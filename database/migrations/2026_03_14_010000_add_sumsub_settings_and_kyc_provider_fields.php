@@ -8,28 +8,62 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('basic_controls', function (Blueprint $table) {
-            $table->unsignedTinyInteger('sumsub_enabled')->default(0)->after('coin_market_cap_auto_update');
-            $table->string('sumsub_app_token')->nullable()->after('sumsub_enabled');
-            $table->text('sumsub_secret_key')->nullable()->after('sumsub_app_token');
-            $table->string('sumsub_base_url')->nullable()->after('sumsub_secret_key');
-            $table->string('sumsub_level_name')->nullable()->after('sumsub_base_url');
-            $table->string('sumsub_websdk_url')->nullable()->after('sumsub_level_name');
-        });
+        if (Schema::hasTable('basic_controls')) {
+            Schema::table('basic_controls', function (Blueprint $table) {
+                if (!Schema::hasColumn('basic_controls', 'sumsub_enabled')) {
+                    $table->unsignedTinyInteger('sumsub_enabled')->default(0);
+                }
+                if (!Schema::hasColumn('basic_controls', 'sumsub_app_token')) {
+                    $table->string('sumsub_app_token')->nullable();
+                }
+                if (!Schema::hasColumn('basic_controls', 'sumsub_secret_key')) {
+                    $table->text('sumsub_secret_key')->nullable();
+                }
+                if (!Schema::hasColumn('basic_controls', 'sumsub_base_url')) {
+                    $table->string('sumsub_base_url')->nullable();
+                }
+                if (!Schema::hasColumn('basic_controls', 'sumsub_level_name')) {
+                    $table->string('sumsub_level_name')->nullable();
+                }
+                if (!Schema::hasColumn('basic_controls', 'sumsub_websdk_url')) {
+                    $table->string('sumsub_websdk_url')->nullable();
+                }
+            });
+        }
 
-        Schema::table('kycs', function (Blueprint $table) {
-            $table->string('provider')->default('manual')->after('slug');
-            $table->json('provider_settings')->nullable()->after('provider');
-        });
+        if (Schema::hasTable('kycs')) {
+            Schema::table('kycs', function (Blueprint $table) {
+                if (!Schema::hasColumn('kycs', 'provider')) {
+                    $table->string('provider')->default('manual');
+                }
+                if (!Schema::hasColumn('kycs', 'provider_settings')) {
+                    $table->json('provider_settings')->nullable();
+                }
+            });
+        }
 
-        Schema::table('user_kycs', function (Blueprint $table) {
-            $table->string('provider')->nullable()->after('kyc_type');
-            $table->string('provider_applicant_id')->nullable()->after('provider');
-            $table->string('provider_review_status')->nullable()->after('provider_applicant_id');
-            $table->string('provider_review_answer')->nullable()->after('provider_review_status');
-            $table->json('provider_payload')->nullable()->after('provider_review_answer');
-            $table->timestamp('provider_completed_at')->nullable()->after('provider_payload');
-        });
+        if (Schema::hasTable('user_kycs')) {
+            Schema::table('user_kycs', function (Blueprint $table) {
+                if (!Schema::hasColumn('user_kycs', 'provider')) {
+                    $table->string('provider')->nullable();
+                }
+                if (!Schema::hasColumn('user_kycs', 'provider_applicant_id')) {
+                    $table->string('provider_applicant_id')->nullable();
+                }
+                if (!Schema::hasColumn('user_kycs', 'provider_review_status')) {
+                    $table->string('provider_review_status')->nullable();
+                }
+                if (!Schema::hasColumn('user_kycs', 'provider_review_answer')) {
+                    $table->string('provider_review_answer')->nullable();
+                }
+                if (!Schema::hasColumn('user_kycs', 'provider_payload')) {
+                    $table->json('provider_payload')->nullable();
+                }
+                if (!Schema::hasColumn('user_kycs', 'provider_completed_at')) {
+                    $table->timestamp('provider_completed_at')->nullable();
+                }
+            });
+        }
     }
 
     public function down(): void

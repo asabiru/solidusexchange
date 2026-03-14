@@ -8,15 +8,19 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('admins', function (Blueprint $table) {
-            $table->boolean('is_trade_online')->default(false)->after('status');
-        });
+        if (Schema::hasTable('admins') && !Schema::hasColumn('admins', 'is_trade_online')) {
+            Schema::table('admins', function (Blueprint $table) {
+                $table->boolean('is_trade_online')->default(false);
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('admins', function (Blueprint $table) {
-            $table->dropColumn('is_trade_online');
-        });
+        if (Schema::hasTable('admins') && Schema::hasColumn('admins', 'is_trade_online')) {
+            Schema::table('admins', function (Blueprint $table) {
+                $table->dropColumn('is_trade_online');
+            });
+        }
     }
 };

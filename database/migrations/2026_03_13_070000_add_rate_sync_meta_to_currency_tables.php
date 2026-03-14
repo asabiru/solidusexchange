@@ -14,11 +14,11 @@ return new class extends Migration {
 
             Schema::table($tableName, function (Blueprint $table) use ($tableName) {
                 if (!Schema::hasColumn($tableName, 'last_rate_sync_at')) {
-                    $table->timestamp('last_rate_sync_at')->nullable()->after('usd_rate');
+                    $table->timestamp('last_rate_sync_at')->nullable();
                 }
 
                 if (!Schema::hasColumn($tableName, 'last_rate_sync_error')) {
-                    $table->text('last_rate_sync_error')->nullable()->after('last_rate_sync_at');
+                    $table->text('last_rate_sync_error')->nullable();
                 }
             });
         }

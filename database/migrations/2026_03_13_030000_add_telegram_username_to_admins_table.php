@@ -9,7 +9,7 @@ return new class extends Migration {
     {
         if (Schema::hasTable('admins') && !Schema::hasColumn('admins', 'telegram_username')) {
             Schema::table('admins', function (Blueprint $table) {
-                $table->string('telegram_username', 50)->nullable()->after('phone');
+                $table->string('telegram_username', 50)->nullable();
             });
         }
     }

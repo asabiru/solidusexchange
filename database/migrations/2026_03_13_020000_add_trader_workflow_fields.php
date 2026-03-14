@@ -10,7 +10,7 @@ return new class extends Migration {
         if (Schema::hasTable('admins')) {
             Schema::table('admins', function (Blueprint $table) {
                 if (!Schema::hasColumn('admins', 'role')) {
-                    $table->string('role', 20)->default('admin')->after('status');
+                    $table->string('role', 20)->default('admin');
                 }
             });
         }
@@ -18,7 +18,7 @@ return new class extends Migration {
         if (Schema::hasTable('fiat_send_gateways')) {
             Schema::table('fiat_send_gateways', function (Blueprint $table) {
                 if (!Schema::hasColumn('fiat_send_gateways', 'processing_mode')) {
-                    $table->string('processing_mode', 20)->default('manual')->after('driver');
+                    $table->string('processing_mode', 20)->default('manual');
                 }
             });
         }
@@ -26,31 +26,31 @@ return new class extends Migration {
         if (Schema::hasTable('sell_requests')) {
             Schema::table('sell_requests', function (Blueprint $table) {
                 if (!Schema::hasColumn('sell_requests', 'assigned_trader_id')) {
-                    $table->unsignedBigInteger('assigned_trader_id')->nullable()->after('crypto_method_id');
+                    $table->unsignedBigInteger('assigned_trader_id')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'assigned_at')) {
-                    $table->timestamp('assigned_at')->nullable()->after('assigned_trader_id');
+                    $table->timestamp('assigned_at')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'completed_by_trader_id')) {
-                    $table->unsignedBigInteger('completed_by_trader_id')->nullable()->after('assigned_at');
+                    $table->unsignedBigInteger('completed_by_trader_id')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'completed_at')) {
-                    $table->timestamp('completed_at')->nullable()->after('completed_by_trader_id');
+                    $table->timestamp('completed_at')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'cancelled_by_trader_id')) {
-                    $table->unsignedBigInteger('cancelled_by_trader_id')->nullable()->after('completed_at');
+                    $table->unsignedBigInteger('cancelled_by_trader_id')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'cancelled_at')) {
-                    $table->timestamp('cancelled_at')->nullable()->after('cancelled_by_trader_id');
+                    $table->timestamp('cancelled_at')->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'contact_telegram')) {
-                    $table->string('contact_telegram', 255)->nullable()->after('refund_wallet');
+                    $table->string('contact_telegram', 255)->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'contact_telegram_id')) {
-                    $table->string('contact_telegram_id', 255)->nullable()->after('contact_telegram');
+                    $table->string('contact_telegram_id', 255)->nullable();
                 }
                 if (!Schema::hasColumn('sell_requests', 'contact_telegram_source')) {
-                    $table->string('contact_telegram_source', 50)->nullable()->after('contact_telegram_id');
+                    $table->string('contact_telegram_source', 50)->nullable();
                 }
             });
         }
