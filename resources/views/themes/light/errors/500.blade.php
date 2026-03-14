@@ -2,7 +2,6 @@
 @section('title','500')
 @section('content')
 
-    @dd('hollla')
 	<section class="error-section">
 		<div class="container">
 			<div class="row g-5 align-items-center">
