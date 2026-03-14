@@ -1,0 +1,39 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Upload deployment scripts
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          source: "deployment/*"
+          target: "${{ secrets.DEPLOY_PATH }}/_deploy"
+          strip_components: 1
+
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            export APP_ROOT="${{ secrets.DEPLOY_PATH }}"
+            export REPO_URL="${{ secrets.DEPLOY_REPO }}"
+            export BRANCH="${{ secrets.DEPLOY_BRANCH || 'main' }}"
+            export PHP_BIN="${{ secrets.DEPLOY_PHP_BIN || 'php' }}"
+            export COMPOSER_BIN="${{ secrets.DEPLOY_COMPOSER_BIN || 'composer' }}"
+            export KEEP_RELEASES="${{ secrets.DEPLOY_KEEP_RELEASES || '5' }}"
+            bash "${APP_ROOT}/_deploy/deploy.sh"
