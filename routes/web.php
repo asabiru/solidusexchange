@@ -35,9 +35,13 @@ Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestF
 Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
 Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset')->middleware('guest');
 Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('password.reset.update');
-Route::get('instruction/page', function () {
-    return view('instruction-page');
-})->name('instructionPage');
+    Route::get('instruction/page', function () {
+        return view('instruction-page');
+    })->name('instructionPage');
+
+    Route::get('license', function () {
+        return redirect()->route('page');
+    })->name('license.redirect');
 
 
 Route::group(['middleware' => ['maintenanceMode']], function () use ($basicControl) {

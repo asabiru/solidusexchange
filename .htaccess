@@ -14,6 +14,10 @@
 
     RewriteEngine On
 
+    # Force-disable legacy /license landing pages sometimes bundled by third-party scripts
+    RewriteRule ^license/?$ / [R=302,L,NC]
+    RewriteRule ^index\.php/license/?$ / [R=302,L,NC]
+
     # Block direct web access to private application directories and files
     RewriteRule ^(?:app|bootstrap|config|database|resources|routes|storage|tests|vendor|deployment|Documentation|SQL)(?:/|$) - [F,L,NC]
     RewriteRule ^(?:\.git|\.github)(?:/|$) - [F,L,NC]
