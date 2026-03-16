@@ -1,6 +1,11 @@
 @extends('admin.layouts.app')
 @section('page_title', __('Telegram Control'))
 @section('content')
+    @php
+        $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
+        $publicBaseUrl = rtrim((string) config('app.url'), '/');
+        $telegramCallbackUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
+    @endphp
     <div class="content container-fluid">
         <div class="page-header">
             <div class="row align-items-end">
@@ -72,7 +77,7 @@
                                             <input type="text"
                                                    class="form-control"
                                                    id="telegram_callback_url"
-                                                   value="{{ route('socialiteCallback','telegram') }}"
+                                                   value="{{ $telegramCallbackUrl }}"
                                                    autocomplete="off" readonly>
                                             <div class="input-group-append">
                                                 <button class="btn btn-outline-secondary" onclick="webhookCopy()"

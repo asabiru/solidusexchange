@@ -215,7 +215,7 @@
     }
 
 
-    function getExchangeCurrency(route = "{{route("getExchangeCurrency")}}", preferredSendCurrencyId = null, preferredGetCurrencyId = null, preferredSendAmount = null) {
+    function getExchangeCurrency(route = "{{ route('getExchangeCurrency', [], false) }}", preferredSendCurrencyId = null, preferredGetCurrencyId = null, preferredSendAmount = null) {
         axios.get(route)
             .then(function (response) {
                 Notiflix.Block.remove('#showLoader');
@@ -241,7 +241,9 @@
                 }
             })
             .catch(function (error) {
-
+                Notiflix.Block.remove('#showLoader');
+                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to load exchange methods');
+                $("#submitBtn").attr('disabled', true);
             });
     }
 
@@ -306,15 +308,15 @@
 
 
     $(document).on("click", "#pills-exchange-tab", function () {
-        activateCalculatorTab('exchange', "{{route("getExchangeCurrency")}}", "{{route('exchangeRequest')}}", "Exchange Now");
+        activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Exchange Now");
     });
 
     $(document).on("click", "#pills-Buy-tab", function () {
-        activateCalculatorTab('buy', "{{route("getBuyCurrency")}}", "{{route('buyRequest')}}", "Buy Now");
+        activateCalculatorTab('buy', "{{ route('getBuyCurrency', [], false) }}", "{{ route('buyRequest', [], false) }}", "Buy Now");
     });
 
     $(document).on("click", "#pills-Sell-tab", function () {
-        activateCalculatorTab('sell', "{{route("getSellCurrency")}}", "{{route('sellRequest')}}", "Sell Now");
+        activateCalculatorTab('sell', "{{ route('getSellCurrency', [], false) }}", "{{ route('sellRequest', [], false) }}", "Sell Now");
     });
 
     function activateCalculatorTab(tabName, route, formSubmitRoute, buttonText) {
@@ -359,7 +361,7 @@
     }
 
     function requestExchangeQuote(sendAmount) {
-        axios.post("{{route('exchangeAutoRate')}}", {
+        axios.post("{{ route('exchangeAutoRate', [], false) }}", {
             sendAmount: sendAmount,
             sendCurrency: activeSendCurrency.id,
             getCurrency: activeGetCurrency.id,

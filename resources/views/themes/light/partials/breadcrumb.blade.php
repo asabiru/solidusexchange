@@ -1,11 +1,12 @@
 <!-- Banner section start -->
 @php
     $routeName = \Illuminate\Support\Facades\Route::currentRouteName();
+    $isFrontendHome = request()->routeIs('page') && blank(request()->route('slug'));
 @endphp
 @if(!in_array($routeName,['exchangeProcessing','exchangeProcessingOverview','exchangeInitPayment','exchangeFinal','tracking',
                           'buyProcessing','buyProcessingOverview','buyInitPayment','payment.process','buyFinal','sellProcessing',
                           'sellProcessingOverview','sellInitPayment','sellFinal']))
-    @if(request()->url() != url('/'))
+    @if(!$isFrontendHome)
         <style>
             .banner-area {
                 background: url({{@$pageSeo['breadcrumb_image']}});

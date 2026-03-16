@@ -130,11 +130,18 @@
                             <button type="submit" class="cmn-btn mt-30 w-100">@lang('Log In')</button>
 
                             @php
+                                $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
+                                $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
+                                $publicBaseUrl = rtrim((string) config('app.url'), '/');
+                                $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
+                                $telegramRequestLooksSecure = request()->isSecure()
+                                    || strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0
+                                    || str_starts_with($publicBaseUrl, 'https://');
                                 $hasAnySocialLogin = config('socialite.google_status')
                                     || config('socialite.facebook_status')
                                     || config('socialite.github_status')
-                                    || (config('socialite.telegram_status') && config('services.telegram.bot_name'));
-                                $telegramWidgetAllowed = !in_array(request()->getHost(), ['127.0.0.1', 'localhost'], true) && request()->isSecure();
+                                    || (config('socialite.telegram_status') && $telegramBotName !== '');
+                                $telegramWidgetAllowed = !in_array(request()->getHost(), ['127.0.0.1', 'localhost'], true) && $telegramRequestLooksSecure;
                             @endphp
 
                             @if($hasAnySocialLogin)
@@ -170,19 +177,19 @@
                                             </a>
                                         </div>
                                     @endif
-                                    @if(config('socialite.telegram_status') && config('services.telegram.bot_name'))
+                                    @if(config('socialite.telegram_status') && $telegramBotName !== '')
                                         <div class="col-12 col-sm-6">
                                             @if($telegramWidgetAllowed)
                                                 <div class="telegram-login-widget text-center">
                                                     <script async src="https://telegram.org/js/telegram-widget.js?22"
-                                                            data-telegram-login="{{ config('services.telegram.bot_name') }}"
+                                                            data-telegram-login="{{ $telegramBotName }}"
                                                             data-size="large"
                                                             data-radius="8"
-                                                            data-auth-url="{{ route('socialiteCallback','telegram') }}"
+                                                            data-auth-url="{{ $telegramAuthUrl }}"
                                                             data-request-access="write"></script>
                                                 </div>
                                             @else
-                                                <a href="https://t.me/{{ config('services.telegram.bot_name') }}?start=web_login"
+                                                <a href="https://t.me/{{ $telegramBotName }}?start=web_login"
                                                    target="_blank" rel="noopener"
                                                    class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex align-items-center justify-content-center gap-2">
                                                     <i class="fab fa-telegram-plane"></i>

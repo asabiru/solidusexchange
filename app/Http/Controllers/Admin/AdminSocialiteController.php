@@ -10,6 +10,14 @@ use Stevebauman\Purify\Facades\Purify;
 
 class AdminSocialiteController extends Controller
 {
+    private function publicRoute(string $routeName, string $provider): string
+    {
+        $path = route($routeName, $provider, false);
+        $baseUrl = rtrim((string) config('app.url'), '/');
+
+        return $baseUrl !== '' ? $baseUrl . $path : route($routeName, $provider);
+    }
+
 	public function index()
 	{
 		return view('admin.control_panel.socialiteConfig');
@@ -41,7 +49,7 @@ class AdminSocialiteController extends Controller
 			$env = file($envPath);
 			$env = $this->set('GITHUB_CLIENT_ID', $purifiedData->github_client_id, $env);
 			$env = $this->set('GITHUB_CLIENT_SECRET', $purifiedData->github_client_secret, $env);
-			$env = $this->set('GITHUB_REDIRECT_URL', route('socialiteCallback', 'github'), $env);
+			$env = $this->set('GITHUB_REDIRECT_URL', $this->publicRoute('socialiteCallback', 'github'), $env);
 
 			$fp = fopen($envPath, 'w');
 			fwrite($fp, implode($env));
@@ -78,7 +86,7 @@ class AdminSocialiteController extends Controller
 			$env = file($envPath);
 			$env = $this->set('GOOGLE_CLIENT_ID', $purifiedData->google_client_id, $env);
 			$env = $this->set('GOOGLE_CLIENT_SECRET', $purifiedData->google_client_secret, $env);
-			$env = $this->set('GOOGLE_REDIRECT_URL', route('socialiteCallback', 'google'), $env);
+			$env = $this->set('GOOGLE_REDIRECT_URL', $this->publicRoute('socialiteCallback', 'google'), $env);
 
 			$fp = fopen($envPath, 'w');
 			fwrite($fp, implode($env));
@@ -116,7 +124,7 @@ class AdminSocialiteController extends Controller
 			$env = file($envPath);
 			$env = $this->set('FACEBOOK_CLIENT_ID', $purifiedData->facebook_client_id, $env);
 			$env = $this->set('FACEBOOK_CLIENT_SECRET', $purifiedData->facebook_client_secret, $env);
-			$env = $this->set('FACEBOOK_REDIRECT_URL', route('socialiteCallback', 'facebook'), $env);
+			$env = $this->set('FACEBOOK_REDIRECT_URL', $this->publicRoute('socialiteCallback', 'facebook'), $env);
 
 			$fp = fopen($envPath, 'w');
 			fwrite($fp, implode($env));
@@ -156,7 +164,7 @@ class AdminSocialiteController extends Controller
 			$env = file($envPath);
 			$env = $this->set('TELEGRAM_BOT_USERNAME', $telegramBotUsername, $env);
 			$env = $this->set('TELEGRAM_BOT_TOKEN', $telegramBotToken, $env);
-			$env = $this->set('TELEGRAM_CALLBACK_URL', route('socialiteCallback', 'telegram'), $env);
+			$env = $this->set('TELEGRAM_CALLBACK_URL', $this->publicRoute('socialiteCallback', 'telegram'), $env);
 
 			$fp = fopen($envPath, 'w');
 			fwrite($fp, implode($env));

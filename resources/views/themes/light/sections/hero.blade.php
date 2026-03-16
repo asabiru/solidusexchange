@@ -26,7 +26,7 @@
 
                 <div class="col-xxl-5 col-lg-6">
                     <div class="calculator-section">
-                        <form class="calculator" action="{{route('exchangeRequest')}}" method="POST"
+                        <form class="calculator" action="{{ route('exchangeRequest', [], false) }}" method="POST"
                               id="submitFormId">
                             @csrf
                             <div class="autoplay" data-bs-toggle="modal" data-bs-target="#exampleModal">

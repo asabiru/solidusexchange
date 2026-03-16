@@ -39,6 +39,10 @@ class AppServiceProvider extends ServiceProvider
         });
 
         $configForcesHttps = str_starts_with((string) config('app.url'), 'https://');
+        $requestForcesHttps = ! $this->app->runningInConsole() && (
+            request()->isSecure() ||
+            strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0
+        );
 
         try {
             DB::connection()->getPdo();
@@ -67,7 +71,7 @@ class AppServiceProvider extends ServiceProvider
                 $view->with('languages', $languages);
             });
 
-            if ($configForcesHttps || basicControl()->force_ssl == 1) {
+            if ($configForcesHttps || $requestForcesHttps || basicControl()->force_ssl == 1) {
                 if ($this->app->environment('production') || $this->app->environment('local')) {
                     \URL::forceScheme('https');
                 }
