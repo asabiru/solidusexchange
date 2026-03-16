@@ -127,6 +127,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::post('subscribe', [FrontendController::class, 'subscribe'])->name('subscribe');
     Route::post('/contact/send', [FrontendController::class, 'contactSend'])->name('contact.send');
     Route::get('blog-details', [FrontendController::class, 'blogDetails'])->name('blog.details');
+    Route::get('tracking', [FrontendController::class, 'tracking'])->name('tracking');
 
     Route::get('auth/{socialite}', [SocialiteController::class, 'socialiteLogin'])->name('socialiteLogin');
     Route::get('auth/callback/{socialite}', [SocialiteController::class, 'socialiteCallback'])->name('socialiteCallback');
