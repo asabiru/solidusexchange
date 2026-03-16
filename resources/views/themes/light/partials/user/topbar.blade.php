@@ -77,9 +77,10 @@
                             <a class="dropdown-item d-flex align-items-center justify-content-between"
                                href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                 <span class="d-flex align-items-center">
-                                    <img class="avatar avatar-xs avatar-circle me-2"
-                                         src="{{ getFile($language->flag_driver, $language->flag) }}"
-                                         alt="{{ $language->name }}">
+                                    <img src="{{ getFile($language->flag_driver, $language->flag) }}"
+                                         alt="{{ $language->name }}"
+                                         class="me-2 rounded-circle"
+                                         style="width:20px;height:20px;min-width:20px;object-fit:cover;">
                                     <span>{{ __($language->name) }}</span>
                                 </span>
                                 @if(app()->getLocale() === $language->short_name)
