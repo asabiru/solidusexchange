@@ -50,11 +50,40 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         Route::post('/login', [UserLoginController::class, 'login'])->name('login.submit');
     });
 
+    $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
+        $candidateSlugs = collect(array_merge([$slug], $fallbackSlugs))
+            ->filter()
+            ->unique()
+            ->values();
+
+        $existingSlugs = DB::table('pages')
+            ->whereIn('slug', $candidateSlugs->all())
+            ->pluck('slug')
+            ->all();
+
+        $targetSlug = $candidateSlugs->first(function ($candidate) use ($existingSlugs) {
+            return in_array($candidate, $existingSlugs, true);
+        }) ?: '/';
+
+        return app(FrontendController::class)->page($targetSlug);
+    };
+
     Route::get('check', [VerificationController::class, 'check'])->name('check');
     Route::get('resend_code', [VerificationController::class, 'resendCode'])->name('user.resendCode');
+    Route::get('verification/resend', [VerificationController::class, 'resendCode'])->name('verification.resend');
     Route::post('mail-verify', [VerificationController::class, 'mailVerify'])->name('user.mailVerify');
     Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->name('user.smsVerify');
     Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->name('user.twoFA-Verify');
+
+    Route::get('about', fn() => $resolveLegacyPage('about'))->name('about');
+    Route::get('feature', fn() => $resolveLegacyPage('feature'))->name('feature');
+    Route::get('faq', fn() => $resolveLegacyPage('faq'))->name('faq');
+    Route::get('contact', fn() => $resolveLegacyPage('contact'))->name('contact');
+    Route::get('pricing', fn() => $resolveLegacyPage('pricing', ['price', 'feature', '/']))->name('pricing');
+    Route::get('price', fn() => $resolveLegacyPage('price', ['pricing', 'feature', '/']))->name('price');
+    Route::get('terms-and-conditions', fn() => $resolveLegacyPage('terms-and-conditions'))->name('terms-and-conditions');
+    Route::get('privacy-policy', fn() => $resolveLegacyPage('privacy-policy'))->name('privacy-policy');
+    Route::get('blog', fn() => $resolveLegacyPage('blog', ['/']))->name('blog');
 
     Route::group(['middleware' => ['auth', 'verifyUser'], 'prefix' => 'user', 'as' => 'user.'], function () {
 
