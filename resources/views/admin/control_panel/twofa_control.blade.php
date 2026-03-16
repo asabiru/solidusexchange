@@ -55,7 +55,8 @@
                                             </div>
                                             <div class="form-group mx-auto text-center my-3">
                                                 <img class="mx-auto h-auto"
-                                                     src="https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl={{$qrCodeUrl}}">
+                                                     src="{{ $qrCodeImage }}"
+                                                     alt="@lang('Two Factor Authenticator QR Code')">
                                             </div>
 
                                             <div class="form-group mx-auto text-center mt-3">
@@ -81,7 +82,8 @@
                                             </div>
                                             <div class="form-group mx-auto text-center mt-5">
                                                 <img class="h-auto mx-auto"
-                                                     src="https://chart.googleapis.com/chart?chs=200x200&chld=M|0&cht=qr&chl={{$qrCodeUrl}}">
+                                                     src="{{ $qrCodeImage }}"
+                                                     alt="@lang('Two Factor Authenticator QR Code')">
                                             </div>
 
                                             <div class="form-group mx-auto text-center mt-3">

@@ -129,14 +129,16 @@ class BasicControlController extends Controller
         $admin = Auth::guard('admin')->user();
         $google2fa = new Google2FA();
         $secret = $admin->two_fa_code ?? $this->generateSecretKeyForUser($admin);
+        $account = $admin->username ?: $admin->email ?: 'admin';
 
-        // Generate QR code URL
         $qrCodeUrl = $google2fa->getQRCodeUrl(
-            auth()->user()->username,
             $basic->site_title,
+            $account,
             $secret
         );
-        return view('admin.control_panel.twofa_control', compact('secret', 'qrCodeUrl'));
+        $qrCodeImage = $this->makeQrCodeImage($qrCodeUrl);
+
+        return view('admin.control_panel.twofa_control', compact('secret', 'qrCodeUrl', 'qrCodeImage'));
     }
 
     public function twoFaRegenerate()
@@ -155,6 +157,18 @@ class BasicControlController extends Controller
         $user->update(['two_fa_code' => $secret]);
 
         return $secret;
+    }
+
+    private function makeQrCodeImage(string $qrCodeUrl, int $size = 220): string
+    {
+        $query = http_build_query([
+            'cht' => 'qr',
+            'chs' => "{$size}x{$size}",
+            'chld' => 'M|0',
+            'chl' => $qrCodeUrl,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        return "https://quickchart.io/chart?{$query}";
     }
 
     public function twoFaEnable(Request $request)

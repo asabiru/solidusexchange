@@ -30,15 +30,16 @@ class FaSecurityController extends Controller
 
         $google2fa = new Google2FA();
         $secret = $user->two_fa_code ?? $this->generateSecretKeyForUser($user);
+        $account = $user->username ?: $user->email;
 
-        // Generate QR code URL
         $qrCodeUrl = $google2fa->getQRCodeUrl(
-            auth()->user()->username,
             $basic->site_title,
+            $account,
             $secret
         );
+        $qrCodeImage = $this->makeQrCodeImage($qrCodeUrl);
 
-        return view($this->theme . 'user.twoFA.index', compact('secret', 'qrCodeUrl'));
+        return view($this->theme . 'user.twoFA.index', compact('secret', 'qrCodeUrl', 'qrCodeImage'));
     }
 
     public function twoStepRegenerate()
@@ -57,6 +58,18 @@ class FaSecurityController extends Controller
         $user->update(['two_fa_code' => $secret]);
 
         return $secret;
+    }
+
+    private function makeQrCodeImage(string $qrCodeUrl, int $size = 220): string
+    {
+        $query = http_build_query([
+            'cht' => 'qr',
+            'chs' => "{$size}x{$size}",
+            'chld' => 'M|0',
+            'chl' => $qrCodeUrl,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        return "https://quickchart.io/chart?{$query}";
     }
 
     public function twoStepEnable(Request $request)
