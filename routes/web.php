@@ -226,9 +226,27 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
         $redirect = (string) $request->query('redirect', '');
         if ($redirect !== '') {
-            $appUrl = rtrim(url('/'), '/');
-            if (str_starts_with($redirect, $appUrl) || str_starts_with($redirect, '/')) {
+            if (str_starts_with($redirect, '/')) {
                 return redirect()->to($redirect);
+            }
+
+            $appHost = parse_url((string) config('app.url'), PHP_URL_HOST) ?: $request->getHost();
+            $redirectHost = parse_url($redirect, PHP_URL_HOST);
+
+            if (is_string($redirectHost) && is_string($appHost) && strcasecmp($redirectHost, $appHost) === 0) {
+                $redirectPath = parse_url($redirect, PHP_URL_PATH) ?: '/';
+                $redirectQuery = parse_url($redirect, PHP_URL_QUERY);
+                $redirectFragment = parse_url($redirect, PHP_URL_FRAGMENT);
+
+                $normalizedRedirect = $redirectPath;
+                if ($redirectQuery) {
+                    $normalizedRedirect .= '?' . $redirectQuery;
+                }
+                if ($redirectFragment) {
+                    $normalizedRedirect .= '#' . $redirectFragment;
+                }
+
+                return redirect()->to($normalizedRedirect);
             }
         }
 

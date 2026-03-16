@@ -75,7 +75,7 @@
 
                         @forelse($activeLanguages as $language)
                             <a class="dropdown-item d-flex align-items-center justify-content-between"
-                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => url()->full()]) }}">
+                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                 <span class="d-flex align-items-center">
                                     <img class="avatar avatar-xs avatar-circle me-2"
                                          src="{{ getFile($language->flag_driver, $language->flag) }}"

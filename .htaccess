@@ -14,6 +14,11 @@
 
     RewriteEngine On
 
+    # Redirect all traffic to HTTPS once an SSL certificate is installed
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
     # Force-disable legacy /license landing pages sometimes bundled by third-party scripts
     RewriteRule ^license/?$ / [R=302,L,NC]
     RewriteRule ^index\.php/license/?$ / [R=302,L,NC]

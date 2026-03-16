@@ -83,7 +83,7 @@
                         <div class="col-sm-6">
                             <div class="language">
                                 @foreach($languages as $item)
-                                    <a href="{{route('language',$item->short_name)}}"
+                                    <a href="{{ route('language', ['locale' => $item->short_name, 'redirect' => request()->getRequestUri()]) }}"
                                        class="language">@lang($item->name)</a>
                                 @endforeach
                             </div>

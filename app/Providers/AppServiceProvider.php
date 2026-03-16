@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Routing\Router;
 use Symfony\Component\Mailer\Bridge\Mailchimp\Transport\MandrillTransportFactory;
 use Symfony\Component\Mailer\Bridge\Sendgrid\Transport\SendgridTransportFactory;
@@ -38,11 +39,18 @@ class AppServiceProvider extends ServiceProvider
             $this->disableInjectedMiddleware();
         });
 
+        $configuredAppUrl = rtrim((string) config('app.url'), '/');
         $configForcesHttps = str_starts_with((string) config('app.url'), 'https://');
         $requestForcesHttps = ! $this->app->runningInConsole() && (
             request()->isSecure() ||
-            strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0
+            strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0 ||
+            strcasecmp((string) request()->server('HTTP_X_FORWARDED_PROTO'), 'https') === 0 ||
+            strcasecmp((string) request()->server('HTTPS'), 'on') === 0
         );
+
+        if ($configuredAppUrl !== '' && filter_var($configuredAppUrl, FILTER_VALIDATE_URL)) {
+            URL::forceRootUrl($configuredAppUrl);
+        }
 
         try {
             DB::connection()->getPdo();
@@ -71,9 +79,9 @@ class AppServiceProvider extends ServiceProvider
                 $view->with('languages', $languages);
             });
 
-            if ($configForcesHttps || $requestForcesHttps || basicControl()->force_ssl == 1) {
+            if ($configForcesHttps || $requestForcesHttps || (int) (basicControl()->is_force_ssl ?? 0) === 1) {
                 if ($this->app->environment('production') || $this->app->environment('local')) {
-                    \URL::forceScheme('https');
+                    URL::forceScheme('https');
                 }
             }
 

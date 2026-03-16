@@ -136,7 +136,10 @@
                                 $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
                                 $telegramRequestLooksSecure = request()->isSecure()
                                     || strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0
-                                    || str_starts_with($publicBaseUrl, 'https://');
+                                    || strcasecmp((string) request()->server('HTTP_X_FORWARDED_PROTO'), 'https') === 0
+                                    || strcasecmp((string) request()->server('HTTPS'), 'on') === 0
+                                    || str_starts_with($publicBaseUrl, 'https://')
+                                    || (int) (basicControl()->is_force_ssl ?? 0) === 1;
                                 $hasAnySocialLogin = config('socialite.google_status')
                                     || config('socialite.facebook_status')
                                     || config('socialite.github_status')

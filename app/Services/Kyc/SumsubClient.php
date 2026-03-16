@@ -9,6 +9,8 @@ use RuntimeException;
 
 class SumsubClient
 {
+    private const DEFAULT_BASE_URL = 'https://api.sumsub.com';
+
     public function createApplicant(array $payload, string $levelName): array
     {
         $uri = '/resources/applicants?levelName=' . urlencode($levelName);
@@ -54,7 +56,7 @@ class SumsubClient
     {
         $appToken = trim((string) (basicControl()->sumsub_app_token ?? ''));
         $secretKey = trim((string) (basicControl()->sumsub_secret_key ?? ''));
-        $baseUrl = rtrim((string) (basicControl()->sumsub_base_url ?: 'https://api.sumsub.com'), '/');
+        $baseUrl = $this->normalizeBaseUrl((string) (basicControl()->sumsub_base_url ?: self::DEFAULT_BASE_URL));
 
         if ($appToken === '' || $secretKey === '') {
             throw new RuntimeException('Configure Sumsub app token and secret key before using automatic KYC.');
@@ -71,7 +73,17 @@ class SumsubClient
         ])->send($method, $uri, $body === '' ? [] : ['body' => $body]);
 
         if (!$response->successful()) {
-            throw new RuntimeException('Sumsub API error: ' . $response->body());
+            $message = 'Sumsub API error: ' . $response->body();
+
+            if ($response->status() === 404) {
+                $message = sprintf(
+                    'Sumsub API error 404. Check API Base URL and level name. Use only %s as API Base URL without /resources or any extra path. Response: %s',
+                    self::DEFAULT_BASE_URL,
+                    $response->body()
+                );
+            }
+
+            throw new RuntimeException($message);
         }
 
         $decoded = $response->json();
@@ -88,5 +100,24 @@ class SumsubClient
             ->acceptJson()
             ->contentType('application/json')
             ->timeout(20);
+    }
+
+    private function normalizeBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = trim($baseUrl);
+        if ($baseUrl === '') {
+            return self::DEFAULT_BASE_URL;
+        }
+
+        $parts = parse_url($baseUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return self::DEFAULT_BASE_URL;
+        }
+
+        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
     }
 }

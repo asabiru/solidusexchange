@@ -81,7 +81,7 @@
                         <div class="d-flex flex-column gap-2">
                             @foreach($activeLanguages as $language)
                                 <a class="nav-link d-flex align-items-center justify-content-between px-0"
-                                   href="{{ route('language', ['locale' => $language->short_name, 'redirect' => url()->full()]) }}">
+                                   href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                     <span class="d-flex align-items-center">
                                         <img src="{{ getFile($language->flag_driver, $language->flag) }}"
                                              alt="{{ $language->name }}"
@@ -177,7 +177,7 @@
 
                         @forelse($activeLanguages as $language)
                             <a class="dropdown-item d-flex align-items-center justify-content-between"
-                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => url()->full()]) }}">
+                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                 <span class="d-flex align-items-center">
                                     <img src="{{ getFile($language->flag_driver, $language->flag) }}"
                                          alt="{{ $language->name }}"

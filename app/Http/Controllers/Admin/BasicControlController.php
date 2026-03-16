@@ -326,7 +326,7 @@ class BasicControlController extends Controller
                 'sumsub_enabled' => $request->input('sumsub_enabled', 0),
                 'sumsub_app_token' => trim((string) $request->sumsub_app_token),
                 'sumsub_secret_key' => trim((string) $request->sumsub_secret_key),
-                'sumsub_base_url' => trim((string) ($request->sumsub_base_url ?: 'https://api.sumsub.com')),
+                'sumsub_base_url' => $this->normalizeSumsubBaseUrl((string) ($request->sumsub_base_url ?: 'https://api.sumsub.com')),
                 'sumsub_level_name' => trim((string) $request->sumsub_level_name),
                 'sumsub_websdk_url' => trim((string) ($request->sumsub_websdk_url ?: 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js')),
             ]);
@@ -337,6 +337,25 @@ class BasicControlController extends Controller
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
+    }
+
+    private function normalizeSumsubBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = trim($baseUrl);
+        if ($baseUrl === '') {
+            return 'https://api.sumsub.com';
+        }
+
+        $parts = parse_url($baseUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return 'https://api.sumsub.com';
+        }
+
+        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
     }
 
     public function announcement(Request $request)

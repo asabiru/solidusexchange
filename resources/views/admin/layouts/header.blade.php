@@ -133,7 +133,7 @@
                                 @endif
                             </div>
                             @forelse($activeLanguages as $language)
-                                <a href="{{ route('language', ['locale' => $language->short_name, 'redirect' => url()->full()]) }}"
+                                <a href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}"
                                    class="dropdown-item d-flex align-items-center justify-content-between">
                                     <span class="d-flex align-items-center">
                                         <img class="avatar avatar-xss avatar-circle me-2"

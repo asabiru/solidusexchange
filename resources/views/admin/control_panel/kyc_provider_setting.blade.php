@@ -67,6 +67,7 @@
                                 <label class="col-sm-4 col-form-label form-label" for="sumsub_base_url">@lang('API Base URL')</label>
                                 <div class="col-sm-8">
                                     <input type="url" class="form-control @error('sumsub_base_url') is-invalid @enderror" name="sumsub_base_url" id="sumsub_base_url" value="{{ old('sumsub_base_url', $basicControl->sumsub_base_url ?: 'https://api.sumsub.com') }}" autocomplete="off">
+                                    <small class="text-muted">@lang('Use only the root API URL, for example https://api.sumsub.com. Do not paste /resources or a full endpoint here.')</small>
                                     @error('sumsub_base_url')
                                     <span class="invalid-feedback">{{ $message }}</span>
                                     @enderror
