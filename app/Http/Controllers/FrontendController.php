@@ -68,9 +68,13 @@ class FrontendController extends Controller
                 $fallbackLanguageId
             );
 
-            return view("themes.{$selectedTheme}.page", compact('sectionsData', 'pageSeo'));
+            $renderedPage = view("themes.{$selectedTheme}.page", compact('sectionsData', 'pageSeo'))->render();
+
+            return response($renderedPage);
 
         } catch (\Exception $exception) {
+            report($exception);
+
             \Cache::forget('ConfigureSetting');
             if ($exception->getCode() == 404) {
                 abort(404);
@@ -88,6 +92,11 @@ class FrontendController extends Controller
             if ($exception->getCode() == 1049) {
                 die('Unable to establish a connection to the database. Please check your connection settings and try again later');
             }
+
+            if (config('app.debug')) {
+                throw $exception;
+            }
+
             return redirect()->route('instructionPage');
         }
     }
