@@ -111,6 +111,10 @@ class UserKycManager
             'zip_code' => $this->firstNonEmpty([$address['postCode'] ?? null, $address['zipCode'] ?? null]),
         ];
 
+        if ($this->containsMockIdentityData($fields)) {
+            return [];
+        }
+
         $kycInfo = [];
         foreach ($fields as $key => $value) {
             $value = is_string($value) ? trim($value) : $value;
@@ -176,6 +180,10 @@ class UserKycManager
 
         if (!empty($profileData['country_code']) && empty($profileData['country'])) {
             $profileData['country'] = $this->resolveCountryName($profileData['country_code']);
+        }
+
+        if ($this->containsMockIdentityData($profileData)) {
+            return [];
         }
 
         return array_filter($profileData, static fn($value) => $value !== null && $value !== '');
@@ -250,6 +258,27 @@ class UserKycManager
         }
 
         return null;
+    }
+
+    private function containsMockIdentityData(array $fields): bool
+    {
+        foreach (['first_name', 'last_name', 'document_number', 'firstname', 'lastname'] as $key) {
+            $value = trim((string) ($fields[$key] ?? ''));
+            if ($value !== '' && $this->isMockValue($value)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function isMockValue(string $value): bool
+    {
+        $normalized = Str::lower(trim($value));
+
+        return Str::startsWith($normalized, 'mock-')
+            || Str::startsWith($normalized, 'mock ')
+            || Str::contains($normalized, 'mock-doe');
     }
 
     private function joinAddressParts(array $parts): ?string
