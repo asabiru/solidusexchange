@@ -84,6 +84,9 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::get('terms-and-conditions', fn() => $resolveLegacyPage('terms-and-conditions'))->name('terms-and-conditions');
     Route::get('privacy-policy', fn() => $resolveLegacyPage('privacy-policy'))->name('privacy-policy');
     Route::get('blog', fn() => $resolveLegacyPage('blog', ['/']))->name('blog');
+    Route::get('documentation', fn() => $resolveLegacyPage('documentation', ['doc', 'docs', '/']))->name('documentation');
+    Route::get('docs', fn() => $resolveLegacyPage('docs', ['documentation', 'doc', '/']))->name('docs');
+    Route::get('doc', fn() => $resolveLegacyPage('doc', ['documentation', 'docs', '/']))->name('doc');
 
     Route::group(['middleware' => ['auth', 'verifyUser'], 'prefix' => 'user', 'as' => 'user.'], function () {
 
