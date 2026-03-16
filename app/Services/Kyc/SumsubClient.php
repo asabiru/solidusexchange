@@ -20,13 +20,13 @@ class SumsubClient
 
     public function generateSdkToken(string $externalUserId, string $levelName, int $ttlInSecs = 3600): array
     {
-        $query = http_build_query([
+        $payload = [
             'userId' => $externalUserId,
             'levelName' => $levelName,
             'ttlInSecs' => $ttlInSecs,
-        ], '', '&', PHP_QUERY_RFC3986);
+        ];
 
-        return $this->request('POST', '/resources/accessTokens/sdk?' . $query);
+        return $this->request('POST', '/resources/accessTokens/sdk', $payload);
     }
 
     public function verifyWebhook(Request $request): bool
@@ -73,17 +73,36 @@ class SumsubClient
         ])->send($method, $uri, $body === '' ? [] : ['body' => $body]);
 
         if (!$response->successful()) {
-            $message = 'Sumsub API error: ' . $response->body();
+            $decodedError = $response->json();
+            $description = is_array($decodedError) ? trim((string) ($decodedError['description'] ?? '')) : '';
+            $errorName = is_array($decodedError) ? trim((string) ($decodedError['errorName'] ?? '')) : '';
+            $errorCode = is_array($decodedError) ? trim((string) ($decodedError['errorCode'] ?? '')) : '';
+            $correlationId = is_array($decodedError) ? trim((string) ($decodedError['correlationId'] ?? '')) : '';
 
-            if ($response->status() === 404) {
-                $message = sprintf(
-                    'Sumsub API error 404. Check API Base URL and level name. Use only %s as API Base URL without /resources or any extra path. Response: %s',
-                    self::DEFAULT_BASE_URL,
-                    $response->body()
-                );
+            $parts = ["Sumsub API {$response->status()}"];
+
+            if ($description !== '') {
+                $parts[] = $description;
             }
 
-            throw new RuntimeException($message);
+            if ($errorName !== '') {
+                $parts[] = "errorName={$errorName}";
+            }
+
+            if ($errorCode !== '') {
+                $parts[] = "errorCode={$errorCode}";
+            }
+
+            if ($correlationId !== '') {
+                $parts[] = "correlationId={$correlationId}";
+            }
+
+            if ($response->status() === 404) {
+                $parts[] = 'Check API Base URL and level name.';
+                $parts[] = 'Use only ' . self::DEFAULT_BASE_URL . ' as API Base URL.';
+            }
+
+            throw new RuntimeException(implode('. ', array_filter($parts)));
         }
 
         $decoded = $response->json();
