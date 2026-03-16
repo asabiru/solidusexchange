@@ -426,6 +426,7 @@ class HomeController extends Controller
 
     public function verificationCenter()
     {
+        $data['kycs'] = Kyc::where('status', 1)->get();
         $data['userKycs'] = UserKyc::own()->latest()->get();
         return view($this->theme . 'user.kyc.verification-center', $data);
     }
