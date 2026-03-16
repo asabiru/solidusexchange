@@ -34,13 +34,13 @@ class UsersController extends Controller
         if (!$userRecord) {
             $userRecord = User::withTrashed()->selectRaw('COUNT(id) AS totalUserWithTrashed')
                 ->selectRaw('COUNT(CASE WHEN deleted_at IS NULL THEN id END) AS totalUser')
-                ->selectRaw('(COUNT(CASE WHEN deleted_at IS NULL THEN id END) / COUNT(id)) * 100 AS totalUserPercentage')
-                ->selectRaw('COUNT(CASE WHEN status = 1 THEN id END) AS activeUser')
-                ->selectRaw('(COUNT(CASE WHEN status = 1 THEN id END) / COUNT(id)) * 100 AS activeUserPercentage')
-                ->selectRaw('COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN id END) AS todayJoin')
-                ->selectRaw('(COUNT(CASE WHEN DATE(created_at) = CURDATE() THEN id END) / COUNT(id)) * 100 AS todayJoinPercentage')
-                ->selectRaw('COUNT(CASE WHEN status = 0 THEN id END) AS deactivateUser')
-                ->selectRaw('(COUNT(CASE WHEN status = 0 THEN id END) / COUNT(id)) * 100 AS deactivateUserPercentage')
+                ->selectRaw('(COUNT(CASE WHEN deleted_at IS NULL THEN id END) / NULLIF(COUNT(id), 0)) * 100 AS totalUserPercentage')
+                ->selectRaw('COUNT(CASE WHEN deleted_at IS NULL AND status = 1 THEN id END) AS activeUser')
+                ->selectRaw('(COUNT(CASE WHEN deleted_at IS NULL AND status = 1 THEN id END) / NULLIF(COUNT(CASE WHEN deleted_at IS NULL THEN id END), 0)) * 100 AS activeUserPercentage')
+                ->selectRaw('COUNT(CASE WHEN deleted_at IS NULL AND DATE(created_at) = CURDATE() THEN id END) AS todayJoin')
+                ->selectRaw('(COUNT(CASE WHEN deleted_at IS NULL AND DATE(created_at) = CURDATE() THEN id END) / NULLIF(COUNT(CASE WHEN deleted_at IS NULL THEN id END), 0)) * 100 AS todayJoinPercentage')
+                ->selectRaw('COUNT(CASE WHEN deleted_at IS NULL AND status = 0 THEN id END) AS deactivateUser')
+                ->selectRaw('(COUNT(CASE WHEN deleted_at IS NULL AND status = 0 THEN id END) / NULLIF(COUNT(CASE WHEN deleted_at IS NULL THEN id END), 0)) * 100 AS deactivateUserPercentage')
                 ->get()
                 ->toArray();
             \Cache::put('userRecord', $userRecord);
@@ -166,7 +166,13 @@ class UsersController extends Controller
             session()->flash('error', 'You do not select User.');
             return response()->json(['error' => 1]);
         } else {
-            User::whereIn('id', $request->strIds)->delete();
+            User::query()
+                ->whereIn('id', $request->strIds)
+                ->get()
+                ->each(function (User $user) {
+                    UserAllRecordDeleteJob::dispatchSync($user);
+                });
+            \Cache::forget('userRecord');
             session()->flash('success', 'User has been deleted successfully');
             return response()->json(['success' => 1]);
         }
@@ -358,8 +364,7 @@ class UsersController extends Controller
             $user = User::where('id', $id)->firstOr(function () {
                 throw new \Exception('User not found!');
             });
-            UserAllRecordDeleteJob::dispatch($user);
-            $user->delete();
+            UserAllRecordDeleteJob::dispatchSync($user);
             return redirect()->route('admin.users')->with('success', 'User Account Deleted Successfully.');
 
         } catch (\Exception $exp) {

@@ -59,6 +59,15 @@ class User extends Authenticatable
         static::saved(function () {
             Cache::forget('userRecord');
         });
+        static::deleted(function () {
+            Cache::forget('userRecord');
+        });
+        static::restored(function () {
+            Cache::forget('userRecord');
+        });
+        static::forceDeleted(function () {
+            Cache::forget('userRecord');
+        });
     }
 
 

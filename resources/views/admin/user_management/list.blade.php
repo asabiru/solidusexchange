@@ -74,7 +74,7 @@
                             <div class="col">
                                 <span
                                     class="js-counter display-4 text-dark">{{ fractionNumber($userRecord[0]['todayJoin'],false) }}</span>
-                                <span class="text-body fs-5 ms-1">from {{ $userRecord[0]['todayJoin'] }}</span>
+                                <span class="text-body fs-5 ms-1">from {{ $userRecord[0]['totalUser'] }}</span>
                             </div>
                             <div class="col-auto">
                           <span class="badge bg-soft-info text-info p-1">
