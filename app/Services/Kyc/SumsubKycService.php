@@ -43,16 +43,23 @@ class SumsubKycService
         $applicantId = $userKyc?->provider_applicant_id;
 
         if (!$applicantId) {
-            $applicant = $this->client->createApplicant([
+            $applicantPayload = [
                 'externalUserId' => $externalUserId,
                 'email' => $user->email,
                 'type' => 'individual',
                 'lang' => app()->getLocale(),
-                'fixedInfo' => array_filter([
-                    'firstName' => $user->firstname,
-                    'lastName' => $user->lastname,
-                ]),
-            ], $levelName);
+            ];
+
+            $fixedInfo = array_filter([
+                'firstName' => $user->firstname,
+                'lastName' => $user->lastname,
+            ], static fn($value) => $value !== null && $value !== '');
+
+            if ($fixedInfo !== []) {
+                $applicantPayload['fixedInfo'] = $fixedInfo;
+            }
+
+            $applicant = $this->client->createApplicant($applicantPayload, $levelName);
 
             $applicantId = (string) ($applicant['id'] ?? '');
             if ($applicantId === '') {
