@@ -75,18 +75,35 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->name('user.smsVerify');
     Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->name('user.twoFA-Verify');
 
-    Route::get('about', fn() => $resolveLegacyPage('about'))->name('about');
-    Route::get('feature', fn() => $resolveLegacyPage('feature'))->name('feature');
-    Route::get('faq', fn() => $resolveLegacyPage('faq'))->name('faq');
-    Route::get('contact', fn() => $resolveLegacyPage('contact'))->name('contact');
-    Route::get('pricing', fn() => $resolveLegacyPage('pricing', ['price', 'feature', '/']))->name('pricing');
-    Route::get('price', fn() => $resolveLegacyPage('price', ['pricing', 'feature', '/']))->name('price');
-    Route::get('terms-and-conditions', fn() => $resolveLegacyPage('terms-and-conditions'))->name('terms-and-conditions');
-    Route::get('privacy-policy', fn() => $resolveLegacyPage('privacy-policy'))->name('privacy-policy');
-    Route::get('blog', fn() => $resolveLegacyPage('blog', ['/']))->name('blog');
-    Route::get('documentation', fn() => $resolveLegacyPage('documentation', ['doc', 'docs', '/']))->name('documentation');
-    Route::get('docs', fn() => $resolveLegacyPage('docs', ['documentation', 'doc', '/']))->name('docs');
-    Route::get('doc', fn() => $resolveLegacyPage('doc', ['documentation', 'docs', '/']))->name('doc');
+    $legacyPageRoutes = [
+        'home' => ['/',],
+        'about' => ['about'],
+        'feature' => ['feature'],
+        'features' => ['feature', '/'],
+        'faq' => ['faq'],
+        'faqs' => ['faq', '/'],
+        'contact' => ['contact'],
+        'contacts' => ['contact', '/'],
+        'contact-us' => ['contact', '/'],
+        'pricing' => ['pricing', 'price', 'feature', '/'],
+        'price' => ['price', 'pricing', 'feature', '/'],
+        'prices' => ['price', 'pricing', 'feature', '/'],
+        'terms' => ['terms-and-conditions', '/'],
+        'term' => ['terms-and-conditions', '/'],
+        'terms-and-conditions' => ['terms-and-conditions'],
+        'privacy' => ['privacy-policy', '/'],
+        'policy' => ['privacy-policy', '/'],
+        'privacy-policy' => ['privacy-policy'],
+        'blog' => ['blog', '/'],
+        'documentation' => ['documentation', 'doc', 'docs', '/'],
+        'docs' => ['docs', 'documentation', 'doc', '/'],
+        'doc' => ['doc', 'documentation', 'docs', '/'],
+    ];
+
+    foreach ($legacyPageRoutes as $routeName => $candidateSlugs) {
+        Route::get($routeName, fn() => $resolveLegacyPage($candidateSlugs[0], array_slice($candidateSlugs, 1)))
+            ->name($routeName);
+    }
 
     Route::group(['middleware' => ['auth', 'verifyUser'], 'prefix' => 'user', 'as' => 'user.'], function () {
 
