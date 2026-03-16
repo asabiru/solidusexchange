@@ -43,6 +43,26 @@ Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('
         return redirect()->route('page');
     })->name('license.redirect');
 
+    Route::get('__routecheck', function () {
+        abort_unless(config('app.debug'), 404);
+
+        $names = ['doc', 'docs', 'documentation', 'price', 'pricing', 'tracking'];
+        $data = [];
+
+        foreach ($names as $name) {
+            $data[$name] = [
+                'has' => \Illuminate\Support\Facades\Route::has($name),
+                'url' => \Illuminate\Support\Facades\Route::has($name) ? route($name) : null,
+            ];
+        }
+
+        return response()->json([
+            'app_url' => config('app.url'),
+            'current_url' => url()->current(),
+            'routes' => $data,
+        ]);
+    })->name('debug.routecheck');
+
 
 Route::group(['middleware' => ['maintenanceMode']], function () use ($basicControl) {
     Route::group(['middleware' => ['guest']], function () {
