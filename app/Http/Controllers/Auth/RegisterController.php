@@ -81,13 +81,9 @@ class RegisterController extends Controller
     {
         $basicControl = basicControl();
         $validateData = [
-            'first_name' => ['required', 'string', 'max:255'],
-            'last_name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'max:50', 'unique:users,username'],
             'password' => ['required', 'string', 'min:6', 'confirmed'],
-            'phone_code' => ['required', 'string'],
-            'phone' => ['required', 'string', 'unique:users,phone'],
         ];
 
         // Recaptcha
@@ -109,7 +105,6 @@ class RegisterController extends Controller
         }
 
         return Validator::make($data, $validateData, [
-            'name.required' => 'Full Name field is required',
             'g-recaptcha-response.required' => 'The reCAPTCHA field is required',
         ]);
     }
@@ -124,15 +119,15 @@ class RegisterController extends Controller
     {
         $basic = basicControl();
         return User::create([
-            'firstname' => $data['first_name'],
-            'lastname' => $data['last_name'],
+            'firstname' => null,
+            'lastname' => null,
             'username' => $data['username'],
             'email' => $data['email'],
-            'phone_code' => '+' . $data['phone_code'],
-            'phone' => $data['phone'],
+            'phone_code' => null,
+            'phone' => null,
             'password' => Hash::make($data['password']),
             'email_verification' => ($basic->email_verification) ? 0 : 1,
-            'sms_verification' => ($basic->sms_verification) ? 0 : 1,
+            'sms_verification' => 1,
         ]);
     }
 

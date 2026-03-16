@@ -14,6 +14,7 @@ class UserKycManager
         'lastname' => ['lastname', 'last_name', 'last name', 'surname', 'family_name', 'family name'],
         'phone' => ['phone', 'phone_number', 'phone number', 'mobile', 'mobile_number', 'mobile number', 'telephone'],
         'phone_code' => ['phone_code', 'phone code', 'dial_code', 'dial code', 'country_dial_code'],
+        'document_number' => ['document_number', 'document number', 'document_id', 'document id', 'id_number', 'id number', 'doc_number', 'doc number', 'passport_number', 'passport number'],
         'address' => ['address', 'address_one', 'address one', 'address1', 'address 1', 'street', 'street_address', 'address_line_1', 'line1'],
         'address_two' => ['address_two', 'address two', 'address2', 'address 2', 'address_line_2', 'line2', 'sub_street', 'sub street', 'flat', 'flat_number', 'flat number', 'apartment', 'suite'],
         'city' => ['city', 'town'],
@@ -53,7 +54,7 @@ class UserKycManager
 
         $updates = [];
 
-        foreach (['firstname', 'lastname', 'address', 'address_two', 'city', 'country', 'country_code', 'zip_code'] as $field) {
+        foreach (['firstname', 'lastname', 'document_number', 'address', 'address_two', 'city', 'country', 'country_code', 'zip_code'] as $field) {
             if (!empty($profileData[$field])) {
                 $updates[$field] = $profileData[$field];
             }
@@ -101,6 +102,7 @@ class UserKycManager
             'first_name' => $this->firstNonEmpty([$fixedInfo['firstName'] ?? null, $info['firstName'] ?? null]),
             'last_name' => $this->firstNonEmpty([$fixedInfo['lastName'] ?? null, $info['lastName'] ?? null]),
             'phone' => $phone,
+            'document_number' => $this->resolveDocumentNumber($info, $fixedInfo),
             'address' => $addressLineOne,
             'address_two' => $addressLineTwo,
             'city' => $this->firstNonEmpty([$address['town'] ?? null, $address['city'] ?? null]),
@@ -232,6 +234,22 @@ class UserKycManager
         }
 
         return $this->asArray($info['address'] ?? $fixedInfo['address'] ?? []);
+    }
+
+    private function resolveDocumentNumber(array $info, array $fixedInfo): ?string
+    {
+        foreach ([$fixedInfo, $info] as $source) {
+            $documents = Arr::wrap($source['idDocs'] ?? []);
+            foreach ($documents as $document) {
+                $document = $this->asArray($document);
+                $number = trim((string) ($document['number'] ?? $document['idNumber'] ?? $document['docNumber'] ?? ''));
+                if ($number !== '') {
+                    return $number;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function joinAddressParts(array $parts): ?string

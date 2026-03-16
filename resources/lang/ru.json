@@ -1241,5 +1241,10 @@
     "Each row keeps the provider, status and submission time of a verification request.": "В каждой строке указаны провайдер, статус и время отправки заявки на верификацию.",
     "No verification requests yet": "Заявок на верификацию пока нет",
     "When you submit KYC, the history of checks will appear here automatically.": "После отправки KYC история проверок появится здесь автоматически.",
-    "Verification details": "Детали верификации"
+    "Verification details": "Детали верификации",
+    "Identity details": "Данные личности",
+    "These details are filled automatically from approved KYC verification and cannot be edited manually.": "Эти данные автоматически заполняются из одобренной KYC-проверки и недоступны для ручного редактирования.",
+    "These details will appear here automatically after your KYC verification is approved.": "Эти данные появятся здесь автоматически после одобрения вашей KYC-проверки.",
+    "Will be filled after KYC verification": "Заполнится после прохождения KYC",
+    "Document ID": "Номер документа"
 }

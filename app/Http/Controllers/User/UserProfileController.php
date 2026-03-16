@@ -60,23 +60,20 @@ class UserProfileController extends Controller
     public function index(Request $request)
     {
         $userProfile = $this->user;
-        $countries = config('country');
-        $country_code = $userProfile->phone_code;
         if ($request->isMethod('get')) {
             $data['kycs'] = Kyc::where('status', 1)->get();
             $languages = Language::select('id', 'name')->where('status', 1)->orderBy('name', 'ASC')->get();
-            return view($this->theme . 'user.profile.show', $data, compact('country_code', 'userProfile', 'countries', 'languages'));
+            $kycProfileLocked = (int) $userProfile->identity_verify === 2;
+
+            return view($this->theme . 'user.profile.show', $data, compact('userProfile', 'languages', 'kycProfileLocked'));
         } elseif ($request->isMethod('post')) {
             $purifiedData = Purify::clean($request->all());
 
             $validator = Validator::make($purifiedData, [
-                'firstname' => 'required|min:3|max:100|string',
-                'lastname' => 'required|min:3|max:100|string',
                 'username' => 'sometimes|required|min:5|max:50|unique:users,username,' . $userProfile->id,
                 'email' => 'sometimes|required|min:5|max:50|unique:users,email,' . $userProfile->id,
                 'language' => 'required|integer|not_in:0|exists:languages,id',
                 'timezone' => 'required',
-                'address' => 'nullable|max:250',
             ]);
 
             if ($validator->fails()) {
@@ -88,17 +85,9 @@ class UserProfileController extends Controller
                 if ($purifiedData->email != $userProfile->email) {
                     $userProfile->email_verification = 0;
                 }
-                if ($purifiedData->phone != $userProfile->phone) {
-                    $userProfile->sms_verification = 0;
-                }
 
-                $userProfile->firstname = $purifiedData->firstname;
-                $userProfile->lastname = $purifiedData->lastname;
                 $userProfile->username = $purifiedData->username;
                 $userProfile->email = $purifiedData->email;
-                $userProfile->address = $purifiedData->address ?? null;
-                $userProfile->phone = $purifiedData->phone;
-                $userProfile->phone_code = $purifiedData->phone_code ?? $userProfile->phone_code;
                 $userProfile->language_id = $purifiedData->language;
                 $userProfile->timezone = $purifiedData->timezone;
 

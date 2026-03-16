@@ -1,8 +1,5 @@
 @extends($theme.'layouts.login_register')
 @section('title',trans('Register'))
-@push('css-lib')
-    <link rel="stylesheet" href="{{ asset($themeTrue . 'css/intlTelInput.min.css')}}"/>
-@endpush
 @section('content')
     @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
         <style>
@@ -57,22 +54,6 @@
                             @endif
                             <div class="row g-4">
                                 <div class="col-12">
-                                    <input type="text" name="first_name" value="{{old('first_name')}}"
-                                           class="form-control" id="exampleInputEmail0"
-                                           placeholder="@lang('First Name')">
-                                    @error('first_name')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="text" name="last_name" value="{{old('last_name')}}"
-                                           class="form-control" id="exampleInputEmail2"
-                                           placeholder="@lang('Last Name')">
-                                    @error('last_name')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
                                     <input type="email" name="email" value="{{old('email')}}" class="form-control"
                                            id="exampleInputEmail4"
                                            placeholder="@lang('Email')">
@@ -87,12 +68,6 @@
                                     @error('username')
                                     <span class="text-danger">{{$message}}</span>
                                     @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="hidden" id="country" name="phone_code" value="+1">
-                                    <input id="telephone" class="form-control" name="phone" type="tel">
-                                    <div class="text-danger">@error('phone') @lang($message) @enderror</div>
-                                    <div class="text-danger">@error('phone_code') @lang($message) @enderror</div>
                                 </div>
                                 <div class="col-12">
                                     <div class="password-box">
@@ -164,7 +139,6 @@
 @endsection
 
 @push('js-lib')
-    <script src="{{ asset($themeTrue . 'js/intlTelInput.min.js')}}"></script>
     @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_login == 1))
         <script async src="https://www.google.com/recaptcha/api.js"></script>
     @endif
@@ -172,16 +146,6 @@
 
 @push('extra_scripts')
     <script>
-        const input = document.querySelector("#telephone");
-        window.intlTelInput(input, {
-            initialCountry: "us",
-            separateDialCode: true,
-        });
-
-        $('.iti__country-list li').on('click', function () {
-            $("#country").val($(this).data('dial-code'));
-        })
-
         const password = document.querySelector('.password');
         const passwordIcon = document.querySelector('.password-icon');
 

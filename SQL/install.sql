@@ -1245,6 +1245,7 @@ CREATE TABLE `users` (
   `country` varchar(191) DEFAULT NULL,
   `phone_code` varchar(20) DEFAULT NULL,
   `phone` varchar(191) DEFAULT NULL,
+  `document_number` varchar(191) DEFAULT NULL,
   `balance` decimal(11,2) DEFAULT 0.00,
   `image` varchar(191) DEFAULT NULL,
   `image_driver` varchar(50) DEFAULT NULL,
