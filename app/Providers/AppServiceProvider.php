@@ -38,6 +38,8 @@ class AppServiceProvider extends ServiceProvider
             $this->disableInjectedMiddleware();
         });
 
+        $configForcesHttps = str_starts_with((string) config('app.url'), 'https://');
+
         try {
             DB::connection()->getPdo();
             $data['basicControl'] = basicControl();
@@ -65,8 +67,7 @@ class AppServiceProvider extends ServiceProvider
                 $view->with('languages', $languages);
             });
 
-
-            if (basicControl()->force_ssl == 1) {
+            if ($configForcesHttps || basicControl()->force_ssl == 1) {
                 if ($this->app->environment('production') || $this->app->environment('local')) {
                     \URL::forceScheme('https');
                 }
