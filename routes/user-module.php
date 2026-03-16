@@ -20,41 +20,49 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::controller(ExchangeController::class)->group(function () {
         Route::get('get-exchange/currency', 'getExchangeCurrency')->name('getExchangeCurrency');
         Route::post('exchange/auto-rate', 'exchangeAutoRate')->name('exchangeAutoRate');
-        Route::get('exchange/get-status/{utr}', 'exchangeGetStatus')->name('exchangeGetStatus');
-
-        Route::post('exchange/request', 'exchangeRequest')->name('exchangeRequest');
-        Route::any('exchange/processing/{utr}', 'exchangeProcessing')->name('exchangeProcessing');
-        Route::get('exchange/processing-overview/{utr}', 'exchangeProcessingOverview')->name('exchangeProcessingOverview');
-        Route::any('exchange/initiate-payment/{utr}', 'exchangeInitPayment')->name('exchangeInitPayment');
-        Route::get('exchange/final/{utr}', 'exchangeFinal')->name('exchangeFinal');
     });
 
     Route::controller(BuyController::class)->group(function () {
         Route::get('get-buy/currency', 'getBuyCurrency')->name('getBuyCurrency');
         Route::post('buy/auto-rate', 'buyAutoRate')->name('buyAutoRate');
-        Route::get('buy/get-status/{utr}', 'buyGetStatus')->name('buyGetStatus');
-
-        Route::post('buy/request', 'buyRequest')->name('buyRequest');
-        Route::any('buy/processing/{utr}', 'buyProcessing')->name('buyProcessing');
-        Route::get('buy/processing-overview/{utr}', 'buyProcessingOverview')->name('buyProcessingOverview');
-        Route::any('buy/initiate-payment/{utr}', 'buyInitPayment')->name('buyInitPayment');
-        Route::get('buy/final/{utr}', 'buyFinal')->name('buyFinal');
     });
 
     Route::controller(SellController::class)->group(function () {
         Route::get('get-sell/currency', 'getSellCurrency')->name('getSellCurrency');
         Route::post('sell/auto-rate', 'sellAutoRate')->name('sellAutoRate');
-        Route::get('sell/get-status/{utr}', 'sellGetStatus')->name('sellGetStatus');
         Route::get('sell-currency/method-info', 'getSellCurrencyMethodInfo')->name('getSellCurrencyMethodInfo');
-
-        Route::post('sell/request', 'sellRequest')->name('sellRequest');
-        Route::any('sell/processing/{utr}', 'sellProcessing')->name('sellProcessing');
-        Route::get('sell/processing-overview/{utr}', 'sellProcessingOverview')->name('sellProcessingOverview');
-        Route::any('sell/initiate-payment/{utr}', 'sellInitPayment')->name('sellInitPayment');
-        Route::get('sell/final/{utr}', 'sellFinal')->name('sellFinal');
     });
 
-    Route::group(['middleware' => ['auth', 'verifyUser'], 'prefix' => 'user', 'as' => 'user.'], function () {
+    Route::group(['middleware' => ['auth', 'verifyUser', 'verifiedKyc']], function () {
+        Route::controller(ExchangeController::class)->group(function () {
+            Route::get('exchange/get-status/{utr}', 'exchangeGetStatus')->name('exchangeGetStatus');
+            Route::post('exchange/request', 'exchangeRequest')->name('exchangeRequest');
+            Route::any('exchange/processing/{utr}', 'exchangeProcessing')->name('exchangeProcessing');
+            Route::get('exchange/processing-overview/{utr}', 'exchangeProcessingOverview')->name('exchangeProcessingOverview');
+            Route::any('exchange/initiate-payment/{utr}', 'exchangeInitPayment')->name('exchangeInitPayment');
+            Route::get('exchange/final/{utr}', 'exchangeFinal')->name('exchangeFinal');
+        });
+
+        Route::controller(BuyController::class)->group(function () {
+            Route::get('buy/get-status/{utr}', 'buyGetStatus')->name('buyGetStatus');
+            Route::post('buy/request', 'buyRequest')->name('buyRequest');
+            Route::any('buy/processing/{utr}', 'buyProcessing')->name('buyProcessing');
+            Route::get('buy/processing-overview/{utr}', 'buyProcessingOverview')->name('buyProcessingOverview');
+            Route::any('buy/initiate-payment/{utr}', 'buyInitPayment')->name('buyInitPayment');
+            Route::get('buy/final/{utr}', 'buyFinal')->name('buyFinal');
+        });
+
+        Route::controller(SellController::class)->group(function () {
+            Route::get('sell/get-status/{utr}', 'sellGetStatus')->name('sellGetStatus');
+            Route::post('sell/request', 'sellRequest')->name('sellRequest');
+            Route::any('sell/processing/{utr}', 'sellProcessing')->name('sellProcessing');
+            Route::get('sell/processing-overview/{utr}', 'sellProcessingOverview')->name('sellProcessingOverview');
+            Route::any('sell/initiate-payment/{utr}', 'sellInitPayment')->name('sellInitPayment');
+            Route::get('sell/final/{utr}', 'sellFinal')->name('sellFinal');
+        });
+    });
+
+    Route::group(['middleware' => ['auth', 'verifyUser', 'verifiedKyc'], 'prefix' => 'user', 'as' => 'user.'], function () {
 
         Route::controller(TradeHistrotyController::class)->group(function () {
             Route::get('exchange-request/list', 'exchangeList')->name('exchangeList');

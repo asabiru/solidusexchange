@@ -12,6 +12,7 @@ use App\Models\SellRequest;
 use App\Models\Transaction;
 use App\Models\UserKyc;
 use App\Services\Kyc\SumsubKycService;
+use App\Services\Kyc\UserKycManager;
 use App\Traits\Upload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -344,7 +345,7 @@ class HomeController extends Controller
         return view($this->theme . 'user.kyc.show', $data);
     }
 
-    public function kycVerificationSubmit(Request $request, $id)
+    public function kycVerificationSubmit(Request $request, $id, UserKycManager $userKycManager)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
         if (($kyc->provider ?? 'manual') === 'sumsub') {
@@ -412,6 +413,10 @@ class HomeController extends Controller
                 'kyc_type' => $kyc->name,
                 'kyc_info' => $reqField
             ]);
+
+            if (auth()->user()) {
+                $userKycManager->refreshUserVerificationStatus(auth()->user()->fresh());
+            }
 
             return back()->with('success', 'KYC Sent Successfully');
         } catch (\Exception $e) {

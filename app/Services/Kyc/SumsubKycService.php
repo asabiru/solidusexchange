@@ -11,8 +11,10 @@ use RuntimeException;
 
 class SumsubKycService
 {
-    public function __construct(private readonly SumsubClient $client)
-    {
+    public function __construct(
+        private readonly SumsubClient $client,
+        private readonly UserKycManager $userKycManager,
+    ) {
     }
 
     public function startSession(User $user, Kyc $kyc): array
@@ -86,6 +88,10 @@ class SumsubKycService
             ]
         );
 
+        if ((int) $user->identity_verify !== 2) {
+            $this->userKycManager->refreshUserVerificationStatus($user->fresh());
+        }
+
         return [
             'token' => $token,
             'applicant_id' => $applicantId,
@@ -118,23 +124,47 @@ class SumsubKycService
 
         $userKyc->provider_review_status = $reviewStatus;
         $userKyc->provider_review_answer = $reviewAnswer;
-        $userKyc->provider_payload = $payload;
+
+        $providerPayload = is_array($userKyc->provider_payload) ? $userKyc->provider_payload : [];
+        $providerPayload['webhook'] = $payload;
+
+        if ($applicantId !== '') {
+            try {
+                $applicant = $this->client->getApplicant($applicantId);
+                $providerPayload['applicant'] = $applicant;
+
+                $sumsubKycInfo = $this->userKycManager->buildKycInfoFromSumsubApplicant($applicant);
+                if ($sumsubKycInfo !== []) {
+                    $userKyc->kyc_info = $sumsubKycInfo;
+                }
+            } catch (\Throwable $exception) {
+                report($exception);
+            }
+        }
+
+        $userKyc->provider_payload = $providerPayload;
 
         if ($reviewStatus === 'completed' && strtoupper($reviewAnswer) === 'GREEN') {
             $userKyc->status = 1;
             $userKyc->provider_completed_at = now();
             $userKyc->reason = null;
-            optional($userKyc->user)->forceFill(['identity_verify' => 2])->save();
         } elseif ($reviewStatus === 'completed' && strtoupper($reviewAnswer) === 'RED') {
             $userKyc->status = 2;
             $userKyc->provider_completed_at = now();
             $userKyc->reason = $this->extractRejectReason($payload);
-            optional($userKyc->user)->forceFill(['identity_verify' => 3])->save();
         } else {
             $userKyc->status = 0;
         }
 
         $userKyc->save();
+
+        if ($userKyc->user) {
+            $this->userKycManager->refreshUserVerificationStatus($userKyc->user->fresh());
+
+            if ((int) $userKyc->status === 1) {
+                $this->userKycManager->syncApprovedKycToProfile($userKyc->fresh('user'));
+            }
+        }
 
         return ['status' => 'ok'];
     }

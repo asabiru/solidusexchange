@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Kyc;
 use App\Models\UserKyc;
+use App\Services\Kyc\UserKycManager;
 use App\Traits\Notify;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -306,7 +307,7 @@ class KycController extends Controller
         }
     }
 
-    public function action(Request $request, $id)
+    public function action(Request $request, $id, UserKycManager $userKycManager)
     {
         $req = $request->except('_token', '_method');
         $rules = [
@@ -325,20 +326,26 @@ class KycController extends Controller
             $userKyc = UserKyc::findOrFail($id);
             if ($request->status == 1) {
                 $userKyc->status = 1;
-                $userKyc->user->identity_verify = 2;
-                $userKyc->user->save();
+                $userKyc->reason = null;
                 $message = 'Approved Successfully';
                 $this->userSendMailNotify($userKyc->user, 'approve');
             } elseif ($request->status == 2) {
                 $userKyc->status = 2;
-                $userKyc->user->identity_verify = 3;
-                $userKyc->user->save();
                 $userKyc->reason = $request->rejected_reason;
                 $message = 'Rejected Successfully';
                 $this->userSendMailNotify($userKyc->user, 'reject');
             }
 
             $userKyc->save();
+
+            if ($userKyc->user) {
+                $userKycManager->refreshUserVerificationStatus($userKyc->user->fresh());
+
+                if ((int) $userKyc->status === 1) {
+                    $userKycManager->syncApprovedKycToProfile($userKyc->fresh('user'));
+                }
+            }
+
             return back()->with('success', $message);
 
         } catch (Exception $exception) {

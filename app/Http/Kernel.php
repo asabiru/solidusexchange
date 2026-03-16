@@ -4,6 +4,7 @@ namespace App\Http;
 
 use App\Http\Middleware\Demo;
 use App\Http\Middleware\EnsureAdminRole;
+use App\Http\Middleware\EnsureKycVerified;
 use App\Http\Middleware\EnsureUserHasService;
 use App\Http\Middleware\VerifyAdmin;
 use App\Http\Middleware\VerifyUser;
@@ -76,6 +77,7 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'maintenanceMode' => \App\Http\Middleware\MaintenanceMode::class,
         'verifyUser' => VerifyUser::class,
+        'verifiedKyc' => EnsureKycVerified::class,
         'verifyAdmin' => VerifyAdmin::class,
         'checkAuthenticate' => \App\Http\Middleware\CheckApiAuthenticate::class,
         'Ensure' => EnsureUserHasService::class,

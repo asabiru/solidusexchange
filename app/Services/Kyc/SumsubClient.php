@@ -29,6 +29,11 @@ class SumsubClient
         return $this->request('POST', '/resources/accessTokens/sdk', $payload);
     }
 
+    public function getApplicant(string $applicantId): array
+    {
+        return $this->request('GET', '/resources/applicants/' . urlencode($applicantId) . '/one');
+    }
+
     public function verifyWebhook(Request $request): bool
     {
         $secretKey = trim((string) (basicControl()->sumsub_secret_key ?? ''));

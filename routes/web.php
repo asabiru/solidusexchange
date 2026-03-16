@@ -128,16 +128,20 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::group(['middleware' => ['auth', 'verifyUser'], 'prefix' => 'user', 'as' => 'user.'], function () {
 
         Route::controller(HomeController::class)->group(function () {
-            Route::get('dashboard', 'index')->name('dashboard');
             Route::post('save-token', 'saveToken')->name('save.token');
 
             Route::get('kyc/{slug}/{id}', 'kycShow')->name('kyc');
             Route::post('kyc/submit/{id}', 'kycVerificationSubmit')->name('kyc.verification.submit');
             Route::post('kyc/sumsub/token/{id}', 'kycSumsubAccessToken')->name('kyc.sumsub.token');
             Route::get('verification/center', 'verificationCenter')->name('verification.center');
-            Route::get('funds', 'fund')->name('fund.index');
-            Route::get('transaction', 'transaction')->name('transaction.index');
+        });
 
+        Route::group(['middleware' => ['verifiedKyc']], function () {
+            Route::controller(HomeController::class)->group(function () {
+                Route::get('dashboard', 'index')->name('dashboard');
+                Route::get('funds', 'fund')->name('fund.index');
+                Route::get('transaction', 'transaction')->name('transaction.index');
+            });
         });
 
         //USER PROFILE UPDATE
@@ -174,10 +178,12 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     });
 
     /* Manage User Deposit */
-    Route::controller(DepositController::class)->group(function () {
-        Route::get('supported-currency', 'supportedCurrency')->name('supported.currency');
-        Route::post('payment-request', 'paymentRequest')->name('payment.request');
-        Route::get('deposit-check-amount', 'checkAmount')->name('deposit.checkAmount');
+    Route::group(['middleware' => ['auth', 'verifyUser', 'verifiedKyc']], function () {
+        Route::controller(DepositController::class)->group(function () {
+            Route::get('supported-currency', 'supportedCurrency')->name('supported.currency');
+            Route::post('payment-request', 'paymentRequest')->name('payment.request');
+            Route::get('deposit-check-amount', 'checkAmount')->name('deposit.checkAmount');
+        });
     });
 
 

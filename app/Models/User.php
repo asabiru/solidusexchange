@@ -73,6 +73,11 @@ class User extends Authenticatable
         return $this->hasOne(Transaction::class)->latest();
     }
 
+    public function userKycs()
+    {
+        return $this->hasMany(UserKyc::class)->latest();
+    }
+
 
     public function getLastSeenActivityAttribute()
     {
