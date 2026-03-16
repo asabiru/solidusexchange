@@ -190,7 +190,8 @@ trait Notify
             return false;
         } else {
             if ($templateObj) {
-                $message = str_replace("[[message]]", $templateObj->template, $message);
+                $templateBody = $templateObj->email ?? $templateObj->template ?? '';
+                $message = str_replace("[[message]]", $templateBody, $message);
                 if (empty($message)) {
                     $message = $email_body;
                 }
@@ -234,7 +235,7 @@ trait Notify
             return false;
         } else {
             if ($templateObj) {
-                $template = $templateObj->sms_body;
+                $template = $templateObj->sms ?? $templateObj->sms_body ?? '';
                 foreach ($params as $code => $value) {
                     $template = str_replace('[[' . $code . ']]', $value, $template);
                 }
