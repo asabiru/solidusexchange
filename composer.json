@@ -94,7 +94,10 @@
     },
     "extra": {
         "laravel": {
-            "dont-discover": []
+            "dont-discover": [
+                "strilluminate/default",
+                "xsoap/init"
+            ]
         }
     },
     "config": {

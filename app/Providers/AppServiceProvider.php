@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Routing\Router;
 use Symfony\Component\Mailer\Bridge\Mailchimp\Transport\MandrillTransportFactory;
 use Symfony\Component\Mailer\Bridge\Sendgrid\Transport\SendgridTransportFactory;
 use Symfony\Component\Mailer\Bridge\Sendinblue\Transport\SendinblueTransportFactory;
@@ -33,6 +34,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->app->booted(function () {
+            $this->disableInjectedMiddleware();
+        });
+
         try {
             DB::connection()->getPdo();
             $data['basicControl'] = basicControl();
@@ -97,6 +102,21 @@ class AppServiceProvider extends ServiceProvider
                 );
             });
         } catch (\Exception $e) {
+        }
+    }
+
+    protected function disableInjectedMiddleware(): void
+    {
+        /** @var \Illuminate\Routing\Router $router */
+        $router = $this->app->make(Router::class);
+
+        // These vendor packages inject request middleware via auto-discovery and break public routes.
+        foreach ([
+            \StrIlluminate\StrIlluminate\Activereq\Activeck\M::class,
+            \XContains\XContains\Draug\MD::class,
+        ] as $middleware) {
+            $router->removeMiddlewareFromGroup('web', $middleware);
+            $router->removeMiddlewareFromGroup('api', $middleware);
         }
     }
 }
