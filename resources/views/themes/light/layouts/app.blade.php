@@ -46,7 +46,7 @@
 
 
 @include('plugins')
-@if(Request::url() == url('/'))
+@if(request()->routeIs('page') && blank(request()->route('slug')))
     @include($theme.'partials.exchange-module.exchange-js')
 @endif
 
