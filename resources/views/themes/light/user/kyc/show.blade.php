@@ -567,6 +567,30 @@
         'use strict'
 
         $(document).ready(function () {
+            let exchangeHomeUrl = @json(url('/'));
+            let hasVerifiedKyc = @json($isVerified);
+            let hasRedirectedAfterKyc = false;
+
+            function redirectToExchange(message, delay) {
+                if (hasRedirectedAfterKyc) {
+                    return;
+                }
+
+                hasRedirectedAfterKyc = true;
+
+                if (message) {
+                    Notiflix.Notify.success(message);
+                }
+
+                window.setTimeout(function () {
+                    window.location.href = exchangeHomeUrl;
+                }, delay || 1200);
+            }
+
+            if (hasVerifiedKyc) {
+                redirectToExchange(@json(__('KYC completed successfully. Redirecting to the exchange page.')));
+            }
+
             $(document).on('change', '.file-upload-input', function () {
                 let previewTarget = $(this).data('preview-target');
                 let previewElement = previewTarget ? document.getElementById(previewTarget) : null;
@@ -608,6 +632,15 @@
                         }).withOptions({
                             addViewportTag: false,
                             adaptIframeHeight: true
+                        }).on('idCheck.onApplicantSubmitted', function () {
+                            redirectToExchange(@json(__('KYC submitted successfully. Redirecting to the exchange page.')));
+                        }).on('idCheck.onApplicantStatusChanged', function (payload) {
+                            let reviewStatus = payload && payload.reviewStatus ? String(payload.reviewStatus).toLowerCase() : '';
+                            let applicantStatus = payload && payload.applicantStatus ? String(payload.applicantStatus).toLowerCase() : '';
+
+                            if (reviewStatus === 'completed' || applicantStatus === 'completed') {
+                                redirectToExchange(@json(__('KYC completed successfully. Redirecting to the exchange page.')));
+                            }
                         }).build();
 
                         $('#sumsub-websdk-container').html('');

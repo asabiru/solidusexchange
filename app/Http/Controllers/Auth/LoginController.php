@@ -142,6 +142,12 @@ class LoginController extends Controller
      */
     protected function authenticated(Request $request, $user)
     {
+        $user = $user ?: Auth::user();
+
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
         $user->last_login = Carbon::now();
         $user->last_seen = Carbon::now();
         $user->two_fa_verify = ($user->two_fa == 1) ? 0 : 1;
@@ -162,6 +168,12 @@ class LoginController extends Controller
         $ul['get_device'] = UserSystemInfo::get_device();
 
         UserLogin::create($ul);
+
+        if (!$user->email_verification || !$user->sms_verification || !$user->two_fa_verify) {
+            return redirect()->route('check');
+        }
+
+        return redirect()->to(url('/'));
 
     }
 

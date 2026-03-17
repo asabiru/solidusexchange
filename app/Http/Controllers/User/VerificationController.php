@@ -203,7 +203,7 @@ class VerificationController extends Controller
             return $kycRedirect;
         }
 
-        $redirect = redirect()->intended(route('user.dashboard'));
+        $redirect = redirect()->to(url('/'));
 
         return $successMessage ? $redirect->with('success', $successMessage) : $redirect;
     }

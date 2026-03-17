@@ -44,7 +44,7 @@ class SocialiteController extends Controller
 
             if ($searchUser) {
                 Auth::login($searchUser);
-                return redirect('user/dashboard');
+                return redirect()->to(url('/'));
 
             } else {
                 $languageId = Language::select('id')->where('default_status', 1)->first()->id ?? null;
@@ -62,7 +62,7 @@ class SocialiteController extends Controller
 
                 $this->extraWorkWithRegister($newUser);
                 Auth::login($newUser);
-                return redirect()->route('user.dashboard');
+                return redirect()->to(url('/'));
             }
 
         } catch (\Exception $e) {
@@ -97,7 +97,7 @@ class SocialiteController extends Controller
 
         if ($searchUser) {
             Auth::login($searchUser);
-            return redirect()->route('user.dashboard');
+            return redirect()->to(url('/'));
         }
 
         $languageId = Language::select('id')->where('default_status', 1)->first()->id ?? null;
@@ -116,7 +116,7 @@ class SocialiteController extends Controller
         $this->extraWorkWithRegister($newUser);
         Auth::login($newUser);
 
-        return redirect()->route('user.dashboard');
+        return redirect()->to(url('/'));
     }
 
     private function validateTelegramAuthData(array $telegramAuth): bool
