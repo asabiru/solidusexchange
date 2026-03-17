@@ -11,8 +11,10 @@ trait TimeZone
     protected function localDateFormat($value)
     {
         if (isset($value)) {
-            if (isset(auth()->user()->timezone)) {
-                return Carbon::parse(Carbon::parse($value)->setTimezone(auth()->user()->timezone)->toDateTimeString());
+            $timezone = auth()->user()->timezone ?? optional(basicControl())->time_zone ?? config('app.timezone');
+
+            if (!empty($timezone)) {
+                return Carbon::parse(Carbon::parse($value)->setTimezone($timezone)->toDateTimeString());
 
             }
             return Carbon::parse($value);

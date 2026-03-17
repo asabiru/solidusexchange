@@ -56,6 +56,17 @@ class User extends Authenticatable
     protected static function boot()
     {
         parent::boot();
+        static::creating(function (self $user) {
+            $defaultTimezone = optional(basicControl())->time_zone ?: config('app.timezone');
+
+            if (empty($user->attributes['timezone'] ?? null)) {
+                $user->timezone = $defaultTimezone;
+            }
+
+            if (empty($user->attributes['time_zone'] ?? null)) {
+                $user->time_zone = $defaultTimezone;
+            }
+        });
         static::saved(function () {
             Cache::forget('userRecord');
         });
@@ -121,6 +132,19 @@ class User extends Authenticatable
     public function getPlainPhoneCode()
     {
         return str_replace('+', '', $this->phone_code);
+    }
+
+    public function getTimezoneAttribute($value)
+    {
+        if (!empty($value)) {
+            return $value;
+        }
+
+        if (!empty($this->attributes['time_zone'] ?? null)) {
+            return $this->attributes['time_zone'];
+        }
+
+        return optional(basicControl())->time_zone ?: config('app.timezone');
     }
 
     public function sendPasswordResetNotification($token)

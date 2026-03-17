@@ -92,28 +92,6 @@
                                                    required>
                                             <div class="text-danger">@error('email') @lang($message) @enderror</div>
                                         </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">@lang('Language')</label>
-                                            <select class="cmn-select2" name="language">
-                                                @foreach($languages as $language)
-                                                    <option value="{{ $language->id }}" {{ old('language', $userProfile->language_id) == $language->id ? 'selected' : '' }}>
-                                                        {{ __($language->name) }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            <div class="text-danger">@error('language') @lang($message) @enderror</div>
-                                        </div>
-                                        <div class="col-md-6">
-                                            <label class="form-label">@lang('Time Zone')</label>
-                                            <select class="cmn-select2" name="timezone">
-                                                @foreach(timezone_identifiers_list() as $value)
-                                                    <option value="{{ $value }}" {{ old('timezone', $userProfile->timezone) == $value ? 'selected' : '' }}>
-                                                        {{ __($value) }}
-                                                    </option>
-                                                @endforeach
-                                            </select>
-                                            <div class="text-danger">@error('timezone') @lang($message) @enderror</div>
-                                        </div>
                                     </div>
                                     <div class="btn-area d-flex g-3">
                                         <button type="submit" class="cmn-btn">@lang('save changes')</button>
