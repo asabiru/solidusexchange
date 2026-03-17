@@ -74,7 +74,7 @@ trait CurrencyRateUpdate
 
     protected function resolveBybitUsdRate(string $code, $tickers): ?float
     {
-        $code = strtoupper($code);
+        $code = $this->normalizeBybitCurrencyCode($code);
 
         if (in_array($code, ['USD', 'USDT'], true)) {
             return 1.0;
@@ -95,6 +95,17 @@ trait CurrencyRateUpdate
         }
 
         return null;
+    }
+
+    protected function normalizeBybitCurrencyCode(string $code): string
+    {
+        $code = strtoupper(trim($code));
+
+        if (str_contains($code, '_')) {
+            return explode('_', $code)[0];
+        }
+
+        return $code;
     }
 
     protected function getTickerLastPrice($tickers, string $symbol): ?float
