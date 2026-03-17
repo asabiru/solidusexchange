@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Module;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FiatStoreRequest;
 use App\Models\BasicControl;
+use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
 use App\Traits\CurrencyRateUpdate;
 use App\Traits\Upload;
@@ -49,10 +50,11 @@ class FiatCurrencyController extends Controller
         $filterDate = explode('-', $request->filterDate);
         $startDate = $filterDate[0];
         $endDate = isset($filterDate[1]) ? trim($filterDate[1]) : null;
-        $referenceUsdtUsdRate = optional(
-            \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get()
-                ->first(fn($currency) => strtoupper((string) $currency->normalized_code) === 'USDT')
-        )->usd_rate ?: 1;
+        $referenceUsdtCurrency = CryptoCurrency::where('status', 1)
+            ->orderBy('sort_by', 'ASC')
+            ->get()
+            ->first(fn($currency) => strtoupper((string) $currency->normalized_code) === 'USDT');
+        $referenceUsdtUsdRate = optional($referenceUsdtCurrency)->usd_rate ?: 1;
 
         $currencies = FiatCurrency::orderBy('sort_by', 'ASC')
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -106,26 +108,28 @@ class FiatCurrencyController extends Controller
                               </a>';
 
             })
-            ->addColumn('rate', function ($item) use ($referenceUsdtUsdRate) {
-                $displayRate = $this->formatDisplayRate($item, $referenceUsdtUsdRate);
+            ->addColumn('rate', function ($item) use ($referenceUsdtCurrency, $referenceUsdtUsdRate) {
+                $displayRate = $this->formatDisplayRate($item, $referenceUsdtCurrency, $referenceUsdtUsdRate);
 
                 return '<div class="flex-grow-1 ms-3">
                                   <h5 class="text-hover-primary mb-0">1 ' . $displayRate['left_currency'] . ' = ' . $displayRate['value'] . ' ' . $displayRate['right_currency'] . '</h5>
                                   <span class="fs-6 text-body">1 USD = ' . $displayRate['usd_value'] . ' ' . $item->code . '</span>
                                 </div>';
             })
-            ->addColumn('rate_indicator', function ($item) {
-                if ($item->last_rate_sync_at && blank($item->last_rate_sync_error)) {
+            ->addColumn('rate_indicator', function ($item) use ($referenceUsdtCurrency) {
+                [$effectiveSyncAt, $effectiveSyncError] = $this->resolveSyncMeta($item, $referenceUsdtCurrency);
+
+                if ($effectiveSyncAt && blank($effectiveSyncError)) {
                     return '<div class="d-flex flex-column gap-1">
                                 <span class="badge bg-soft-success text-success"><span class="legend-indicator bg-success"></span>' . trans('Live') . '</span>
-                                <small class="text-body">' . dateTime($item->last_rate_sync_at, basicControl()->date_time_format) . '</small>
+                                <small class="text-body">' . dateTime($effectiveSyncAt, basicControl()->date_time_format) . '</small>
                             </div>';
                 }
 
-                if ($item->last_rate_sync_at && filled($item->last_rate_sync_error)) {
+                if ($effectiveSyncAt && filled($effectiveSyncError)) {
                     return '<div class="d-flex flex-column gap-1">
                                 <span class="badge bg-soft-warning text-warning"><span class="legend-indicator bg-warning"></span>' . trans('Fallback') . '</span>
-                                <small class="text-body">' . dateTime($item->last_rate_sync_at, basicControl()->date_time_format) . '</small>
+                                <small class="text-body">' . dateTime($effectiveSyncAt, basicControl()->date_time_format) . '</small>
                             </div>';
                 }
 
@@ -403,8 +407,19 @@ class FiatCurrencyController extends Controller
         return (float) $currency->rate > 0 || (float) $currency->usd_rate > 0;
     }
 
-    protected function formatDisplayRate(FiatCurrency $currency, float $referenceUsdtUsdRate): array
+    protected function formatDisplayRate(FiatCurrency $currency, ?CryptoCurrency $referenceUsdtCurrency, float $referenceUsdtUsdRate): array
     {
+        if ($this->shouldMirrorBaseCurrencyFromUsdt($currency, $referenceUsdtCurrency)) {
+            $baseValue = (float) $referenceUsdtCurrency->rate;
+
+            return [
+                'left_currency' => 'USDT',
+                'right_currency' => $currency->code,
+                'value' => rtrim(rtrim(number_format($baseValue, 8, '.', ''), '0'), '.'),
+                'usd_value' => rtrim(rtrim(number_format($baseValue, 8, '.', ''), '0'), '.'),
+            ];
+        }
+
         $usdValue = (float) $currency->usd_rate > 0
             ? (1 / (float) $currency->usd_rate)
             : 0;
@@ -419,5 +434,26 @@ class FiatCurrencyController extends Controller
             'value' => rtrim(rtrim(number_format($usdtValue, 8, '.', ''), '0'), '.'),
             'usd_value' => rtrim(rtrim(number_format($usdValue, 8, '.', ''), '0'), '.'),
         ];
+    }
+
+    protected function resolveSyncMeta(FiatCurrency $currency, ?CryptoCurrency $referenceUsdtCurrency): array
+    {
+        if ($this->shouldMirrorBaseCurrencyFromUsdt($currency, $referenceUsdtCurrency)) {
+            return [
+                $referenceUsdtCurrency->last_rate_sync_at,
+                $referenceUsdtCurrency->last_rate_sync_error,
+            ];
+        }
+
+        return [
+            $currency->last_rate_sync_at,
+            $currency->last_rate_sync_error,
+        ];
+    }
+
+    protected function shouldMirrorBaseCurrencyFromUsdt(FiatCurrency $currency, ?CryptoCurrency $referenceUsdtCurrency): bool
+    {
+        return $referenceUsdtCurrency !== null
+            && strtoupper((string) $currency->code) === strtoupper((string) basicControl()->base_currency);
     }
 }
