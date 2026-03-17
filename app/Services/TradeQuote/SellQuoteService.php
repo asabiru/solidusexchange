@@ -17,7 +17,8 @@ class SellQuoteService
             throw new RuntimeException('Send amount must be greater than zero.');
         }
 
-        $exchangeRate = (float) $sendCurrency->usd_rate / (float) $getCurrency->usd_rate;
+        $getUsdRate = $this->resolveEffectiveFiatUsdRate($getCurrency);
+        $exchangeRate = (float) $sendCurrency->usd_rate / $getUsdRate;
         $getAmount = $sendAmount * $exchangeRate;
         $fees = $this->getFiatFees($getAmount, $getCurrency);
         $processingFee = (float) $fees['processingFees'];
@@ -40,5 +41,30 @@ class SellQuoteService
             'get_currency_code' => $getCurrency->code,
             'rate_source' => 'auto_sync',
         ];
+    }
+
+    protected function resolveEffectiveFiatUsdRate(FiatCurrency $currency): float
+    {
+        $storedUsdRate = (float) $currency->usd_rate;
+        $baseCurrency = strtoupper((string) basicControl()->base_currency);
+
+        if (strtoupper((string) $currency->code) !== $baseCurrency) {
+            return $storedUsdRate;
+        }
+
+        $referenceUsdt = CryptoCurrency::where('status', 1)
+            ->orderBy('sort_by', 'ASC')
+            ->get()
+            ->first(function ($cryptoCurrency) {
+                return strtoupper((string) $cryptoCurrency->normalized_code) === 'USDT'
+                    && (float) $cryptoCurrency->rate > 0
+                    && (float) $cryptoCurrency->usd_rate > 0;
+            });
+
+        if (!$referenceUsdt) {
+            return $storedUsdRate;
+        }
+
+        return (float) $referenceUsdt->usd_rate / (float) $referenceUsdt->rate;
     }
 }
