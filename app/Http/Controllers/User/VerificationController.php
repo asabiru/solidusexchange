@@ -4,7 +4,9 @@ namespace App\Http\Controllers\User;
 
 use App\Helpers\GoogleAuthenticator;
 use App\Http\Controllers\Controller;
+use App\Models\Kyc;
 use App\Models\ContentDetails;
+use App\Models\UserKyc;
 use App\Traits\Notify;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -82,7 +84,7 @@ class VerificationController extends Controller
             return view(template() . 'auth.verification.2stepSecurity', compact('user', 'page_title', 'template'));
 
         }
-        return redirect()->route('user.dashboard');
+        return $this->redirectAfterVerification();
     }
 
 
@@ -136,7 +138,7 @@ class VerificationController extends Controller
             $user->verify_code = null;
             $user->sent_at = null;
             $user->save();
-            return redirect()->intended(route('user.dashboard'));
+            return $this->redirectAfterVerification('Email verified successfully. The next step is to complete KYC verification.');
         }
         throw ValidationException::withMessages(['error' => 'Verification code didn\'t match!']);
     }
@@ -158,7 +160,7 @@ class VerificationController extends Controller
             $user->sent_at = null;
             $user->save();
 
-            return redirect()->intended(route('user.dashboard'));
+            return $this->redirectAfterVerification('Verification completed successfully. The next step is to complete KYC verification.');
         }
         throw ValidationException::withMessages(['error' => 'Verification code didn\'t match!']);
     }
@@ -176,10 +178,67 @@ class VerificationController extends Controller
         if ($getCode == trim($request->code)) {
             $user->two_fa_verify = 1;
             $user->save();
-            return redirect()->intended(route('user.dashboard'));
+            return $this->redirectAfterVerification('Verification completed successfully. The next step is to complete KYC verification.');
         }
         throw ValidationException::withMessages(['error' => 'Wrong Verification Code']);
 
+    }
+
+    protected function redirectAfterVerification(?string $successMessage = null)
+    {
+        $user = $this->user ?? Auth::user();
+
+        if (!$user) {
+            return redirect()->route('login');
+        }
+
+        if (!$user->email_verification || !$user->sms_verification || !$user->two_fa_verify) {
+            $redirect = redirect()->route('check');
+
+            return $successMessage ? $redirect->with('success', $successMessage) : $redirect;
+        }
+
+        $kycRedirect = $this->redirectToRequiredKycStep($user, $successMessage);
+        if ($kycRedirect) {
+            return $kycRedirect;
+        }
+
+        $redirect = redirect()->intended(route('user.dashboard'));
+
+        return $successMessage ? $redirect->with('success', $successMessage) : $redirect;
+    }
+
+    protected function redirectToRequiredKycStep($user, ?string $successMessage = null)
+    {
+        $activeKycs = Kyc::query()->where('status', 1)->orderBy('id')->get();
+        if ($activeKycs->isEmpty()) {
+            return null;
+        }
+
+        if ((int) $user->identity_verify === 2 || UserKyc::query()->where('user_id', $user->id)->where('status', 1)->exists()) {
+            return null;
+        }
+
+        $latestUserKyc = UserKyc::query()
+            ->where('user_id', $user->id)
+            ->latest()
+            ->first();
+
+        $redirectUrl = route('user.verification.center');
+        $message = $successMessage ?: 'Please complete KYC verification to continue.';
+
+        if ($latestUserKyc && (int) $latestUserKyc->status === 0) {
+            $message = $successMessage ?: 'Your KYC verification is under review.';
+        } elseif ($latestUserKyc && (int) $latestUserKyc->status === 2) {
+            $message = $successMessage ?: 'Your KYC verification was rejected. Please submit it again.';
+
+            $kyc = $activeKycs->firstWhere('id', $latestUserKyc->kyc_id) ?: $activeKycs->first();
+            if ($kyc) {
+                $redirectUrl = route('user.kyc', [$kyc->slug, $kyc->id]);
+            }
+        }
+
+        return redirect()->to($redirectUrl)->with('success', $message);
     }
 
 

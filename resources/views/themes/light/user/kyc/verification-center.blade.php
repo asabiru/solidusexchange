@@ -7,6 +7,8 @@
     $approvedCount = $userKycs->where('status', 1)->count();
     $rejectedCount = $userKycs->where('status', 2)->count();
     $firstKyc = $kycs->first();
+    $latestRequest = $userKycs->first();
+    $needsKycAction = (int) auth()->user()->identity_verify !== 2;
 @endphp
 
 @section('content')
@@ -16,6 +18,33 @@
 
             <div class="account-settings-profile-section">
                 <div class="kyc-center-shell">
+                    @if($needsKycAction)
+                        <div class="card kyc-next-step-card">
+                            <div class="card-body">
+                                <div class="kyc-center-hero__grid align-items-start">
+                                    <div>
+                                        <span class="kyc-center-chip">@lang('Next required step')</span>
+                                        @if($latestRequest && (int) $latestRequest->status === 0)
+                                            <h5 class="kyc-next-step-title">@lang('Your KYC request is under review')</h5>
+                                            <p class="kyc-center-text mb-0">@lang('Your email is already confirmed. We are reviewing your verification request now and will update the result automatically on this page.')</p>
+                                        @elseif($latestRequest && (int) $latestRequest->status === 2)
+                                            <h5 class="kyc-next-step-title">@lang('KYC needs to be submitted again')</h5>
+                                            <p class="kyc-center-text mb-0">@lang('Your email is already confirmed. The next step is to reopen the verification form, fix the issue and submit KYC again.')</p>
+                                        @else
+                                            <h5 class="kyc-next-step-title">@lang('Complete KYC to unlock your account')</h5>
+                                            <p class="kyc-center-text mb-0">@lang('Your email is already confirmed. The next required step is KYC verification so you can access the dashboard, deposits and exchange operations.')</p>
+                                        @endif
+                                    </div>
+                                    @if($firstKyc)
+                                        <div class="kyc-center-actions">
+                                            <a href="{{ route('user.kyc', [$firstKyc->slug, $firstKyc->id]) }}" class="cmn-btn">@lang('Start KYC verification')</a>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     <div class="card kyc-center-hero">
                         <div class="card-body">
                             <div class="kyc-center-hero__grid">
@@ -199,6 +228,7 @@
         }
 
         .kyc-center-hero,
+        .kyc-next-step-card,
         .kyc-stat-card,
         .kyc-history-card {
             border: 1px solid rgba(171, 131, 255, 0.18);
@@ -206,6 +236,20 @@
                 radial-gradient(circle at top right, rgba(164, 93, 255, 0.14), transparent 35%),
                 linear-gradient(180deg, rgba(27, 15, 53, 0.94), rgba(18, 11, 38, 0.96));
             box-shadow: 0 28px 50px rgba(8, 5, 22, 0.28);
+        }
+
+        .kyc-next-step-card {
+            border-color: rgba(96, 218, 255, 0.22);
+            background:
+                radial-gradient(circle at top right, rgba(96, 218, 255, 0.12), transparent 35%),
+                radial-gradient(circle at bottom left, rgba(164, 93, 255, 0.14), transparent 35%),
+                linear-gradient(180deg, rgba(27, 15, 53, 0.96), rgba(18, 11, 38, 0.98));
+        }
+
+        .kyc-next-step-title {
+            margin: 14px 0 10px;
+            font-size: clamp(1.35rem, 1.4vw, 1.75rem);
+            line-height: 1.15;
         }
 
         .kyc-center-hero__grid {
