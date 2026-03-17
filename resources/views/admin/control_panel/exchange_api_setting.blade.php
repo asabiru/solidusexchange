@@ -99,22 +99,23 @@
                                     @enderror
                                 </label>
 
-                                <h2 class="card-title h5 my-5 border-top border-bottom pt-4 pb-3 ">@lang('CoinMarketCap Api Config (Crypto Currency)')</h2>
+                                <h2 class="card-title h5 my-5 border-top border-bottom pt-4 pb-3 ">@lang('Bybit Spot Sync (Crypto Currency)')</h2>
 
                                 <div class="row mb-4">
-                                    <label for="coin_market_cap_app_key"
-                                           class="col-sm-4 col-form-label form-label">@lang("Coin Market Cap App Key")</label>
+                                    <label class="col-sm-4 col-form-label form-label">@lang("Rate Source")</label>
                                     <div class="col-sm-8">
-                                        <input type="text"
-                                               class="form-control  @error('coin_market_cap_app_key') is-invalid @enderror"
-                                               name="coin_market_cap_app_key" id="pusherAppIdLabel"
-                                               autocomplete="off"
-                                               placeholder="@lang("Coin Market Cap App Key")"
-                                               aria-label="@lang("Coin Market Cap App Key")"
-                                               value="{{ old('coin_market_cap_app_key', $basicControl->coin_market_cap_app_key) }}">
-                                        @error('coin_market_cap_app_key')
-                                        <span class="invalid-feedback">{{ $message }}</span>
-                                        @enderror
+                                        <div class="alert alert-soft-primary mb-0">
+                                            <div class="d-flex align-items-start gap-2">
+                                                <i class="bi bi-info-circle mt-1"></i>
+                                                <div>
+                                                    <strong>@lang('Bybit public spot market')</strong>
+                                                    <div class="small text-body mt-1">
+                                                        @lang('Crypto currency rates are now synced from Bybit public spot tickers. No CoinMarketCap key is required for this sync.')
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="coin_market_cap_app_key" value="{{ old('coin_market_cap_app_key', $basicControl->coin_market_cap_app_key) }}">
                                     </div>
                                 </div>
 
@@ -131,7 +132,7 @@
                                                             }'>
                                                 @foreach($scheduleList as $key => $schedule)
                                                     <option
-                                                        value="{{$key}}" {{ $key == old('coin_market_cap_auto_update_at',$basicControl->currency_layer_auto_update_at) ? 'selected' : '' }}>@lang($schedule)</option>
+                                                        value="{{$key}}" {{ $key == old('coin_market_cap_auto_update_at',$basicControl->coin_market_cap_auto_update_at) ? 'selected' : '' }}>@lang($schedule)</option>
                                                 @endforeach
                                             </select>
                                         </div>
@@ -144,9 +145,9 @@
                                 <!-- Form Switch -->
                                 <label class="row form-check form-switch mb-4" for="coin_market_cap_auto_update">
                                         <span class="col-8 col-sm-9 ms-0">
-                                          <span class="d-block text-dark">@lang("Auto Update Currency Rate")</span>
+                                          <span class="d-block text-dark">@lang("Auto Update Crypto Rate")</span>
                                           <span
-                                              class="d-block fs-5">@lang("Auto update your site currency rate.")</span>
+                                              class="d-block fs-5">@lang("Auto update your site crypto currency rates from Bybit.")</span>
                                         </span>
                                     <span class="col-4 col-sm-3 text-end">
                                            <input type='hidden' value='0' name='coin_market_cap_auto_update'>
@@ -187,12 +188,13 @@
 
                 <div id="emailSection" class="card mb-4">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h2 class="card-title h4 mt-2">@lang('Coin Market Cap Instructions')</h2>
+                        <h2 class="card-title h4 mt-2">@lang('Bybit Sync Instructions')</h2>
                     </div>
                     <div class="card-body">
-                        <p> @lang("CoinMarketCap is the world's most-referenced price-tracking website for cryptoassets in the rapidly growing cryptocurrency space. Its mission is to make crypto discoverable and efficient globally by empowering retail users with unbiased, high quality and accurate information for drawing their own informed conclusions. Get your free API keys")</p>
-                        <a href="https://coinmarketcap.com/"
-                           target="_blank">@lang('Create an account') <i class="fas fa-external-link-alt"></i></a>
+                        <p>@lang('Crypto currency rates are synced from Bybit public spot tickers. The update job does not require a CoinMarketCap key anymore.')</p>
+                        <p>@lang('Supported currencies are those that have a tradable spot pair on Bybit, primarily against USDT and selected cross pairs.')</p>
+                        <a href="https://www.bybit.com/"
+                           target="_blank">@lang('Open Bybit') <i class="fas fa-external-link-alt"></i></a>
                     </div>
                 </div>
             </div>

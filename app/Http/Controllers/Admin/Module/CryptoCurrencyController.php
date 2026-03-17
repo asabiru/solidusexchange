@@ -317,20 +317,27 @@ class CryptoCurrencyController extends Controller
 
             if ($response['status']) {
                 foreach ($response['res'] as $apiRes) {
-                    $apiCode = $apiRes[0]->symbol;
-                    $apiRate = $apiRes[0]->quote->{basicControl()->base_currency}->price;
-                    $matchingCurrencies = $currencies->where('code', $apiCode);
+                    $matchingCurrencies = $currencies->where('code', $apiRes['code']);
 
                     if ($matchingCurrencies->isNotEmpty()) {
-                        $matchingCurrencies->each(function ($currency) use ($apiRate) {
+                        $matchingCurrencies->each(function ($currency) use ($apiRes) {
                             $currency->update([
-                                'rate' => $apiRate,
-                                'usd_rate' => getUSDRate($apiRate),
+                                'rate' => $apiRes['rate'],
+                                'usd_rate' => $apiRes['usd_rate'],
                                 'last_rate_sync_at' => now(),
                                 'last_rate_sync_error' => null,
                             ]);
                         });
                     }
+                }
+
+                if (!empty($response['errors'])) {
+                    CryptoCurrency::query()
+                        ->whereIn('id', $request->strIds)
+                        ->whereIn('code', array_keys($response['errors']))
+                        ->update([
+                            'last_rate_sync_error' => 'Bybit spot pair not found for this currency',
+                        ]);
                 }
             } else {
                 CryptoCurrency::query()

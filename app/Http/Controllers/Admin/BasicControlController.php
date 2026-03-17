@@ -290,17 +290,17 @@ class BasicControlController extends Controller
     public function currencyExchangeApiConfigUpdate(Request $request)
     {
         $request->validate([
-            'currency_layer_access_key' => 'required|string',
-            'coin_market_cap_app_key' => 'required|string',
+            'currency_layer_access_key' => 'nullable|string',
+            'coin_market_cap_app_key' => 'nullable|string',
         ]);
 
         try {
             $basicControl = basicControl();
             $basicControl->update([
-                'currency_layer_access_key' => $request->currency_layer_access_key,
+                'currency_layer_access_key' => trim((string) $request->currency_layer_access_key),
                 'currency_layer_auto_update' => $request->currency_layer_auto_update,
                 'currency_layer_auto_update_at' => $request->currency_layer_auto_update_at,
-                'coin_market_cap_app_key' => $request->coin_market_cap_app_key,
+                'coin_market_cap_app_key' => trim((string) $request->coin_market_cap_app_key),
                 'coin_market_cap_auto_update' => $request->coin_market_cap_auto_update,
                 'coin_market_cap_auto_update_at' => $request->coin_market_cap_auto_update_at
             ]);
