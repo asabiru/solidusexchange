@@ -71,7 +71,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('exchange/confirm-deposit/{utr}', 'exchangeConfirmDeposit')->name('exchangeConfirmDeposit');
             Route::post('exchange/send-confirm/{utr}', 'exchangeSend')->name('exchangeSend');
             Route::post('exchange/cancel-confirm/{utr}', 'exchangeCancel')->name('exchangeCancel');
-            Route::post('exchange/refund-confirm/{utr}', 'exchangeRefund')->name('exchangeRefund');
         });
 
         Route::controller(ExchangeWalletController::class)->group(function () {
@@ -99,7 +98,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
             Route::post('buy/send-confirm/{utr}', 'buySend')->name('buySend');
             Route::post('buy/cancel-confirm/{utr}', 'buyCancel')->name('buyCancel');
-            Route::post('buy/refund-confirm/{utr}', 'buyRefund')->name('buyRefund');
         });
 
         Route::controller(SellController::class)->group(function () {
@@ -111,7 +109,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
             Route::post('sell/send-confirm/{utr}', 'sellSend')->name('sellSend');
             Route::post('sell/cancel-confirm/{utr}', 'sellCancel')->name('sellCancel');
-            Route::post('sell/refund-confirm/{utr}', 'sellRefund')->name('sellRefund');
         });
 
         Route::controller(FiatSendGatewayController::class)->group(function () {

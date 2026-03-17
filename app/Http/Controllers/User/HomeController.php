@@ -64,7 +64,7 @@ class HomeController extends Controller
 
 
         $exchangeRecord = collect((clone $exchangeRequestQuery)
-                ->whereIn('status', ['2', '3', '5', '6'])
+                ->whereIn('status', ['2', '3', '5'])
                 ->selectRaw('COUNT(id) AS totalExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 2 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysPendingPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
@@ -72,23 +72,19 @@ class HomeController extends Controller
                 ->selectRaw('(COUNT(CASE WHEN status = 3 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCompletePercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
                 ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 5 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCancelPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
-                ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundExchange')
-                ->selectRaw('(COUNT(CASE WHEN status = 6 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysRefundPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
                 ->get()
                 ->makeHidden(['tracking_status', 'admin_status', 'user_status'])
                 ->toArray())->collapse();
 
         $buyRequestQuery = $this->buyRequestQuery();
 
-        $buyRecord = collect((clone $buyRequestQuery)->where('user_id', auth()->id())->whereIn('status', [2,3,5,6])->selectRaw('COUNT(id) AS totalBuy')
+        $buyRecord = collect((clone $buyRequestQuery)->where('user_id', auth()->id())->whereIn('status', [2, 3, 5])->selectRaw('COUNT(id) AS totalBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 2 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysPendingPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 3 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCompletePercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 5 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCancelPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundBuy')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysRefundPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
             ->get()
             ->makeHidden(['tracking_status', 'admin_status', 'user_status'])
             ->toArray())->collapse();
@@ -97,7 +93,7 @@ class HomeController extends Controller
 
         $sellRecord = collect((clone $sellRequestQuery)
             ->where('user_id', auth()->id())
-            ->whereIn('status', ['2', '3', '5', '6'])
+            ->whereIn('status', ['2', '3', '5'])
             ->selectRaw('COUNT(id) AS totalSell')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingSell')
             ->selectRaw('(COUNT(CASE WHEN status = 2 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysPendingPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
@@ -105,8 +101,6 @@ class HomeController extends Controller
             ->selectRaw('(COUNT(CASE WHEN status = 3 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCompletePercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelSell')
             ->selectRaw('(COUNT(CASE WHEN status = 5 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysCancelPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundSell')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 AND created_at >= ? THEN id END) / COUNT(CASE WHEN created_at >= ? THEN id END)) * 100 AS last30DaysRefundPercentage', [$thirtyDaysAgo, $thirtyDaysAgo])
             ->get()
             ->makeHidden(['tracking_status', 'admin_status', 'user_status'])
             ->toArray())->collapse();
@@ -119,8 +113,6 @@ class HomeController extends Controller
             'last30DaysCompletePercentage' => fractionNumber($exchangeRecord['last30DaysCompletePercentage']),
             'cancelExchange' => fractionNumber($exchangeRecord['cancelExchange'], false),
             'last30DaysCancelPercentage' => fractionNumber($exchangeRecord['last30DaysCancelPercentage']),
-            'refundExchange' => fractionNumber($exchangeRecord['refundExchange'], false),
-            'last30DaysRefundPercentage' => fractionNumber($exchangeRecord['last30DaysRefundPercentage']),
 
             'totalBuy' => fractionNumber($buyRecord['totalBuy'], false, false),
             'pendingBuy' => fractionNumber($buyRecord['pendingBuy'], false),
@@ -129,8 +121,6 @@ class HomeController extends Controller
             'last30DaysCompletePercentageBuy' => fractionNumber($buyRecord['last30DaysCompletePercentage']),
             'cancelBuy' => fractionNumber($buyRecord['cancelBuy'], false),
             'last30DaysCancelPercentageBuy' => fractionNumber($buyRecord['last30DaysCancelPercentage']),
-            'refundBuy' => fractionNumber($buyRecord['refundBuy'], false),
-            'last30DaysRefundPercentageBuy' => fractionNumber($buyRecord['last30DaysRefundPercentage']),
 
             'totalSell' => fractionNumber($sellRecord['totalSell'], false),
             'pendingSell' => fractionNumber($sellRecord['pendingSell'], false),
@@ -139,8 +129,6 @@ class HomeController extends Controller
             'last30DaysCompletePercentageSell' => fractionNumber($sellRecord['last30DaysCompletePercentage']),
             'cancelSell' => fractionNumber($sellRecord['cancelSell'], false),
             'last30DaysCancelPercentageSell' => fractionNumber($sellRecord['last30DaysCancelPercentage']),
-            'refundSell' => fractionNumber($sellRecord['refundSell'], false),
-            'last30DaysRefundPercentageSell' => fractionNumber($sellRecord['last30DaysRefundPercentage']),
         ]);
     }
 
@@ -149,17 +137,16 @@ class HomeController extends Controller
         $exchangeRequestQuery = $this->exchangeRequestQuery()->where('user_id', auth()->id());
 
         $exchangeRecord = collect((clone $exchangeRequestQuery)
-            ->whereIn('status', [2, 3, 5, 6])
+            ->whereIn('status', [2, 3, 5])
             ->selectRaw('COUNT(id) AS totalExchange')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingExchange')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeExchange')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelExchange')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundExchange')
             ->get()
             ->toArray())->collapse();
 
         $data['horizontalBarChatExchange'] = [$exchangeRecord['totalExchange'], $exchangeRecord['pendingExchange'], $exchangeRecord['completeExchange'],
-            $exchangeRecord['cancelExchange'], $exchangeRecord['refundExchange']];
+            $exchangeRecord['cancelExchange']];
 
         return response()->json(['exchangeFigures' => $data]);
     }
@@ -169,17 +156,16 @@ class HomeController extends Controller
         $buyRequestQuery = $this->buyRequestQuery();
 
         $buyRecord = collect((clone $buyRequestQuery)->where('user_id', auth()->id())
-            ->whereIn('status', ['2', '3', '5', '6'])
+            ->whereIn('status', ['2', '3', '5'])
             ->selectRaw('COUNT(id) AS totalBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelBuy')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundBuy')
             ->get()
             ->toArray())->collapse();
 
         $data['horizontalBarChatBuy'] = [$buyRecord['totalBuy'], $buyRecord['pendingBuy'], $buyRecord['completeBuy'],
-            $buyRecord['cancelBuy'], $buyRecord['refundBuy']];
+            $buyRecord['cancelBuy']];
 
         return response()->json(['buyFigures' => $data]);
     }
@@ -188,17 +174,16 @@ class HomeController extends Controller
     {
         $sellRequestQuery = $this->sellRequestQuery();
         $sellRecord = collect((clone $sellRequestQuery)->where('user_id', auth()->id())
-            ->whereIn('status', ['2', '3', '5', '6'])
+            ->whereIn('status', ['2', '3', '5'])
             ->selectRaw('COUNT(id) AS totalSell')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingSell')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeSell')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelSell')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundSell')
             ->get()
             ->toArray())->collapse();
 
         $data['horizontalBarChatSell'] = [$sellRecord['totalSell'], $sellRecord['pendingSell'], $sellRecord['completeSell'],
-            $sellRecord['cancelSell'], $sellRecord['refundSell']];
+            $sellRecord['cancelSell']];
 
         return response()->json(['sellFigures' => $data]);
     }
@@ -213,7 +198,7 @@ class HomeController extends Controller
         $exchangeRequests = (clone $exchangeRequestQuery)->where('user_id', auth()->id())->selectRaw('MONTH(created_at) as month, COUNT(*) as total')
             ->whereYear('created_at', $currentYear)
 
-            ->whereIn('status', [2, 3, 5, 6])
+            ->whereIn('status', [2, 3, 5])
             ->whereMonth('created_at', '<=', $currentMonth)
             ->groupBy(DB::raw('MONTH(created_at)'))
             ->get();
@@ -248,7 +233,7 @@ class HomeController extends Controller
         $buyRequestQuery = $this->buyRequestQuery();
         $buyRequests = (clone $buyRequestQuery)->where('user_id', auth()->id())->selectRaw('MONTH(created_at) as month, COUNT(*) as total')
             ->whereYear('created_at', $currentYear)
-            ->whereIn('status', ['2', '3', '5', '6'])
+            ->whereIn('status', ['2', '3', '5'])
 
             ->whereMonth('created_at', '<=', $currentMonth)
             ->groupBy(DB::raw('MONTH(created_at)'))
@@ -272,7 +257,7 @@ class HomeController extends Controller
         $sellRequests = (clone $sellRequestBaseQuery)
             ->whereYear('created_at', $currentYear)
             ->selectRaw('MONTH(created_at) as month, COUNT(*) as total')
-            ->whereIn('status', ['2', '3', '5', '6'])
+            ->whereIn('status', ['2', '3', '5'])
             ->where('user_id', auth()->id())
             ->whereMonth('created_at', '<=', $currentMonth)
             ->groupBy(DB::raw('MONTH(created_at)'))
@@ -301,21 +286,21 @@ class HomeController extends Controller
                 if ($type == 'exchange') {
                     $count = DB::table('exchange_requests')
                         ->where('user_id', auth()->id())
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();
                 } elseif ($type == 'buy') {
                     $count = DB::table('buy_requests')
                         ->where('user_id', auth()->id())
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();
                 } elseif ($type == 'sell') {
                     $count = DB::table('sell_requests')
                         ->where('user_id', auth()->id())
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();

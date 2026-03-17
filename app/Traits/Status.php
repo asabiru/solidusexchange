@@ -12,16 +12,12 @@ trait Status
         } elseif ($this->status == 2) {
             if ($this->hedge_status === 'payout_queued') {
                 return '<h4 class="mb-0 text-warning">'.trans('Payout queued').'</h4>';
-            } elseif ($this->hedge_status === 'refund_queued') {
-                return '<h4 class="mb-0 text-warning">'.trans('Refund queued').'</h4>';
             }
             return '<h4 class="mb-0 text-primary">'.trans('Awaiting').'</h4>';
         } elseif ($this->status == 3) {
             return '<h4 class="mb-0 text-success">'.trans('Completed').'</h4>';
-        } elseif ($this->status == 5) {
+        } elseif ((int)$this->status === 5) {
             return '<h4 class="mb-0 text-danger">'.trans('Canceled').'</h4>';
-        } elseif ($this->status == 6) {
-            return '<h4 class="mb-0 text-warning">'.trans('Refunded').'</h4>';
         }
     }
 
@@ -32,16 +28,12 @@ trait Status
         } elseif ($this->status == 2) {
             if ($this->hedge_status === 'payout_queued') {
                 return '<span class="badge text-bg-warning">'.trans('Payout queued').'</span>';
-            } elseif ($this->hedge_status === 'refund_queued') {
-                return '<span class="badge text-bg-warning">'.trans('Refund queued').'</span>';
             }
             return '<span class="badge text-bg-primary">'.trans('Awaiting').'</span>';
         } elseif ($this->status == 3) {
             return '<span class="badge text-bg-success">'.trans('Completed').'</span>';
-        } elseif ($this->status == 5) {
+        } elseif ((int)$this->status === 5) {
             return '<span class="badge text-bg-danger">'.trans('Canceled').'</span>';
-        } elseif ($this->status == 6) {
-            return '<span class="badge text-bg-warning">'.trans('Refunded').'</span>';
         }
     }
 
@@ -57,10 +49,6 @@ trait Status
                 return '<span class="badge bg-soft-warning text-warning">
                     <span class="legend-indicator bg-warning"></span>' . trans('Payout Queued') . '
                   </span>';
-            } elseif ($this->hedge_status === 'refund_queued') {
-                return '<span class="badge bg-soft-warning text-warning">
-                    <span class="legend-indicator bg-warning"></span>' . trans('Refund Queued') . '
-                  </span>';
             }
             return '<span class="badge bg-soft-warning text-warning">
                     <span class="legend-indicator bg-warning"></span>' . trans('Pending') . '
@@ -70,13 +58,9 @@ trait Status
             return '<span class="badge bg-soft-success text-success">
                     <span class="legend-indicator bg-success"></span>' . trans('Completed') . '
                   </span>';
-        } elseif ($this->status == 5) {
+        } elseif ((int)$this->status === 5) {
             return '<span class="badge bg-soft-danger text-danger">
                     <span class="legend-indicator bg-danger"></span>' . trans('Canceled') . '
-                  </span>';
-        } elseif ($this->status == 6) {
-            return '<span class="badge bg-soft-primary text-primary">
-                    <span class="legend-indicator bg-primary"></span>' . trans('Refunded') . '
                   </span>';
         }
     }

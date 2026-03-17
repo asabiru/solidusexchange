@@ -84,24 +84,6 @@
                 </div>
             </div>
 
-            <div class="col-sm-6 col-lg-3 mb-3 mb-lg-5">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <h6 class="card-subtitle mb-2">@lang("Refund Buy")</h6>
-                        <div class="row align-items-center gx-2">
-                            <div class="col">
-                                <span
-                                    class="js-counter display-4 text-dark">{{$buys['refundBuy']??0}}</span>
-                                <span
-                                    class="text-body fs-5 ms-1">from {{$buys['totalBuy']??0}}</span>
-                            </div>
-                            <div class="col-auto">
-                                <span class="badge bg-soft-primary text-primary p-1">{{fractionNumber($buys['refundBuyPercentage'])??0}}%</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
 
         <div class="row">
@@ -196,9 +178,6 @@
                                                                 </option>
                                                                 <option value="5"
                                                                         data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-danger"></span>Cancel</span>'>
-                                                                </option>
-                                                                <option value="6"
-                                                                        data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-primary"></span>Refund</span>'>
                                                                 </option>
                                                             </select>
                                                         </div>

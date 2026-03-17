@@ -22,7 +22,7 @@ class BasicControl extends Model
         'currency_layer_access_key', 'currency_layer_auto_update_at', 'currency_layer_auto_update', 'coin_market_cap_app_key', 'coin_market_cap_auto_update_at',
         'coin_market_cap_auto_update', 'sumsub_enabled', 'sumsub_app_token', 'sumsub_secret_key', 'sumsub_base_url', 'sumsub_level_name', 'sumsub_websdk_url',
         'automatic_payout_permission', 'date_time_format', 'google_reCapture_admin_login', 'google_reCaptcha_status_login',
-        'google_reCaptcha_status_registration', 'exchange_rate', 'refund_exchange_status', 'refund_exchange_note', 'floating_rate_update_time', 'floating_rate_update_status',
+        'google_reCaptcha_status_registration', 'exchange_rate', 'floating_rate_update_time', 'floating_rate_update_status',
         'crypto_send_time', 'fiat_send_time', 'default_mode','changeable_mode'
     ];
 

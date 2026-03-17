@@ -29,12 +29,6 @@
                     <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
                     </button>
-                    @if($sell->refund_wallet)
-                        <button type="button" class="btn btn-soft-secondary" id="refund" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i
-                                class="fas fa-arrow-rotate-left"></i> @lang('Refund')
-                        </button>
-                    @endif
                 </div>
             </div>
         @endif
@@ -53,8 +47,6 @@
                                         <span class="legend-indicator bg-success"></span>@lang("Trade Completed")
                                     @elseif ($sell->status == 5)
                                         <span class="legend-indicator bg-danger"></span>@lang("Trade Cancel")
-                                    @elseif ($sell->status == 6)
-                                        <span class="legend-indicator bg-primary"></span>@lang("Trade Refunded")
                                     @endif
                                 </div>
 
@@ -165,19 +157,6 @@
                                             <strong class="text-dark font-weight-bold"
                                                     id="receiveId">{{$sell->admin_wallet}}</strong>
                                         </li>
-                                        @if($sell->refund_wallet)
-                                            <li class="list-checked-item">@lang('Refund Address')
-                                                ({{optional($sell->sendCurrency)->code}}):
-                                                <a
-                                                    href="javascript:void(0)"
-                                                    onclick="copyRefundAddress()" data-bs-toggle="tooltip"
-                                                    data-bs-placement="top" title="@lang("copy to clipboard")"><i
-                                                        class="fas fa-copy"></i></a>
-                                                <strong
-                                                    class="text-dark font-weight-bold"
-                                                    id="refundId">{{$sell->refund_wallet}}</strong>
-                                            </li>
-                                        @endif
                                         <li class="list-checked-item">@lang('Fiat Send Gateway') : <strong
                                                 class="text-dark font-weight-bold">{{optional($sell->fiatSendGateway)->name}}</strong>
                                         </li>
@@ -264,19 +243,6 @@
             $("#deleteModalBody").text(`Do you wish to proceed with cancel the exchange?`);
             $(".deleteModalRoute").attr('action', route);
         });
-
-        $(document).on("click", "#refund", function () {
-            let route = "{{route("admin.sellRefund",$sell->utr)}}";
-            $("#deleteModalHeader").text(`Refund Confirmation`);
-            $("#deleteModalBody").text(`Do you wish to proceed with refund the exchange?`);
-            $(".deleteModalRoute").attr('action', route);
-        });
-
-
-        function copyRefundAddress() {
-            var textToCopy = document.getElementById('refundId').innerText;
-            copyExe(textToCopy);
-        }
 
         function copyReceiveAddress() {
             var textToCopy = document.getElementById('receiveId').innerText;

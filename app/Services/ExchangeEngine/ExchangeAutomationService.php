@@ -39,8 +39,8 @@ class ExchangeAutomationService
             return false;
         }
 
-        if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent', 'payout_queued', 'refund_queued'], true)) {
-            return in_array((int)$exchange->status, [3, 6], true);
+        if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent', 'payout_queued'], true)) {
+            return (int)$exchange->status === 3;
         }
 
         try {

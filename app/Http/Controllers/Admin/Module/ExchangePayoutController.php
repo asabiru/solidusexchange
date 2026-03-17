@@ -22,7 +22,7 @@ class ExchangePayoutController extends Controller
             ->when(in_array($status, ['queued', 'processing', 'sent', 'failed'], true), function ($query) use ($status) {
                 $query->where('status', $status);
             })
-            ->when(in_array($type, ['payout', 'refund'], true), function ($query) use ($type) {
+            ->when($type === 'payout', function ($query) use ($type) {
                 $query->where('type', $type);
             })
             ->orderByDesc('id')
@@ -53,48 +53,25 @@ class ExchangePayoutController extends Controller
         if ($exchange) {
             $exchange->payout_tx_id = $validated['tx_id'];
             $exchange->hedge_status = 'payout_sent';
-
-            if ($payout->type === 'refund') {
-                $exchange->status = 6;
-            } else {
-                $exchange->status = 3;
-            }
+            $exchange->status = 3;
 
             $exchange->save();
 
-            if ($payout->type === 'refund') {
-                $amount = getBaseAmount($exchange->send_amount, optional($exchange->sendCurrency)->code, 'crypto');
+            $amount = getBaseAmount($exchange->final_amount, optional($exchange->getCurrency)->code, 'crypto');
 
-                BasicService::makeTransaction(
-                    $amount,
-                    0,
-                    '+',
-                    'Crypto Exchange Refund',
-                    $exchange->id,
-                    ExchangeRequest::class,
-                    $exchange->user_id,
-                    $exchange->send_amount,
-                    optional($exchange->sendCurrency)->code
-                );
+            BasicService::makeTransaction(
+                $amount,
+                0,
+                '+',
+                'Crypto Exchange Complete',
+                $exchange->id,
+                ExchangeRequest::class,
+                $exchange->user_id,
+                $exchange->final_amount,
+                optional($exchange->getCurrency)->code
+            );
 
-                $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_REFUND');
-            } else {
-                $amount = getBaseAmount($exchange->final_amount, optional($exchange->getCurrency)->code, 'crypto');
-
-                BasicService::makeTransaction(
-                    $amount,
-                    0,
-                    '+',
-                    'Crypto Exchange Complete',
-                    $exchange->id,
-                    ExchangeRequest::class,
-                    $exchange->user_id,
-                    $exchange->final_amount,
-                    optional($exchange->getCurrency)->code
-                );
-
-                $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_COMPLETE');
-            }
+            $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_COMPLETE');
         }
 
         return back()->with('success', 'Exchange payout marked as sent successfully.');
@@ -114,7 +91,7 @@ class ExchangePayoutController extends Controller
         $payout->save();
 
         if ($payout->exchangeRequest) {
-            $payout->exchangeRequest->hedge_status = $payout->type === 'refund' ? 'refund_failed' : 'payout_failed';
+            $payout->exchangeRequest->hedge_status = 'payout_failed';
             $payout->exchangeRequest->hedge_error = $validated['error_message'];
             $payout->exchangeRequest->save();
         }

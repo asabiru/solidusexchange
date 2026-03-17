@@ -9,10 +9,8 @@ class Service
 {
     public function withdrawCrypto($object, $amount, $currency, $address, $type)
     {
-        $payoutType = $type === 'refund' ? 'refund' : 'payout';
-
         $existing = ExchangePayout::where('exchange_request_id', $object->id)
-            ->where('type', $payoutType)
+            ->where('type', 'payout')
             ->latest()
             ->first();
 
@@ -23,7 +21,7 @@ class Service
         ExchangePayout::updateOrCreate(
             [
                 'exchange_request_id' => $object->id,
-                'type' => $payoutType,
+                'type' => 'payout',
             ],
             [
                 'user_id' => $object->user_id,

@@ -82,7 +82,7 @@
         function getStatus() {
             axios.get("{{route('exchangeGetStatus',$exchangeRequest->utr)}}")
                 .then(function (response) {
-                    if (parseInt(response.data.exchangeRequest.status) === 3 || parseInt(response.data.exchangeRequest.status) === 5 || parseInt(response.data.exchangeRequest.status) === 6) {
+                    if (parseInt(response.data.exchangeRequest.status) === 3 || parseInt(response.data.exchangeRequest.status) === 5) {
                         window.location.href = route;
                     }
                 })

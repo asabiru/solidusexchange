@@ -93,10 +93,6 @@ class SellController extends Controller
                 return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
-            if (!$request->refund_wallet && basicControl()->refund_exchange_status) {
-                return back()->withInput()->with('error', 'Refund wallet address is required');
-            }
-
             $fiatSendGateway = FiatSendGateway::where('status', 1)->findOrFail($request->payment_method);
             $params = $fiatSendGateway->parameters;
 
@@ -154,7 +150,6 @@ class SellController extends Controller
             $sellRequest->final_amount = $finalAmount;
             $sellRequest->status = 1;
             $sellRequest->fiat_send_gateway_id = $fiatSendGateway->id;
-            $sellRequest->refund_wallet = $request->refund_wallet ?? null;
             $sellRequest->contact_telegram = $contactTelegram;
             $sellRequest->contact_telegram_id = $contactTelegramId;
             $sellRequest->contact_telegram_source = $contactTelegramSource;

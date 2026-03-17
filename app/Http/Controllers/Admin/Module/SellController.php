@@ -16,7 +16,7 @@ class SellController extends Controller
 
     public function sellList(Request $request)
     {
-        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel', 'refund'])) {
+        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel'])) {
              abort(404);
         }
         $data['sellType'] = $request->type;
@@ -27,8 +27,6 @@ class SellController extends Controller
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END) / COUNT(id)) * 100 AS completeSellPercentage')
             ->selectRaw('COUNT(CASE WHEN status = 5 THEN id END) AS cancelSell')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END) / COUNT(id)) * 100 AS cancelSellPercentage')
-            ->selectRaw('COUNT(CASE WHEN status = 6 THEN id END) AS refundSell')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END) / COUNT(id)) * 100 AS refundSellPercentage')
             ->get()
             ->toArray())->collapse();
         return view('admin.sell.index', $data);
@@ -53,10 +51,8 @@ class SellController extends Controller
                     return $query->where('status', 3);
                 } elseif ($sellType == 'cancel') {
                     return $query->where('status', 5);
-                } elseif ($sellType == 'refund') {
-                    return $query->where('status', 6);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['2', '3', '5']);
                 }
             })
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -222,24 +218,4 @@ class SellController extends Controller
         return back()->with('success', 'Sell Cancel Successfully');
     }
 
-    public function sellRefund(Request $request,$utr)
-    {
-        $sell = SellRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-        if ($request->btnValue == 'automatic' && optional($sell->cryptoMethod)->is_automatic) {
-            $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($sell->cryptoMethod)->code . '\\Service';
-            $data = $methodObj::withdrawCrypto($sell, $sell->send_amount, optional($sell->sendCurrency)->code, $sell->refund_wallet, 'refund');
-            if (!$data) {
-                return back()->with('error', 'The automatic cryptocurrency refund could not be executed.');
-            }
-        }
-        $sell->status = 6;
-        $sell->save();
-
-        $amount = getBaseAmount($sell->send_amount, optional($sell->sendCurrency)->code, 'crypto');
-        BasicService::makeTransaction($amount, 0, '+', 'Crypto Sell Refunded',
-            $sell->id, SellRequest::class, $sell->user_id, $sell->send_amount, optional($sell->sendCurrency)->code);
-
-        $this->sendUserNotification($sell, 'userSell', 'SELL_REFUND');
-        return back()->with('success', 'Sell Refund Successfully');
-    }
 }

@@ -90,10 +90,6 @@
                                    href="{{ route('admin.trader.sells.index', ['type' => 'cancel']) }}">
                                     @lang('Canceled Deals')
                                 </a>
-                                <a class="nav-link {{ request()->query('type') == 'refund' ? 'active' : '' }}"
-                                   href="{{ route('admin.trader.sells.index', ['type' => 'refund']) }}">
-                                    @lang('Refunded Deals')
-                                </a>
                             </div>
                         </div>
 
@@ -194,10 +190,6 @@
                                href="{{ route('admin.exchangeList').'?type=cancel' }}">
                                 @lang('Cancel Exchange')
                             </a>
-                            <a class="nav-link {{ request()->query('type') == 'refund'? 'active' : '' }}"
-                               href="{{ route('admin.exchangeList').'?type=refund' }}">
-                                @lang('Refund Exchange')
-                            </a>
                         </div>
                     </div>
                     <div class="nav-item" {{ menuActive(['admin.buyList','admin.buyView'], 3) }}>
@@ -227,10 +219,6 @@
                             <a class="nav-link {{ request()->query('type') == 'cancel'? 'active' : '' }}"
                                href="{{ route('admin.buyList').'?type=cancel' }}">
                                 @lang('Cancel Buy')
-                            </a>
-                            <a class="nav-link {{ request()->query('type') == 'refund'? 'active' : '' }}"
-                               href="{{ route('admin.buyList').'?type=refund' }}">
-                                @lang('Refund Buy')
                             </a>
                         </div>
                     </div>
@@ -262,10 +250,6 @@
                             <a class="nav-link {{ request()->query('type') == 'cancel'? 'active' : '' }}"
                                href="{{ route('admin.sellList').'?type=cancel' }}">
                                 @lang('Cancel Sell')
-                            </a>
-                            <a class="nav-link {{ request()->query('type') == 'refund'? 'active' : '' }}"
-                               href="{{ route('admin.sellList').'?type=refund' }}">
-                                @lang('Refund Sell')
                             </a>
                         </div>
                     </div>

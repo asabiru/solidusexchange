@@ -29,10 +29,6 @@
                     <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
                     </button>
-                    <button type="button" class="btn btn-soft-secondary" id="refund" data-bs-target="#confirmation"
-                            data-bs-toggle="modal"><i
-                            class="fas fa-arrow-rotate-left"></i> @lang('Refund')
-                    </button>
                 </div>
             </div>
         @endif
@@ -51,8 +47,6 @@
                                         <span class="legend-indicator bg-success"></span>@lang("Trade Completed")
                                     @elseif ($buy->status == 5)
                                         <span class="legend-indicator bg-danger"></span>@lang("Trade Cancel")
-                                    @elseif ($buy->status == 6)
-                                        <span class="legend-indicator bg-primary"></span>@lang("Trade Refunded")
                                     @endif
                                 </div>
 
@@ -215,13 +209,6 @@
             let route = "{{route("admin.buyCancel",$buy->utr)}}";
             $("#deleteModalHeader").text(`Cancel Confirmation`);
             $("#deleteModalBody").text(`Do you wish to proceed with cancel the exchange?`);
-            $(".deleteModalRoute").attr('action', route);
-        });
-
-        $(document).on("click", "#refund", function () {
-            let route = "{{route("admin.buyRefund",$buy->utr)}}";
-            $("#deleteModalHeader").text(`Refund Confirmation`);
-            $("#deleteModalBody").text(`Do you wish to proceed with refund the exchange?`);
             $(".deleteModalRoute").attr('action', route);
         });
 

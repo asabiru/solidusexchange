@@ -190,19 +190,19 @@ class DashboardController extends Controller
 
                 if ($type == 'exchange') {
                     $count = DB::table('exchange_requests')
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();
                 } elseif ($type == 'buy') {
                     $count = DB::table('buy_requests')
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();
                 } elseif ($type == 'sell') {
                     $count = DB::table('sell_requests')
-                        ->whereIn('status', ['2', '3', '5', '6'])
+                        ->whereIn('status', ['2', '3', '5'])
                         ->where('updated_at', '>=', $hour)
                         ->where('updated_at', '<', $hour->copy()->addHours(2))
                         ->count();
@@ -323,7 +323,7 @@ class DashboardController extends Controller
         $data['exchangeYesterday'] = $this->getDataForTimeRange($currentTime->copy()->subHours(24), $currentTime->copy()->subHours(24), 'exchange')[0] ?? null;
 
         $exchangeRequestQuery = $this->exchangeRequestQuery();
-        $data['totalExchange'] = (clone $exchangeRequestQuery)->whereIn('status', ['2', '3', '5', '6'])->count();
+        $data['totalExchange'] = (clone $exchangeRequestQuery)->whereIn('status', ['2', '3', '5'])->count();
         return response()->json(['exchangeRecord' => $data]);
     }
 
@@ -334,7 +334,7 @@ class DashboardController extends Controller
         $data['buyYesterday'] = $this->getDataForTimeRange($currentTime->copy()->subHours(24), $currentTime->copy()->subHours(24), 'buy')[0] ?? null;
 
         $buyRequestQuery = $this->buyRequestQuery();
-        $data['totalBuy'] = (clone $buyRequestQuery)->whereIn('status', ['2', '3', '5', '6'])->count();
+        $data['totalBuy'] = (clone $buyRequestQuery)->whereIn('status', ['2', '3', '5'])->count();
         return response()->json(['buyRecord' => $data]);
     }
 
@@ -346,7 +346,7 @@ class DashboardController extends Controller
 
         $sellRequestQuery = $this->sellRequestQuery();
 
-        $data['totalSell'] = (clone $sellRequestQuery)->whereIn('status', ['2', '3', '5', '6'])->count();
+        $data['totalSell'] = (clone $sellRequestQuery)->whereIn('status', ['2', '3', '5'])->count();
         return response()->json(['sellRecord' => $data]);
     }
 
@@ -355,17 +355,16 @@ class DashboardController extends Controller
         $exchangeRequestQuery = $this->exchangeRequestQuery();
         $exchangeRecord = collect(
             (clone $exchangeRequestQuery)
-                ->whereIn('status', ['2', '3', '5', '6'])
+                ->whereIn('status', ['2', '3', '5'])
                 ->selectRaw('COUNT(id) AS totalExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeExchange')
                 ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelExchange')
-                ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundExchange')
                 ->get()
                 ->toArray())->collapse();
 
         $data['horizontalBarChatExchange'] = [$exchangeRecord['totalExchange'], $exchangeRecord['pendingExchange'], $exchangeRecord['completeExchange'],
-            $exchangeRecord['cancelExchange'], $exchangeRecord['refundExchange']];
+            $exchangeRecord['cancelExchange']];
 
         return response()->json(['exchangePerformance' => $data]);
     }
@@ -373,17 +372,16 @@ class DashboardController extends Controller
     public function chartBuyPerformance()
     {
         $buyRequestQuery = $this->buyRequestQuery();
-        $buyRecord = collect((clone $buyRequestQuery)->whereIn('status', ['2', '3', '5', '6'])
+        $buyRecord = collect((clone $buyRequestQuery)->whereIn('status', ['2', '3', '5'])
             ->selectRaw('COUNT(id) AS totalBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelBuy')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundBuy')
             ->get()
             ->toArray())->collapse();
 
         $data['horizontalBarChatBuy'] = [$buyRecord['totalBuy'], $buyRecord['pendingBuy'], $buyRecord['completeBuy'],
-            $buyRecord['cancelBuy'], $buyRecord['refundBuy']];
+            $buyRecord['cancelBuy']];
 
         return response()->json(['buyPerformance' => $data]);
     }
@@ -391,17 +389,16 @@ class DashboardController extends Controller
     public function chartSellPerformance()
     {
         $sellRequestQuery = $this->sellRequestQuery();
-        $sellRecord = collect((clone $sellRequestQuery)->whereIn('status', ['2', '3', '5', '6'])
+        $sellRecord = collect((clone $sellRequestQuery)->whereIn('status', ['2', '3', '5'])
             ->selectRaw('COUNT(id) AS totalSell')
             ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END)) AS pendingSell')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END)) AS completeSell')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END)) AS cancelSell')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END)) AS refundSell')
             ->get()
             ->toArray())->collapse();
 
         $data['horizontalBarChatSell'] = [$sellRecord['totalSell'], $sellRecord['pendingSell'], $sellRecord['completeSell'],
-            $sellRecord['cancelSell'], $sellRecord['refundSell']];
+            $sellRecord['cancelSell']];
 
         return response()->json(['sellPerformance' => $data]);
     }

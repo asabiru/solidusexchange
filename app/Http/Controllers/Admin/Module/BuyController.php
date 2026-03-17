@@ -16,7 +16,7 @@ class BuyController extends Controller
 
     public function buyList(Request $request)
     {
-        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel', 'refund'])) {
+        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel'])) {
             return abort(404);
         }
         $data['buyType'] = $request->type;
@@ -27,8 +27,6 @@ class BuyController extends Controller
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END) / COUNT(id)) * 100 AS completeBuyPercentage')
             ->selectRaw('COUNT(CASE WHEN status = 5 THEN id END) AS cancelBuy')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END) / COUNT(id)) * 100 AS cancelBuyPercentage')
-            ->selectRaw('COUNT(CASE WHEN status = 6 THEN id END) AS refundBuy')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END) / COUNT(id)) * 100 AS refundBuyPercentage')
             ->get()
             ->toArray())->collapse();
         return view('admin.buy.index', $data);
@@ -53,10 +51,8 @@ class BuyController extends Controller
                     return $query->where('status', 3);
                 } elseif ($buyType == 'cancel') {
                     return $query->where('status', 5);
-                } elseif ($buyType == 'refund') {
-                    return $query->where('status', 6);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['2', '3', '5']);
                 }
             })
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -229,17 +225,4 @@ class BuyController extends Controller
         return back()->with('success', 'Exchange Cancel Successfully');
     }
 
-    public function buyRefund($utr)
-    {
-        $buy = BuyRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-        $buy->status = 6;
-        $buy->save();
-
-        $amount = getBaseAmount($buy->send_amount, optional($buy->sendCurrency)->code, 'fiat');
-        BasicService::makeTransaction($amount, 0, '+', 'Crypto Buy Refunded',
-            $buy->id, BuyRequest::class, $buy->user_id, $buy->send_amount, optional($buy->sendCurrency)->code);
-
-        $this->sendUserNotification($buy, 'userBuy', 'BUY_REFUND');
-        return back()->with('success', 'Exchange Refund Successfully');
-    }
 }

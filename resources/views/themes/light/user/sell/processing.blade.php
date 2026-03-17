@@ -115,21 +115,6 @@
 
                             </div>
                             <div id="telegramContactBox"></div>
-                            @if(basicControl()->refund_exchange_status)
-                                <div class="item">
-                                    <h4>@lang("Refund wallet address")</h4>
-                                    <div class="form-floating">
-                                        <input type="text" name="refund_wallet" class="form-control"
-                                               id="floatingInputValue" value="{{old('refund_wallet')}}"
-                                               placeholder="" required>
-                                        <label for="floatingInputValue"
-                                               id="refundMsg">@lang("Enter your") {{optional($sellRequest->sendCurrency)->currency_name}} @lang("recipient address")</label>
-                                    </div>
-                                    <div class="tag-area">
-                                        <small>{{basicControl()->refund_exchange_note}}</small>
-                                    </div>
-                                </div>
-                            @endif
                             <div class="check">
                                 <input type="checkbox" class="form-check-input" id="exampleCheck1" required>
                                 <label class="form-check-label"

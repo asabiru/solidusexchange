@@ -104,8 +104,6 @@ class BasicControlController extends Controller
                     'id' => $basicControl->id ?? ''
                 ], [
                     'exchange_rate' => $request->exchange_rate,
-                    'refund_exchange_status' => $request->refund_exchange_status,
-                    'refund_exchange_note' => $request->refund_exchange_note,
                     'floating_rate_update_time' => $request->floating_rate_update_time,
                     'floating_rate_update_status' => $request->floating_rate_update_status,
                     'crypto_send_time' => $request->crypto_send_time,

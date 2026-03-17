@@ -71,27 +71,6 @@
                         </div>
                     </div>
                 </div>
-                <div class="item">
-                    <div class="box-card strong-orange-card exchangeRecord">
-                        <div class="box-card-header">
-                            <h5 class="box-card-title"><i
-                                    class="fa-light fas fa-undo-alt"></i>@lang('Refund Exchange')</h5>
-                        </div>
-                        <div class="box-card-body">
-                            <h4 class="mb-0"><span class="refundExchange"></span>
-                                <sub><small>@lang('from') <span
-                                            class="totalExchange"></span></small></sub>
-                            </h4>
-                            <div class="statistics">
-                                <p class="growth"><i
-                                        class="fa-light fa-chart-line-up"></i><span
-                                        class="last30DaysRefundPercentage"></span>
-                                    %</p>
-                                <div class="time">@lang('last 30 days')</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -161,27 +140,6 @@
                                 <p class="growth down"><i
                                         class="fa-light fa-chart-line-down"></i><span
                                         class="last30DaysCancelPercentageBuy"></span>
-                                    %</p>
-                                <div class="time">@lang('last 30 days')</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="item">
-                    <div class="box-card strong-orange-card exchangeRecord">
-                        <div class="box-card-header">
-                            <h5 class="box-card-title"><i
-                                    class="fa-light fas fa-undo-alt"></i>@lang('Refund Buy')</h5>
-                        </div>
-                        <div class="box-card-body">
-                            <h4 class="mb-0"> <span class="refundBuy"></span>
-                                <sub><small>@lang('from') <span
-                                            class="totalBuy"></span></small></sub>
-                            </h4>
-                            <div class="statistics">
-                                <p class="growth"><i
-                                        class="fa-light fa-chart-line-up"></i><span
-                                        class="last30DaysRefundPercentageBuy"></span>
                                     %</p>
                                 <div class="time">@lang('last 30 days')</div>
                             </div>
@@ -258,27 +216,6 @@
                             <div class="statistics">
                                 <p class="growth down"><i
                                         class="fa-light fa-chart-line-down"></i><span class="last30DaysCancelPercentageSell"></span>
-                                    %</p>
-                                <div class="time">@lang('last 30 days')</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="item">
-                    <div class="box-card grayish-custom-card exchangeRecord">
-                        <div class="box-card-header">
-                            <h5 class="box-card-title"><i
-                                    class="fa-light fas fa-undo-alt"></i>@lang('Refund Sell')</h5>
-                        </div>
-                        <div class="box-card-body">
-                            <h4 class="mb-0"> <span class="refundSell"></span>
-                                <sub><small>@lang('from') <span
-                                            class="totalSell"></span>
-                                    </small></sub></h4>
-                            <div class="statistics">
-                                <p class="growth"><i
-                                        class="fa-light fa-chart-line-up"></i><span
-                                        class="last30DaysRefundPercentageSell"></span>
                                     %</p>
                                 <div class="time">@lang('last 30 days')</div>
                             </div>

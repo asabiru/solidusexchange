@@ -108,14 +108,12 @@ class PayTM{
 
     public function getArray2Str($arrayList)
     {
-        $findme   = 'REFUND';
         $findmepipe = '|';
         $paramStr = "";
         $flag = 1;
         foreach ($arrayList as $key => $value) {
-            $pos = strpos($value, $findme);
             $pospipe = strpos($value, $findmepipe);
-            if ($pos !== false || $pospipe !== false) {
+            if ($pospipe !== false) {
                 continue;
             }
 
@@ -162,13 +160,6 @@ class PayTM{
     public function getTxnStatus($requestParamList)
     {
         return $this->callAPI(PAYTM_STATUS_QUERY_URL, $requestParamList);
-    }
-
-    public function initiateTxnRefund($requestParamList)
-    {
-        $CHECKSUM                     = $this->getChecksumFromArray($requestParamList, PAYTM_MERCHANT_KEY, 0);
-        $requestParamList["CHECKSUM"] = $CHECKSUM;
-        return $this->callAPI(PAYTM_REFUND_URL, $requestParamList);
     }
 
     public function callAPI($apiURL, $requestParamList)

@@ -33,7 +33,6 @@
                         <select name="type" class="form-select">
                             <option value="">@lang('All')</option>
                             <option value="payout" @selected($currentType === 'payout')>@lang('Payout')</option>
-                            <option value="refund" @selected($currentType === 'refund')>@lang('Refund')</option>
                         </select>
                     </div>
                     <div class="col-md-3 d-flex align-items-end">

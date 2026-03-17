@@ -117,19 +117,6 @@
                                                       id="destinationId">{{$sell->admin_wallet}}</span>
                                             </span>
                                         </li>
-                                        @if($sell->refund_wallet)
-                                            <li class="my-3">
-                                            <span>
-												<i class="fas fa-check-circle me-2 text-base"></i> @lang('Refund Address') ({{optional($sell->sendCurrency)->code}}) :
-                                                <a href="javascript:void(0)"
-                                                   onclick="copyRefundAddress()" data-bs-toggle="tooltip"
-                                                   data-bs-placement="top" title="@lang("copy to clipboard")"><i
-                                                        class="fas fa-copy"></i></a>
-                                                <span class="font-weight-bold"
-                                                      id="refundId">{{$sell->refund_wallet}}</span>
-                                            </span>
-                                            </li>
-                                        @endif
                                         <li class="my-3">
                                             <span>
 												<i class="fas fa-check-circle me-2 text-base"></i> @lang('Fiat Send Gateway') :<span
@@ -165,11 +152,6 @@
 
         function copyDestinationAddress() {
             var textToCopy = document.getElementById('destinationId').innerText;
-            copyExe(textToCopy);
-        }
-
-        function copyRefundAddress() {
-            var textToCopy = document.getElementById('refundId').innerText;
             copyExe(textToCopy);
         }
 

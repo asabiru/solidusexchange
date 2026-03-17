@@ -8,7 +8,6 @@
                 'pending' => __('Pending'),
                 'complete' => __('Completed'),
                 'cancel' => __('Canceled'),
-                'refund' => __('Refunded'),
             ];
             $sellTypeLabel = $sellTypeLabels[$sellType] ?? ucfirst($sellType);
         @endphp

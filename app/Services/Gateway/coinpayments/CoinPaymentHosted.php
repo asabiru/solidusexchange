@@ -39,7 +39,7 @@ class CoinPaymentHosted {
      * @param currency2 The cryptocurrency of the transaction. currency1 and currency2 can be the same if you don't want any exchange rate conversion.
      * @param address Optionally set the payout address of the transaction. If address is empty then it will follow your payout settings for that coin.
      * @param ipn_url Optionally set an IPN handler to receive notices about this transaction. If ipn_url is empty then it will use the default IPN URL in your account.
-     * @param buyer_email Optionally (recommended) set the buyer's email so they can automatically claim refunds if there is an issue with their payment.
+     * @param buyer_email Optionally (recommended) set the buyer's email so they can receive payment status updates if there is an issue with their payment.
      */
     public function CreateTransactionSimple($amount, $currency1, $currency2, $address='', $ipn_url='', $buyer_email='') {
         $req = array(

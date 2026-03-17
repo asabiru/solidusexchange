@@ -84,7 +84,7 @@
         function getStatus() {
             axios.get("{{route('buyGetStatus',$buyRequest->utr)}}")
                 .then(function (response) {
-                    if (parseInt(response.data.buyRequest.status) === 3 || parseInt(response.data.buyRequest.status) === 5 || parseInt(response.data.buyRequest.status) === 6) {
+                    if (parseInt(response.data.buyRequest.status) === 3 || parseInt(response.data.buyRequest.status) === 5) {
                         window.location.href = route;
                     }
                     if (response.data.redirect === true) {

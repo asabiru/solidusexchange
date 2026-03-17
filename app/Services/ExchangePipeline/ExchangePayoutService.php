@@ -32,20 +32,6 @@ class ExchangePayoutService
         );
     }
 
-    public function sendExchangeRefund(ExchangeRequest $exchange): bool
-    {
-        $method = $this->resolvePayoutMethod($exchange);
-        $serviceClass = 'Facades\\App\\Services\\CryptoMethod\\' . $method->code . '\\Service';
-
-        return (bool)$serviceClass::withdrawCrypto(
-            $exchange,
-            (float)$exchange->send_amount,
-            optional($exchange->sendCurrency)->code,
-            (string)$exchange->refund_wallet,
-            'refund'
-        );
-    }
-
     public function resolvePayoutMethod(ExchangeRequest $exchange): CryptoMethod
     {
         $exchange->loadMissing('cryptoMethod');

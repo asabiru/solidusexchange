@@ -62,23 +62,6 @@
 
                                         <div class="row mb-4">
                                             <div class="col-sm-12">
-                                                <label for="RefundExchangeNote"
-                                                       class="form-label">@lang("Refund Exchange Note")</label>
-                                                <input type="text"
-                                                       class="form-control @error('refund_exchange_note') is-invalid @enderror"
-                                                       name="refund_exchange_note" id="RefundExchangeNote"
-                                                       placeholder="@lang("Refund Exchange Note")"
-                                                       aria-label="@lang("Refund Exchange Note")"
-                                                       autocomplete="off"
-                                                       value="{{ old('refund_exchange_note', $basicControl->refund_exchange_note) }}">
-                                                @error('refund_exchange_note')
-                                                <span class="invalid-feedback">{{ $message }}</span>
-                                                @enderror
-                                            </div>
-                                        </div>
-
-                                        <div class="row mb-4">
-                                            <div class="col-sm-12">
                                                 <label for="ExchangeRate"
                                                        class="form-label">@lang('Floating Rate Update')
                                                     <i
@@ -159,26 +142,6 @@
                                         </div>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="row form-check form-switch my-4"
-                                               for="status">
-                                            <span class="col-8 col-sm-9 ms-0">
-                                              <span class="d-block text-dark">@lang("Refund Exchange")</span>
-                                              <span
-                                                  class="d-block fs-5">@lang("To obtain the recipient's refund cryptocurrency wallet address.")</span>
-                                            </span>
-                                            <span class="col-4 col-sm-3 text-end">
-                                                    <input type="hidden" value="0" name="refund_exchange_status"/>
-                                                    <input
-                                                        class="form-check-input @error('refund_exchange_status') is-invalid @enderror"
-                                                        type="checkbox" name="refund_exchange_status"
-                                                        id="refund_exchange_status" value="1"
-                                                        {{($basicControl->refund_exchange_status == "1") ? 'checked' : ''}}>
-                                                </span>
-                                            @error('refund_exchange_status')
-                                            <span class="invalid-feedback d-block">{{ $message }}</span>
-                                            @enderror
-                                        </label>
-
                                         <label class="row form-check form-switch my-4"
                                                for="status">
                                             <span class="col-8 col-sm-9 ms-0">

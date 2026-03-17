@@ -82,7 +82,7 @@
         function getStatus() {
             axios.get("{{route('sellGetStatus',$sellRequest->utr)}}")
                 .then(function (response) {
-                    if (parseInt(response.data.selllRequest.status) === 3 || parseInt(response.data.selllRequest.status) === 5 || parseInt(response.data.selllRequest.status) === 6) {
+                    if (parseInt(response.data.selllRequest.status) === 3 || parseInt(response.data.selllRequest.status) === 5) {
                         window.location.href = route;
                     }
                 })

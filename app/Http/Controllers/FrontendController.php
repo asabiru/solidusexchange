@@ -251,19 +251,19 @@ class FrontendController extends Controller
         if ($request->trx_id) {
             $firstCharacter = substr($request->trx_id, 0, 1);
             if ($firstCharacter == 'E') {
-                $exchange = ExchangeRequest::whereIn('status', [2, 3, 5, 6])->where('utr', $request->trx_id)->latest()->first();
+                $exchange = ExchangeRequest::whereIn('status', [2, 3, 5])->where('utr', $request->trx_id)->latest()->first();
                 if ($exchange) {
                     $data['type'] = 'exchange';
                     $data['object'] = $exchange;
                 }
             } elseif ($firstCharacter == 'B') {
-                $buy = BuyRequest::whereIn('status', [2, 3, 5, 6])->where('utr', $request->trx_id)->latest()->first();
+                $buy = BuyRequest::whereIn('status', [2, 3, 5])->where('utr', $request->trx_id)->latest()->first();
                 if ($buy) {
                     $data['type'] = 'buy';
                     $data['object'] = $buy;
                 }
             } elseif ($firstCharacter == 'S') {
-                $sell = SellRequest::whereIn('status', [2, 3, 5, 6])->where('utr', $request->trx_id)->latest()->first();
+                $sell = SellRequest::whereIn('status', [2, 3, 5])->where('utr', $request->trx_id)->latest()->first();
                 if ($sell) {
                     $data['type'] = 'sell';
                     $data['object'] = $sell;

@@ -16,7 +16,7 @@ class ExchangeRequest extends Model
 
     protected $fillable = ['user_id', 'send_currency_id', 'get_currency_id', 'send_amount', 'get_amount',
         'exchange_rate', 'service_fee', 'network_fee', 'final_amount', 'status', 'utr', 'deleted_at',
-        'crypto_method_id', 'rate_type', 'destination_wallet', 'refund_wallet', 'admin_wallet', 'expire_time',
+        'crypto_method_id', 'rate_type', 'destination_wallet', 'admin_wallet', 'expire_time',
         'quote_provider', 'quote_symbol', 'quote_reference_price', 'quote_price', 'quote_markup_percent',
         'quote_slippage_percent', 'quote_trade_fee_percent', 'quote_expires_at', 'deposit_amount_confirmed',
         'deposit_tx_id', 'hedge_status', 'hedge_order_id', 'hedge_order_link_id', 'hedge_avg_price',

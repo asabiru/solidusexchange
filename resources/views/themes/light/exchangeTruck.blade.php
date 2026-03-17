@@ -55,12 +55,6 @@
                         <span>@lang("Recipient address")</span>
                         <h6>{{$object->destination_wallet}}</h6>
                     </div>
-                    @if($object->refund_wallet)
-                        <div class="item">
-                            <span>@lang("Refund address")</span>
-                            <h6>{{$object->refund_wallet}}</h6>
-                        </div>
-                    @endif
                 </div>
 
             </div>

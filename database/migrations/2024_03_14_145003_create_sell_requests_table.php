@@ -23,7 +23,7 @@ return new class extends Migration {
             $table->float('processing_fee')->default(0.00);
             $table->float('final_amount')->default(0.00)->comment("After deduct all fees");
             $table->text('parameters')->nullable()->comment("information for send fiat");
-            $table->tinyInteger('status')->default(0)->comment("0=>initiate,1=>give_address,2=>deposit_amount,3=>exchange_completed,5=>cancel,6=>refund");
+            $table->tinyInteger('status')->default(0)->comment("0=>initiate,1=>give_address,2=>deposit_amount,3=>exchange_completed,5=>cancel");
             $table->softDeletes();
             $table->timestamps();
         });

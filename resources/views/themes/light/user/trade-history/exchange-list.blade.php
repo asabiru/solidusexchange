@@ -44,8 +44,6 @@
                             </option>
                             <option value="5" {{ @request()->status == '5' ? 'selected' : '' }}>@lang('Trade Cancel')
                             </option>
-                            <option value="6" {{ @request()->status == '6' ? 'selected' : '' }}>@lang('Trade Refunded')
-                            </option>
                         </select>
                     </div>
                     <div class="col-md-2">

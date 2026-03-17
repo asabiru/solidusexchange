@@ -22,7 +22,7 @@ return new class extends Migration {
             $table->decimal('network_fee', 18, 8)->default(0.00000000);
             $table->decimal('final_amount', 18, 8)->default(0.00000000)->comment("After deduct all fees");
             $table->string('destination_wallet')->nullable()->comment("which address crypto send");
-            $table->tinyInteger('status')->default(0)->comment("0=>initiate,1=>give_address,2=>deposit_amount,3=>exchange_completed,5=>cancel,6=>refund");
+            $table->tinyInteger('status')->default(0)->comment("0=>initiate,1=>give_address,2=>deposit_amount,3=>exchange_completed,5=>cancel");
             $table->softDeletes();
             $table->timestamps();
         });

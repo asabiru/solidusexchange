@@ -74,9 +74,6 @@
                     <div class="card-body">
                         <ul class="list-checked list-checked-lg list-checked-soft-bg-warning">
                             <li class="list-checked-item">@lang('Deposit Wallet'): <strong>{{ $sell->admin_wallet }}</strong></li>
-                            @if($sell->refund_wallet)
-                                <li class="list-checked-item">@lang('Refund Wallet'): <strong>{{ $sell->refund_wallet }}</strong></li>
-                            @endif
                             @foreach(($sell->parameters ?? []) as $param)
                                 <li class="list-checked-item">{{ $param->field_label }}: <strong>{{ $param->field_value }}</strong></li>
                             @endforeach

@@ -19,7 +19,7 @@ class SellController extends Controller
         $assignmentService->assignPendingManualSells();
 
         $type = $request->get('type', 'all');
-        if (!in_array($type, ['all', 'pending', 'complete', 'cancel', 'refund'], true)) {
+        if (!in_array($type, ['all', 'pending', 'complete', 'cancel'], true)) {
             abort(404);
         }
 
@@ -34,8 +34,7 @@ class SellController extends Controller
             'pending' => $query->where('status', 2),
             'complete' => $query->where('status', 3),
             'cancel' => $query->where('status', 5),
-            'refund' => $query->where('status', 6),
-            default => $query->whereIn('status', [2, 3, 5, 6]),
+            default => $query->whereIn('status', [2, 3, 5]),
         };
 
         $data['sellType'] = $type;

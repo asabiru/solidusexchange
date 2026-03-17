@@ -27,7 +27,7 @@ class ExchangeController extends Controller
 
     public function exchangeList(Request $request)
     {
-        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel', 'refund'])) {
+        if (!in_array($request->type, ['all', 'pending', 'complete', 'cancel'])) {
             abort(404);
         }
         $data['exchangeType'] = $request->type;
@@ -38,8 +38,6 @@ class ExchangeController extends Controller
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END) / COUNT(id)) * 100 AS completeExchangePercentage')
             ->selectRaw('COUNT(CASE WHEN status = 5 THEN id END) AS cancelExchange')
             ->selectRaw('(COUNT(CASE WHEN status = 5 THEN id END) / COUNT(id)) * 100 AS cancelExchangePercentage')
-            ->selectRaw('COUNT(CASE WHEN status = 6 THEN id END) AS refundExchange')
-            ->selectRaw('(COUNT(CASE WHEN status = 6 THEN id END) / COUNT(id)) * 100 AS refundExchangePercentage')
             ->get()
             ->toArray())->collapse();
         return view('admin.exchange.index', $data);
@@ -64,10 +62,8 @@ class ExchangeController extends Controller
                     return $query->where('status', 3);
                 } elseif ($exchangeType == 'cancel') {
                     return $query->where('status', 5);
-                } elseif ($exchangeType == 'refund') {
-                    return $query->where('status', 6);
                 } else {
-                    return $query->whereIn('status', ['1', '2', '3', '5', '6']);
+                    return $query->whereIn('status', ['1', '2', '3', '5']);
                 }
             })
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -325,42 +321,4 @@ class ExchangeController extends Controller
         return back()->with('success', 'Exchange Cancel Successfully');
     }
 
-    public function exchangeRefund(Request $request, $utr)
-    {
-        $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-
-        $existingQueuedRefund = ExchangePayout::where('exchange_request_id', $exchange->id)
-            ->where('type', 'refund')
-            ->whereIn('status', ['queued', 'processing'])
-            ->latest()
-            ->first();
-
-        if ($existingQueuedRefund) {
-            return back()->with('warning', 'A treasury refund is already queued for this exchange.');
-        }
-
-        if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
-            $data = $this->payoutService->sendExchangeRefund($exchange);
-            if (!$data) {
-                return back()->with('error', 'The automatic cryptocurrency refund could not be executed.');
-            }
-
-            if ($this->payoutService->isAsyncPayout($exchange)) {
-                $exchange->hedge_status = 'refund_queued';
-                $exchange->save();
-
-                return back()->with('success', 'Treasury refund queued successfully. Mark it as sent after the on-chain transfer is broadcast.');
-            }
-        }
-        $exchange->status = 6;
-        $exchange->hedge_status = 'payout_sent';
-        $exchange->save();
-
-        $amount = getBaseAmount($exchange->send_amount, optional($exchange->sendCurrency)->code, 'crypto');
-        BasicService::makeTransaction($amount, 0, '+', 'Crypto Exchange Refund',
-            $exchange->id, ExchangeRequest::class, $exchange->user_id, $exchange->send_amount, optional($exchange->sendCurrency)->code);
-
-        $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_REFUND');
-        return back()->with('success', 'Exchange Refund Successfully');
-    }
 }

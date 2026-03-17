@@ -101,10 +101,6 @@ class ExchangeController extends Controller
                 return back()->withInput()->with('error', 'Destination wallet address is required');
             }
 
-            if (!$request->refund_wallet && basicControl()->refund_exchange_status) {
-                return back()->withInput()->with('error', 'Refund wallet address is required');
-            }
-
             $quoteService = app(ExchangeQuoteService::class);
 
             try {
@@ -118,7 +114,6 @@ class ExchangeController extends Controller
             $quoteService->applyToExchange($exchangeRequest, $quote, $rateType);
             $exchangeRequest->status = 1;
             $exchangeRequest->destination_wallet = $request->destination_wallet;
-            $exchangeRequest->refund_wallet = $request->refund_wallet ?? null;
             $exchangeRequest->save();
 
             return redirect()->route('exchangeProcessingOverview', $exchangeRequest->utr);
@@ -181,7 +176,7 @@ class ExchangeController extends Controller
     public function exchangeFinal($utr)
     {
         $exchangeRequest = ExchangeRequest::where('utr', $utr)->firstOrFail();
-        if (in_array((int)$exchangeRequest->status, [3, 5, 6], true)) {
+        if (in_array((int)$exchangeRequest->status, [3, 5], true)) {
             return redirect()->route('tracking', ['trx_id' => $exchangeRequest->utr]);
         }
 
@@ -234,7 +229,7 @@ class ExchangeController extends Controller
             }
         }
 
-        if ($exchangeRequest && in_array((int)$exchangeRequest->status, [3, 5, 6], true)) {
+        if ($exchangeRequest && in_array((int)$exchangeRequest->status, [3, 5], true)) {
             $route = route('tracking', ['trx_id' => $exchangeRequest->utr]);
         }
 

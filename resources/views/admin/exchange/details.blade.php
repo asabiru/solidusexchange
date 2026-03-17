@@ -35,12 +35,6 @@
                     <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
                     </button>
-                    @if($exchange->refund_wallet)
-                        <button type="button" class="btn btn-soft-secondary" id="refund" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i
-                                class="fas fa-arrow-rotate-left"></i> @lang('Refund')
-                        </button>
-                    @endif
                     @endif
                 </div>
             </div>
@@ -58,16 +52,12 @@
                                         <span class="legend-indicator bg-info"></span>@lang("Awaiting Deposit")
                                     @elseif ($exchange->status == 2 && $exchange->hedge_status === 'payout_queued')
                                         <span class="legend-indicator bg-warning"></span>@lang("Payout Queued")
-                                    @elseif ($exchange->status == 2 && $exchange->hedge_status === 'refund_queued')
-                                        <span class="legend-indicator bg-warning"></span>@lang("Refund Queued")
                                     @elseif ($exchange->status == 2)
                                         <span class="legend-indicator bg-warning"></span>@lang("Awaiting Complete")
                                     @elseif ($exchange->status == 3)
                                         <span class="legend-indicator bg-success"></span>@lang("Trade Completed")
                                     @elseif ($exchange->status == 5)
                                         <span class="legend-indicator bg-danger"></span>@lang("Trade Cancel")
-                                    @elseif ($exchange->status == 6)
-                                        <span class="legend-indicator bg-primary"></span>@lang("Trade Refunded")
                                     @endif
                                 </div>
 
@@ -188,17 +178,6 @@
                                                 class="text-dark font-weight-bold"
                                                 id="destinationId">{{$exchange->destination_wallet}} </strong>
                                         </li>
-                                        @if($exchange->refund_wallet)
-                                            <li class="list-checked-item">@lang('Refund address')
-                                                ({{optional($exchange->sendCurrency)->code}}): <a
-                                                    href="javascript:void(0)"
-                                                    onclick="copyRefundAddress()" data-bs-toggle="tooltip"
-                                                    data-bs-placement="top" title="@lang("copy to clipboard")"><i
-                                                        class="fas fa-copy"></i></a><strong
-                                                    class="text-dark font-weight-bold"
-                                                    id="refundId">{{$exchange->refund_wallet}}</strong>
-                                            </li>
-                                        @endif
                                         <li class="list-checked-item">@lang('Admin Receive address')
                                             ({{optional($exchange->sendCurrency)->code}}) :
                                             <a href="javascript:void(0)"
@@ -219,9 +198,6 @@
                                             </li>
                                         @endif
                                     </ul>
-                                </div>
-                                <div class="alert alert-soft-secondary" role="alert">
-                                    @lang("You can initiate a cryptocurrency refund by providing the designated refund address.")
                                 </div>
                                 @if($hasPendingTreasuryPayout && $latestExchangePayout)
                                     <div class="alert alert-soft-warning mt-3" role="alert">
@@ -305,14 +281,6 @@
             $(".deleteModalRoute").attr('action', route);
         });
 
-        $(document).on("click", "#refund", function () {
-            let route = "{{route("admin.exchangeRefund",$exchange->utr)}}";
-            $(".confirm-deposit-fields").addClass('d-none');
-            $("#deleteModalHeader").text(`Refund Confirmation`);
-            $("#deleteModalBody").text(`Do you wish to proceed with refund the exchange?`);
-            $(".deleteModalRoute").attr('action', route);
-        });
-
         $(document).on("click", "#confirmDeposit", function () {
             let route = "{{route("admin.exchangeConfirmDeposit",$exchange->utr)}}";
             $(".confirm-deposit-fields").removeClass('d-none');
@@ -351,11 +319,6 @@
 
         function copyDestinationAddress() {
             var textToCopy = document.getElementById('destinationId').innerText;
-            copyExe(textToCopy);
-        }
-
-        function copyRefundAddress() {
-            var textToCopy = document.getElementById('refundId').innerText;
             copyExe(textToCopy);
         }
 

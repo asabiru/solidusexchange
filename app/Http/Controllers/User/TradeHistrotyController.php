@@ -50,7 +50,7 @@ class TradeHistrotyController extends Controller
                 if (@$search['status']) {
                     return $query->where('status', $search['status']);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['2', '3', '5']);
                 }
             })
             ->orderBy('id', 'desc')
@@ -62,7 +62,7 @@ class TradeHistrotyController extends Controller
 
     public function exchangeDetails($utr)
     {
-        $data['exchange'] = ExchangeRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5', '6'])
+        $data['exchange'] = ExchangeRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5'])
             ->where('utr', $utr)->firstOrFail();
         return view($this->theme . 'user.trade-history.exchange-details', $data);
     }
@@ -117,7 +117,7 @@ class TradeHistrotyController extends Controller
                 if (@$search['status']) {
                     return $query->where('status', $search['status']);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['2', '3', '5']);
                 }
             })
             ->orderBy('id', 'desc')
@@ -130,7 +130,7 @@ class TradeHistrotyController extends Controller
 
     public function buyDetails($utr)
     {
-        $data['buy'] = BuyRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5', '6'])
+        $data['buy'] = BuyRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5'])
             ->where('utr', $utr)->firstOrFail();
         return view($this->theme . 'user.trade-history.buy-details', $data);
     }
@@ -159,7 +159,7 @@ class TradeHistrotyController extends Controller
                 if (@$search['status']) {
                     return $query->where('status', $search['status']);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['2', '3', '5']);
                 }
             })
             ->orderBy('id', 'desc')
@@ -172,7 +172,7 @@ class TradeHistrotyController extends Controller
 
     public function sellDetails($utr)
     {
-        $data['sell'] = SellRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5', '6'])
+        $data['sell'] = SellRequest::where('user_id', $this->user->id)->whereIn('status', ['2', '3', '5'])
             ->where('utr', $utr)->firstOrFail();
         return view($this->theme . 'user.trade-history.sell-details', $data);
     }

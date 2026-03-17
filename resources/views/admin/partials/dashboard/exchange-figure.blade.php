@@ -56,7 +56,7 @@
                 enabled: false
             },
             xaxis: {
-                categories: ['Total', 'Pending', 'Complete', 'Cancel', 'Refund'
+                categories: ['Total', 'Pending', 'Complete', 'Cancel'
                 ],
                 labels: {
                     style: {
@@ -111,7 +111,7 @@
                 enabled: false
             },
             xaxis: {
-                categories: ['Total', 'Pending', 'Complete', 'Cancel', 'Refund'
+                categories: ['Total', 'Pending', 'Complete', 'Cancel'
                 ],
                 labels: {
                     style: {
@@ -169,7 +169,7 @@
                 enabled: false
             },
             xaxis: {
-                categories: ['Total', 'Pending', 'Complete', 'Cancel', 'Refund'
+                categories: ['Total', 'Pending', 'Complete', 'Cancel'
                 ],
                 labels: {
                     style: {
