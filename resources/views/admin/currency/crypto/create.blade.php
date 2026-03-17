@@ -79,6 +79,25 @@
                                                 <span class="invalid-feedback d-block">{{ $message }}</span>
                                                 @enderror
                                             </div>
+                                            <label class="row form-check form-switch my-4"
+                                                   for="is_stablecoin">
+                                            <span class="col-8 col-sm-9 ms-0">
+                                              <span class="d-block text-dark">@lang("Stablecoin")</span>
+                                              <span
+                                                  class="d-block fs-5">@lang("Use this for coins that should be treated as stable assets in the admin display and future exchange rules.")</span>
+                                            </span>
+                                                <span class="col-4 col-sm-3 text-end">
+                                                    <input type="hidden" value="0" name="is_stablecoin"/>
+                                                    <input
+                                                        class="form-check-input @error('is_stablecoin') is-invalid @enderror"
+                                                        type="checkbox" name="is_stablecoin"
+                                                        id="is_stablecoin" value="1"
+                                                        {{old('is_stablecoin') == '1' ? 'checked':''}}>
+                                                </span>
+                                                @error('is_stablecoin')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                            </label>
                                             <div class="mb-3">
                                                 <label class="form-label"
                                                        for="Rate">@lang('Fallback Rate')</label>
@@ -98,6 +117,9 @@
                                                 @enderror
                                                 <small class="text-body d-block mt-2">
                                                     @lang('The latest successful parsed rate is stored here. If live parsing becomes unavailable, the system will continue to use this value until sync resumes.')
+                                                </small>
+                                                <small class="text-body d-block mt-2">
+                                                    @lang('Display logic: USDT is shown in the site base currency, while all other crypto currencies are shown against USDT in the list.')
                                                 </small>
                                             </div>
                                             <div class="mb-3">

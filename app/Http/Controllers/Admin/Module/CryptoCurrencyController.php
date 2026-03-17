@@ -50,6 +50,11 @@ class CryptoCurrencyController extends Controller
         $startDate = $filterDate[0];
         $endDate = isset($filterDate[1]) ? trim($filterDate[1]) : null;
 
+        $referenceUsdtUsdRate = optional(
+            CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get()
+                ->first(fn($currency) => $this->normalizeCryptoCode($currency->code) === 'USDT')
+        )->usd_rate ?: 1;
+
         $currencies = CryptoCurrency::orderBy('sort_by', 'ASC')
             ->when(isset($filterName), function ($query) use ($filterName) {
                 return $query->where('name', 'LIKE', '%' . $filterName . '%');
@@ -86,6 +91,10 @@ class CryptoCurrencyController extends Controller
             })
             ->addColumn('name', function ($item) {
                 $url = getFile($item->driver, $item->image);
+                $coinTypeBadge = $item->is_stablecoin
+                    ? '<span class="badge bg-soft-info text-info ms-2">' . trans('Stablecoin') . '</span>'
+                    : '<span class="badge bg-soft-secondary text-body ms-2">' . trans('Coin') . '</span>';
+
                 return '<a class="d-flex align-items-center me-2">
                                 <div class="list-group-item">
                                  <i class="sortablejs-custom-handle bi-grip-horizontal list-group-icon"></i>
@@ -96,16 +105,18 @@ class CryptoCurrencyController extends Controller
                                   </div>
                                 </div>
                                 <div class="flex-grow-1 ms-3">
-                                  <h5 class="text-hover-primary mb-0">' . $item->name . '</h5>
+                                  <h5 class="text-hover-primary mb-0">' . $item->name . $coinTypeBadge . '</h5>
                                   <span class="fs-6 text-body">' . $item->symbol . ' - ' . $item->code . '</span>
                                 </div>
                               </a>';
 
             })
-            ->addColumn('rate', function ($item) {
+            ->addColumn('rate', function ($item) use ($referenceUsdtUsdRate) {
+                $displayRate = $this->formatDisplayRate($item, $referenceUsdtUsdRate);
+
                 return '<div class="flex-grow-1 ms-3">
-                                  <h5 class="text-hover-primary mb-0">1 ' . $item->code . ' = ' . number_format($item->rate) . ' ' . basicControl()->base_currency . '</h5>
-                                  <span class="fs-6 text-body">1 ' . $item->code . ' = ' . number_format($item->usd_rate) . ' USD' . '</span>
+                                  <h5 class="text-hover-primary mb-0">1 ' . $item->code . ' = ' . $displayRate['value'] . ' ' . $displayRate['currency'] . '</h5>
+                                  <span class="fs-6 text-body">1 ' . $item->code . ' = ' . $this->formatRateNumber($item->usd_rate) . ' USD' . '</span>
                                 </div>';
             })
             ->addColumn('rate_indicator', function ($item) {
@@ -351,5 +362,35 @@ class CryptoCurrencyController extends Controller
             session()->flash('success', 'Rate Updated successfully');
             return response()->json(['success' => 1]);
         }
+    }
+
+    protected function normalizeCryptoCode(?string $code): string
+    {
+        $code = strtoupper(trim((string) $code));
+        return str_contains($code, '_') ? explode('_', $code)[0] : $code;
+    }
+
+    protected function formatDisplayRate(CryptoCurrency $currency, float $referenceUsdtUsdRate): array
+    {
+        if ($this->normalizeCryptoCode($currency->code) === 'USDT') {
+            return [
+                'value' => $this->formatRateNumber($currency->rate),
+                'currency' => basicControl()->base_currency,
+            ];
+        }
+
+        $referenceRate = $referenceUsdtUsdRate > 0
+            ? ((float) $currency->usd_rate / $referenceUsdtUsdRate)
+            : (float) $currency->usd_rate;
+
+        return [
+            'value' => $this->formatRateNumber($referenceRate),
+            'currency' => 'USDT',
+        ];
+    }
+
+    protected function formatRateNumber(float $rate): string
+    {
+        return rtrim(rtrim(number_format($rate, 8, '.', ''), '0'), '.');
     }
 }

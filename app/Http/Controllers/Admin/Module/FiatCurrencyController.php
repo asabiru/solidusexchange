@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Module;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\FiatStoreRequest;
+use App\Models\BasicControl;
 use App\Models\FiatCurrency;
 use App\Traits\CurrencyRateUpdate;
 use App\Traits\Upload;
@@ -302,11 +303,21 @@ class FiatCurrencyController extends Controller
             return response()->json(['error' => 1]);
         } else {
             $currencies = FiatCurrency::select(['id', 'code', 'rate', 'usd_rate'])->whereIn('id', $request->strIds)->get();
-            $currencyCodes = implode(',', $currencies->pluck('code')->toArray());
+            $currencyCodes = $currencies->pluck('code')
+                ->push('USD')
+                ->unique()
+                ->implode(',');
 
             $response = $this->fiatRateUpdate(basicControl()->base_currency, $currencyCodes);
 
             if ($response['status']) {
+                $baseExchangeRate = $this->resolveBaseExchangeRate($response['res']);
+                if ($baseExchangeRate !== null) {
+                    optional(BasicControl::first())->update([
+                        'exchange_rate' => $baseExchangeRate,
+                    ]);
+                }
+
                 foreach ($response['res'] as $key => $apiRes) {
                     $apiCode = substr($key, -3);
                     $apiRate = 1 / $apiRes;
@@ -335,5 +346,23 @@ class FiatCurrencyController extends Controller
             session()->flash('success', 'Rate Updated successfully');
             return response()->json(['success' => 1]);
         }
+    }
+
+    protected function resolveBaseExchangeRate(array $quotes): ?float
+    {
+        $baseCurrency = strtoupper((string) basicControl()->base_currency);
+
+        if ($baseCurrency === 'USD') {
+            return 1.0;
+        }
+
+        $quoteKey = $baseCurrency . 'USD';
+        $quote = (float) ($quotes[$quoteKey] ?? 0);
+
+        if ($quote <= 0) {
+            return null;
+        }
+
+        return 1 / $quote;
     }
 }

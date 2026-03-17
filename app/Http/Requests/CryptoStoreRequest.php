@@ -37,6 +37,7 @@ class CryptoStoreRequest extends FormRequest
             'network_fee' => 'required|numeric|min:0|not_in:0',
             'network_fee_type' => ['required', Rule::in(['percent', 'flat'])],
             'status' => ['required', Rule::in(['0', '1'])],
+            'is_stablecoin' => ['required', Rule::in(['0', '1'])],
         ];
     }
 }
