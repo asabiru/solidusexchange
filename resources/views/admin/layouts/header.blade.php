@@ -35,10 +35,10 @@
             <div class="dropdown ms-2">
                 <div class="d-none d-lg-block">
                     <div
-                        class="input-group input-group-merge input-group-borderless input-group-hover-light navbar-input-group">
-                        <div class="input-group-prepend input-group-text">
+                        class="input-group input-group-merge input-group-borderless input-group-hover-light navbar-input-group admin-header-search">
+                        <span class="input-group-text">
                             <i class="bi-search"></i>
-                        </div>
+                        </span>
 
                         <input type="search" class="js-form-search form-control global-search"
                                placeholder="@lang("Search for a menu")"
@@ -49,9 +49,9 @@
                                "toggleIconOnFocus": true,
                                "activeClass": "focus"
                              }'>
-                        <a class="input-group-append input-group-text" href="javascript:void(0)">
+                        <button type="button" class="input-group-text navbar-search-clear display-none" aria-label="@lang('Clear search')">
                             <i id="clearSearchResultsIcon" class="bi-x-lg d-none"></i>
-                        </a>
+                        </button>
                     </div>
                 </div>
 
@@ -75,17 +75,17 @@
                         <!-- Body -->
                         <div class="card-body-height search-result">
                             <div class="d-lg-none">
-                                <div class="input-group input-group-merge navbar-input-group mb-5">
-                                    <div class="input-group-prepend input-group-text">
+                                <div class="input-group input-group-merge navbar-input-group admin-header-search-mobile mb-5">
+                                    <span class="input-group-text">
                                         <i class="bi-search"></i>
-                                    </div>
+                                    </span>
 
                                     <input type="search" class="form-control global-search"
                                            placeholder="@lang("Search for a menu")"
                                            aria-label="@lang("Search for a menu")">
-                                    <a class="input-group-append input-group-text" href="javascript:void(0);">
+                                    <button type="button" class="input-group-text navbar-search-clear-mobile display-none" aria-label="@lang('Clear search')">
                                         <i class="bi-x-lg"></i>
-                                    </a>
+                                    </button>
                                 </div>
                             </div>
 
@@ -273,6 +273,54 @@
 @push('script')
     <script>
         'use strict'
+
+        function toggleAdminHeaderSearchClear(wrapperSelector, inputSelector, buttonSelector) {
+            const wrapper = document.querySelector(wrapperSelector);
+            if (!wrapper) return;
+
+            const input = wrapper.querySelector(inputSelector);
+            const button = wrapper.querySelector(buttonSelector);
+
+            if (!input || !button) return;
+
+            button.classList.toggle('display-none', input.value.trim().length === 0);
+        }
+
+        document.addEventListener('input', function (event) {
+            if (event.target.closest('.admin-header-search')) {
+                toggleAdminHeaderSearchClear('.admin-header-search', '.global-search', '.navbar-search-clear');
+            }
+
+            if (event.target.closest('.admin-header-search-mobile')) {
+                toggleAdminHeaderSearchClear('.admin-header-search-mobile', '.global-search', '.navbar-search-clear-mobile');
+            }
+        });
+
+        document.addEventListener('click', function (event) {
+            const desktopClear = event.target.closest('.navbar-search-clear');
+            const mobileClear = event.target.closest('.navbar-search-clear-mobile');
+
+            if (desktopClear) {
+                const wrapper = document.querySelector('.admin-header-search');
+                const input = wrapper ? wrapper.querySelector('.global-search') : null;
+                if (input) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.focus();
+                }
+            }
+
+            if (mobileClear) {
+                const wrapper = document.querySelector('.admin-header-search-mobile');
+                const input = wrapper ? wrapper.querySelector('.global-search') : null;
+                if (input) {
+                    input.value = '';
+                    input.dispatchEvent(new Event('input', {bubbles: true}));
+                    input.focus();
+                }
+            }
+        });
+
         let pushNotificationArea = new Vue({
             el: "#pushNotificationArea",
             data: {

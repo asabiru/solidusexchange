@@ -53,6 +53,36 @@
     width: 16rem !important;
 }
 
+.admin-header-search,
+.admin-header-search-mobile {
+    align-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.admin-header-search {
+    min-width: 22rem;
+}
+
+.admin-header-search .input-group-text,
+.admin-header-search-mobile .input-group-text {
+    min-width: 2.75rem;
+    justify-content: center;
+    border: 0;
+}
+
+.admin-header-search .form-control,
+.admin-header-search-mobile .form-control {
+    border: 0;
+    box-shadow: none;
+}
+
+.admin-header-search .navbar-search-clear,
+.admin-header-search-mobile .navbar-search-clear-mobile {
+    cursor: pointer;
+}
+
 .form-label {
     margin-bottom: 0.3rem !important;
 }
