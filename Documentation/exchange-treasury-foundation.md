@@ -51,8 +51,19 @@ EXCHANGE_AML_AUTO_BLOCK_PROCESSING=true
 Если хотите начать снижать входящую комиссию без полной переделки payout:
 
 ```env
-EXCHANGE_PIPELINE_DEPOSIT_PROVIDER=manual
+EXCHANGE_PIPELINE_DEPOSIT_PROVIDER=treasury_wallet
 EXCHANGE_PIPELINE_PAYOUT_PROVIDER=crypto_cloud
 ```
 
-Тогда exchange будет брать входящий депозитный адрес из ручного wallet map, а payout останется на `CryptoCloud`.
+Тогда exchange будет:
+
+- брать входящий депозитный адрес из inventory `exchange_wallets`
+- оставлять payout на `CryptoCloud`
+- ждать ручного подтверждения on-chain депозита админом через карточку exchange
+
+## Что Появилось На Этом Этапе
+
+- `ExchangeWallet` inventory для отдельных депозитных адресов
+- `treasury_wallet` provider для exchange deposits
+- отдельный admin раздел `Exchange Wallets`
+- ручное подтверждение депозита для exchange со статусом `Awaiting Deposit`

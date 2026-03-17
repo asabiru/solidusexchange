@@ -7,6 +7,7 @@ use App\Models\ExchangeRequest;
 use App\Models\SellRequest;
 use App\Services\ExchangeEngine\ExchangeAutomationService;
 use App\Services\ExchangePipeline\ExchangeAmlService;
+use App\Services\ExchangePipeline\ExchangeWalletInventoryService;
 use App\Services\Sell\TraderAssignmentService;
 use Facades\App\Services\BasicService;
 use Throwable;
@@ -57,6 +58,14 @@ trait CryptoWalletGenerate
             $object->save();
             $amount = getBaseAmount($object->send_amount, optional($object->sendCurrency)->code, 'crypto');
             $charge = getBaseAmount($object->service_fee + $object->network_fee, optional($object->getCurrency)->code, 'crypto');
+
+            try {
+                if (($object->deposit_provider ?? null) === 'treasury_wallet') {
+                    app(ExchangeWalletInventoryService::class)->markConsumedForExchange($object);
+                }
+            } catch (Throwable $exception) {
+                report($exception);
+            }
 
             BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Exchange',
                 $object->id, ExchangeRequest::class, $object->user_id, $object->send_amount, optional($object->sendCurrency)->code);

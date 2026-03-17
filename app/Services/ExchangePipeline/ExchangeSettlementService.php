@@ -43,7 +43,9 @@ class ExchangeSettlementService
         }
 
         $exchange->admin_wallet = $address;
-        $exchange->crypto_method_id = $exchange->crypto_method_id ?: $cryptoMethod->id;
+        if ($cryptoMethod?->id) {
+            $exchange->crypto_method_id = $exchange->crypto_method_id ?: $cryptoMethod->id;
+        }
         $exchange->deposit_provider = $providerCode;
         $exchange->deposit_provider_ref = $payload['provider_reference'] ?? null;
         $exchange->deposit_network = $payload['provider_network'] ?? null;
@@ -60,6 +62,10 @@ class ExchangeSettlementService
     private function resolveDepositProvider(): array
     {
         $configuredProvider = (string)config('exchange_pipeline.deposit_provider', 'active_crypto_method');
+
+        if ($configuredProvider === 'treasury_wallet') {
+            return ['treasury_wallet', null];
+        }
 
         if ($configuredProvider === 'active_crypto_method') {
             $cryptoMethod = CryptoMethod::where('status', 1)->first();

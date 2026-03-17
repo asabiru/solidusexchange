@@ -188,6 +188,9 @@
                                                                 <option value="all"
                                                                         data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-secondary"></span>All Status</span>'>
                                                                 </option>
+                                                                <option value="1"
+                                                                        data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-info"></span>Awaiting Deposit</span>'>
+                                                                </option>
                                                                 <option value="2"
                                                                         data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-warning"></span>Pending</span>'>
                                                                 </option>

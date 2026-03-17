@@ -150,14 +150,18 @@ class ExchangeController extends Controller
                 $exchangeRequest->save();
             }
 
-            $cryptoMethod = $exchangeRequest->cryptoMethod ?: CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
+            $cryptoMethod = $exchangeRequest->cryptoMethod;
 
-            if (!$exchangeRequest->crypto_method_id) {
+            if (!$cryptoMethod && blank($exchangeRequest->deposit_provider)) {
+                $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
+            }
+
+            if (!$exchangeRequest->crypto_method_id && $cryptoMethod && blank($exchangeRequest->deposit_provider)) {
                 $exchangeRequest->crypto_method_id = $cryptoMethod->id;
                 $exchangeRequest->save();
             }
 
-            $data['isButtonShow'] = $cryptoMethod->code == 'manual';
+            $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual';
             return view($this->theme . 'user.exchange.init-payment', $data, compact('exchangeRequest'));
         } elseif ($request->method() == 'POST') {
             $exchangeRequest->status = 2;

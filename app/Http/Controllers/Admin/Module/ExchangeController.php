@@ -17,7 +17,7 @@ use Yajra\DataTables\Facades\DataTables;
 
 class ExchangeController extends Controller
 {
-    use CalculateFees, SendNotification;
+    use CalculateFees, SendNotification, CryptoWalletGenerate;
 
     public function __construct(
         private readonly ExchangePayoutService $payoutService,
@@ -31,8 +31,8 @@ class ExchangeController extends Controller
         }
         $data['exchangeType'] = $request->type;
         $data['exchanges'] = collect(ExchangeRequest::selectRaw('COUNT(id) AS totalExchange')
-            ->selectRaw('COUNT(CASE WHEN status = 2 THEN id END) AS pendingExchange')
-            ->selectRaw('(COUNT(CASE WHEN status = 2 THEN id END) / COUNT(id)) * 100 AS pendingExchangePercentage')
+            ->selectRaw('COUNT(CASE WHEN status IN (1, 2) THEN id END) AS pendingExchange')
+            ->selectRaw('(COUNT(CASE WHEN status IN (1, 2) THEN id END) / COUNT(id)) * 100 AS pendingExchangePercentage')
             ->selectRaw('COUNT(CASE WHEN status = 3 THEN id END) AS completeExchange')
             ->selectRaw('(COUNT(CASE WHEN status = 3 THEN id END) / COUNT(id)) * 100 AS completeExchangePercentage')
             ->selectRaw('COUNT(CASE WHEN status = 5 THEN id END) AS cancelExchange')
@@ -58,7 +58,7 @@ class ExchangeController extends Controller
             ->orderBy('id', 'DESC')
             ->when(isset($exchangeType), function ($query) use ($exchangeType) {
                 if ($exchangeType == 'pending') {
-                    return $query->where('status', 2);
+                    return $query->whereIn('status', [1, 2]);
                 } elseif ($exchangeType == 'complete') {
                     return $query->where('status', 3);
                 } elseif ($exchangeType == 'cancel') {
@@ -66,7 +66,7 @@ class ExchangeController extends Controller
                 } elseif ($exchangeType == 'refund') {
                     return $query->where('status', 6);
                 } else {
-                    return $query->whereIn('status', ['2', '3', '5', '6']);
+                    return $query->whereIn('status', ['1', '2', '3', '5', '6']);
                 }
             })
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -221,6 +221,27 @@ class ExchangeController extends Controller
         }
 
         return view('admin.exchange.details', compact('exchange', 'autoPayoutMethod', 'canAutoPayout'));
+    }
+
+    public function exchangeConfirmDeposit(Request $request, $utr)
+    {
+        $exchange = ExchangeRequest::where(['status' => 1, 'utr' => $utr])->latest()->firstOrFail();
+
+        $validated = $request->validate([
+            'deposit_amount' => 'nullable|numeric|min:0.00000001',
+            'deposit_tx_id' => 'required|string|max:191',
+        ]);
+
+        $depositAmount = isset($validated['deposit_amount']) && $validated['deposit_amount'] !== null
+            ? (float)$validated['deposit_amount']
+            : (float)$exchange->send_amount;
+
+        $this->walletUpgration($exchange, 'exchange', [
+            'deposit_amount' => $depositAmount,
+            'deposit_tx_id' => $validated['deposit_tx_id'],
+        ]);
+
+        return back()->with('success', 'Deposit confirmed and the exchange moved to processing.');
     }
 
     public function rateUpdate($exchange)

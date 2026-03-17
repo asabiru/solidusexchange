@@ -7,7 +7,9 @@ trait Status
 {
     public function getTrackingStatusAttribute()
     {
-        if ($this->status == 2) {
+        if ($this->status == 1) {
+            return '<h4 class="mb-0 text-info">'.trans('Awaiting deposit').'</h4>';
+        } elseif ($this->status == 2) {
             return '<h4 class="mb-0 text-primary">'.trans('Awaiting').'</h4>';
         } elseif ($this->status == 3) {
             return '<h4 class="mb-0 text-success">'.trans('Completed').'</h4>';
@@ -20,7 +22,9 @@ trait Status
 
     public function getUserStatusAttribute()
     {
-        if ($this->status == 2) {
+        if ($this->status == 1) {
+            return '<span class="badge text-bg-info">'.trans('Awaiting deposit').'</span>';
+        } elseif ($this->status == 2) {
             return '<span class="badge text-bg-primary">'.trans('Awaiting').'</span>';
         } elseif ($this->status == 3) {
             return '<span class="badge text-bg-success">'.trans('Completed').'</span>';
@@ -33,7 +37,12 @@ trait Status
 
     public function getAdminStatusAttribute()
     {
-        if ($this->status == 2) {
+        if ($this->status == 1) {
+            return '<span class="badge bg-soft-info text-info">
+                    <span class="legend-indicator bg-info"></span>' . trans('Awaiting Deposit') . '
+                  </span>';
+
+        } elseif ($this->status == 2) {
             return '<span class="badge bg-soft-warning text-warning">
                     <span class="legend-indicator bg-warning"></span>' . trans('Pending') . '
                   </span>';

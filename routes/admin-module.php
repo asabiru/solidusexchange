@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Module\FiatCurrencyController;
 use App\Http\Controllers\Admin\Module\CoinAnnounceController;
 use App\Http\Controllers\Admin\Module\CryptoMethodController;
 use App\Http\Controllers\Admin\Module\ExchangeController;
+use App\Http\Controllers\Admin\Module\ExchangeWalletController;
 use App\Http\Controllers\Admin\Module\BuyController;
 use App\Http\Controllers\Admin\Module\SellController;
 use App\Http\Controllers\Admin\Module\FiatSendGatewayController;
@@ -66,9 +67,19 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::delete('exchange/delete/{id}', 'exchangeDelete')->name('exchangeDelete');
             Route::post('exchange/multiple-delete', 'exchangeMultipleDelete')->name('exchangeMultipleDelete');
 
+            Route::post('exchange/confirm-deposit/{utr}', 'exchangeConfirmDeposit')->name('exchangeConfirmDeposit');
             Route::post('exchange/send-confirm/{utr}', 'exchangeSend')->name('exchangeSend');
             Route::post('exchange/cancel-confirm/{utr}', 'exchangeCancel')->name('exchangeCancel');
             Route::post('exchange/refund-confirm/{utr}', 'exchangeRefund')->name('exchangeRefund');
+        });
+
+        Route::controller(ExchangeWalletController::class)->group(function () {
+            Route::get('exchange-wallets', 'index')->name('exchangeWalletIndex');
+            Route::get('exchange-wallets/create', 'create')->name('exchangeWalletCreate');
+            Route::post('exchange-wallets/store', 'store')->name('exchangeWalletStore');
+            Route::get('exchange-wallets/edit/{id}', 'edit')->name('exchangeWalletEdit');
+            Route::put('exchange-wallets/update/{id}', 'update')->name('exchangeWalletUpdate');
+            Route::delete('exchange-wallets/delete/{id}', 'delete')->name('exchangeWalletDelete');
         });
 
         Route::controller(BuyController::class)->group(function () {

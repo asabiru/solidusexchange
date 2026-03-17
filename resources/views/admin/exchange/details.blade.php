@@ -20,9 +20,15 @@
                 </div>
             </div>
         </div>
-        @if($exchange->status == 2)
+        @if(in_array($exchange->status, [1, 2]))
             <div class="row mx-4">
                 <div class="d-flex justify-content-end gap-2">
+                    @if($exchange->status == 1)
+                        <button type="button" class="btn btn-soft-primary" id="confirmDeposit" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-coins"></i> @lang("Confirm Deposit")
+                        </button>
+                    @endif
+                    @if($exchange->status == 2)
                     <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
                     </button>
@@ -34,6 +40,7 @@
                                 data-bs-toggle="modal"><i
                                 class="fas fa-arrow-rotate-left"></i> @lang('Refund')
                         </button>
+                    @endif
                     @endif
                 </div>
             </div>
@@ -47,7 +54,9 @@
                             <div class="card-header d-flex justify-content-between">
                                 <h4 class="card-title mt-2">@lang("Trade Information's")</h4>
                                 <div>
-                                    @if ($exchange->status == 2)
+                                    @if ($exchange->status == 1)
+                                        <span class="legend-indicator bg-info"></span>@lang("Awaiting Deposit")
+                                    @elseif ($exchange->status == 2)
                                         <span class="legend-indicator bg-warning"></span>@lang("Awaiting Complete")
                                     @elseif ($exchange->status == 3)
                                         <span class="legend-indicator bg-success"></span>@lang("Trade Completed")
@@ -82,8 +91,8 @@
                                                 id="networkFee">{{rtrim(rtrim(getAmount($exchange->network_fee,8),0),'.')}} {{optional($exchange->getCurrency)->code}}</strong>
                                         </li>
                                         <li class="list-checked-item">@lang('Deposit Provider')
-                                            : {{optional($exchange->cryptoMethod)->name}}
-                                            @if(optional($exchange->cryptoMethod)->is_automatic)
+                                            : {{ optional($exchange->cryptoMethod)->name ?? ucfirst(str_replace('_', ' ', $exchange->deposit_provider ?? 'N/A')) }}
+                                            @if((optional($exchange->cryptoMethod)->is_automatic && blank($exchange->deposit_provider)) || in_array($exchange->deposit_provider, ['crypto_cloud', 'crypto_apis', 'coin_payment']))
                                                 <span
                                                     class="badge bg-soft-success text-success">@lang("Automatic")</span>
                                             @else
@@ -189,6 +198,14 @@
                                                 class="text-dark font-weight-bold"
                                                 id="receiveId">{{$exchange->admin_wallet}}</strong>
                                         </li>
+                                        <li class="list-checked-item">@lang('Deposit Provider Ref') :
+                                            <strong class="text-dark font-weight-bold">{{ $exchange->deposit_provider_ref ?? 'N/A' }}</strong>
+                                        </li>
+                                        @if($exchange->deposit_tx_id)
+                                            <li class="list-checked-item">@lang('Confirmed Deposit Tx ID') :
+                                                <strong class="text-dark font-weight-bold">{{ $exchange->deposit_tx_id }}</strong>
+                                            </li>
+                                        @endif
                                     </ul>
                                 </div>
                                 <div class="alert alert-soft-secondary" role="alert">
@@ -217,6 +234,16 @@
                     <button type="button" class="btn btn-white" data-bs-dismiss="modal">@lang('Close')</button>
                     <form action="" method="post" class="deleteModalRoute">
                         @csrf
+                        <div class="confirm-deposit-fields d-none mb-3 text-start">
+                            <div class="mb-3">
+                                <label class="form-label">@lang('Confirmed Amount')</label>
+                                <input type="text" name="deposit_amount" class="form-control" value="{{ rtrim(rtrim($exchange->send_amount,0),'.') }}">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">@lang('Deposit Tx ID')</label>
+                                <input type="text" name="deposit_tx_id" class="form-control" value="">
+                            </div>
+                        </div>
                         @if($canAutoPayout)
                             <button type="submit" name="btnValue" class="btn btn-soft-primary"
                                     value="automatic">@lang('Send Automatic')</button>
@@ -246,6 +273,7 @@
 
         $(document).on("click", "#send", function () {
             let route = "{{route("admin.exchangeSend",$exchange->utr)}}";
+            $(".confirm-deposit-fields").addClass('d-none');
             $("#deleteModalHeader").text(`Send Confirmation`);
             $("#deleteModalBody").text(`Do you wish to proceed with finalizing the exchange?`);
             $(".deleteModalRoute").attr('action', route);
@@ -253,6 +281,7 @@
 
         $(document).on("click", "#cancel", function () {
             let route = "{{route("admin.exchangeCancel",$exchange->utr)}}";
+            $(".confirm-deposit-fields").addClass('d-none');
             $("#deleteModalHeader").text(`Cancel Confirmation`);
             $("#deleteModalBody").text(`Do you wish to proceed with cancel the exchange?`);
             $(".deleteModalRoute").attr('action', route);
@@ -260,8 +289,17 @@
 
         $(document).on("click", "#refund", function () {
             let route = "{{route("admin.exchangeRefund",$exchange->utr)}}";
+            $(".confirm-deposit-fields").addClass('d-none');
             $("#deleteModalHeader").text(`Refund Confirmation`);
             $("#deleteModalBody").text(`Do you wish to proceed with refund the exchange?`);
+            $(".deleteModalRoute").attr('action', route);
+        });
+
+        $(document).on("click", "#confirmDeposit", function () {
+            let route = "{{route("admin.exchangeConfirmDeposit",$exchange->utr)}}";
+            $(".confirm-deposit-fields").removeClass('d-none');
+            $("#deleteModalHeader").text(`Deposit Confirmation`);
+            $("#deleteModalBody").text(`Confirm the on-chain deposit details to move this exchange into processing.`);
             $(".deleteModalRoute").attr('action', route);
         });
 
