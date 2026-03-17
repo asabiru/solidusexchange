@@ -123,6 +123,13 @@ class FiatCurrencyController extends Controller
                             </div>';
                 }
 
+                if ($this->hasConfiguredFallbackRate($item)) {
+                    return '<div class="d-flex flex-column gap-1">
+                                <span class="badge bg-soft-secondary text-body"><span class="legend-indicator bg-secondary"></span>' . trans('Fallback Only') . '</span>
+                                <small class="text-body">' . trans('Configured manually or before live sync was enabled') . '</small>
+                            </div>';
+                }
+
                 return '<div class="d-flex flex-column gap-1">
                             <span class="badge bg-soft-danger text-danger"><span class="legend-indicator bg-danger"></span>' . trans('No Sync') . '</span>
                             <small class="text-body">' . trans('Waiting for first sync') . '</small>
@@ -364,5 +371,10 @@ class FiatCurrencyController extends Controller
         }
 
         return 1 / $quote;
+    }
+
+    protected function hasConfiguredFallbackRate(FiatCurrency $currency): bool
+    {
+        return (float) $currency->rate > 1 || (float) $currency->usd_rate > 1;
     }
 }
