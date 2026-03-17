@@ -10,7 +10,7 @@ class FiatCurrency extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'processing_fee', 'processing_fee_type', 'min_send', 'max_send', 'image', 'driver', 'status', 'sort_by'];
+    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'processing_fee', 'processing_fee_type', 'min_send', 'max_send', 'image', 'driver', 'status', 'sort_by', 'last_rate_sync_at', 'last_rate_sync_error'];
     protected $casts = [
         'last_rate_sync_at' => 'datetime',
     ];
