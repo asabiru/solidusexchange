@@ -62,6 +62,8 @@ class UserProfileController extends Controller
         $userProfile = $this->user;
         if ($request->isMethod('get')) {
             $data['kycs'] = Kyc::where('status', 1)->get();
+            $data['languages'] = Language::where('status', 1)->get();
+            $data['timeZones'] = timezone_identifiers_list();
             $kycProfileLocked = (int) $userProfile->identity_verify === 2;
 
             return view($this->theme . 'user.profile.show', $data, compact('userProfile', 'kycProfileLocked'));
