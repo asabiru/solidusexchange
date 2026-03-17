@@ -49,6 +49,10 @@ class FiatCurrencyController extends Controller
         $filterDate = explode('-', $request->filterDate);
         $startDate = $filterDate[0];
         $endDate = isset($filterDate[1]) ? trim($filterDate[1]) : null;
+        $referenceUsdtUsdRate = optional(
+            \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get()
+                ->first(fn($currency) => strtoupper((string) $currency->normalized_code) === 'USDT')
+        )->usd_rate ?: 1;
 
         $currencies = FiatCurrency::orderBy('sort_by', 'ASC')
             ->when(isset($filterName), function ($query) use ($filterName) {
@@ -102,9 +106,11 @@ class FiatCurrencyController extends Controller
                               </a>';
 
             })
-            ->addColumn('rate', function ($item) {
+            ->addColumn('rate', function ($item) use ($referenceUsdtUsdRate) {
+                $displayRate = $this->formatDisplayRate($item, $referenceUsdtUsdRate);
+
                 return '<div class="flex-grow-1 ms-3">
-                                  <h5 class="text-hover-primary mb-0">1 ' . $item->code . ' = ' . rtrim(rtrim($item->rate, 0), '.') . ' ' . basicControl()->base_currency . '</h5>
+                                  <h5 class="text-hover-primary mb-0">1 ' . $item->code . ' = ' . $displayRate['value'] . ' ' . $displayRate['currency'] . '</h5>
                                   <span class="fs-6 text-body">1 ' . $item->code . ' = ' . rtrim(rtrim($item->usd_rate, 0), '.') . ' USD' . '</span>
                                 </div>';
             })
@@ -392,5 +398,17 @@ class FiatCurrencyController extends Controller
     protected function hasConfiguredFallbackRate(FiatCurrency $currency): bool
     {
         return (float) $currency->rate > 1 || (float) $currency->usd_rate > 1;
+    }
+
+    protected function formatDisplayRate(FiatCurrency $currency, float $referenceUsdtUsdRate): array
+    {
+        $referenceRate = $referenceUsdtUsdRate > 0
+            ? ((float) $currency->usd_rate / $referenceUsdtUsdRate)
+            : (float) $currency->usd_rate;
+
+        return [
+            'value' => rtrim(rtrim(number_format($referenceRate, 8, '.', ''), '0'), '.'),
+            'currency' => 'USDT',
+        ];
     }
 }
