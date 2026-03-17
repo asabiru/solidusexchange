@@ -81,9 +81,19 @@
                                                 class="text-dark font-weight-bold"
                                                 id="networkFee">{{rtrim(rtrim(getAmount($exchange->network_fee,8),0),'.')}} {{optional($exchange->getCurrency)->code}}</strong>
                                         </li>
-                                        <li class="list-checked-item">@lang('Payment Method')
+                                        <li class="list-checked-item">@lang('Deposit Provider')
                                             : {{optional($exchange->cryptoMethod)->name}}
                                             @if(optional($exchange->cryptoMethod)->is_automatic)
+                                                <span
+                                                    class="badge bg-soft-success text-success">@lang("Automatic")</span>
+                                            @else
+                                                <span
+                                                    class="badge bg-soft-secondary text-danger">@lang('manual')</span>
+                                            @endif
+                                        </li>
+                                        <li class="list-checked-item">@lang('Payout Provider')
+                                            : {{ $autoPayoutMethod->name ?? ucfirst($exchange->payout_provider ?? 'N/A') }}
+                                            @if($canAutoPayout)
                                                 <span
                                                     class="badge bg-soft-success text-success">@lang("Automatic")</span>
                                             @else
@@ -207,7 +217,7 @@
                     <button type="button" class="btn btn-white" data-bs-dismiss="modal">@lang('Close')</button>
                     <form action="" method="post" class="deleteModalRoute">
                         @csrf
-                        @if(optional($exchange->cryptoMethod)->is_automatic)
+                        @if($canAutoPayout)
                             <button type="submit" name="btnValue" class="btn btn-soft-primary"
                                     value="automatic">@lang('Send Automatic')</button>
                         @endif

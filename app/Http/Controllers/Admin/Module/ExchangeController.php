@@ -5,17 +5,24 @@ namespace App\Http\Controllers\Admin\Module;
 use App\Http\Controllers\Controller;
 use App\Models\ExchangeRequest;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\ExchangePipeline\ExchangePayoutService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use App\Traits\SendNotification;
 use Carbon\Carbon;
 use Facades\App\Services\BasicService;
 use Illuminate\Http\Request;
+use Throwable;
 use Yajra\DataTables\Facades\DataTables;
 
 class ExchangeController extends Controller
 {
     use CalculateFees, SendNotification;
+
+    public function __construct(
+        private readonly ExchangePayoutService $payoutService,
+    ) {
+    }
 
     public function exchangeList(Request $request)
     {
@@ -203,7 +210,17 @@ class ExchangeController extends Controller
             $exchange = $this->rateUpdate($exchange);
         }
 
-        return view('admin.exchange.details', compact('exchange'));
+        $autoPayoutMethod = null;
+        $canAutoPayout = false;
+
+        try {
+            $autoPayoutMethod = $this->payoutService->resolvePayoutMethod($exchange);
+            $canAutoPayout = $this->payoutService->canAutoPayout($exchange);
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
+        return view('admin.exchange.details', compact('exchange', 'autoPayoutMethod', 'canAutoPayout'));
     }
 
     public function rateUpdate($exchange)
@@ -237,9 +254,8 @@ class ExchangeController extends Controller
     public function exchangeSend(Request $request, $utr)
     {
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-        if ($request->btnValue == 'automatic' && optional($exchange->cryptoMethod)->is_automatic) {
-            $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($exchange->cryptoMethod)->code . '\\Service';
-            $data = $methodObj::withdrawCrypto($exchange, $exchange->final_amount, optional($exchange->getCurrency)->code, $exchange->destination_wallet, 'exchange');
+        if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
+            $data = $this->payoutService->sendExchangePayout($exchange);
             if (!$data) {
                 return back()->with('error', 'The automatic cryptocurrency exchange could not be executed.');
             }
@@ -268,9 +284,8 @@ class ExchangeController extends Controller
     public function exchangeRefund(Request $request, $utr)
     {
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-        if ($request->btnValue == 'automatic' && optional($exchange->cryptoMethod)->is_automatic) {
-            $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($exchange->cryptoMethod)->code . '\\Service';
-            $data = $methodObj::withdrawCrypto($exchange, $exchange->send_amount, optional($exchange->sendCurrency)->code, $exchange->refund_wallet, 'refund');
+        if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
+            $data = $this->payoutService->sendExchangeRefund($exchange);
             if (!$data) {
                 return back()->with('error', 'The automatic cryptocurrency refund could not be executed.');
             }

@@ -4,6 +4,7 @@ namespace App\Services\ExchangeEngine;
 
 use App\Models\ExchangeRequest;
 use App\Traits\SendNotification;
+use App\Services\ExchangePipeline\ExchangePayoutService;
 use Facades\App\Services\BasicService;
 use Throwable;
 
@@ -14,6 +15,7 @@ class ExchangeAutomationService
     public function __construct(
         private readonly ExchangeQuoteService $quoteService,
         private readonly BybitClient $bybitClient,
+        private readonly ExchangePayoutService $payoutService,
     ) {
     }
 
@@ -93,14 +95,7 @@ class ExchangeAutomationService
                 return false;
             }
 
-            $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($exchange->cryptoMethod)->code . '\\Service';
-            $isSent = $methodObj::withdrawCrypto(
-                $exchange,
-                (float)$exchange->final_amount,
-                optional($exchange->getCurrency)->code,
-                (string)$exchange->destination_wallet,
-                'exchange'
-            );
+            $isSent = $this->payoutService->sendExchangePayout($exchange);
 
             if (!$isSent) {
                 $exchange->hedge_error = 'Hedge completed but automatic payout failed.';
@@ -143,7 +138,7 @@ class ExchangeAutomationService
     {
         return $exchange->isAmlApproved()
             && config('exchange_engine.auto_payout_after_hedge')
-            && optional($exchange->cryptoMethod)->is_automatic
+            && $this->payoutService->canAutoPayout($exchange)
             && filled($exchange->destination_wallet);
     }
 

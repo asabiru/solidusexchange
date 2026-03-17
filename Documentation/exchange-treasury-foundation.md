@@ -45,3 +45,14 @@ EXCHANGE_AML_AUTO_BLOCK_PROCESSING=true
 2. подключить реальный AML screening provider вместо `manual`
 3. вынести payout с `CryptoCloud` в отдельный treasury payout layer
 4. оставить `Bybit` только для hedge и рыночной котировки
+
+## Что Уже Можно Сделать
+
+Если хотите начать снижать входящую комиссию без полной переделки payout:
+
+```env
+EXCHANGE_PIPELINE_DEPOSIT_PROVIDER=manual
+EXCHANGE_PIPELINE_PAYOUT_PROVIDER=crypto_cloud
+```
+
+Тогда exchange будет брать входящий депозитный адрес из ручного wallet map, а payout останется на `CryptoCloud`.

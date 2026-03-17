@@ -70,9 +70,9 @@ class ExchangeSettlementService
             return [$cryptoMethod->code, $cryptoMethod];
         }
 
-        $cryptoMethod = CryptoMethod::where('code', $configuredProvider)->where('status', 1)->first();
+        $cryptoMethod = CryptoMethod::where('code', $configuredProvider)->first();
         if (!$cryptoMethod) {
-            throw new RuntimeException("Configured exchange deposit provider [{$configuredProvider}] is inactive or missing.");
+            throw new RuntimeException("Configured exchange deposit provider [{$configuredProvider}] is missing.");
         }
 
         return [$configuredProvider, $cryptoMethod];

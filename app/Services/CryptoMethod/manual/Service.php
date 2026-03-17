@@ -10,6 +10,13 @@ class Service
         try {
             $address = $activeMethod->parameters->{$cryptoCode};
             if ($address) {
+                if (!empty($context['structured_response'])) {
+                    return [
+                        'address' => $address,
+                        'provider_reference' => $address,
+                        'provider_network' => $cryptoCode,
+                    ];
+                }
                 return $address;
             }
             return null;
