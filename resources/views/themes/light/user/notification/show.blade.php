@@ -39,14 +39,14 @@
                                         <tbody>
                                         @foreach($templates as $item)
                                             <tr>
-                                                <td data-label="Type">
+                                                <td data-label="@lang('Type')">
                                                     <div class="d-flex align-items-center">
-                                                        <span>{{$item['name']}}</span>
+                                                        <span>@lang($item['name'])</span>
                                                     </div>
 
                                                 </td>
                                                 @if(basicControl()->email_notification)
-                                                    <td data-label="✉️ Email">
+                                                    <td data-label="✉️ @lang('Email')">
                                                         <div class="form-check form-switch">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch" name="email_key[]"
@@ -57,7 +57,7 @@
                                                     </td>
                                                 @endif
                                                 @if(basicControl()->sms_notification)
-                                                    <td data-label="✉️ Sms">
+                                                    <td data-label="📨️ @lang('Sms')">
                                                         <div class="form-check form-switch">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch"
@@ -69,7 +69,7 @@
                                                     </td>
                                                 @endif
                                                 @if(basicControl()->push_notification)
-                                                    <td data-label="🖥 Push">
+                                                    <td data-label="🖥 @lang('Push')">
                                                         <div class="form-check form-switch">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch"
@@ -81,7 +81,7 @@
                                                     </td>
                                                 @endif
                                                 @if(basicControl()->in_app_notification)
-                                                    <td data-label="👩🏻‍💻 In App">
+                                                    <td data-label="👩🏻‍💻 @lang('In App')">
                                                         <div class="form-check form-switch">
                                                             <input class="form-check-input" type="checkbox"
                                                                    role="switch"

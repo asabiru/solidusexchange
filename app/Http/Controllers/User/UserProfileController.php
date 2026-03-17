@@ -62,18 +62,15 @@ class UserProfileController extends Controller
         $userProfile = $this->user;
         if ($request->isMethod('get')) {
             $data['kycs'] = Kyc::where('status', 1)->get();
-            $languages = Language::select('id', 'name')->where('status', 1)->orderBy('name', 'ASC')->get();
             $kycProfileLocked = (int) $userProfile->identity_verify === 2;
 
-            return view($this->theme . 'user.profile.show', $data, compact('userProfile', 'languages', 'kycProfileLocked'));
+            return view($this->theme . 'user.profile.show', $data, compact('userProfile', 'kycProfileLocked'));
         } elseif ($request->isMethod('post')) {
             $purifiedData = Purify::clean($request->all());
 
             $validator = Validator::make($purifiedData, [
                 'username' => 'sometimes|required|min:5|max:50|unique:users,username,' . $userProfile->id,
                 'email' => 'sometimes|required|min:5|max:50|unique:users,email,' . $userProfile->id,
-                'language' => 'required|integer|not_in:0|exists:languages,id',
-                'timezone' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -88,8 +85,6 @@ class UserProfileController extends Controller
 
                 $userProfile->username = $purifiedData->username;
                 $userProfile->email = $purifiedData->email;
-                $userProfile->language_id = $purifiedData->language;
-                $userProfile->timezone = $purifiedData->timezone;
 
                 $userProfile->save();
                 return back()->with('success', 'Profile Update Successfully');
@@ -103,8 +98,26 @@ class UserProfileController extends Controller
     public function notification(Request $request)
     {
         if ($request->method() == 'GET') {
+            $currentLanguage = Language::query()
+                ->where('short_name', session('lang', app()->getLocale()))
+                ->where('status', 1)
+                ->first() ?: defaultLang();
+
             $data['kycs'] = Kyc::where('status', 1)->get();
-            $data['templates'] = NotificationTemplate::select(['id', 'notify_for', 'template_key', 'name', 'status'])->where('notify_for', 0)->get()->unique('template_key');
+            $data['templates'] = NotificationTemplate::query()
+                ->select(['id', 'language_id', 'notify_for', 'template_key', 'name', 'status'])
+                ->where('notify_for', 0)
+                ->when($currentLanguage, function ($query) use ($currentLanguage) {
+                    $query->where(function ($subQuery) use ($currentLanguage) {
+                        $subQuery->where('language_id', $currentLanguage->id)
+                            ->orWhereNull('language_id');
+                    });
+                })
+                ->orderByRaw('CASE WHEN language_id = ? THEN 0 ELSE 1 END', [$currentLanguage?->id ?? 0])
+                ->get()
+                ->unique('template_key')
+                ->values();
+
             return view($this->theme . 'user.notification.show', $data);
         } elseif ($request->method() == 'POST') {
             $user = $this->user;
@@ -121,7 +134,7 @@ class UserProfileController extends Controller
                 $user->in_app_key = $request->in_app_key;
             }
             $user->save();
-            return back()->with('success', 'Updated Successfully');
+            return back()->with('success', 'Notification settings updated successfully');
         }
     }
 }
