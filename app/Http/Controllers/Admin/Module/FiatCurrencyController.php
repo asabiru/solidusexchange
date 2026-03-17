@@ -178,14 +178,17 @@ class FiatCurrencyController extends Controller
                 $edit = route('admin.fiatEdit') . '?id=' . $item->id;
 
                 $html = '<div class="btn-group sortable" role="group" data-code ="' . $item->code . '">
-                       <a href="' . $edit . '" class="btn btn-white btn-sm ">
-                        <i class="fal fa-edit me-1"></i> ' . trans("Edit") . '
+                      <a href="' . $edit . '" class="btn btn-white btn-icon btn-sm" title="' . trans("Edit") . '">
+                        <i class="fal fa-edit"></i>
                       </a>';
 
                 $html .= '<div class="btn-group">
                       <button type="button" class="btn btn-white btn-icon btn-sm dropdown-toggle dropdown-toggle-empty" id="userEditDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
                       <div class="dropdown-menu dropdown-menu-end mt-1" aria-labelledby="userEditDropdown">
-                          <a href="' . $statusChange . '" class="dropdown-item edit_user_btn">
+                        <a href="' . $edit . '" class="dropdown-item">
+                            <i class="fal fa-edit dropdown-item-icon"></i> ' . trans("Edit") . '
+                        </a>
+                        <a href="' . $statusChange . '" class="dropdown-item edit_user_btn">
                             <i class="fal fa-badge dropdown-item-icon"></i> ' . trans($statusBtn) . '
                         </a>
                         <a class="dropdown-item delete_btn" href="javascript:void(0)" data-bs-target="#delete"
