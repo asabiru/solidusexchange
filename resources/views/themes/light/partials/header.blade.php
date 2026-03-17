@@ -45,7 +45,7 @@
 <!-- Header top section end -->
 
 <!-- Nav section start -->
-<nav class="navbar sticky-top navbar-expand-lg transparent">
+<nav class="navbar public-navbar sticky-top navbar-expand-lg transparent">
     @php
         $activeLanguages = \App\Models\Language::query()
             ->where('status', 1)
@@ -54,7 +54,7 @@
             ->get();
         $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
     @endphp
-    <div class="container">
+    <div class="container public-navbar__inner">
         <a class="navbar-brand logo" href="{{url('/')}}"><img
                 src="{{getFile(basicControl()->logo_driver,basicControl()->logo)}}" alt="..." id="logoSet"></a>
         <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar"
@@ -71,7 +71,7 @@
                         aria-label="Close"><i class="fa-light fa-arrow-right"></i></button>
             </div>
             <div class="offcanvas-body align-items-center justify-content-between">
-                <ul class="navbar-nav ms-auto">
+                <ul class="navbar-nav ms-auto public-navbar__menu">
                     {!! renderHeaderMenu(getHeaderMenuData()) !!}
                 </ul>
 
@@ -99,21 +99,20 @@
                 @endif
             </div>
         </div>
-        <div class="nav-right">
-            <ul class="custom-nav">
+        <div class="nav-right public-navbar__actions">
+            <ul class="custom-nav header-action-list">
                 @guest
-                    <li class="nav-item">
-                        <a class="nav-link login-btn" href="{{ route('login') }}"><i
+                    <li class="nav-item header-action-item">
+                        <a class="nav-link login-btn header-login-btn" href="{{ route('login') }}"><i
                                 class="login-icon fa-light fa-right-to-bracket"></i><span
                                 class="d-none d-md-block">@lang('Login')</span></a>
                     </li>
                 @endguest
                 @auth
-                    <li class="nav-item">
-                        <div class="profile-box">
-                            <div class="profile">
-                                <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white fw-semibold"
-                                      style="width:42px;height:42px;background:linear-gradient(120deg,var(--solidus-accent),var(--solidus-accent-2));">
+                    <li class="nav-item header-action-item">
+                        <div class="profile-box header-profile-box">
+                            <div class="profile header-profile-trigger">
+                                <span class="header-avatar-badge">
                                     {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(auth()->user()->firstname ?? auth()->user()->username ?? 'U', 0, 1)) }}
                                 </span>
                             </div>
@@ -149,25 +148,36 @@
                 @endauth
 
                 @if(basicControl()->changeable_mode == 1 )
-                    <li>
-                        <a id="toggle-btn" class="nav-link d-flex toggle-btn">
+                    <li class="header-action-item">
+                        <a id="toggle-btn" class="nav-link d-flex align-items-center justify-content-center toggle-btn nav-utility-btn"
+                           title="@lang('Toggle theme')">
                             <i class="fa-regular fa-moon" id="moon"></i>
                             <i class="fa-regular fa-sun-bright" id="sun"></i>
                         </a>
                     </li>
                 @endif
 
-                <li class="dropdown">
+                <li class="dropdown header-action-item">
                     <button type="button"
-                            class="btn btn-ghost-secondary btn-icon rounded-circle nav-link"
+                            class="nav-link nav-utility-btn language-trigger"
                             id="publicLanguageDropdown"
                             data-bs-toggle="dropdown"
                             aria-expanded="false"
                             title="@lang('Language Settings')">
-                        <i class="fa-thin fa-globe"></i>
+                        @if($currentLanguage)
+                            <span class="language-trigger__flag">
+                                <img src="{{ getFile($currentLanguage->flag_driver, $currentLanguage->flag) }}"
+                                     alt="{{ $currentLanguage->name }}">
+                            </span>
+                            <span class="language-trigger__label d-none d-xl-inline">
+                                {{ \Illuminate\Support\Str::upper($currentLanguage->short_name) }}
+                            </span>
+                        @else
+                            <i class="fa-thin fa-globe"></i>
+                        @endif
                     </button>
 
-                    <div class="dropdown-menu dropdown-menu-end mt-2">
+                    <div class="dropdown-menu dropdown-menu-end mt-2 language-dropdown-menu">
                         <div class="dropdown-item-text border-bottom pb-2 mb-1">
                             <span class="d-block fw-semibold">@lang('Language Settings')</span>
                             @if($currentLanguage)
