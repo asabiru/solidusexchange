@@ -86,6 +86,14 @@ class Service
             throw new RuntimeException('CryptoCloud did not return a deposit address.');
         }
 
+        if (!empty($context['structured_response'])) {
+            return [
+                'address' => $address,
+                'provider_reference' => $wallet['uuid'] ?? $identify,
+                'provider_network' => $providerCode,
+            ];
+        }
+
         return $address;
     }
 

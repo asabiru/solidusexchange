@@ -8,6 +8,7 @@ use App\Models\CryptoCurrency;
 use App\Models\CryptoMethod;
 use App\Models\ExchangeRequest;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\ExchangePipeline\ExchangeSettlementService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use App\Traits\SendNotification;
@@ -136,12 +137,12 @@ class ExchangeController extends Controller
         if ($request->method() == 'GET') {
 
             if (!$exchangeRequest->admin_wallet) {
-                $response = $this->getCryptoWallet($exchangeRequest->sendCurrency->code, 'exchange', ['identifier' => $exchangeRequest->utr]);
-                if (!$response['status']) {
+                try {
+                    app(ExchangeSettlementService::class)->prepareIncomingDeposit($exchangeRequest);
+                    $exchangeRequest = $exchangeRequest->fresh();
+                } catch (RuntimeException $exception) {
                     return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
                 }
-                $exchangeRequest->admin_wallet = $response['message'];
-                $exchangeRequest->save();
             }
 
             if (!$exchangeRequest->expire_time) {
@@ -149,7 +150,7 @@ class ExchangeController extends Controller
                 $exchangeRequest->save();
             }
 
-            $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
+            $cryptoMethod = $exchangeRequest->cryptoMethod ?: CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
 
             if (!$exchangeRequest->crypto_method_id) {
                 $exchangeRequest->crypto_method_id = $cryptoMethod->id;

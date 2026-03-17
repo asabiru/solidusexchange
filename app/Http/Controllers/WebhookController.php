@@ -63,9 +63,13 @@ class WebhookController extends Controller
 
                 if (!empty($orderId)) {
                     if (!empty($address)) {
-                        $builder->orWhere('utr', $orderId);
+                        $builder->orWhere('utr', $orderId)
+                            ->orWhere('deposit_provider_ref', $orderId);
                     } else {
-                        $builder->where('utr', $orderId);
+                        $builder->where(function ($inner) use ($orderId) {
+                            $inner->where('utr', $orderId)
+                                ->orWhere('deposit_provider_ref', $orderId);
+                        });
                     }
                 }
             });

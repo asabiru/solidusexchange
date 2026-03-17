@@ -33,6 +33,10 @@ class ExchangeAutomationService
             return false;
         }
 
+        if (!$exchange->isAmlApproved()) {
+            return false;
+        }
+
         if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent'], true)) {
             return (int)$exchange->status === 3;
         }
@@ -137,7 +141,8 @@ class ExchangeAutomationService
 
     private function shouldAutoPayout(ExchangeRequest $exchange): bool
     {
-        return config('exchange_engine.auto_payout_after_hedge')
+        return $exchange->isAmlApproved()
+            && config('exchange_engine.auto_payout_after_hedge')
             && optional($exchange->cryptoMethod)->is_automatic
             && filled($exchange->destination_wallet);
     }

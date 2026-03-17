@@ -6,6 +6,7 @@ use App\Models\CryptoMethod;
 use App\Models\ExchangeRequest;
 use App\Models\SellRequest;
 use App\Services\ExchangeEngine\ExchangeAutomationService;
+use App\Services\ExchangePipeline\ExchangeAmlService;
 use App\Services\Sell\TraderAssignmentService;
 use Facades\App\Services\BasicService;
 use Throwable;
@@ -59,6 +60,25 @@ trait CryptoWalletGenerate
 
             BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Exchange',
                 $object->id, ExchangeRequest::class, $object->user_id, $object->send_amount, optional($object->sendCurrency)->code);
+
+            $amlDecision = [
+                'status' => 'approved',
+                'should_block_processing' => false,
+            ];
+
+            try {
+                $amlDecision = app(ExchangeAmlService::class)->screenConfirmedDeposit(
+                    $object->fresh(['sendCurrency', 'getCurrency', 'cryptoMethod']),
+                    $meta
+                );
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+
+            if (($amlDecision['status'] ?? null) !== 'approved' && ($amlDecision['should_block_processing'] ?? true)) {
+                $this->sendAdminNotification($object->fresh(), 'exchange');
+                return;
+            }
 
             $isAutoProcessed = false;
 

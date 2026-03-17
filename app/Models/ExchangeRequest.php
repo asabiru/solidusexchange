@@ -21,12 +21,15 @@ class ExchangeRequest extends Model
         'quote_slippage_percent', 'quote_trade_fee_percent', 'quote_expires_at', 'deposit_amount_confirmed',
         'deposit_tx_id', 'hedge_status', 'hedge_order_id', 'hedge_order_link_id', 'hedge_avg_price',
         'hedge_exec_qty', 'hedge_exec_value', 'hedge_fee_amount', 'hedge_fee_currency', 'profit_amount',
-        'profit_currency', 'payout_tx_id', 'hedge_error', 'hedged_at'];
+        'profit_currency', 'payout_tx_id', 'hedge_error', 'hedged_at', 'deposit_provider',
+        'deposit_provider_ref', 'deposit_network', 'payout_provider', 'aml_status', 'aml_provider',
+        'aml_risk_level', 'aml_risk_score', 'aml_notes', 'aml_checked_at'];
 
     protected $casts = [
         'expire_time' => 'datetime',
         'quote_expires_at' => 'datetime',
         'hedged_at' => 'datetime',
+        'aml_checked_at' => 'datetime',
     ];
 
     protected $appends = ['tracking_status', 'admin_status', 'user_status'];
@@ -54,6 +57,11 @@ class ExchangeRequest extends Model
     public function prunable(): Builder
     {
         return static::where('created_at', '<=', now()->subDays(2))->where('status', 0);
+    }
+
+    public function isAmlApproved(): bool
+    {
+        return blank($this->aml_status) || $this->aml_status === 'approved';
     }
 
 }
