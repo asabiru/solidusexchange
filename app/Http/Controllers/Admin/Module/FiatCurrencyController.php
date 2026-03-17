@@ -110,8 +110,8 @@ class FiatCurrencyController extends Controller
                 $displayRate = $this->formatDisplayRate($item, $referenceUsdtUsdRate);
 
                 return '<div class="flex-grow-1 ms-3">
-                                  <h5 class="text-hover-primary mb-0">1 ' . $item->code . ' = ' . $displayRate['value'] . ' ' . $displayRate['currency'] . '</h5>
-                                  <span class="fs-6 text-body">1 ' . $item->code . ' = ' . rtrim(rtrim($item->usd_rate, 0), '.') . ' USD' . '</span>
+                                  <h5 class="text-hover-primary mb-0">1 ' . $displayRate['left_currency'] . ' = ' . $displayRate['value'] . ' ' . $displayRate['right_currency'] . '</h5>
+                                  <span class="fs-6 text-body">1 USD = ' . $displayRate['usd_value'] . ' ' . $item->code . '</span>
                                 </div>';
             })
             ->addColumn('rate_indicator', function ($item) {
@@ -400,18 +400,24 @@ class FiatCurrencyController extends Controller
 
     protected function hasConfiguredFallbackRate(FiatCurrency $currency): bool
     {
-        return (float) $currency->rate > 1 || (float) $currency->usd_rate > 1;
+        return (float) $currency->rate > 0 || (float) $currency->usd_rate > 0;
     }
 
     protected function formatDisplayRate(FiatCurrency $currency, float $referenceUsdtUsdRate): array
     {
-        $referenceRate = $referenceUsdtUsdRate > 0
-            ? ((float) $currency->usd_rate / $referenceUsdtUsdRate)
-            : (float) $currency->usd_rate;
+        $usdValue = (float) $currency->usd_rate > 0
+            ? (1 / (float) $currency->usd_rate)
+            : 0;
+
+        $usdtValue = $referenceUsdtUsdRate > 0
+            ? ($usdValue * $referenceUsdtUsdRate)
+            : $usdValue;
 
         return [
-            'value' => rtrim(rtrim(number_format($referenceRate, 8, '.', ''), '0'), '.'),
-            'currency' => 'USDT',
+            'left_currency' => 'USDT',
+            'right_currency' => $currency->code,
+            'value' => rtrim(rtrim(number_format($usdtValue, 8, '.', ''), '0'), '.'),
+            'usd_value' => rtrim(rtrim(number_format($usdValue, 8, '.', ''), '0'), '.'),
         ];
     }
 }
