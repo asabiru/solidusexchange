@@ -133,7 +133,7 @@ trait CurrencyRateUpdate
             if (isset($result->success) && isset($result->quotes)) {
                 return [
                     'status' => true,
-                    'res' => $result->quotes,
+                    'res' => (array) $result->quotes,
                 ];
             }
 

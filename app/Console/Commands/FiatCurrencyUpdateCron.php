@@ -39,14 +39,16 @@ class FiatCurrencyUpdateCron extends Command
         $response = $this->fiatRateUpdate(basicControl()->base_currency, $currencyCodes);
 
         if ($response['status']) {
-            $baseExchangeRate = $this->resolveBaseExchangeRate($response['res']);
+            $quotes = $this->normalizeQuotes($response['res']);
+
+            $baseExchangeRate = $this->resolveBaseExchangeRate($quotes);
             if ($baseExchangeRate !== null) {
                 optional(BasicControl::first())->update([
                     'exchange_rate' => $baseExchangeRate,
                 ]);
             }
 
-            foreach ($response['res'] as $key => $apiRes) {
+            foreach ($quotes as $key => $apiRes) {
                 $apiCode = substr($key, -3);
                 $apiRate = 1 / $apiRes;
                 $matchingCurrencies = $currencies->where('code', $apiCode);
@@ -73,8 +75,9 @@ class FiatCurrencyUpdateCron extends Command
             ]);
     }
 
-    protected function resolveBaseExchangeRate(array $quotes): ?float
+    protected function resolveBaseExchangeRate($quotes): ?float
     {
+        $quotes = $this->normalizeQuotes($quotes);
         $baseCurrency = strtoupper((string) basicControl()->base_currency);
 
         if ($baseCurrency === 'USD') {
@@ -89,5 +92,18 @@ class FiatCurrencyUpdateCron extends Command
         }
 
         return 1 / $quote;
+    }
+
+    protected function normalizeQuotes($quotes): array
+    {
+        if (is_array($quotes)) {
+            return $quotes;
+        }
+
+        if ($quotes instanceof \stdClass) {
+            return (array) $quotes;
+        }
+
+        return [];
     }
 }
