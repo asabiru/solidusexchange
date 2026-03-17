@@ -13,6 +13,11 @@ class ExchangePayoutService
         return filled($exchange->destination_wallet) && (bool)optional($this->resolvePayoutMethod($exchange))->is_automatic;
     }
 
+    public function isAsyncPayout(ExchangeRequest $exchange): bool
+    {
+        return $this->resolvePayoutMethod($exchange)->code === 'treasury_queue';
+    }
+
     public function sendExchangePayout(ExchangeRequest $exchange): bool
     {
         $method = $this->resolvePayoutMethod($exchange);
@@ -47,7 +52,13 @@ class ExchangePayoutService
 
         $configuredProvider = (string)($exchange->payout_provider ?: config('exchange_pipeline.payout_provider', 'active_crypto_method'));
 
-        if ($configuredProvider === 'active_crypto_method') {
+        if ($configuredProvider === 'treasury_queue') {
+            $method = new CryptoMethod([
+                'code' => 'treasury_queue',
+                'name' => 'Treasury Queue',
+                'is_automatic' => 1,
+            ]);
+        } elseif ($configuredProvider === 'active_crypto_method') {
             $method = $exchange->cryptoMethod ?: CryptoMethod::where('status', 1)->first();
         } else {
             $method = CryptoMethod::where('code', $configuredProvider)->first();

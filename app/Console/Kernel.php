@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Console\Commands\CryptoCurrencyUpdateCron;
+use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
 use App\Models\BuyRequest;
 use App\Models\Deposit;
@@ -16,6 +17,7 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         CryptoCurrencyUpdateCron::class,
         FiatCurrencyUpdateCron::class,
+        ExchangeWalletWatcherSync::class,
     ];
 
     /**
@@ -29,6 +31,10 @@ class Kernel extends ConsoleKernel
         }
         if ($basicControl->currency_layer_auto_update) {
             $schedule->command('app:fiat-currency-update-cron')->{basicControl()->currency_layer_auto_update_at}();
+        }
+
+        if (config('exchange_pipeline.treasury.watch_provider') !== 'none') {
+            $schedule->command('app:exchange-wallet-watcher-sync')->everyFifteenMinutes();
         }
 
         $schedule->command('model:prune', [

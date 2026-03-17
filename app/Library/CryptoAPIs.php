@@ -58,6 +58,11 @@ class CryptoAPIs
 
     public function setWebhook($cryptoName, $address, $callback)
     {
+        return $this->subscribeAddress($cryptoName, $address, $callback);
+    }
+
+    public function subscribeAddress($cryptoName, $address, $callback)
+    {
         $cryptoName = strtolower($cryptoName);
         $url = "https://rest.cryptoapis.io/blockchain-events/$cryptoName/$this->network/subscriptions/address-coins-transactions-confirmed?context=yourExampleString";
         $postParam = [
@@ -84,6 +89,19 @@ class CryptoAPIs
         curl_close($ch);
         $res = json_decode($result);
 
-        return 'ok';
+        if (isset($res) && isset($res->data) && isset($res->data->item)) {
+            return [
+                'status' => 'success',
+                'reference' => $res->data->item->referenceId
+                    ?? $res->data->item->subscriptionId
+                    ?? $res->data->item->id
+                    ?? null,
+            ];
+        }
+
+        return [
+            'status' => 'error',
+            'msg' => @$res->error->message ?? 'Unable to subscribe address webhook.',
+        ];
     }
 }

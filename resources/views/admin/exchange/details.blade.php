@@ -28,7 +28,7 @@
                                 data-bs-toggle="modal"><i class="fas fa-coins"></i> @lang("Confirm Deposit")
                         </button>
                     @endif
-                    @if($exchange->status == 2)
+                    @if($exchange->status == 2 && !$hasPendingTreasuryPayout)
                     <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
                     </button>
@@ -56,6 +56,10 @@
                                 <div>
                                     @if ($exchange->status == 1)
                                         <span class="legend-indicator bg-info"></span>@lang("Awaiting Deposit")
+                                    @elseif ($exchange->status == 2 && $exchange->hedge_status === 'payout_queued')
+                                        <span class="legend-indicator bg-warning"></span>@lang("Payout Queued")
+                                    @elseif ($exchange->status == 2 && $exchange->hedge_status === 'refund_queued')
+                                        <span class="legend-indicator bg-warning"></span>@lang("Refund Queued")
                                     @elseif ($exchange->status == 2)
                                         <span class="legend-indicator bg-warning"></span>@lang("Awaiting Complete")
                                     @elseif ($exchange->status == 3)
@@ -110,6 +114,14 @@
                                                     class="badge bg-soft-secondary text-danger">@lang('manual')</span>
                                             @endif
                                         </li>
+                                        @if($latestExchangePayout)
+                                            <li class="list-checked-item">@lang('Latest Payout Queue')
+                                                : <a href="{{ route('admin.exchangePayoutIndex') }}">{{ ucfirst($latestExchangePayout->status) }}</a>
+                                                @if($latestExchangePayout->tx_id)
+                                                    <strong class="text-dark font-weight-bold"> / {{ $latestExchangePayout->tx_id }}</strong>
+                                                @endif
+                                            </li>
+                                        @endif
                                         <li class="list-checked-item">@lang('Requester') : <a
                                                 href="{{$exchange->user_id ? route('admin.user.edit',$exchange->user_id) : 'javascript:void(0)'}}">{{optional($exchange->user)->fullname??'Anonymous'}}</a>
                                         </li>
@@ -211,6 +223,12 @@
                                 <div class="alert alert-soft-secondary" role="alert">
                                     @lang("You can initiate a cryptocurrency refund by providing the designated refund address.")
                                 </div>
+                                @if($hasPendingTreasuryPayout && $latestExchangePayout)
+                                    <div class="alert alert-soft-warning mt-3" role="alert">
+                                        @lang('A treasury payout job is queued for this exchange. Finish it from the Exchange Payouts panel before marking the trade complete.')
+                                        <a href="{{ route('admin.exchangePayoutIndex') }}" class="ms-1">@lang('Open queue')</a>
+                                    </div>
+                                @endif
                             </div>
                         </div>
                     </div>

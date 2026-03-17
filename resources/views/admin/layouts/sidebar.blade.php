@@ -154,6 +154,13 @@
                             <span class="nav-link-title">@lang("Exchange Wallets")</span>
                         </a>
                     </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.exchangePayoutIndex']) }}"
+                           href="{{ route('admin.exchangePayoutIndex') }}" data-placement="left">
+                            <i class="bi-cash-stack nav-icon"></i>
+                            <span class="nav-link-title">@lang("Exchange Payouts")</span>
+                        </a>
+                    </div>
 
 
                     <span class="dropdown-header mt-3">@lang('Transaction History')</span>

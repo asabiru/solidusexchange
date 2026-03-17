@@ -35,6 +35,7 @@
                         <th>@lang('Label')</th>
                         <th>@lang('Status')</th>
                         <th>@lang('Allocation')</th>
+                        <th>@lang('Auto Confirm')</th>
                         <th>@lang('Action')</th>
                     </tr>
                     </thead>
@@ -56,7 +57,31 @@
                                 <span class="badge bg-soft-secondary text-secondary">{{ ucfirst($wallet->allocation_status) }}</span>
                             </td>
                             <td>
+                                @php($watchStatus = $wallet->watch_status ?? 'not_configured')
+
+                                @if($watchStatus === 'subscribed')
+                                    <span class="badge bg-soft-success text-success">@lang('Webhook Active')</span>
+                                @elseif($watchStatus === 'failed')
+                                    <span class="badge bg-soft-danger text-danger">@lang('Webhook Failed')</span>
+                                    @if($wallet->watch_error)
+                                        <div class="small text-muted mt-1">{{ \Illuminate\Support\Str::limit($wallet->watch_error, 90) }}</div>
+                                    @endif
+                                @elseif($watchStatus === 'manual')
+                                    <span class="badge bg-soft-warning text-warning">@lang('Manual Confirmation')</span>
+                                @elseif($watchStatus === 'inactive')
+                                    <span class="badge bg-soft-dark text-dark">@lang('Wallet Inactive')</span>
+                                @else
+                                    <span class="badge bg-soft-secondary text-secondary">@lang('Not Configured')</span>
+                                @endif
+                            </td>
+                            <td>
                                 <div class="btn-group" role="group">
+                                    <form action="{{ route('admin.exchangeWalletSync', $wallet->id) }}" method="post">
+                                        @csrf
+                                        <button type="submit" class="btn btn-white btn-sm">
+                                            <i class="fal fa-sync-alt me-1"></i> @lang('Sync')
+                                        </button>
+                                    </form>
                                     <a href="{{ route('admin.exchangeWalletEdit', $wallet->id) }}" class="btn btn-white btn-sm">
                                         <i class="fal fa-edit me-1"></i> @lang('Edit')
                                     </a>
@@ -73,7 +98,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="text-center py-5">@lang('No exchange wallets found')</td>
+                            <td colspan="8" class="text-center py-5">@lang('No exchange wallets found')</td>
                         </tr>
                     @endforelse
                     </tbody>

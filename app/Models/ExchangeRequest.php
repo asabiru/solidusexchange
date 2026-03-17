@@ -54,6 +54,11 @@ class ExchangeRequest extends Model
         return $this->belongsTo(CryptoMethod::class, 'crypto_method_id');
     }
 
+    public function payouts()
+    {
+        return $this->hasMany(ExchangePayout::class, 'exchange_request_id');
+    }
+
     public function prunable(): Builder
     {
         return static::where('created_at', '<=', now()->subDays(2))->where('status', 0);

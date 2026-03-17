@@ -17,6 +17,11 @@ class ExchangeWallet extends Model
         'notes',
         'status',
         'allocation_status',
+        'watch_provider',
+        'watch_status',
+        'watch_reference',
+        'webhook_subscribed_at',
+        'watch_error',
         'exchange_request_id',
         'reserved_at',
         'consumed_at',
@@ -24,6 +29,7 @@ class ExchangeWallet extends Model
 
     protected $casts = [
         'status' => 'boolean',
+        'webhook_subscribed_at' => 'datetime',
         'reserved_at' => 'datetime',
         'consumed_at' => 'datetime',
     ];

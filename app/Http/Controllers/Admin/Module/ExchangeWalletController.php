@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin\Module;
 use App\Http\Controllers\Controller;
 use App\Models\CryptoCurrency;
 use App\Models\ExchangeWallet;
+use App\Services\ExchangePipeline\ExchangeWalletWatcherService;
 use Illuminate\Http\Request;
+use RuntimeException;
 
 class ExchangeWalletController extends Controller
 {
@@ -32,7 +34,7 @@ class ExchangeWalletController extends Controller
             'status' => 'nullable|integer|in:0,1',
         ]);
 
-        ExchangeWallet::create([
+        $wallet = ExchangeWallet::create([
             'currency_code' => strtoupper(trim($validated['currency_code'])),
             'address' => trim($validated['address']),
             'network' => $validated['network'] ?? null,
@@ -42,7 +44,7 @@ class ExchangeWalletController extends Controller
             'allocation_status' => 'available',
         ]);
 
-        return redirect()->route('admin.exchangeWalletIndex')->with('success', 'Exchange wallet created successfully.');
+        return $this->redirectWithWatcherStatus($wallet, 'Exchange wallet created successfully.');
     }
 
     public function edit($id)
@@ -72,9 +74,31 @@ class ExchangeWalletController extends Controller
             'label' => $validated['label'] ?? null,
             'notes' => $validated['notes'] ?? null,
             'status' => (bool)($validated['status'] ?? 0),
+            'watch_provider' => null,
+            'watch_status' => 'not_configured',
+            'watch_reference' => null,
+            'webhook_subscribed_at' => null,
+            'watch_error' => null,
         ]);
 
-        return back()->with('success', 'Exchange wallet updated successfully.');
+        return $this->redirectWithWatcherStatus($wallet, 'Exchange wallet updated successfully.', true);
+    }
+
+    public function sync($id)
+    {
+        $wallet = ExchangeWallet::findOrFail($id);
+
+        try {
+            $wallet = app(ExchangeWalletWatcherService::class)->syncWallet($wallet, true);
+
+            if ($wallet->watch_status === 'subscribed') {
+                return back()->with('success', 'Exchange wallet webhook subscription refreshed successfully.');
+            }
+
+            return back()->with('warning', 'Exchange wallet saved, but automatic confirmation is still disabled for this wallet.');
+        } catch (RuntimeException $exception) {
+            return back()->with('error', $exception->getMessage());
+        }
     }
 
     public function delete($id)
@@ -88,5 +112,27 @@ class ExchangeWalletController extends Controller
         $wallet->delete();
 
         return back()->with('success', 'Exchange wallet deleted successfully.');
+    }
+
+    private function redirectWithWatcherStatus(ExchangeWallet $wallet, string $successMessage, bool $stayOnPage = false)
+    {
+        try {
+            $wallet = app(ExchangeWalletWatcherService::class)->syncWallet($wallet, true);
+
+            $message = $successMessage;
+            if ($wallet->watch_status === 'subscribed') {
+                $message .= ' Automatic deposit confirmation webhook is active.';
+            }
+
+            $redirect = $stayOnPage ? back() : redirect()->route('admin.exchangeWalletIndex');
+
+            return $redirect->with('success', $message);
+        } catch (RuntimeException $exception) {
+            $redirect = $stayOnPage ? back() : redirect()->route('admin.exchangeWalletIndex');
+
+            return $redirect
+                ->with('success', $successMessage)
+                ->with('warning', $exception->getMessage());
+        }
     }
 }

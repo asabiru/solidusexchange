@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\Module\FiatCurrencyController;
 use App\Http\Controllers\Admin\Module\CoinAnnounceController;
 use App\Http\Controllers\Admin\Module\CryptoMethodController;
 use App\Http\Controllers\Admin\Module\ExchangeController;
+use App\Http\Controllers\Admin\Module\ExchangePayoutController;
 use App\Http\Controllers\Admin\Module\ExchangeWalletController;
 use App\Http\Controllers\Admin\Module\BuyController;
 use App\Http\Controllers\Admin\Module\SellController;
@@ -79,7 +80,14 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('exchange-wallets/store', 'store')->name('exchangeWalletStore');
             Route::get('exchange-wallets/edit/{id}', 'edit')->name('exchangeWalletEdit');
             Route::put('exchange-wallets/update/{id}', 'update')->name('exchangeWalletUpdate');
+            Route::post('exchange-wallets/sync/{id}', 'sync')->name('exchangeWalletSync');
             Route::delete('exchange-wallets/delete/{id}', 'delete')->name('exchangeWalletDelete');
+        });
+
+        Route::controller(ExchangePayoutController::class)->group(function () {
+            Route::get('exchange-payouts', 'index')->name('exchangePayoutIndex');
+            Route::post('exchange-payouts/mark-sent/{id}', 'markSent')->name('exchangePayoutMarkSent');
+            Route::post('exchange-payouts/mark-failed/{id}', 'markFailed')->name('exchangePayoutMarkFailed');
         });
 
         Route::controller(BuyController::class)->group(function () {

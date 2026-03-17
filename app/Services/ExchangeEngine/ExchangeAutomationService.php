@@ -39,8 +39,8 @@ class ExchangeAutomationService
             return false;
         }
 
-        if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent'], true)) {
-            return (int)$exchange->status === 3;
+        if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent', 'payout_queued', 'refund_queued'], true)) {
+            return in_array((int)$exchange->status, [3, 6], true);
         }
 
         try {
@@ -101,6 +101,14 @@ class ExchangeAutomationService
                 $exchange->hedge_error = 'Hedge completed but automatic payout failed.';
                 $exchange->save();
                 return false;
+            }
+
+            if ($this->payoutService->isAsyncPayout($exchange)) {
+                $exchange->hedge_status = 'payout_queued';
+                $exchange->save();
+                $this->sendAdminNotification($exchange->fresh(), 'exchange');
+
+                return true;
             }
 
             $exchange->status = 3;

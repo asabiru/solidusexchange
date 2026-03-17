@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Module;
 
 use App\Http\Controllers\Controller;
+use App\Models\ExchangePayout;
 use App\Models\ExchangeRequest;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
 use App\Services\ExchangePipeline\ExchangePayoutService;
@@ -205,7 +206,7 @@ class ExchangeController extends Controller
 
     public function exchangeView(Request $request)
     {
-        $exchange = ExchangeRequest::findOrFail($request->id);
+        $exchange = ExchangeRequest::with('payouts')->findOrFail($request->id);
         if ($exchange->status == 2 && $exchange->rate_type == 'floating') {
             $exchange = $this->rateUpdate($exchange);
         }
@@ -220,7 +221,10 @@ class ExchangeController extends Controller
             report($exception);
         }
 
-        return view('admin.exchange.details', compact('exchange', 'autoPayoutMethod', 'canAutoPayout'));
+        $latestExchangePayout = $exchange->payouts()->latest()->first();
+        $hasPendingTreasuryPayout = $latestExchangePayout && in_array($latestExchangePayout->status, ['queued', 'processing'], true);
+
+        return view('admin.exchange.details', compact('exchange', 'autoPayoutMethod', 'canAutoPayout', 'latestExchangePayout', 'hasPendingTreasuryPayout'));
     }
 
     public function exchangeConfirmDeposit(Request $request, $utr)
@@ -275,13 +279,32 @@ class ExchangeController extends Controller
     public function exchangeSend(Request $request, $utr)
     {
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
+
+        $existingQueuedPayout = ExchangePayout::where('exchange_request_id', $exchange->id)
+            ->where('type', 'payout')
+            ->whereIn('status', ['queued', 'processing'])
+            ->latest()
+            ->first();
+
+        if ($existingQueuedPayout) {
+            return back()->with('warning', 'A treasury payout is already queued for this exchange.');
+        }
+
         if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
             $data = $this->payoutService->sendExchangePayout($exchange);
             if (!$data) {
                 return back()->with('error', 'The automatic cryptocurrency exchange could not be executed.');
             }
+
+            if ($this->payoutService->isAsyncPayout($exchange)) {
+                $exchange->hedge_status = 'payout_queued';
+                $exchange->save();
+
+                return back()->with('success', 'Treasury payout queued successfully. Mark it as sent after the on-chain transfer is broadcast.');
+            }
         }
         $exchange->status = 3;
+        $exchange->hedge_status = 'payout_sent';
         $exchange->save();
 
         $amount = getBaseAmount($exchange->final_amount, optional($exchange->getCurrency)->code, 'crypto');
@@ -305,13 +328,32 @@ class ExchangeController extends Controller
     public function exchangeRefund(Request $request, $utr)
     {
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
+
+        $existingQueuedRefund = ExchangePayout::where('exchange_request_id', $exchange->id)
+            ->where('type', 'refund')
+            ->whereIn('status', ['queued', 'processing'])
+            ->latest()
+            ->first();
+
+        if ($existingQueuedRefund) {
+            return back()->with('warning', 'A treasury refund is already queued for this exchange.');
+        }
+
         if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
             $data = $this->payoutService->sendExchangeRefund($exchange);
             if (!$data) {
                 return back()->with('error', 'The automatic cryptocurrency refund could not be executed.');
             }
+
+            if ($this->payoutService->isAsyncPayout($exchange)) {
+                $exchange->hedge_status = 'refund_queued';
+                $exchange->save();
+
+                return back()->with('success', 'Treasury refund queued successfully. Mark it as sent after the on-chain transfer is broadcast.');
+            }
         }
         $exchange->status = 6;
+        $exchange->hedge_status = 'payout_sent';
         $exchange->save();
 
         $amount = getBaseAmount($exchange->send_amount, optional($exchange->sendCurrency)->code, 'crypto');
