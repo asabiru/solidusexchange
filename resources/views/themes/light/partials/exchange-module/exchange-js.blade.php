@@ -115,10 +115,20 @@
 
                 let initialAmount = preferredSendAmount !== null && preferredSendAmount !== undefined
                     ? preferredSendAmount
-                    : response.data.initialSendAmount;
-                $("input[name='exchangeSendAmount']").val(formatSendAmount(initialAmount));
+                    : 0;
                 $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange');
-                requestQuoteDebounced(initialAmount, 0);
+
+                if (parseFloat(initialAmount || 0) > 0) {
+                    $("input[name='exchangeSendAmount']").val(formatSendAmount(initialAmount));
+                    requestQuoteDebounced(initialAmount, 0);
+                    return;
+                }
+
+                currentQuote = null;
+                $("input[name='exchangeSendAmount']").val('0');
+                $("input[name='exchangeGetAmount']").val('0');
+                $("#exchangeMessage").text('');
+                $("#submitBtn").attr('disabled', true);
             })
             .catch(function (error) {
                 Notiflix.Block.remove('#showLoader');
@@ -132,8 +142,9 @@
         $("#submitBtn").attr('disabled', false);
 
         if (!sendAmount || parseFloat(sendAmount) <= 0) {
-            $("input[name='exchangeGetAmount']").val('');
+            $("input[name='exchangeGetAmount']").val('0');
             currentQuote = null;
+            $("#submitBtn").attr('disabled', true);
             return;
         }
 
@@ -289,8 +300,8 @@
 
     function formatSendAmount(amount) {
         let numericAmount = parseFloat(amount);
-        if (Number.isNaN(numericAmount)) {
-            return '';
+        if (Number.isNaN(numericAmount) || numericAmount <= 0) {
+            return '0';
         }
 
         return activeTab === 'buy' ? numericAmount.toFixed(2) : numericAmount.toFixed(8);
@@ -298,8 +309,8 @@
 
     function formatReceiveAmount(amount) {
         let numericAmount = parseFloat(amount);
-        if (Number.isNaN(numericAmount)) {
-            return '';
+        if (Number.isNaN(numericAmount) || numericAmount <= 0) {
+            return '0';
         }
 
         return activeTab === 'sell' ? numericAmount.toFixed(2) : numericAmount.toFixed(8);
