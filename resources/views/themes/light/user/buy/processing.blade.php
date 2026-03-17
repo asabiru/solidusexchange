@@ -160,116 +160,57 @@
         Notiflix.Block.dots('#calLoader', {
             backgroundColor: loaderColor,
         });
+
         var initialSendAmount = "{{$buyRequest->send_amount}}";
-        var initialSendCurrency = "{{$buyRequest->send_currency_id}}";
-        var initialGetCurrency = "{{$buyRequest->get_currency_id}}";
         var finalAmount = 0;
         var activeSendCurrency = @json($buyRequest->sendCurrency);
         var activeGetCurrency = @json($buyRequest->getCurrency);
+        var currentQuote = null;
+
         getExchangeCurrency();
         setSendCurrency(activeSendCurrency);
         setGetCurrency(activeGetCurrency);
 
         $(document).on("keyup", "input[name='exchangeSendAmount']", function () {
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
         });
 
         $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
-            let getAmount = $("input[name='exchangeGetAmount']").val();
-            sendCalculation(getAmount);
+            if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
+                return;
+            }
+
+            let getAmount = parseFloat($("input[name='exchangeGetAmount']").val() || 0);
+            let sendAmount = getAmount / parseFloat(currentQuote.exchangeRate);
+            $("input[name='exchangeSendAmount']").val(sendAmount);
+            requestQuote(sendAmount);
         });
 
         $(document).on("click", "#swapBtn", function () {
             let sendAmount = $("input[name='exchangeGetAmount']").val();
             $("input[name='exchangeSendAmount']").val(sendAmount);
-            getCalculation(sendAmount);
+            requestQuote(sendAmount);
         });
 
         $(document).on("click", ".sendModal", function () {
             activeSendCurrency = $(this).data('res');
             setSendCurrency(activeSendCurrency);
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal').modal('hide');
 
             $('.sendModal .right-side').empty();
-            $(this).find('.right-side').html('');
             $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
         });
 
         $(document).on("click", ".getModal", function () {
             activeGetCurrency = $(this).data('res');
             setGetCurrency(activeGetCurrency);
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal2').modal('hide');
 
             $('.getModal .right-side').empty();
-            $(this).find('.right-side').html('');
             $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
         });
-
-        function getCalculation(sendAmount) {
-            $("#exchangeMessage").text('');
-            $("#submitBtn").attr('disabled', false);
-
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-            let sendUsdRate = activeSendCurrency.usd_rate
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let getCode = activeGetCurrency.code;
-            let getServiceFee = activeGetCurrency.service_fee;
-            let getServiceType = activeGetCurrency.service_fee_type;
-            let getNetworkFee = activeGetCurrency.network_fee;
-            let getNetworkFeeType = activeGetCurrency.network_fee_type;
-            let getAmount = getAmountCal(sendAmount, sendUsdRate, getUsdRate);
-            $("input[name='exchangeGetAmount']").val(getAmount);
-
-            tradeShow(parseFloat(sendAmount).toFixed(2), parseFloat(getAmount).toFixed(8), sendCode, getCode, parseFloat(getServiceFee).toFixed(8), getServiceType, parseFloat(getNetworkFee).toFixed(8), getNetworkFeeType)
-
-            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-            }
-
-            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-            }
-        }
-
-        function sendCalculation(getAmount) {
-            $("#exchangeMessage").text('');
-            $("#submitBtn").attr('disabled', false);
-
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-            let sendUsdRate = activeSendCurrency.usd_rate
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let sendAmount = sendAmountCal(getAmount, sendUsdRate, getUsdRate);
-            $("input[name='exchangeSendAmount']").val(sendAmount);
-
-            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-            }
-
-            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-            }
-        }
-
-        function getAmountCal(sendAmount, sendUsdRate, getUsdRate) {
-            return (sendAmount * sendUsdRate / getUsdRate).toFixed(8);
-        }
-
-        function sendAmountCal(getAmount, sendUsdRate, getUsdRate) {
-            return (getAmount * getUsdRate / sendUsdRate).toFixed(2);
-        }
 
         function getExchangeCurrency(route = "{{route("getBuyCurrency")}}") {
             axios.get(route)
@@ -278,10 +219,57 @@
                     showSend(response.data.sendCurrencies);
                     showGet(response.data.getCurrencies);
                     $("input[name='exchangeSendAmount']").val(parseFloat(initialSendAmount).toFixed(2));
-                    getCalculation(parseFloat(initialSendAmount));
+                    requestQuote(parseFloat(initialSendAmount));
+                });
+        }
+
+        function requestQuote(sendAmount) {
+            $("#exchangeMessage").text('');
+            $("#submitBtn").attr('disabled', false);
+
+            if (!sendAmount || parseFloat(sendAmount) <= 0) {
+                $("input[name='exchangeGetAmount']").val('');
+                currentQuote = null;
+                clearTradeDetails();
+                return;
+            }
+
+            let sendMinLimit = activeSendCurrency.min_send;
+            let sendMaxLimit = activeSendCurrency.max_send;
+            let sendCode = activeSendCurrency.code;
+
+            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
+                $("#submitBtn").attr('disabled', true);
+                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+                return;
+            }
+
+            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
+                $("#submitBtn").attr('disabled', true);
+                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+                return;
+            }
+
+            Notiflix.Block.dots('#autoRate', {
+                backgroundColor: loaderColor,
+            });
+
+            axios.post("{{route('buyAutoRate')}}", {
+                sendAmount: sendAmount,
+                sendCurrency: activeSendCurrency.id,
+                getCurrency: activeGetCurrency.id,
+            })
+                .then(function (response) {
+                    Notiflix.Block.remove('#autoRate');
+                    currentQuote = response.data.quote;
+                    $("input[name='exchangeSendAmount']").val(parseFloat(response.data.quote.sendAmount).toFixed(2));
+                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.getAmount).toFixed(8));
+                    tradeShow(response.data.quote);
                 })
                 .catch(function (error) {
-
+                    Notiflix.Block.remove('#autoRate');
+                    $("#submitBtn").attr('disabled', true);
+                    $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
                 });
         }
 
@@ -331,7 +319,6 @@
             $('#showSendImage').attr('src', currency.image_path);
             $('#showSendCode').text(currency.code);
             $('#showSendName').text(currency.name);
-
             $('input[name="exchangeSendCurrency"]').val(currency.id);
         }
 
@@ -339,66 +326,61 @@
             $('#showGetImage').attr('src', currency.image_path);
             $('#showGetCode').text(currency.code);
             $('#showGetName').text(currency.name);
-
             $('input[name="exchangeGetCurrency"]').val(currency.id);
         }
 
-
         function tradeDetails() {
-            Notiflix.Block.dots('#autoRate', {
-                backgroundColor: loaderColor,
-            });
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            let sendCurrency = activeSendCurrency.id;
-            let getCurrency = activeGetCurrency.id;
-
-            axios.post("{{route('buyAutoRate')}}", {
-                sendAmount: sendAmount,
-                sendCurrency: sendCurrency,
-                getCurrency: getCurrency,
-            })
-                .then(function (response) {
-                    Notiflix.Block.remove('#autoRate');
-                    showSend(response.data.sendCurrencies);
-                    showGet(response.data.getCurrencies);
-                    $("input[name='exchangeSendAmount']").val(parseFloat(response.data.initialSendAmount).toFixed(2));
-                    getCalculation(parseFloat(response.data.initialSendAmount).toFixed(2));
-                })
-                .catch(function (error) {
-
-                });
+            requestQuote($("input[name='exchangeSendAmount']").val());
         }
 
-        function tradeShow(sendAmount, getAmount, sendCurrencyCode, getCurrencyCode, serviceFee, serviceFeeType, networkFee, networkFeeType) {
-            let exchangeRate = (sendAmount / getAmount).toFixed(2);
+        function tradeShow(quote) {
+            let sendAmount = parseFloat(quote.sendAmount || 0).toFixed(2);
+            let getAmount = parseFloat(quote.getAmount || 0).toFixed(8);
+            let exchangeRate = parseFloat(quote.exchangeRate || 0);
+            let serviceFee = parseFloat(quote.serviceFee || 0);
+            let networkFee = parseFloat(quote.networkFee || 0);
+            let serviceFeeType = quote.serviceFeeType;
+            let networkFeeType = quote.networkFeeType;
+            let sendCurrencyCode = quote.sendCurrencyCode;
+            let getCurrencyCode = quote.getCurrencyCode;
+
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
-            $("#showExchangeRate").text(`1 ${getCurrencyCode} ~ ${exchangeRate} ${sendCurrencyCode}`);
+            $("#showExchangeRate").text(`1 ${getCurrencyCode} ~ ${(exchangeRate > 0 ? (1 / exchangeRate) : 0).toFixed(2)} ${sendCurrencyCode}`);
+
             if (serviceFeeType === 'percent') {
-                let stringServiceFee = parseFloat(serviceFee).toString();
-                $("#showServiceType").text(`Service fee ${stringServiceFee}%`);
-                serviceFee = ((getAmount * serviceFee) / 100).toFixed(8);
+                $("#showServiceType").text(`Service fee ${parseFloat(serviceFee).toString()}%`);
+                serviceFee = ((parseFloat(getAmount) * serviceFee) / 100).toFixed(8);
             } else {
                 $("#showServiceType").text(`Service fee`);
+                serviceFee = serviceFee.toFixed(8);
             }
             $("#showServiceFee").text(`${serviceFee} ${getCurrencyCode}`);
 
             if (networkFeeType === 'percent') {
-                let stringNetworkFee = parseFloat(networkFee).toString();
-                $("#showNetworkType").text(`Network fee ${stringNetworkFee}%`);
-                networkFee = ((getAmount * networkFee) / 100).toFixed(8);
+                $("#showNetworkType").text(`Network fee ${parseFloat(networkFee).toString()}%`);
+                networkFee = ((parseFloat(getAmount) * networkFee) / 100).toFixed(8);
             } else {
                 $("#showNetworkType").text(`Network fee`);
+                networkFee = networkFee.toFixed(8);
             }
             $("#showNetworkFee").text(`${networkFee} ${getCurrencyCode}`);
 
-            finalAmount = (parseFloat(getAmount) - (parseFloat(serviceFee) + parseFloat(networkFee))).toFixed(8);
-
+            finalAmount = parseFloat(quote.finalAmount || 0).toFixed(8);
             showFinalRate();
         }
 
         function showFinalRate() {
-            let getCurrencyCode = activeGetCurrency.code;
-            $(".showFinalAmount").text(`~ ${finalAmount} ${getCurrencyCode}`);
+            $(".showFinalAmount").text(`~ ${finalAmount} ${activeGetCurrency.code}`);
+        }
+
+        function clearTradeDetails() {
+            $("#showSendAmount").text('');
+            $("#showExchangeRate").text('');
+            $("#showServiceType").text('');
+            $("#showServiceFee").text('');
+            $("#showNetworkType").text('');
+            $("#showNetworkFee").text('');
+            $(".showFinalAmount").text('');
         }
 
         setInterval(tradeDetails, 60000);

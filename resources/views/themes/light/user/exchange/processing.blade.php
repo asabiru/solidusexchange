@@ -187,6 +187,7 @@
         var finalAmount = 0;
         var activeSendCurrency = @json($exchangeRequest->sendCurrency);
         var activeGetCurrency = @json($exchangeRequest->getCurrency);
+        var currentQuote = null;
         var quoteTimer = null;
         getExchangeCurrency();
         setSendCurrency(activeSendCurrency);
@@ -280,12 +281,11 @@
             $("#exchangeMessage").text('');
             $("#submitBtn").attr('disabled', false);
 
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-            let sendUsdRate = activeSendCurrency.usd_rate
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let sendAmount = sendAmountCal(getAmount, sendUsdRate, getUsdRate);
+            if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
+                return;
+            }
+
+            let sendAmount = parseFloat(getAmount || 0) / parseFloat(currentQuote.exchangeRate);
             $("input[name='exchangeSendAmount']").val(sendAmount);
             getCalculation(sendAmount);
         }
@@ -467,6 +467,7 @@
         }
 
         function applyQuote(quote) {
+            currentQuote = quote;
             $("#exchangeMessage").text('');
             $("#submitBtn").attr('disabled', false);
             $("input[name='exchangeSendAmount']").val(formatAmount(quote.sendAmount));

@@ -8,18 +8,20 @@ use App\Models\BuyRequest;
 use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
 use App\Models\Gateway;
+use App\Services\TradeQuote\BuyQuoteService;
 use App\Traits\CalculateFees;
 use App\Traits\PaymentValidationCheck;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Stevebauman\Purify\Facades\Purify;
+use RuntimeException;
 
 class BuyController extends Controller
 {
     use CalculateFees, PaymentValidationCheck;
 
-    public function __construct()
+    public function __construct(private readonly BuyQuoteService $buyQuoteService)
     {
         $this->theme = template();
     }
@@ -51,23 +53,22 @@ class BuyController extends Controller
             return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
-        $sendAmount = $request->exchangeSendAmount;
-        $exchangeRate = $sendCurrency->usd_rate / $getCurrency->usd_rate;
-        $getAmount = $sendAmount * $exchangeRate;
-        $service_fee = $this->getCryptoFees($getAmount, $getCurrency)['serviceFees'];
-        $network_fee = $this->getCryptoFees($getAmount, $getCurrency)['networkFees'];
-        $finalAmount = $getAmount - ($service_fee + $network_fee);
+        try {
+            $quote = $this->buyQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         $buyRequest = BuyRequest::create([
             'user_id' => auth()->id() ?? null,
-            'send_currency_id' => $sendCurrency->id,
-            'get_currency_id' => $getCurrency->id,
-            'send_amount' => $sendAmount,
-            'get_amount' => $getAmount,
-            'exchange_rate' => $exchangeRate,
-            'service_fee' => $service_fee,
-            'network_fee' => $network_fee,
-            'final_amount' => $finalAmount,
+            'send_currency_id' => $quote['send_currency_id'],
+            'get_currency_id' => $quote['get_currency_id'],
+            'send_amount' => $quote['send_amount'],
+            'get_amount' => $quote['get_amount'],
+            'exchange_rate' => $quote['exchange_rate'],
+            'service_fee' => $quote['service_fee'],
+            'network_fee' => $quote['network_fee'],
+            'final_amount' => $quote['final_amount'],
             'utr' => uniqid('B'),
         ]);
 
@@ -96,21 +97,20 @@ class BuyController extends Controller
                 return back()->withInput()->with('error', 'Destination wallet address is required');
             }
 
-            $sendAmount = $request->exchangeSendAmount;
-            $exchangeRate = $sendCurrency->usd_rate / $getCurrency->usd_rate;
-            $getAmount = $sendAmount * $exchangeRate;
-            $service_fee = $this->getCryptoFees($getAmount, $getCurrency)['serviceFees'];
-            $network_fee = $this->getCryptoFees($getAmount, $getCurrency)['networkFees'];
-            $finalAmount = $getAmount - ($service_fee + $network_fee);
+            try {
+                $quote = $this->buyQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+            } catch (RuntimeException $exception) {
+                return back()->withInput()->with('error', $exception->getMessage());
+            }
 
-            $buyRequest->send_currency_id = $sendCurrency->id;
-            $buyRequest->get_currency_id = $getCurrency->id;
-            $buyRequest->send_amount = $sendAmount;
-            $buyRequest->get_amount = $getAmount;
-            $buyRequest->exchange_rate = $exchangeRate;
-            $buyRequest->service_fee = $service_fee;
-            $buyRequest->network_fee = $network_fee;
-            $buyRequest->final_amount = $finalAmount;
+            $buyRequest->send_currency_id = $quote['send_currency_id'];
+            $buyRequest->get_currency_id = $quote['get_currency_id'];
+            $buyRequest->send_amount = $quote['send_amount'];
+            $buyRequest->get_amount = $quote['get_amount'];
+            $buyRequest->exchange_rate = $quote['exchange_rate'];
+            $buyRequest->service_fee = $quote['service_fee'];
+            $buyRequest->network_fee = $quote['network_fee'];
+            $buyRequest->final_amount = $quote['final_amount'];
             $buyRequest->status = 1;
             $buyRequest->destination_wallet = $request->destination_wallet;
             $buyRequest->save();
@@ -186,13 +186,33 @@ class BuyController extends Controller
 
     public function buyAutoRate(Request $request)
     {
-        $sendCurrencies = FiatCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
+        $request->validate([
+            'sendAmount' => 'required|numeric|min:0.01',
+            'sendCurrency' => 'required|integer',
+            'getCurrency' => 'required|integer',
+        ]);
+
+        $sendCurrency = FiatCurrency::where('status', 1)->findOrFail($request->sendCurrency);
+        $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->getCurrency);
+        $sendAmount = (float) $request->sendAmount;
+
+        if ($sendCurrency->min_send > $sendAmount) {
+            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+        }
+
+        if ($sendCurrency->max_send < $sendAmount) {
+            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+        }
+
+        try {
+            $quote = $this->buyQuoteService->build($sendCurrency, $getCurrency, $sendAmount);
+        } catch (RuntimeException $exception) {
+            return response()->json(['status' => false, 'message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
-            'sendCurrencies' => $sendCurrencies,
-            'getCurrencies' => $getCurrencies,
-            'initialSendAmount' => $request->sendAmount,
+            'status' => true,
+            'quote' => $this->formatQuoteResponse($quote),
         ]);
     }
 
@@ -219,6 +239,23 @@ class BuyController extends Controller
             'buyRequest' => $buyRequest ?? null,
             'route' => $route
         ]);
+    }
+
+    protected function formatQuoteResponse(array $quote): array
+    {
+        return [
+            'sendAmount' => round((float) $quote['send_amount'], 8),
+            'getAmount' => round((float) $quote['get_amount'], 8),
+            'exchangeRate' => round((float) $quote['exchange_rate'], 8),
+            'serviceFee' => round((float) $quote['service_fee'], 8),
+            'networkFee' => round((float) $quote['network_fee'], 8),
+            'finalAmount' => round((float) $quote['final_amount'], 8),
+            'serviceFeeType' => $quote['service_fee_type'],
+            'networkFeeType' => $quote['network_fee_type'],
+            'sendCurrencyCode' => $quote['send_currency_code'],
+            'getCurrencyCode' => $quote['get_currency_code'],
+            'rateSource' => $quote['rate_source'],
+        ];
     }
 
 }

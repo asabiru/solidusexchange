@@ -10,6 +10,7 @@ use App\Models\FiatCurrency;
 use App\Models\FiatSendGateway;
 use App\Models\SellRequest;
 use App\Services\Sell\TraderAssignmentService;
+use App\Services\TradeQuote\SellQuoteService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use Carbon\Carbon;
@@ -18,12 +19,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use RuntimeException;
 
 class SellController extends Controller
 {
     use CryptoWalletGenerate, CalculateFees;
 
-    public function __construct()
+    public function __construct(private readonly SellQuoteService $sellQuoteService)
     {
         $this->theme = template();
     }
@@ -55,21 +57,21 @@ class SellController extends Controller
             return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
-        $sendAmount = $request->exchangeSendAmount;
-        $exchangeRate = $sendCurrency->usd_rate / $getCurrency->usd_rate;
-        $getAmount = $sendAmount * $exchangeRate;
-        $processing_fee = $this->getFiatFees($getAmount, $getCurrency)['processingFees'];
-        $finalAmount = $getAmount - $processing_fee;
+        try {
+            $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
 
         $sellRequest = SellRequest::create([
             'user_id' => auth()->id() ?? null,
-            'send_currency_id' => $sendCurrency->id,
-            'get_currency_id' => $getCurrency->id,
-            'send_amount' => $sendAmount,
-            'get_amount' => $getAmount,
-            'exchange_rate' => $exchangeRate,
-            'processing_fee' => $processing_fee,
-            'final_amount' => $finalAmount,
+            'send_currency_id' => $quote['send_currency_id'],
+            'get_currency_id' => $quote['get_currency_id'],
+            'send_amount' => $quote['send_amount'],
+            'get_amount' => $quote['get_amount'],
+            'exchange_rate' => $quote['exchange_rate'],
+            'processing_fee' => $quote['processing_fee'],
+            'final_amount' => $quote['final_amount'],
             'utr' => uniqid('S'),
         ]);
 
@@ -135,19 +137,19 @@ class SellController extends Controller
                 }
             }
 
-            $sendAmount = $request->exchangeSendAmount;
-            $exchangeRate = $sendCurrency->usd_rate / $getCurrency->usd_rate;
-            $getAmount = $sendAmount * $exchangeRate;
-            $processing_fee = $this->getFiatFees($getAmount, $getCurrency)['processingFees'];
-            $finalAmount = $getAmount - $processing_fee;
+            try {
+                $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+            } catch (RuntimeException $exception) {
+                return back()->withInput()->with('error', $exception->getMessage());
+            }
 
-            $sellRequest->send_currency_id = $sendCurrency->id;
-            $sellRequest->get_currency_id = $getCurrency->id;
-            $sellRequest->send_amount = $sendAmount;
-            $sellRequest->get_amount = $getAmount;
-            $sellRequest->exchange_rate = $exchangeRate;
-            $sellRequest->processing_fee = $processing_fee;
-            $sellRequest->final_amount = $finalAmount;
+            $sellRequest->send_currency_id = $quote['send_currency_id'];
+            $sellRequest->get_currency_id = $quote['get_currency_id'];
+            $sellRequest->send_amount = $quote['send_amount'];
+            $sellRequest->get_amount = $quote['get_amount'];
+            $sellRequest->exchange_rate = $quote['exchange_rate'];
+            $sellRequest->processing_fee = $quote['processing_fee'];
+            $sellRequest->final_amount = $quote['final_amount'];
             $sellRequest->status = 1;
             $sellRequest->fiat_send_gateway_id = $fiatSendGateway->id;
             $sellRequest->contact_telegram = $contactTelegram;
@@ -222,13 +224,33 @@ class SellController extends Controller
 
     public function sellAutoRate(Request $request)
     {
-        $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = FiatCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
+        $request->validate([
+            'sendAmount' => 'required|numeric|min:0.00000001',
+            'sendCurrency' => 'required|integer',
+            'getCurrency' => 'required|integer',
+        ]);
+
+        $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->sendCurrency);
+        $getCurrency = FiatCurrency::where('status', 1)->findOrFail($request->getCurrency);
+        $sendAmount = (float) $request->sendAmount;
+
+        if ($sendCurrency->min_send > $sendAmount) {
+            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+        }
+
+        if ($sendCurrency->max_send < $sendAmount) {
+            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+        }
+
+        try {
+            $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, $sendAmount);
+        } catch (RuntimeException $exception) {
+            return response()->json(['status' => false, 'message' => $exception->getMessage()], 422);
+        }
 
         return response()->json([
-            'sendCurrencies' => $sendCurrencies,
-            'getCurrencies' => $getCurrencies,
-            'initialSendAmount' => $request->sendAmount,
+            'status' => true,
+            'quote' => $this->formatQuoteResponse($quote),
         ]);
     }
 
@@ -307,5 +329,20 @@ class SellController extends Controller
         }
 
         return $telegram;
+    }
+
+    protected function formatQuoteResponse(array $quote): array
+    {
+        return [
+            'sendAmount' => round((float) $quote['send_amount'], 8),
+            'getAmount' => round((float) $quote['get_amount'], 8),
+            'exchangeRate' => round((float) $quote['exchange_rate'], 8),
+            'processingFee' => round((float) $quote['processing_fee'], 8),
+            'finalAmount' => round((float) $quote['final_amount'], 8),
+            'processingFeeType' => $quote['processing_fee_type'],
+            'sendCurrencyCode' => $quote['send_currency_code'],
+            'getCurrencyCode' => $quote['get_currency_code'],
+            'rateSource' => $quote['rate_source'],
+        ];
     }
 }

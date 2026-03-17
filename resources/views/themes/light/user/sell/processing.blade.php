@@ -161,118 +161,65 @@
         Notiflix.Block.dots('#calLoader', {
             backgroundColor: loaderColor,
         });
+
         var initialSendAmount = "{{$sellRequest->send_amount}}";
-        var initialSendCurrency = "{{$sellRequest->send_currency_id}}";
-        var initialGetCurrency = "{{$sellRequest->get_currency_id}}";
         var initialGetCurrencyCode = "{{optional($sellRequest->getCurrency)->code}}";
         var finalAmount = 0;
         var activeSendCurrency = @json($sellRequest->sendCurrency);
         var activeGetCurrency = @json($sellRequest->getCurrency);
+        var currentQuote = null;
         var currentUserTelegram = @json(auth()->check() ? ['contact' => auth()->user()->telegram_contact, 'id' => auth()->user()->provider_id ?? null] : null);
         var oldContactTelegram = @json(old('contact_telegram'));
+
         getExchangeCurrency();
         setSendCurrency(activeSendCurrency);
         setGetCurrency(activeGetCurrency);
         getSendCurrencyInfo(initialGetCurrencyCode);
 
         $(document).on("keyup", "input[name='exchangeSendAmount']", function () {
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
         });
 
         $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
-            let getAmount = $("input[name='exchangeGetAmount']").val();
-            sendCalculation(getAmount);
+            if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
+                return;
+            }
+
+            let getAmount = parseFloat($("input[name='exchangeGetAmount']").val() || 0);
+            let sendAmount = getAmount / parseFloat(currentQuote.exchangeRate);
+            $("input[name='exchangeSendAmount']").val(sendAmount);
+            requestQuote(sendAmount);
         });
 
         $(document).on("click", "#swapBtn", function () {
             let sendAmount = $("input[name='exchangeGetAmount']").val();
             $("input[name='exchangeSendAmount']").val(sendAmount);
-            getCalculation(sendAmount);
+            requestQuote(sendAmount);
         });
 
         $(document).on("click", ".sendModal", function () {
             activeSendCurrency = $(this).data('res');
             setSendCurrency(activeSendCurrency);
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal').modal('hide');
 
             $('.sendModal .right-side').empty();
-            $(this).find('.right-side').html('');
             $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
         });
 
         $(document).on("click", ".getModal", function () {
             activeGetCurrency = $(this).data('res');
             setGetCurrency(activeGetCurrency);
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            getCalculation(sendAmount);
+            requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal2').modal('hide');
 
             $('.getModal .right-side').empty();
-            $(this).find('.right-side').html('');
             $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
         });
 
-        function getCalculation(sendAmount) {
-            $("#exchangeMessage").text('');
-            $("#submitBtn").attr('disabled', false);
-
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-            let sendUsdRate = activeSendCurrency.usd_rate
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let getCode = activeGetCurrency.code;
-            let getProcessingFee = activeGetCurrency.processing_fee;
-            let getProcessingType = activeGetCurrency.processing_fee_type;
-            let getAmount = getAmountCal(sendAmount, sendUsdRate, getUsdRate);
-            $("input[name='exchangeGetAmount']").val(getAmount);
-
-            tradeShow(parseFloat(sendAmount).toFixed(8), parseFloat(getAmount).toFixed(2), sendCode, getCode, parseFloat(getProcessingFee).toFixed(2), getProcessingType)
-
-            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-            }
-
-            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-            }
-        }
-
-        function sendCalculation(getAmount) {
-            $("#exchangeMessage").text('');
-            $("#submitBtn").attr('disabled', false);
-
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-            let sendUsdRate = activeSendCurrency.usd_rate
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let sendAmount = sendAmountCal(getAmount, sendUsdRate, getUsdRate);
-            $("input[name='exchangeSendAmount']").val(sendAmount);
-
-            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-            }
-
-            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-            }
-        }
-
-        function getAmountCal(sendAmount, sendUsdRate, getUsdRate) {
-            return (sendAmount * sendUsdRate / getUsdRate).toFixed(2);
-        }
-
-        function sendAmountCal(getAmount, sendUsdRate, getUsdRate) {
-            return (getAmount * getUsdRate / sendUsdRate).toFixed(8);
-        }
+        $(document).on("change", "#paymentMethod", function () {
+            showInfo();
+        });
 
         function getExchangeCurrency(route = "{{route("getSellCurrency")}}") {
             axios.get(route)
@@ -281,10 +228,57 @@
                     showSend(response.data.sendCurrencies);
                     showGet(response.data.getCurrencies);
                     $("input[name='exchangeSendAmount']").val(parseFloat(initialSendAmount).toFixed(8));
-                    getCalculation(parseFloat(initialSendAmount));
+                    requestQuote(parseFloat(initialSendAmount));
+                });
+        }
+
+        function requestQuote(sendAmount) {
+            $("#exchangeMessage").text('');
+            $("#submitBtn").attr('disabled', false);
+
+            if (!sendAmount || parseFloat(sendAmount) <= 0) {
+                $("input[name='exchangeGetAmount']").val('');
+                currentQuote = null;
+                clearTradeDetails();
+                return;
+            }
+
+            let sendMinLimit = activeSendCurrency.min_send;
+            let sendMaxLimit = activeSendCurrency.max_send;
+            let sendCode = activeSendCurrency.code;
+
+            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
+                $("#submitBtn").attr('disabled', true);
+                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+                return;
+            }
+
+            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
+                $("#submitBtn").attr('disabled', true);
+                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+                return;
+            }
+
+            Notiflix.Block.dots('#autoRate', {
+                backgroundColor: loaderColor,
+            });
+
+            axios.post("{{route('sellAutoRate')}}", {
+                sendAmount: sendAmount,
+                sendCurrency: activeSendCurrency.id,
+                getCurrency: activeGetCurrency.id,
+            })
+                .then(function (response) {
+                    Notiflix.Block.remove('#autoRate');
+                    currentQuote = response.data.quote;
+                    $("input[name='exchangeSendAmount']").val(parseFloat(response.data.quote.sendAmount).toFixed(8));
+                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.getAmount).toFixed(2));
+                    tradeShow(response.data.quote);
                 })
                 .catch(function (error) {
-
+                    Notiflix.Block.remove('#autoRate');
+                    $("#submitBtn").attr('disabled', true);
+                    $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
                 });
         }
 
@@ -334,7 +328,6 @@
             $('#showSendImage').attr('src', currency.image_path);
             $('#showSendCode').text(currency.code);
             $('#showSendName').text(currency.name);
-
             $('input[name="exchangeSendCurrency"]').val(currency.id);
         }
 
@@ -342,76 +335,58 @@
             $('#showGetImage').attr('src', currency.image_path);
             $('#showGetCode').text(currency.code);
             $('#showGetName').text(currency.name);
-
             $('input[name="exchangeGetCurrency"]').val(currency.id);
         }
 
         function tradeDetails() {
-            Notiflix.Block.dots('#autoRate', {
-                backgroundColor: loaderColor,
-            });
-            let sendAmount = $("input[name='exchangeSendAmount']").val();
-            let sendCurrency = activeSendCurrency.id;
-            let getCurrency = activeGetCurrency.id;
-
-            axios.post("{{route('sellAutoRate')}}", {
-                sendAmount: sendAmount,
-                sendCurrency: sendCurrency,
-                getCurrency: getCurrency,
-            })
-                .then(function (response) {
-                    Notiflix.Block.remove('#autoRate');
-                    showSend(response.data.sendCurrencies);
-                    showGet(response.data.getCurrencies);
-                    $("input[name='exchangeSendAmount']").val(parseFloat(response.data.initialSendAmount).toFixed(2));
-                    getCalculation(parseFloat(response.data.initialSendAmount).toFixed(8));
-                })
-                .catch(function (error) {
-
-                });
+            requestQuote($("input[name='exchangeSendAmount']").val());
         }
 
-        function tradeShow(sendAmount, getAmount, sendCurrencyCode, getCurrencyCode, processingFee, processingFeeType) {
-            let exchangeRate = (getAmount / sendAmount).toFixed(2);
+        function tradeShow(quote) {
+            let sendAmount = parseFloat(quote.sendAmount || 0).toFixed(8);
+            let getAmount = parseFloat(quote.getAmount || 0).toFixed(2);
+            let exchangeRate = parseFloat(quote.exchangeRate || 0).toFixed(2);
+            let processingFee = parseFloat(quote.processingFee || 0);
+            let processingFeeType = quote.processingFeeType;
+            let sendCurrencyCode = quote.sendCurrencyCode;
+            let getCurrencyCode = quote.getCurrencyCode;
+
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
             $("#showExchangeRate").text(`1 ${sendCurrencyCode} ~ ${exchangeRate} ${getCurrencyCode}`);
+
             if (processingFeeType === 'percent') {
-                let stringProcessingFee = parseFloat(processingFee).toString();
-                $("#showProcessingType").text(`Processing fee ${stringProcessingFee}%`);
-                processingFee = ((getAmount * processingFee) / 100).toFixed(2);
+                $("#showProcessingType").text(`Processing fee ${parseFloat(processingFee).toString()}%`);
+                processingFee = ((parseFloat(getAmount) * processingFee) / 100).toFixed(2);
             } else {
                 $("#showProcessingType").text(`Processing fee`);
+                processingFee = processingFee.toFixed(2);
             }
             $("#showProcessingFee").text(`${processingFee} ${getCurrencyCode}`);
 
-            finalAmount = (parseFloat(getAmount) - (parseFloat(processingFee))).toFixed(2);
-
+            finalAmount = parseFloat(quote.finalAmount || 0).toFixed(2);
             showFinalRate();
         }
 
         function showFinalRate() {
-            let getCurrencyCode = activeGetCurrency.code;
-            $(".showFinalAmount").text(`~ ${finalAmount} ${getCurrencyCode}`);
+            $(".showFinalAmount").text(`~ ${finalAmount} ${activeGetCurrency.code}`);
         }
 
-
-        $(document).on("change", "#paymentMethod", function () {
-            showInfo();
-        });
+        function clearTradeDetails() {
+            $("#showSendAmount").text('');
+            $("#showExchangeRate").text('');
+            $("#showProcessingType").text('');
+            $("#showProcessingFee").text('');
+            $(".showFinalAmount").text('');
+        }
 
         function getSendCurrencyInfo(getCurrencyCode) {
-            axios.get("{{route('getSellCurrencyMethodInfo')}}",
-                {
-                    params: {
-                        getCurrencyCode: getCurrencyCode
-                    }
-                })
+            axios.get("{{route('getSellCurrencyMethodInfo')}}", {
+                params: {
+                    getCurrencyCode: getCurrencyCode
+                }
+            })
                 .then(function (response) {
-                    let getCurrencySendInfo = response.data.getCurrencySendInfo;
-                    showSendCurrencyInfo(getCurrencySendInfo)
-                })
-                .catch(function (error) {
-
+                    showSendCurrencyInfo(response.data.getCurrencySendInfo);
                 });
         }
 
@@ -426,7 +401,6 @@
             $('#paymentMethod').append(options);
             showInfo();
         }
-
 
         function showInfo() {
             $('#showInfoDiv').html('');
@@ -458,7 +432,6 @@
             if (mode === 'manual') {
                 showTelegramContactField();
             }
-
         }
 
         function showTelegramContactField() {
@@ -486,6 +459,5 @@
         }
 
         setInterval(tradeDetails, 60000);
-
     </script>
 @endpush

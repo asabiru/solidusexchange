@@ -2,6 +2,7 @@
     Notiflix.Block.dots('#showLoader', {
         backgroundColor: loaderColor,
     });
+
     getExchangeCurrency();
     var activeTab = "exchange";
     var activeSendCurrency = "";
@@ -10,20 +11,14 @@
     var availableGetCurrencies = [];
     var pendingTabSwap = null;
     var exchangeQuoteTimer = null;
+    var currentQuote = null;
 
     $(document).on("keyup", "input[name='exchangeSendAmount']", function () {
-        let sendAmount = $("input[name='exchangeSendAmount']").val();
-        if (activeTab === 'exchange') {
-            requestExchangeQuoteDebounced(sendAmount);
-            return;
-        }
-
-        getCalculation(sendAmount);
+        requestQuoteDebounced($("input[name='exchangeSendAmount']").val());
     });
 
     $(document).on("change", "select[name='exchangeSendCurrency']", function () {
-        let sendAmount = $("input[name='exchangeSendAmount']").val();
-        getCalculation(sendAmount);
+        requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
     });
 
     $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
@@ -31,13 +26,18 @@
             return;
         }
 
-        let getAmount = $("input[name='exchangeGetAmount']").val();
-        sendCalculation(getAmount);
+        if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
+            return;
+        }
+
+        let getAmount = parseFloat($("input[name='exchangeGetAmount']").val() || 0);
+        let sendAmount = getAmount / parseFloat(currentQuote.exchangeRate);
+        $("input[name='exchangeSendAmount']").val(sendAmount);
+        requestQuoteDebounced(sendAmount, 0);
     });
 
     $(document).on("change", "select[name='exchangeGetCurrency']", function () {
-        let sendAmount = $("input[name='exchangeSendAmount']").val();
-        getCalculation(sendAmount);
+        requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
     });
 
     $(document).on("click", "#swapBtn", function () {
@@ -60,7 +60,7 @@
             showGet(availableGetCurrencies);
 
             $("input[name='exchangeSendAmount']").val(formatSendAmount(swappedSendAmount));
-            requestExchangeQuoteDebounced(swappedSendAmount, 0);
+            requestQuoteDebounced(swappedSendAmount, 0);
             return;
         }
 
@@ -83,137 +83,22 @@
     $(document).on("click", ".sendModal", function () {
         activeSendCurrency = $(this).data('res');
         setSendCurrency(activeSendCurrency);
-        let sendAmount = $("input[name='exchangeSendAmount']").val();
-        if (activeTab === 'exchange') {
-            requestExchangeQuoteDebounced(sendAmount, 0);
-        } else {
-            getCalculation(sendAmount);
-        }
+        requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal').modal('hide');
 
         $('.sendModal .right-side').empty();
-        $(this).find('.right-side').html('');
         $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
     });
 
     $(document).on("click", ".getModal", function () {
         activeGetCurrency = $(this).data('res');
         setGetCurrency(activeGetCurrency);
-        let sendAmount = $("input[name='exchangeSendAmount']").val();
-        if (activeTab === 'exchange') {
-            requestExchangeQuoteDebounced(sendAmount, 0);
-        } else {
-            getCalculation(sendAmount);
-        }
+        requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal2').modal('hide');
 
         $('.getModal .right-side').empty();
-        $(this).find('.right-side').html('');
         $(this).find('.right-side').html('<i class="fa-sharp fa-solid fa-circle-check"></i>');
     });
-
-    function getCalculation(sendAmount) {
-        $("#exchangeMessage").text('');
-        $("#submitBtn").attr('disabled', false);
-
-        if (activeTab === 'exchange') {
-            if (!sendAmount || parseFloat(sendAmount) <= 0) {
-                $("input[name='exchangeGetAmount']").val('');
-                return;
-            }
-
-            let sendMinLimit = activeSendCurrency.min_send;
-            let sendMaxLimit = activeSendCurrency.max_send;
-            let sendCode = activeSendCurrency.code;
-
-            if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-                return;
-            }
-
-            if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-                return;
-            }
-
-            requestExchangeQuote(sendAmount);
-            return;
-        }
-
-        let sendMinLimit = activeSendCurrency.min_send;
-        let sendMaxLimit = activeSendCurrency.max_send;
-        let sendCode = activeSendCurrency.code;
-        let sendUsdRate = activeSendCurrency.usd_rate;
-        let getUsdRate = activeGetCurrency.usd_rate;
-        let getAmount = getAmountCal(sendAmount, sendUsdRate, getUsdRate);
-        $("input[name='exchangeGetAmount']").val(getAmount);
-
-        if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-            $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-        }
-
-        if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-            $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-        }
-    }
-
-    function getAmountCal(sendAmount, sendUsdRate, getUsdRate) {
-
-        if (activeTab == 'exchange') {
-            return (sendAmount * sendUsdRate / getUsdRate).toFixed(8);
-        } else if (activeTab == 'buy') {
-            return (sendAmount * sendUsdRate / getUsdRate).toFixed(8);
-        } else if (activeTab == 'sell') {
-            return (sendAmount * sendUsdRate / getUsdRate).toFixed(2);
-        }
-    }
-
-    function sendCalculation(getAmount) {
-        $("#exchangeMessage").text('');
-        $("#submitBtn").attr('disabled', false);
-
-        if (activeTab === 'exchange') {
-            let sendUsdRate = activeSendCurrency.usd_rate;
-            let getUsdRate = activeGetCurrency.usd_rate;
-            let sendAmount = sendAmountCal(getAmount, sendUsdRate, getUsdRate);
-            $("input[name='exchangeSendAmount']").val(sendAmount);
-            getCalculation(sendAmount);
-            return;
-        }
-
-        let sendMinLimit = activeSendCurrency.min_send;
-        let sendMaxLimit = activeSendCurrency.max_send;
-        let sendCode = activeSendCurrency.code;
-        let sendUsdRate = activeSendCurrency.usd_rate;
-        let getUsdRate = activeGetCurrency.usd_rate;
-        let sendAmount = sendAmountCal(getAmount, sendUsdRate, getUsdRate);
-        $("input[name='exchangeSendAmount']").val(sendAmount);
-
-        if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
-            $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
-        }
-
-        if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
-            $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
-        }
-    }
-
-    function sendAmountCal(getAmount, sendUsdRate, getUsdRate) {
-        if (activeTab == 'exchange') {
-            return (getAmount * getUsdRate / sendUsdRate).toFixed(8);
-        } else if (activeTab == 'buy') {
-            return (getAmount * getUsdRate / sendUsdRate).toFixed(2);
-        } else if (activeTab == 'sell') {
-            return (getAmount * getUsdRate / sendUsdRate).toFixed(8);
-        }
-    }
-
 
     function getExchangeCurrency(route = "{{ route('getExchangeCurrency', [], false) }}", preferredSendCurrencyId = null, preferredGetCurrencyId = null, preferredSendAmount = null) {
         axios.get(route)
@@ -232,19 +117,80 @@
                     ? preferredSendAmount
                     : response.data.initialSendAmount;
                 $("input[name='exchangeSendAmount']").val(formatSendAmount(initialAmount));
-                if (activeTab === 'exchange') {
-                    $("input[name='exchangeGetAmount']").prop('readonly', true);
-                    requestExchangeQuoteDebounced(initialAmount, 0);
-                } else {
-                    $("input[name='exchangeGetAmount']").prop('readonly', false);
-                    getCalculation(initialAmount);
-                }
+                $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange');
+                requestQuoteDebounced(initialAmount, 0);
             })
             .catch(function (error) {
                 Notiflix.Block.remove('#showLoader');
                 $("#exchangeMessage").text(error.response?.data?.message || 'Unable to load exchange methods');
                 $("#submitBtn").attr('disabled', true);
             });
+    }
+
+    function getCalculation(sendAmount) {
+        $("#exchangeMessage").text('');
+        $("#submitBtn").attr('disabled', false);
+
+        if (!sendAmount || parseFloat(sendAmount) <= 0) {
+            $("input[name='exchangeGetAmount']").val('');
+            currentQuote = null;
+            return;
+        }
+
+        let sendMinLimit = activeSendCurrency.min_send;
+        let sendMaxLimit = activeSendCurrency.max_send;
+        let sendCode = activeSendCurrency.code;
+
+        if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
+            $("#submitBtn").attr('disabled', true);
+            $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+            return;
+        }
+
+        if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
+            $("#submitBtn").attr('disabled', true);
+            $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+            return;
+        }
+
+        requestQuote(sendAmount);
+    }
+
+    function requestQuoteDebounced(sendAmount, delay = 250) {
+        clearTimeout(exchangeQuoteTimer);
+        exchangeQuoteTimer = setTimeout(function () {
+            getCalculation(sendAmount);
+        }, delay);
+    }
+
+    function requestQuote(sendAmount) {
+        const routeMap = {
+            exchange: "{{ route('exchangeAutoRate', [], false) }}",
+            buy: "{{ route('buyAutoRate', [], false) }}",
+            sell: "{{ route('sellAutoRate', [], false) }}",
+        };
+
+        axios.post(routeMap[activeTab], {
+            sendAmount: sendAmount,
+            sendCurrency: activeSendCurrency.id,
+            getCurrency: activeGetCurrency.id,
+        })
+            .then(function (response) {
+                applyQuote(response.data.quote);
+            })
+            .catch(function (error) {
+                $("#submitBtn").attr('disabled', true);
+                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
+            });
+    }
+
+    function applyQuote(quote) {
+        currentQuote = quote;
+        $("#exchangeMessage").text('');
+        $("#submitBtn").attr('disabled', false);
+        $("input[name='exchangeSendAmount']").val(formatSendAmount(quote.sendAmount));
+        $("input[name='exchangeGetAmount']").val(formatReceiveAmount(quote.getAmount));
+        $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange' && !!quote.receiveReadonly);
     }
 
     function showSend(currencies) {
@@ -268,23 +214,6 @@
         $('#show-send').append(options);
     }
 
-
-    function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path);
-        $('#showSendCode').text(currency.code);
-        $('#showSendName').text(currency.name);
-
-        $('input[name="exchangeSendCurrency"]').val(currency.id);
-    }
-
-    function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path);
-        $('#showGetCode').text(currency.code);
-        $('#showGetName').text(currency.name);
-
-        $('input[name="exchangeGetCurrency"]').val(currency.id);
-    }
-
     function showGet(currencies) {
         $('#show-get').html(``);
         let options = "";
@@ -306,6 +235,19 @@
         $('#show-get').append(options);
     }
 
+    function setSendCurrency(currency) {
+        $('#showSendImage').attr('src', currency.image_path);
+        $('#showSendCode').text(currency.code);
+        $('#showSendName').text(currency.name);
+        $('input[name="exchangeSendCurrency"]').val(currency.id);
+    }
+
+    function setGetCurrency(currency) {
+        $('#showGetImage').attr('src', currency.image_path);
+        $('#showGetCode').text(currency.code);
+        $('#showGetName').text(currency.name);
+        $('input[name="exchangeGetCurrency"]').val(currency.id);
+    }
 
     $(document).on("click", "#pills-exchange-tab", function () {
         activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Exchange Now");
@@ -326,6 +268,7 @@
 
         $("#submitFormId").attr("action", formSubmitRoute);
         activeTab = tabName;
+        currentQuote = null;
 
         let preferredSelection = pendingTabSwap;
         pendingTabSwap = null;
@@ -353,34 +296,16 @@
         return activeTab === 'buy' ? numericAmount.toFixed(2) : numericAmount.toFixed(8);
     }
 
-    function requestExchangeQuoteDebounced(sendAmount, delay = 250) {
-        clearTimeout(exchangeQuoteTimer);
-        exchangeQuoteTimer = setTimeout(function () {
-            getCalculation(sendAmount);
-        }, delay);
-    }
+    function formatReceiveAmount(amount) {
+        let numericAmount = parseFloat(amount);
+        if (Number.isNaN(numericAmount)) {
+            return '';
+        }
 
-    function requestExchangeQuote(sendAmount) {
-        axios.post("{{ route('exchangeAutoRate', [], false) }}", {
-            sendAmount: sendAmount,
-            sendCurrency: activeSendCurrency.id,
-            getCurrency: activeGetCurrency.id,
-        })
-            .then(function (response) {
-                $("#exchangeMessage").text('');
-                $("#submitBtn").attr('disabled', false);
-                $("input[name='exchangeSendAmount']").val(formatSendAmount(response.data.quote.sendAmount));
-                $("input[name='exchangeGetAmount']").val(formatSendAmount(response.data.quote.getAmount));
-                $("input[name='exchangeGetAmount']").prop('readonly', !!response.data.quote.receiveReadonly);
-            })
-            .catch(function (error) {
-                $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
-            });
+        return activeTab === 'sell' ? numericAmount.toFixed(2) : numericAmount.toFixed(8);
     }
 
     $(document).ready(function () {
-
         $('.autoplay').slick({
             slidesToShow: 1,
             slidesToScroll: 1,
