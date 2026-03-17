@@ -66,9 +66,9 @@
                                 <div class="title" id="showGetCode"></div>
                                 <i class="fa-regular fa-angle-down"></i>
                             </a>
-                            <input type="text"
+                                    <input type="text"
                                    name="exchangeGetAmount" id="receive" placeholder="@lang('You get')"
-                                   onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" required>
+                                   onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" readonly required>
                             <input type="hidden" name="exchangeGetCurrency" value="">
                         </div>
                         <div class="d-flex justify-content-between">

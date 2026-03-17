@@ -22,18 +22,7 @@
     });
 
     $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
-        if (activeTab === 'exchange' && $("input[name='exchangeGetAmount']").prop('readonly')) {
-            return;
-        }
-
-        if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
-            return;
-        }
-
-        let getAmount = parseFloat($("input[name='exchangeGetAmount']").val() || 0);
-        let sendAmount = getAmount / parseFloat(currentQuote.exchangeRate);
-        $("input[name='exchangeSendAmount']").val(sendAmount);
-        requestQuoteDebounced(sendAmount, 0);
+        return;
     });
 
     $(document).on("change", "select[name='exchangeGetCurrency']", function () {
@@ -82,6 +71,9 @@
 
     $(document).on("click", ".sendModal", function () {
         activeSendCurrency = $(this).data('res');
+        if (!isCurrencySelectable('send', activeSendCurrency)) {
+            return;
+        }
         setSendCurrency(activeSendCurrency);
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal').modal('hide');
@@ -92,6 +84,9 @@
 
     $(document).on("click", ".getModal", function () {
         activeGetCurrency = $(this).data('res');
+        if (!isCurrencySelectable('get', activeGetCurrency)) {
+            return;
+        }
         setGetCurrency(activeGetCurrency);
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal2').modal('hide');
@@ -208,6 +203,9 @@
         $('#show-send').html(``);
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
+            if (!isCurrencySelectable('send', currencies[i])) {
+                continue;
+            }
             let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
@@ -229,6 +227,9 @@
         $('#show-get').html(``);
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
+            if (!isCurrencySelectable('get', currencies[i])) {
+                continue;
+            }
             let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
@@ -258,6 +259,22 @@
         $('#showGetCode').text(currency.code);
         $('#showGetName').text(currency.name);
         $('input[name="exchangeGetCurrency"]').val(currency.id);
+    }
+
+    function isCurrencySelectable(side, currency) {
+        if (activeTab !== 'exchange' || !currency) {
+            return true;
+        }
+
+        if (side === 'send' && activeGetCurrency) {
+            return Number(currency.id) !== Number(activeGetCurrency.id);
+        }
+
+        if (side === 'get' && activeSendCurrency) {
+            return Number(currency.id) !== Number(activeSendCurrency.id);
+        }
+
+        return true;
     }
 
     $(document).on("click", "#pills-exchange-tab", function () {

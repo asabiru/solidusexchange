@@ -80,7 +80,7 @@
                                                                 </a>
                                                                 <input type="text"
                                                                        name="exchangeGetAmount" id="receive" placeholder="@lang('You get')"
-                                                                       onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" required>
+                                                                       onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" readonly required>
                                                                 <input type="hidden" name="exchangeGetCurrency" value="">
                                                             </div>
                                                             <div class="d-flex justify-content-between">
@@ -199,12 +199,7 @@
 
 
         $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
-            if ($("input[name='exchangeGetAmount']").prop('readonly')) {
-                return;
-            }
-
-            let getAmount = $("input[name='exchangeGetAmount']").val();
-            sendCalculation(getAmount);
+            return;
         });
 
 
@@ -226,6 +221,9 @@
 
         $(document).on("click", ".sendModal", function () {
             activeSendCurrency = $(this).data('res');
+            if (!isCurrencySelectable('send', activeSendCurrency)) {
+                return;
+            }
             setSendCurrency(activeSendCurrency);
             let sendAmount = $("input[name='exchangeSendAmount']").val();
             requestQuoteDebounced(sendAmount, 0);
@@ -238,6 +236,9 @@
 
         $(document).on("click", ".getModal", function () {
             activeGetCurrency = $(this).data('res');
+            if (!isCurrencySelectable('get', activeGetCurrency)) {
+                return;
+            }
             setGetCurrency(activeGetCurrency);
             let sendAmount = $("input[name='exchangeSendAmount']").val();
             requestQuoteDebounced(sendAmount, 0);
@@ -318,6 +319,9 @@
             $('#show-send').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
+                if (!isCurrencySelectable('send', currencies[i])) {
+                    continue;
+                }
                 let isChecked = (currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
@@ -339,6 +343,9 @@
             $('#show-get').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
+                if (!isCurrencySelectable('get', currencies[i])) {
+                    continue;
+                }
                 let isChecked = (currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
@@ -370,6 +377,22 @@
             $('#showGetName').text(currency.name);
 
             $('input[name="exchangeGetCurrency"]').val(currency.id);
+        }
+
+        function isCurrencySelectable(side, currency) {
+            if (!currency) {
+                return true;
+            }
+
+            if (side === 'send' && activeGetCurrency) {
+                return Number(currency.id) !== Number(activeGetCurrency.id);
+            }
+
+            if (side === 'get' && activeSendCurrency) {
+                return Number(currency.id) !== Number(activeSendCurrency.id);
+            }
+
+            return true;
         }
 
         $(document).on("click", "#Floating-rate", function () {

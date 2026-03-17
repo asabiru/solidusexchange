@@ -82,7 +82,7 @@
                                                                 <input type="text"
                                                                        name="exchangeGetAmount" id="receive"
                                                                        placeholder="@lang('You get')"
-                                                                       onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" required>
+                                                                       onkeyup="this.value = this.value.replace (/^\.|[^\d\.]/g, '')" readonly required>
                                                                 <input type="hidden" name="exchangeGetCurrency"
                                                                        value="">
                                                             </div>
@@ -176,14 +176,7 @@
         });
 
         $(document).on("keyup", "input[name='exchangeGetAmount']", function () {
-            if (!currentQuote || !currentQuote.exchangeRate || parseFloat(currentQuote.exchangeRate) <= 0) {
-                return;
-            }
-
-            let getAmount = parseFloat($("input[name='exchangeGetAmount']").val() || 0);
-            let sendAmount = getAmount / parseFloat(currentQuote.exchangeRate);
-            $("input[name='exchangeSendAmount']").val(sendAmount);
-            requestQuote(sendAmount);
+            return;
         });
 
         $(document).on("click", "#swapBtn", function () {
