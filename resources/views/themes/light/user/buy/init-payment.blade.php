@@ -76,7 +76,7 @@
                                     <span>@lang('Your payable amount is not required to fall within the minimum and maximum limits.')</span>
                                 </div>
                                 <button type="submit" class="cmn-btn w-100"
-                                        id="submitBtn">@lang("Confirm & continue")</button>
+                                        id="submitBtn" {{ count($gateways) ? '' : 'disabled' }}>@lang("Confirm & continue")</button>
                             </div>
                         </div>
                     </div>
@@ -141,8 +141,14 @@
         'use strict';
         let amountField = $('#amount');
         $('#submitBtn').attr('disabled', true);
-        let selectedGateway = "{{$gateways[0]->id}}";
-        supportCurrency(selectedGateway);
+        let selectedGateway = @json(optional($gateways->first())->id);
+
+        if (selectedGateway) {
+            supportCurrency(selectedGateway);
+        } else {
+            $('#paymentMethod').append(`<option value="">@lang('No payment method available')</option>`);
+            $('#supported_currency').append(`<option value="">@lang('No payment method available')</option>`);
+        }
 
         function clearMessage(fieldId) {
             $(fieldId).removeClass('is-valid')
@@ -158,7 +164,7 @@
 
         function supportCurrency(selectedGateway) {
             if (!selectedGateway) {
-                console.error('Selected Gateway is undefined or null.');
+                $('#submitBtn').attr('disabled', true);
                 return;
             }
 

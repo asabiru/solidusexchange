@@ -498,6 +498,7 @@ CREATE TABLE `fiat_currencies` (
   `driver` varchar(255) NOT NULL DEFAULT 'local',
   `status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '0=>inactive,1=>active',
   `show_in_buy` tinyint(1) NOT NULL DEFAULT 1,
+  `buy_gateway_id` bigint(20) UNSIGNED DEFAULT NULL,
   `show_in_sell` tinyint(1) NOT NULL DEFAULT 1,
   `fiat_send_gateway_id` bigint(20) UNSIGNED DEFAULT NULL,
   `sort_by` int(11) NOT NULL DEFAULT 1,
@@ -1424,6 +1425,7 @@ ALTER TABLE `failed_jobs`
 --
 ALTER TABLE `fiat_currencies`
   ADD PRIMARY KEY (`id`),
+  ADD KEY `fiat_currencies_buy_gateway_id_foreign` (`buy_gateway_id`),
   ADD KEY `fiat_currencies_fiat_send_gateway_id_foreign` (`fiat_send_gateway_id`);
 
 --

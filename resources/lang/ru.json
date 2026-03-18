@@ -1254,6 +1254,9 @@
     "Linked Sell Method": "Привязанный метод продажи",
     "No specific method": "Без конкретного метода",
     "If a method is selected, this fiat currency will use only that active sell method in the user flow.": "Если метод выбран, эта фиатная валюта будет использовать только этот активный метод в пользовательском сценарии продажи.",
+    "Linked Buy Method": "Привязанный метод покупки",
+    "If a method is selected, this fiat currency will use only that active buy method in the user flow. Manual gateways are also available here.": "Если метод выбран, эта фиатная валюта будет использовать только этот активный метод в пользовательском сценарии покупки. Здесь также доступны manual gateways.",
     "No payout method available": "Нет доступного метода выплаты",
-    "No active sell method is linked to this fiat currency yet.": "К этой фиатной валюте пока не привязан активный метод продажи."
+    "No active sell method is linked to this fiat currency yet.": "К этой фиатной валюте пока не привязан активный метод продажи.",
+    "No payment method available": "Нет доступного способа оплаты"
 }

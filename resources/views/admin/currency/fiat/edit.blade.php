@@ -247,6 +247,28 @@
 
                                             <div class="mb-3">
                                                 <label class="form-label"
+                                                       for="BuyGateway">@lang('Linked Buy Method')</label>
+                                                <select class="form-select" name="buy_gateway_id" id="BuyGateway">
+                                                    <option value="">@lang('No specific method')</option>
+                                                    @foreach($paymentGateways as $paymentGateway)
+                                                        <option value="{{ $paymentGateway->id }}" {{ old('buy_gateway_id', $currency->buy_gateway_id) == $paymentGateway->id ? 'selected' : '' }}>
+                                                            {{ $paymentGateway->name }}
+                                                            @if($paymentGateway->id >= 1000)
+                                                                (@lang('Manual'))
+                                                            @endif
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                                @error('buy_gateway_id')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                                <small class="text-body d-block mt-2">
+                                                    @lang('If a method is selected, this fiat currency will use only that active buy method in the user flow. Manual gateways are also available here.')
+                                                </small>
+                                            </div>
+
+                                            <div class="mb-3">
+                                                <label class="form-label"
                                                        for="FiatSendGateway">@lang('Linked Sell Method')</label>
                                                 <select class="form-select" name="fiat_send_gateway_id" id="FiatSendGateway">
                                                     <option value="">@lang('No specific method')</option>

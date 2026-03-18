@@ -135,7 +135,10 @@ class BuyController extends Controller
                 $buyRequest->save();
             }
 
-            $data['gateways'] = Gateway::where('status', 1)->orderBy('sort_by', 'ASC')->get();
+            $data['gateways'] = $this->resolveBuyGatewayQuery($buyRequest->sendCurrency)
+                ->orderBy('sort_by', 'ASC')
+                ->orderBy('name', 'ASC')
+                ->get();
             return view($this->theme . 'user.buy.init-payment', $data, compact('buyRequest'));
         } elseif ($request->method() == 'POST') {
             if ($buyRequest->expire_time < Carbon::now()) {
@@ -160,7 +163,7 @@ class BuyController extends Controller
                 return back()->with('error', $checkAmountValidate['msg']);
             }
 
-            $method = Gateway::where('status', 1)->findOrFail($methodId);
+            $method = $this->resolveBuyGateway($buyRequest->sendCurrency, (int) $methodId);
             $deposit = $this->makeDeposit($checkAmountValidate, $amount, BuyRequest::class, $buyRequest->id);
             $buyRequest->gateway_id = $method->id;
             $buyRequest->save();
@@ -256,6 +259,22 @@ class BuyController extends Controller
             'getCurrencyCode' => $quote['get_currency_code'],
             'rateSource' => $quote['rate_source'],
         ];
+    }
+
+    private function resolveBuyGateway(FiatCurrency $currency, int $gatewayId): Gateway
+    {
+        return $this->resolveBuyGatewayQuery($currency)->findOrFail($gatewayId);
+    }
+
+    private function resolveBuyGatewayQuery(?FiatCurrency $currency)
+    {
+        $query = Gateway::query()->where('status', 1);
+
+        if ($currency && $currency->buy_gateway_id) {
+            return $query->where('id', $currency->buy_gateway_id);
+        }
+
+        return $query;
     }
 
 }
