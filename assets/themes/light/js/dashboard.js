@@ -32,7 +32,9 @@ if(toggleBtn){
 }
 
 
-var loaderColor = "#fff";
+var loaderColor = "rgba(250, 244, 255, 0.92)";
+var loaderColorDark = "rgba(45, 24, 78, 0.94)";
+var loaderColorLight = "rgba(250, 244, 255, 0.92)";
 
 function setTheme() {
     const isDarkTheme = localStorage.getItem("dark-theme");
@@ -49,7 +51,7 @@ function setTheme() {
         if (document.getElementById("sun")) {
             document.getElementById("sun").style.display = "block";
         }
-        loaderColor = "#284e46";
+        loaderColor = loaderColorDark;
     } else if (isDarkTheme == 0) {
         $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
@@ -60,7 +62,7 @@ function setTheme() {
         if (document.getElementById("sun")) {
             document.getElementById("sun").style.display = "none";
         }
-        loaderColor = "#fff";
+        loaderColor = loaderColorLight;
     } else {
         if (defaultTheme == 1) {
             $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
@@ -72,7 +74,7 @@ function setTheme() {
             if (document.getElementById("sun")) {
                 document.getElementById("sun").style.display = "block";
             }
-            loaderColor = "#284e46";
+            loaderColor = loaderColorDark;
         } else {
             $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
             $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
@@ -84,7 +86,7 @@ function setTheme() {
             if (document.getElementById("sun")) {
                 document.getElementById("sun").style.display = "none";
             }
-            loaderColor = "#fff";
+            loaderColor = loaderColorLight;
         }
     }
 
