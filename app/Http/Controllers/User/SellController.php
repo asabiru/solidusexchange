@@ -95,7 +95,7 @@ class SellController extends Controller
                 return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
-            $fiatSendGateway = FiatSendGateway::where('status', 1)->findOrFail($request->payment_method);
+            $fiatSendGateway = $this->resolveSellGateway($getCurrency, (int) $request->payment_method);
             $params = $fiatSendGateway->parameters;
 
             $rules = [];
@@ -256,13 +256,41 @@ class SellController extends Controller
 
     public function getSellCurrencyMethodInfo(Request $request)
     {
-        $getCurrencySendInfo = FiatSendGateway::where('status', 1)
-            ->whereJsonContains('supported_currency', $request->getCurrencyCode)
-            ->orderBy('name', 'asc')->get();
+        $getCurrency = null;
+
+        if ($request->filled('getCurrencyId')) {
+            $getCurrency = FiatCurrency::query()->active()->visibleInSell()->find($request->getCurrencyId);
+        }
+
+        if (!$getCurrency && $request->filled('getCurrencyCode')) {
+            $getCurrency = FiatCurrency::query()->active()->visibleInSell()->where('code', $request->getCurrencyCode)->first();
+        }
+
+        $getCurrencySendInfo = $this->resolveSellGatewayQuery($getCurrency)->orderBy('name', 'asc')->get();
 
         return response()->json([
             'getCurrencySendInfo' => $getCurrencySendInfo,
         ]);
+    }
+
+    private function resolveSellGateway(FiatCurrency $currency, int $gatewayId): FiatSendGateway
+    {
+        return $this->resolveSellGatewayQuery($currency)->findOrFail($gatewayId);
+    }
+
+    private function resolveSellGatewayQuery(?FiatCurrency $currency)
+    {
+        $query = FiatSendGateway::query()->where('status', 1);
+
+        if ($currency && $currency->fiat_send_gateway_id) {
+            return $query->where('id', $currency->fiat_send_gateway_id);
+        }
+
+        if ($currency) {
+            return $query->whereJsonContains('supported_currency', $currency->code);
+        }
+
+        return $query->whereRaw('1 = 0');
     }
 
     public function sellGetStatus($utr)

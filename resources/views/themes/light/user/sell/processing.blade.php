@@ -174,7 +174,7 @@
         getExchangeCurrency();
         setSendCurrency(activeSendCurrency);
         setGetCurrency(activeGetCurrency);
-        getSendCurrencyInfo(initialGetCurrencyCode);
+        getSendCurrencyInfo(activeGetCurrency.id, initialGetCurrencyCode);
 
         $(document).on("keyup", "input[name='exchangeSendAmount']", function () {
             requestQuote($("input[name='exchangeSendAmount']").val());
@@ -203,6 +203,7 @@
         $(document).on("click", ".getModal", function () {
             activeGetCurrency = $(this).data('res');
             setGetCurrency(activeGetCurrency);
+            getSendCurrencyInfo(activeGetCurrency.id, activeGetCurrency.code);
             requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal2').modal('hide');
 
@@ -364,9 +365,10 @@
             $(".showFinalAmount").text('');
         }
 
-        function getSendCurrencyInfo(getCurrencyCode) {
+        function getSendCurrencyInfo(getCurrencyId, getCurrencyCode) {
             axios.get("{{route('getSellCurrencyMethodInfo')}}", {
                 params: {
+                    getCurrencyId: getCurrencyId,
                     getCurrencyCode: getCurrencyCode
                 }
             })
@@ -384,6 +386,14 @@
             data-mode="${getCurrencySendInfo[i].processing_mode ?? 'manual'}">${getCurrencySendInfo[i].name}</option>`;
             }
             $('#paymentMethod').append(options);
+            if (!getCurrencySendInfo.length) {
+                $('#paymentMethod').append(`<option value="">@lang('No payout method available')</option>`);
+                $('#submitBtn').attr('disabled', true);
+                $('#showInfoDiv').html(`<div class="item mb-2"><div class="alert alert-warning mb-0">@lang('No active sell method is linked to this fiat currency yet.')</div></div>`);
+                $('#telegramContactBox').html('');
+                return;
+            }
+            $('#submitBtn').attr('disabled', false);
             showInfo();
         }
 

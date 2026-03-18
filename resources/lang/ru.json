@@ -1250,5 +1250,10 @@
     "Show In Buy": "Показывать в покупке",
     "Allow this fiat currency to appear in the Buy tab and buy flow.": "Разрешить показывать эту фиатную валюту во вкладке покупки и во всём сценарии покупки.",
     "Show In Sell": "Показывать в продаже",
-    "Allow this fiat currency to appear in the Sell tab and sell flow.": "Разрешить показывать эту фиатную валюту во вкладке продажи и во всём сценарии продажи."
+    "Allow this fiat currency to appear in the Sell tab and sell flow.": "Разрешить показывать эту фиатную валюту во вкладке продажи и во всём сценарии продажи.",
+    "Linked Sell Method": "Привязанный метод продажи",
+    "No specific method": "Без конкретного метода",
+    "If a method is selected, this fiat currency will use only that active sell method in the user flow.": "Если метод выбран, эта фиатная валюта будет использовать только этот активный метод в пользовательском сценарии продажи.",
+    "No payout method available": "Нет доступного метода выплаты",
+    "No active sell method is linked to this fiat currency yet.": "К этой фиатной валюте пока не привязан активный метод продажи."
 }

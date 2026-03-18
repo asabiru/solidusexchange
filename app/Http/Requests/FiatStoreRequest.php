@@ -38,6 +38,7 @@ class FiatStoreRequest extends FormRequest
             'status' => ['required', Rule::in(['0', '1'])],
             'show_in_buy' => ['required', Rule::in(['0', '1'])],
             'show_in_sell' => ['required', Rule::in(['0', '1'])],
+            'fiat_send_gateway_id' => ['nullable', 'integer', Rule::exists('fiat_send_gateways', 'id')->where('status', 1)],
         ];
     }
 }

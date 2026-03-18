@@ -7,6 +7,7 @@ use App\Http\Requests\FiatStoreRequest;
 use App\Models\BasicControl;
 use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
+use App\Models\FiatSendGateway;
 use App\Traits\CurrencyRateUpdate;
 use App\Traits\Upload;
 use Carbon\Carbon;
@@ -212,7 +213,8 @@ class FiatCurrencyController extends Controller
     public function fiatCreate(FiatStoreRequest $request)
     {
         if ($request->method() == 'GET') {
-            return view('admin.currency.fiat.create');
+            $data['fiatSendGateways'] = FiatSendGateway::where('status', 1)->orderBy('name', 'ASC')->get();
+            return view('admin.currency.fiat.create', $data);
         } elseif ($request->method() == 'POST') {
             $currency = new FiatCurrency();
             $fillData = $request->only($currency->getFillable());
@@ -237,7 +239,8 @@ class FiatCurrencyController extends Controller
     {
         $currency = FiatCurrency::findOrFail($request->id);
         if ($request->method() == 'GET') {
-            return view('admin.currency.fiat.edit', compact('currency'));
+            $fiatSendGateways = FiatSendGateway::where('status', 1)->orderBy('name', 'ASC')->get();
+            return view('admin.currency.fiat.edit', compact('currency', 'fiatSendGateways'));
         } elseif ($request->method() == 'POST') {
             $fillData = $request->only($currency->getFillable());
             $fillData['usd_rate'] = getUSDRate($fillData['rate']);

@@ -10,12 +10,13 @@ class FiatCurrency extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'rate_markup_percent', 'processing_fee', 'processing_fee_type', 'min_send', 'max_send', 'image', 'driver', 'status', 'show_in_buy', 'show_in_sell', 'sort_by', 'last_rate_sync_at', 'last_rate_sync_error'];
+    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'rate_markup_percent', 'processing_fee', 'processing_fee_type', 'min_send', 'max_send', 'image', 'driver', 'status', 'show_in_buy', 'show_in_sell', 'fiat_send_gateway_id', 'sort_by', 'last_rate_sync_at', 'last_rate_sync_error'];
     protected $casts = [
         'last_rate_sync_at' => 'datetime',
         'rate_markup_percent' => 'float',
         'show_in_buy' => 'boolean',
         'show_in_sell' => 'boolean',
+        'fiat_send_gateway_id' => 'integer',
     ];
 
     protected $appends = ['image_path', 'currency_name'];
@@ -28,6 +29,11 @@ class FiatCurrency extends Model
     public function getCurrencyNameAttribute()
     {
         return $this->code . ' - ' . $this->name;
+    }
+
+    public function fiatSendGateway()
+    {
+        return $this->belongsTo(FiatSendGateway::class, 'fiat_send_gateway_id');
     }
 
     public function scopeActive($query)
