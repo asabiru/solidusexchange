@@ -256,7 +256,7 @@
                     Notiflix.Block.remove('#autoRate');
                     currentQuote = response.data.quote;
                     $("input[name='exchangeSendAmount']").val(parseFloat(response.data.quote.sendAmount).toFixed(2));
-                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.getAmount).toFixed(8));
+                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.finalAmount).toFixed(8));
                     tradeShow(response.data.quote);
                 })
                 .catch(function (error) {
@@ -328,34 +328,19 @@
 
         function tradeShow(quote) {
             let sendAmount = parseFloat(quote.sendAmount || 0).toFixed(2);
-            let getAmount = parseFloat(quote.getAmount || 0).toFixed(8);
             let exchangeRate = parseFloat(quote.exchangeRate || 0);
-            let serviceFee = parseFloat(quote.serviceFee || 0);
-            let networkFee = parseFloat(quote.networkFee || 0);
-            let serviceFeeType = quote.serviceFeeType;
-            let networkFeeType = quote.networkFeeType;
+            let serviceFee = parseFloat(quote.serviceFee || 0).toFixed(8);
+            let networkFee = parseFloat(quote.networkFee || 0).toFixed(8);
             let sendCurrencyCode = quote.sendCurrencyCode;
             let getCurrencyCode = quote.getCurrencyCode;
 
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
             $("#showExchangeRate").text(`1 ${getCurrencyCode} ~ ${(exchangeRate > 0 ? (1 / exchangeRate) : 0).toFixed(2)} ${sendCurrencyCode}`);
 
-            if (serviceFeeType === 'percent') {
-                $("#showServiceType").text(`Service fee ${parseFloat(serviceFee).toString()}%`);
-                serviceFee = ((parseFloat(getAmount) * serviceFee) / 100).toFixed(8);
-            } else {
-                $("#showServiceType").text(`Service fee`);
-                serviceFee = serviceFee.toFixed(8);
-            }
+            $("#showServiceType").text(`Service fee`);
             $("#showServiceFee").text(`${serviceFee} ${getCurrencyCode}`);
 
-            if (networkFeeType === 'percent') {
-                $("#showNetworkType").text(`Network fee ${parseFloat(networkFee).toString()}%`);
-                networkFee = ((parseFloat(getAmount) * networkFee) / 100).toFixed(8);
-            } else {
-                $("#showNetworkType").text(`Network fee`);
-                networkFee = networkFee.toFixed(8);
-            }
+            $("#showNetworkType").text(`Network fee`);
             $("#showNetworkFee").text(`${networkFee} ${getCurrencyCode}`);
 
             finalAmount = parseFloat(quote.finalAmount || 0).toFixed(8);

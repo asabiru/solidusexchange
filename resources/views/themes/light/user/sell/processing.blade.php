@@ -265,7 +265,7 @@
                     Notiflix.Block.remove('#autoRate');
                     currentQuote = response.data.quote;
                     $("input[name='exchangeSendAmount']").val(parseFloat(response.data.quote.sendAmount).toFixed(8));
-                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.getAmount).toFixed(2));
+                    $("input[name='exchangeGetAmount']").val(parseFloat(response.data.quote.finalAmount).toFixed(2));
                     tradeShow(response.data.quote);
                 })
                 .catch(function (error) {
@@ -337,23 +337,15 @@
 
         function tradeShow(quote) {
             let sendAmount = parseFloat(quote.sendAmount || 0).toFixed(8);
-            let getAmount = parseFloat(quote.getAmount || 0).toFixed(2);
             let exchangeRate = parseFloat(quote.exchangeRate || 0).toFixed(2);
-            let processingFee = parseFloat(quote.processingFee || 0);
-            let processingFeeType = quote.processingFeeType;
+            let processingFee = parseFloat(quote.processingFee || 0).toFixed(2);
             let sendCurrencyCode = quote.sendCurrencyCode;
             let getCurrencyCode = quote.getCurrencyCode;
 
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
             $("#showExchangeRate").text(`1 ${sendCurrencyCode} ~ ${exchangeRate} ${getCurrencyCode}`);
 
-            if (processingFeeType === 'percent') {
-                $("#showProcessingType").text(`Processing fee ${parseFloat(processingFee).toString()}%`);
-                processingFee = ((parseFloat(getAmount) * processingFee) / 100).toFixed(2);
-            } else {
-                $("#showProcessingType").text(`Processing fee`);
-                processingFee = processingFee.toFixed(2);
-            }
+            $("#showProcessingType").text(`Processing fee`);
             $("#showProcessingFee").text(`${processingFee} ${getCurrencyCode}`);
 
             finalAmount = parseFloat(quote.finalAmount || 0).toFixed(2);

@@ -195,7 +195,7 @@
         $("#exchangeMessage").text('');
         $("#submitBtn").attr('disabled', false);
         $("input[name='exchangeSendAmount']").val(formatSendAmount(quote.sendAmount));
-        $("input[name='exchangeGetAmount']").val(formatReceiveAmount(quote.getAmount));
+        $("input[name='exchangeGetAmount']").val(formatReceiveAmount(quote.finalAmount));
         $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange' && !!quote.receiveReadonly);
     }
 

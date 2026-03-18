@@ -416,33 +416,18 @@
 
         function tradeShow(quote) {
             let sendAmount = parseFloat(quote.sendAmount || 0).toFixed(8);
-            let getAmount = parseFloat(quote.getAmount || 0).toFixed(8);
             let exchangeRate = parseFloat(quote.exchangeRate || 0).toFixed(8);
             let serviceFee = parseFloat(quote.serviceFee || 0).toFixed(8);
             let networkFee = parseFloat(quote.networkFee || 0).toFixed(8);
-            let serviceFeeType = quote.serviceFeeType;
-            let networkFeeType = quote.networkFeeType;
             let sendCurrencyCode = quote.sendCurrencyCode;
             let getCurrencyCode = quote.getCurrencyCode;
 
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
             $("#showExchangeRate").text(`1 ${sendCurrencyCode} ~ ${exchangeRate} ${getCurrencyCode}`);
-            if (serviceFeeType === 'percent') {
-                let stringServiceFee = parseFloat(serviceFee).toString();
-                $("#showServiceType").text(`Service fee ${stringServiceFee}%`);
-                serviceFee = ((parseFloat(getAmount) * parseFloat(serviceFee)) / 100).toFixed(8);
-            } else {
-                $("#showServiceType").text(`Service fee`);
-            }
+            $("#showServiceType").text(`Service fee`);
             $("#showServiceFee").text(`${serviceFee} ${getCurrencyCode}`);
 
-            if (networkFeeType === 'percent') {
-                let stringNetworkFee = parseFloat(networkFee).toString();
-                $("#showNetworkType").text(`Network fee ${stringNetworkFee}%`);
-                networkFee = ((parseFloat(getAmount) * parseFloat(networkFee)) / 100).toFixed(8);
-            } else {
-                $("#showNetworkType").text(`Network fee`);
-            }
+            $("#showNetworkType").text(`Network fee`);
             $("#showNetworkFee").text(`${networkFee} ${getCurrencyCode}`);
 
             finalAmount = parseFloat(quote.finalAmount || 0).toFixed(8);
@@ -494,7 +479,7 @@
             $("#exchangeMessage").text('');
             $("#submitBtn").attr('disabled', false);
             $("input[name='exchangeSendAmount']").val(formatAmount(quote.sendAmount));
-            $("input[name='exchangeGetAmount']").val(formatAmount(quote.getAmount));
+            $("input[name='exchangeGetAmount']").val(formatAmount(quote.finalAmount));
             $("input[name='exchangeGetAmount']").prop('readonly', !!quote.receiveReadonly);
             tradeShow(quote);
         }
