@@ -96,6 +96,25 @@
                                             </div>
                                             <div class="mb-3">
                                                 <label class="form-label"
+                                                       for="RateMarkupPercent">@lang('Rate Increase Percent')</label>
+                                                <div class="input-group">
+                                                    <input type="number" step="0.01" min="0" class="form-control" name="rate_markup_percent"
+                                                           value="{{ old('rate_markup_percent', 0) }}"
+                                                           id="RateMarkupPercent"
+                                                           placeholder="0"
+                                                           aria-label="@lang('rate_markup_percent')"
+                                                           autocomplete="off">
+                                                    <span class="input-group-text">%</span>
+                                                </div>
+                                                @error('rate_markup_percent')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                                <small class="text-body d-block mt-2">
+                                                    @lang('Add this percent on top of the live synced rate before using the fiat currency in buy and sell quotes.')
+                                                </small>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label"
                                                        for="ProcessingFee">@lang('Processing Fee')</label>
                                                 <div class="input-group">
                                                      <span class="input-group-text showCodeLabel"
@@ -171,6 +190,46 @@
                                                         {{old('status') == '1' ? 'checked':''}}>
                                                 </span>
                                                 @error('status')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                            </label>
+
+                                            <label class="row form-check form-switch my-4"
+                                                   for="show_in_buy">
+                                            <span class="col-8 col-sm-9 ms-0">
+                                              <span class="d-block text-dark">@lang("Show In Buy")</span>
+                                              <span
+                                                  class="d-block fs-5">@lang("Allow this fiat currency to appear in the Buy tab and buy flow.")</span>
+                                            </span>
+                                                <span class="col-4 col-sm-3 text-end">
+                                                    <input type="hidden" value="0" name="show_in_buy"/>
+                                                    <input
+                                                        class="form-check-input @error('show_in_buy') is-invalid @enderror"
+                                                        type="checkbox" name="show_in_buy"
+                                                        id="show_in_buy" value="1"
+                                                        {{ old('show_in_buy', '1') == '1' ? 'checked' : '' }}>
+                                                </span>
+                                                @error('show_in_buy')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                            </label>
+
+                                            <label class="row form-check form-switch my-4"
+                                                   for="show_in_sell">
+                                            <span class="col-8 col-sm-9 ms-0">
+                                              <span class="d-block text-dark">@lang("Show In Sell")</span>
+                                              <span
+                                                  class="d-block fs-5">@lang("Allow this fiat currency to appear in the Sell tab and sell flow.")</span>
+                                            </span>
+                                                <span class="col-4 col-sm-3 text-end">
+                                                    <input type="hidden" value="0" name="show_in_sell"/>
+                                                    <input
+                                                        class="form-check-input @error('show_in_sell') is-invalid @enderror"
+                                                        type="checkbox" name="show_in_sell"
+                                                        id="show_in_sell" value="1"
+                                                        {{ old('show_in_sell', '1') == '1' ? 'checked' : '' }}>
+                                                </span>
+                                                @error('show_in_sell')
                                                 <span class="invalid-feedback d-block">{{ $message }}</span>
                                                 @enderror
                                             </label>

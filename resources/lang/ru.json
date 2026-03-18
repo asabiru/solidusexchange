@@ -1244,5 +1244,11 @@
     "These details are filled automatically from approved KYC verification and cannot be edited manually.": "Эти данные автоматически заполняются из одобренной KYC-проверки и недоступны для ручного редактирования.",
     "These details will appear here automatically after your KYC verification is approved.": "Эти данные появятся здесь автоматически после одобрения вашей KYC-проверки.",
     "Will be filled after KYC verification": "Заполнится после прохождения KYC",
-    "Document ID": "Номер документа"
+    "Document ID": "Номер документа",
+    "Rate Increase Percent": "Процент прибавки к курсу",
+    "Add this percent on top of the live synced rate before using the fiat currency in buy and sell quotes.": "Этот процент будет прибавляться к текущему синхронизированному курсу перед расчётами в покупке и продаже.",
+    "Show In Buy": "Показывать в покупке",
+    "Allow this fiat currency to appear in the Buy tab and buy flow.": "Разрешить показывать эту фиатную валюту во вкладке покупки и во всём сценарии покупки.",
+    "Show In Sell": "Показывать в продаже",
+    "Allow this fiat currency to appear in the Sell tab and sell flow.": "Разрешить показывать эту фиатную валюту во вкладке продажи и во всём сценарии продажи."
 }

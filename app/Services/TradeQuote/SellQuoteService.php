@@ -47,24 +47,23 @@ class SellQuoteService
     {
         $storedUsdRate = (float) $currency->usd_rate;
         $baseCurrency = strtoupper((string) basicControl()->base_currency);
+        $effectiveUsdRate = $storedUsdRate;
 
-        if (strtoupper((string) $currency->code) !== $baseCurrency) {
-            return $storedUsdRate;
+        if (strtoupper((string) $currency->code) === $baseCurrency) {
+            $referenceUsdt = CryptoCurrency::where('status', 1)
+                ->orderBy('sort_by', 'ASC')
+                ->get()
+                ->first(function ($cryptoCurrency) {
+                    return strtoupper((string) $cryptoCurrency->normalized_code) === 'USDT'
+                        && (float) $cryptoCurrency->rate > 0
+                        && (float) $cryptoCurrency->usd_rate > 0;
+                });
+
+            if ($referenceUsdt) {
+                $effectiveUsdRate = (float) $referenceUsdt->usd_rate / (float) $referenceUsdt->rate;
+            }
         }
 
-        $referenceUsdt = CryptoCurrency::where('status', 1)
-            ->orderBy('sort_by', 'ASC')
-            ->get()
-            ->first(function ($cryptoCurrency) {
-                return strtoupper((string) $cryptoCurrency->normalized_code) === 'USDT'
-                    && (float) $cryptoCurrency->rate > 0
-                    && (float) $cryptoCurrency->usd_rate > 0;
-            });
-
-        if (!$referenceUsdt) {
-            return $storedUsdRate;
-        }
-
-        return (float) $referenceUsdt->usd_rate / (float) $referenceUsdt->rate;
+        return $currency->applyRateMarkupToUsdRate($effectiveUsdRate);
     }
 }

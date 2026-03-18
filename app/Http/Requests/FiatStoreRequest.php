@@ -30,12 +30,14 @@ class FiatStoreRequest extends FormRequest
             'code' => 'required|min:2',
             'symbol' => 'required',
             'rate' => 'required|numeric|min:0|not_in:0',
+            'rate_markup_percent' => 'nullable|numeric|min:0',
             'min_send' => 'required|numeric|min:1',
             'max_send' => 'required|numeric|min:1',
             'processing_fee' => 'required|numeric|min:0|not_in:0',
             'processing_fee_type' => ['required', Rule::in(['percent', 'flat'])],
             'status' => ['required', Rule::in(['0', '1'])],
-
+            'show_in_buy' => ['required', Rule::in(['0', '1'])],
+            'show_in_sell' => ['required', Rule::in(['0', '1'])],
         ];
     }
 }

@@ -28,7 +28,7 @@ class BuyController extends Controller
 
     public function getBuyCurrency()
     {
-        $sendCurrencies = FiatCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
+        $sendCurrencies = FiatCurrency::query()->active()->visibleInBuy()->sorted()->get();
         $getCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
 
         return response()->json([
@@ -42,7 +42,7 @@ class BuyController extends Controller
 
     public function buyRequest(BuyStoreRequest $request)
     {
-        $sendCurrency = FiatCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
+        $sendCurrency = FiatCurrency::query()->active()->visibleInBuy()->findOrFail($request->exchangeSendCurrency);
         $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
@@ -82,7 +82,7 @@ class BuyController extends Controller
             return view($this->theme . 'user.buy.processing', compact('buyRequest'));
         } elseif ($request->method() == 'POST') {
 
-            $sendCurrency = FiatCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
+            $sendCurrency = FiatCurrency::query()->active()->visibleInBuy()->findOrFail($request->exchangeSendCurrency);
             $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
 
             if ($sendCurrency->min_send > $request->exchangeSendAmount) {
@@ -192,7 +192,7 @@ class BuyController extends Controller
             'getCurrency' => 'required|integer',
         ]);
 
-        $sendCurrency = FiatCurrency::where('status', 1)->findOrFail($request->sendCurrency);
+        $sendCurrency = FiatCurrency::query()->active()->visibleInBuy()->findOrFail($request->sendCurrency);
         $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->getCurrency);
         $sendAmount = (float) $request->sendAmount;
 

@@ -33,7 +33,7 @@ class SellController extends Controller
     public function getSellCurrency()
     {
         $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = FiatCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
+        $getCurrencies = FiatCurrency::query()->active()->visibleInSell()->sorted()->get();
 
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
@@ -47,7 +47,7 @@ class SellController extends Controller
     public function sellRequest(SellStoreRequest $request)
     {
         $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
-        $getCurrency = FiatCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
+        $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
             return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
@@ -85,7 +85,7 @@ class SellController extends Controller
             return view($this->theme . 'user.sell.processing', compact('sellRequest'));
         } elseif ($request->method() == 'POST') {
             $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
-            $getCurrency = FiatCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
+            $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
             if ($sendCurrency->min_send > $request->exchangeSendAmount) {
                 return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
@@ -231,7 +231,7 @@ class SellController extends Controller
         ]);
 
         $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->sendCurrency);
-        $getCurrency = FiatCurrency::where('status', 1)->findOrFail($request->getCurrency);
+        $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->getCurrency);
         $sendAmount = (float) $request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {

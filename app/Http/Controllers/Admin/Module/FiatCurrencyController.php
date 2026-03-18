@@ -410,7 +410,7 @@ class FiatCurrencyController extends Controller
     protected function formatDisplayRate(FiatCurrency $currency, ?CryptoCurrency $referenceUsdtCurrency, float $referenceUsdtUsdRate): array
     {
         if ($this->shouldMirrorBaseCurrencyFromUsdt($currency, $referenceUsdtCurrency)) {
-            $baseValue = (float) $referenceUsdtCurrency->rate;
+            $baseValue = (float) $referenceUsdtCurrency->rate * $currency->resolveRateMarkupFactor();
 
             return [
                 'left_currency' => 'USDT',
@@ -421,7 +421,7 @@ class FiatCurrencyController extends Controller
         }
 
         $usdValue = (float) $currency->usd_rate > 0
-            ? (1 / (float) $currency->usd_rate)
+            ? ((1 / (float) $currency->usd_rate) * $currency->resolveRateMarkupFactor())
             : 0;
 
         $usdtValue = $referenceUsdtUsdRate > 0
