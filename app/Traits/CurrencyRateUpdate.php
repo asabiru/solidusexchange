@@ -36,9 +36,7 @@ trait CurrencyRateUpdate
             return [strtoupper((string) $ticker->symbol) => $ticker];
         });
 
-        $baseRateFactor = strtoupper((string) $convert) === 'USD'
-            ? 1
-            : (float) basicControl()->exchange_rate;
+        $baseRateFactor = $this->resolveBybitBaseRateFactor((string) $convert);
 
         $results = [];
         $errors = [];
@@ -117,6 +115,71 @@ trait CurrencyRateUpdate
 
         $lastPrice = (float) ($ticker->lastPrice ?? 0);
         return $lastPrice > 0 ? $lastPrice : null;
+    }
+
+    protected function resolveBybitBaseRateFactor(string $convert): float
+    {
+        $convert = strtoupper(trim($convert));
+
+        if ($convert === 'USD' || $convert === 'USDT') {
+            return 1.0;
+        }
+
+        $liveConvertRate = $this->fetchBybitUsdtConvertRate($convert);
+        if ($liveConvertRate !== null && $liveConvertRate > 0) {
+            return $liveConvertRate;
+        }
+
+        return (float) basicControl()->exchange_rate;
+    }
+
+    protected function fetchBybitUsdtConvertRate(string $convert): ?float
+    {
+        $convert = strtoupper(trim($convert));
+        if ($convert === '' || $convert === 'USD' || $convert === 'USDT') {
+            return 1.0;
+        }
+
+        $url = 'https://www.bybit.com/en/convert/usdt-to-' . strtolower($convert) . '/';
+        $headers = [
+            'User-Agent: Mozilla/5.0',
+            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language: en-US,en;q=0.9',
+            'Cache-Control: no-cache',
+            'Pragma: no-cache',
+        ];
+
+        $html = BasicCurl::curlGetRequestWithHeaders($url, $headers);
+        if (!is_string($html) || trim($html) === '') {
+            return null;
+        }
+
+        $plainText = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $plainText = preg_replace('/\s+/u', ' ', $plainText);
+        if (!is_string($plainText) || trim($plainText) === '') {
+            return null;
+        }
+
+        $patterns = [
+            '/As of today,\s*1\s*USDT\s*is equivalent to\s*[^\d]*([0-9][0-9,\s]*(?:\.\d+)?)/iu',
+            '/1\s*USDT\s*[^\d]{0,8}([0-9][0-9,\s]*(?:\.\d+)?)\s*' . preg_quote($convert, '/') . '/iu',
+            '/Convert USDT to\s*' . preg_quote($convert, '/') . '.*?1\s*USDT.*?([0-9][0-9,\s]*(?:\.\d+)?)\s*' . preg_quote($convert, '/') . '/isu',
+        ];
+
+        foreach ($patterns as $pattern) {
+            if (!preg_match($pattern, $plainText, $matches)) {
+                continue;
+            }
+
+            $normalizedRate = str_replace([' ', ','], '', (string) ($matches[1] ?? ''));
+            $rate = (float) $normalizedRate;
+
+            if ($rate > 0) {
+                return $rate;
+            }
+        }
+
+        return null;
     }
 
     public function fiatRateUpdate($source, $currencies)
