@@ -12,4 +12,9 @@ return [
         'provider' => env('EXCHANGE_AML_PROVIDER', 'manual'),
         'auto_block_processing' => env('EXCHANGE_AML_AUTO_BLOCK_PROCESSING', true),
     ],
+    'routing' => [
+        'internal_matching_enabled' => env('EXCHANGE_INTERNAL_MATCHING_ENABLED', true),
+        'require_async_payout_for_auto_match' => env('EXCHANGE_INTERNAL_MATCHING_REQUIRE_ASYNC_PAYOUT', true),
+        'netting_window_minutes' => (int) env('EXCHANGE_INTERNAL_MATCHING_WINDOW_MINUTES', 15),
+    ],
 ];

@@ -104,6 +104,29 @@
                                                     class="badge bg-soft-secondary text-danger">@lang('manual')</span>
                                             @endif
                                         </li>
+                                        <li class="list-checked-item">@lang('Execution Route') :
+                                            <strong class="text-dark font-weight-bold">{{ $exchange->execution_route ? ucfirst(str_replace('_', ' ', $exchange->execution_route)) : 'N/A' }}</strong>
+                                        </li>
+                                        @if($exchange->routed_at)
+                                            <li class="list-checked-item">@lang('Routed At') :
+                                                <strong class="text-dark font-weight-bold">{{ dateTime($exchange->routed_at, basicControl()->date_time_format) }}</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->deposit_confirmed_at)
+                                            <li class="list-checked-item">@lang('Deposit Confirmed At') :
+                                                <strong class="text-dark font-weight-bold">{{ dateTime($exchange->deposit_confirmed_at, basicControl()->date_time_format) }}</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->execution_notes)
+                                            <li class="list-checked-item">@lang('Execution Notes') :
+                                                <strong class="text-dark font-weight-bold">{{ $exchange->execution_notes }}</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->matchedExchange)
+                                            <li class="list-checked-item">@lang('Matched Exchange') :
+                                                <a href="{{ route('admin.exchangeView', ['id' => $exchange->matchedExchange->id]) }}">{{ $exchange->matchedExchange->utr }}</a>
+                                            </li>
+                                        @endif
                                         @if($latestExchangePayout)
                                             <li class="list-checked-item">@lang('Latest Payout Queue')
                                                 : <a href="{{ route('admin.exchangePayoutIndex') }}">{{ ucfirst($latestExchangePayout->status) }}</a>
@@ -203,6 +226,12 @@
                                     <div class="alert alert-soft-warning mt-3" role="alert">
                                         @lang('A treasury payout job is queued for this exchange. Finish it from the Exchange Payouts panel before marking the trade complete.')
                                         <a href="{{ route('admin.exchangePayoutIndex') }}" class="ms-1">@lang('Open queue')</a>
+                                    </div>
+                                @endif
+                                @if($exchange->matchedExchange)
+                                    <div class="alert alert-soft-success mt-3" role="alert">
+                                        @lang('This exchange participates in internal netting with')
+                                        <a href="{{ route('admin.exchangeView', ['id' => $exchange->matchedExchange->id]) }}" class="ms-1">{{ $exchange->matchedExchange->utr }}</a>.
                                     </div>
                                 @endif
                             </div>

@@ -55,6 +55,7 @@ trait CryptoWalletGenerate
             if (isset($meta['deposit_tx_id'])) {
                 $object->deposit_tx_id = $meta['deposit_tx_id'];
             }
+            $object->deposit_confirmed_at = now();
             $object->save();
             $amount = getBaseAmount($object->send_amount, optional($object->sendCurrency)->code, 'crypto');
             $charge = getBaseAmount($object->service_fee + $object->network_fee, optional($object->getCurrency)->code, 'crypto');

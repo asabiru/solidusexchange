@@ -51,7 +51,7 @@ class ExchangeQuoteService
             return false;
         }
 
-        return in_array(strtoupper($sendCurrency->code), config('exchange_engine.supported_send_currencies', []), true);
+        return in_array($this->normalizeAssetCode($sendCurrency), config('exchange_engine.supported_send_currencies', []), true);
     }
 
     public function applyToExchange(ExchangeRequest $exchange, array $quote, ?string $rateType = null): ExchangeRequest
@@ -178,7 +178,7 @@ class ExchangeQuoteService
 
     private function buildBybitQuote(CryptoCurrency $sendCurrency, CryptoCurrency $getCurrency, float $sendAmount): array
     {
-        $symbol = strtoupper($getCurrency->code . $sendCurrency->code);
+        $symbol = $this->normalizeAssetCode($getCurrency) . $this->normalizeAssetCode($sendCurrency);
         $instrument = $this->bybitClient->getInstrumentInfo($symbol);
         $bestAsk = $this->bybitClient->getBestAsk($symbol);
         $lotFilter = $instrument['lotSizeFilter'] ?? [];
@@ -262,5 +262,10 @@ class ExchangeQuoteService
         }
 
         return strlen(substr(strrchr($step, '.'), 1));
+    }
+
+    private function normalizeAssetCode(CryptoCurrency $currency): string
+    {
+        return strtoupper((string) ($currency->normalized_code ?? $currency->code));
     }
 }

@@ -19,16 +19,19 @@ class ExchangeRequest extends Model
         'crypto_method_id', 'rate_type', 'destination_wallet', 'admin_wallet', 'expire_time',
         'quote_provider', 'quote_symbol', 'quote_reference_price', 'quote_price', 'quote_markup_percent',
         'quote_slippage_percent', 'quote_trade_fee_percent', 'quote_expires_at', 'deposit_amount_confirmed',
-        'deposit_tx_id', 'hedge_status', 'hedge_order_id', 'hedge_order_link_id', 'hedge_avg_price',
+        'deposit_tx_id', 'deposit_confirmed_at', 'hedge_status', 'hedge_order_id', 'hedge_order_link_id', 'hedge_avg_price',
         'hedge_exec_qty', 'hedge_exec_value', 'hedge_fee_amount', 'hedge_fee_currency', 'profit_amount',
         'profit_currency', 'payout_tx_id', 'hedge_error', 'hedged_at', 'deposit_provider',
-        'deposit_provider_ref', 'deposit_network', 'payout_provider', 'aml_status', 'aml_provider',
+        'deposit_provider_ref', 'deposit_network', 'payout_provider', 'execution_route',
+        'matched_exchange_request_id', 'execution_notes', 'routed_at', 'aml_status', 'aml_provider',
         'aml_risk_level', 'aml_risk_score', 'aml_notes', 'aml_checked_at'];
 
     protected $casts = [
         'expire_time' => 'datetime',
         'quote_expires_at' => 'datetime',
+        'deposit_confirmed_at' => 'datetime',
         'hedged_at' => 'datetime',
+        'routed_at' => 'datetime',
         'aml_checked_at' => 'datetime',
     ];
 
@@ -57,6 +60,11 @@ class ExchangeRequest extends Model
     public function payouts()
     {
         return $this->hasMany(ExchangePayout::class, 'exchange_request_id');
+    }
+
+    public function matchedExchange()
+    {
+        return $this->belongsTo(self::class, 'matched_exchange_request_id')->withTrashed();
     }
 
     public function prunable(): Builder

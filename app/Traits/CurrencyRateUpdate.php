@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 
+use App\Models\FiatCurrency;
 use Facades\App\Services\BasicCurl;
 
 trait CurrencyRateUpdate
@@ -28,7 +29,7 @@ trait CurrencyRateUpdate
         if (($response->retCode ?? 1) !== 0 || !isset($response->result->list) || !is_array($response->result->list)) {
             return [
                 'status' => false,
-                'res' => $response->retMsg ?? 'Bybit market data is unavailable',
+                'res' => $response->retMsg ?? $response->error ?? 'Bybit market data is unavailable',
             ];
         }
 
@@ -36,7 +37,7 @@ trait CurrencyRateUpdate
             return [strtoupper((string) $ticker->symbol) => $ticker];
         });
 
-        $baseRateFactor = $this->resolveBybitBaseRateFactor((string) $convert);
+        $baseRateFactor = $this->resolveBybitBaseRateFactor((string) $convert, $tickers);
 
         $results = [];
         $errors = [];
@@ -78,17 +79,27 @@ trait CurrencyRateUpdate
             return 1.0;
         }
 
-        $directRate = $this->getTickerLastPrice($tickers, "{$code}USDT");
+        $directRate = $this->getTickerReferencePrice($tickers, "{$code}USDT");
         if ($directRate !== null) {
             return $directRate;
         }
 
+        $inverseRate = $this->getTickerReferencePrice($tickers, "USDT{$code}");
+        if ($inverseRate !== null && $inverseRate > 0) {
+            return 1 / $inverseRate;
+        }
+
         foreach (['USDC', 'BTC', 'ETH'] as $quoteCurrency) {
-            $crossRate = $this->getTickerLastPrice($tickers, "{$code}{$quoteCurrency}");
-            $quoteToUsdRate = $this->getTickerLastPrice($tickers, "{$quoteCurrency}USDT");
+            $crossRate = $this->getTickerReferencePrice($tickers, "{$code}{$quoteCurrency}");
+            $inverseCrossRate = $this->getTickerReferencePrice($tickers, "{$quoteCurrency}{$code}");
+            $quoteToUsdRate = $this->resolveBybitUsdRate($quoteCurrency, $tickers);
 
             if ($crossRate !== null && $quoteToUsdRate !== null) {
                 return $crossRate * $quoteToUsdRate;
+            }
+
+            if ($inverseCrossRate !== null && $inverseCrossRate > 0 && $quoteToUsdRate !== null) {
+                return (1 / $inverseCrossRate) * $quoteToUsdRate;
             }
         }
 
@@ -106,18 +117,33 @@ trait CurrencyRateUpdate
         return $code;
     }
 
-    protected function getTickerLastPrice($tickers, string $symbol): ?float
+    protected function getTickerReferencePrice($tickers, string $symbol): ?float
     {
         $ticker = $tickers->get(strtoupper($symbol));
         if (!$ticker) {
             return null;
         }
 
+        $bidPrice = (float) ($ticker->bid1Price ?? 0);
+        $askPrice = (float) ($ticker->ask1Price ?? 0);
+
+        if ($bidPrice > 0 && $askPrice > 0) {
+            return ($bidPrice + $askPrice) / 2;
+        }
+
+        if ($askPrice > 0) {
+            return $askPrice;
+        }
+
+        if ($bidPrice > 0) {
+            return $bidPrice;
+        }
+
         $lastPrice = (float) ($ticker->lastPrice ?? 0);
         return $lastPrice > 0 ? $lastPrice : null;
     }
 
-    protected function resolveBybitBaseRateFactor(string $convert): float
+    protected function resolveBybitBaseRateFactor(string $convert, $tickers): float
     {
         $convert = strtoupper(trim($convert));
 
@@ -125,58 +151,34 @@ trait CurrencyRateUpdate
             return 1.0;
         }
 
-        $liveConvertRate = $this->fetchBybitUsdtConvertRate($convert);
-        if ($liveConvertRate !== null && $liveConvertRate > 0) {
-            return $liveConvertRate;
+        $assetUsdRate = $this->resolveBybitUsdRate($convert, $tickers);
+        if ($assetUsdRate !== null && $assetUsdRate > 0) {
+            return 1 / $assetUsdRate;
+        }
+
+        $storedBaseRateFactor = $this->resolveStoredBaseRateFactor($convert);
+        if ($storedBaseRateFactor !== null && $storedBaseRateFactor > 0) {
+            return $storedBaseRateFactor;
         }
 
         return (float) basicControl()->exchange_rate;
     }
 
-    protected function fetchBybitUsdtConvertRate(string $convert): ?float
+    protected function resolveStoredBaseRateFactor(string $convert): ?float
     {
         $convert = strtoupper(trim($convert));
-        if ($convert === '' || $convert === 'USD' || $convert === 'USDT') {
-            return 1.0;
+
+        $fiatCurrency = FiatCurrency::query()
+            ->where('status', 1)
+            ->whereRaw('UPPER(code) = ?', [$convert])
+            ->first();
+
+        if ($fiatCurrency && (float) $fiatCurrency->usd_rate > 0) {
+            return 1 / (float) $fiatCurrency->usd_rate;
         }
 
-        $url = 'https://www.bybit.com/en/convert/usdt-to-' . strtolower($convert) . '/';
-        $headers = [
-            'User-Agent: Mozilla/5.0',
-            'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language: en-US,en;q=0.9',
-            'Cache-Control: no-cache',
-            'Pragma: no-cache',
-        ];
-
-        $html = BasicCurl::curlGetRequestWithHeaders($url, $headers);
-        if (!is_string($html) || trim($html) === '') {
-            return null;
-        }
-
-        $plainText = html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-        $plainText = preg_replace('/\s+/u', ' ', $plainText);
-        if (!is_string($plainText) || trim($plainText) === '') {
-            return null;
-        }
-
-        $patterns = [
-            '/As of today,\s*1\s*USDT\s*is equivalent to\s*[^\d]*([0-9][0-9,\s]*(?:\.\d+)?)/iu',
-            '/1\s*USDT\s*[^\d]{0,8}([0-9][0-9,\s]*(?:\.\d+)?)\s*' . preg_quote($convert, '/') . '/iu',
-            '/Convert USDT to\s*' . preg_quote($convert, '/') . '.*?1\s*USDT.*?([0-9][0-9,\s]*(?:\.\d+)?)\s*' . preg_quote($convert, '/') . '/isu',
-        ];
-
-        foreach ($patterns as $pattern) {
-            if (!preg_match($pattern, $plainText, $matches)) {
-                continue;
-            }
-
-            $normalizedRate = str_replace([' ', ','], '', (string) ($matches[1] ?? ''));
-            $rate = (float) $normalizedRate;
-
-            if ($rate > 0) {
-                return $rate;
-            }
+        if ($convert === strtoupper((string) basicControl()->base_currency) && (float) basicControl()->exchange_rate > 0) {
+            return (float) basicControl()->exchange_rate;
         }
 
         return null;

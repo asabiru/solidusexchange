@@ -3,9 +3,11 @@
 namespace App\Services\ExchangeEngine;
 
 use App\Models\ExchangeRequest;
+use App\Services\ExchangeRouting\ExchangeExecutionRoutingService;
 use App\Traits\SendNotification;
 use App\Services\ExchangePipeline\ExchangePayoutService;
 use Facades\App\Services\BasicService;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 
 class ExchangeAutomationService
@@ -16,6 +18,7 @@ class ExchangeAutomationService
         private readonly ExchangeQuoteService $quoteService,
         private readonly BybitClient $bybitClient,
         private readonly ExchangePayoutService $payoutService,
+        private readonly ExchangeExecutionRoutingService $routingService,
     ) {
     }
 
@@ -39,8 +42,27 @@ class ExchangeAutomationService
             return false;
         }
 
+        $exchange = $this->routingService->routeConfirmedDeposit($exchange);
+
+        if ($exchange->execution_route === 'internal_match') {
+            return $this->handleInternalMatch($exchange);
+        }
+
+        if ($exchange->execution_route === 'manual_review') {
+            return false;
+        }
+
         if (in_array($exchange->hedge_status, ['processing', 'filled', 'payout_sent', 'payout_queued'], true)) {
             return (int)$exchange->status === 3;
+        }
+
+        if (!$this->quoteService->supportsExchangeEngine($exchange->sendCurrency, $exchange->getCurrency)) {
+            $this->routingService->markManualReview(
+                $exchange,
+                'No internal match was found and the external hedge engine does not support this pair yet.'
+            );
+
+            return false;
         }
 
         try {
@@ -148,6 +170,132 @@ class ExchangeAutomationService
             && config('exchange_engine.auto_payout_after_hedge')
             && $this->payoutService->canAutoPayout($exchange)
             && filled($exchange->destination_wallet);
+    }
+
+    private function handleInternalMatch(ExchangeRequest $exchange): bool
+    {
+        $matchedExchangeId = (int) $exchange->matched_exchange_request_id;
+        if ($matchedExchangeId <= 0) {
+            return false;
+        }
+
+        try {
+            return DB::transaction(function () use ($exchange, $matchedExchangeId) {
+                $pair = ExchangeRequest::query()
+                    ->with(['sendCurrency', 'getCurrency', 'cryptoMethod', 'matchedExchange.sendCurrency', 'matchedExchange.getCurrency', 'matchedExchange.cryptoMethod'])
+                    ->whereIn('id', [$exchange->id, $matchedExchangeId])
+                    ->lockForUpdate()
+                    ->get()
+                    ->keyBy('id');
+
+                /** @var ExchangeRequest|null $primary */
+                $primary = $pair->get($exchange->id);
+                /** @var ExchangeRequest|null $matched */
+                $matched = $pair->get($matchedExchangeId);
+
+                if (!$primary || !$matched) {
+                    return false;
+                }
+
+                if (in_array($primary->hedge_status, ['payout_queued', 'payout_sent'], true)) {
+                    return true;
+                }
+
+                if (
+                    (int) $primary->status !== 2
+                    || (int) $matched->status !== 2
+                    || !$primary->isAmlApproved()
+                    || !$matched->isAmlApproved()
+                ) {
+                    return false;
+                }
+
+                if (
+                    blank($primary->destination_wallet)
+                    || blank($matched->destination_wallet)
+                    || (int) $primary->send_currency_id !== (int) $matched->get_currency_id
+                    || (int) $primary->get_currency_id !== (int) $matched->send_currency_id
+                ) {
+                    return false;
+                }
+
+                if (
+                    $this->payoutService->canAutoPayout($primary) !== true
+                    || $this->payoutService->canAutoPayout($matched) !== true
+                ) {
+                    return false;
+                }
+
+                if (
+                    (bool) config('exchange_pipeline.routing.require_async_payout_for_auto_match', true)
+                    && (
+                        !$this->payoutService->isAsyncPayout($primary)
+                        || !$this->payoutService->isAsyncPayout($matched)
+                    )
+                ) {
+                    $this->routingService->markManualReview(
+                        $primary,
+                        'Internal match found, but automatic completion requires an async treasury payout provider.'
+                    );
+                    $this->routingService->markManualReview(
+                        $matched,
+                        'Internal match found, but automatic completion requires an async treasury payout provider.'
+                    );
+
+                    return false;
+                }
+
+                $primary->hedge_status = 'internal_match_processing';
+                $matched->hedge_status = 'internal_match_processing';
+                $primary->save();
+                $matched->save();
+
+                $primarySent = $this->payoutService->sendExchangePayout($primary);
+                $matchedSent = $this->payoutService->sendExchangePayout($matched);
+
+                if (!$primarySent || !$matchedSent) {
+                    $primary->hedge_status = 'failed';
+                    $matched->hedge_status = 'failed';
+                    $primary->hedge_error = 'Internal match was found, but one of the payouts could not be queued.';
+                    $matched->hedge_error = 'Internal match was found, but one of the payouts could not be queued.';
+                    $primary->save();
+                    $matched->save();
+
+                    return false;
+                }
+
+                $primary->profit_currency = optional($primary->sendCurrency)->code;
+                $primary->profit_amount = round(
+                    (float) ($primary->deposit_amount_confirmed ?: $primary->send_amount) - (float) $matched->final_amount,
+                    16
+                );
+                $matched->profit_currency = optional($matched->sendCurrency)->code;
+                $matched->profit_amount = round(
+                    (float) ($matched->deposit_amount_confirmed ?: $matched->send_amount) - (float) $primary->final_amount,
+                    16
+                );
+                $primary->hedged_at = now();
+                $matched->hedged_at = now();
+
+                $primary->hedge_status = 'payout_queued';
+                $matched->hedge_status = 'payout_queued';
+                $primary->save();
+                $matched->save();
+
+                $this->sendAdminNotification($primary->fresh(), 'exchange');
+                $this->sendAdminNotification($matched->fresh(), 'exchange');
+
+                return true;
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $exchange->hedge_status = 'failed';
+            $exchange->hedge_error = $exception->getMessage();
+            $exchange->save();
+
+            return false;
+        }
     }
 
     private function calculateProfit(ExchangeRequest $exchange, float $execValue, float $feeAmount, string $feeCurrency): float

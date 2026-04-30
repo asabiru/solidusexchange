@@ -8,6 +8,7 @@ use App\Models\CryptoCurrency;
 use App\Models\CryptoMethod;
 use App\Models\ExchangeRequest;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\ExchangePipeline\ExchangeReservationService;
 use App\Services\ExchangePipeline\ExchangeSettlementService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
@@ -225,6 +226,7 @@ class ExchangeController extends Controller
             if (Carbon::now() > $exchangeRequest->expire_time) {
                 $exchangeRequest->status = 4;
                 $exchangeRequest->save();
+                app(ExchangeReservationService::class)->releaseForExchange($exchangeRequest);
                 $route = url('/');
             }
         }

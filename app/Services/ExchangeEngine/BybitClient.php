@@ -161,6 +161,14 @@ class BybitClient
             return [];
         }
 
+        if (!array_key_exists('retCode', $response)) {
+            if (!empty($response['error'])) {
+                throw new RuntimeException("Bybit API error on {$uri}: {$response['error']}");
+            }
+
+            throw new RuntimeException("Unexpected response from Bybit endpoint {$uri}.");
+        }
+
         if (($response['retCode'] ?? 0) !== 0) {
             $message = $response['retMsg'] ?? 'Unknown Bybit error';
             throw new RuntimeException("Bybit API error on {$uri}: {$message}");

@@ -59,6 +59,23 @@ class ExchangeWalletInventoryService
         ])->save();
     }
 
+    public function releaseReservationForExchange(ExchangeRequest $exchange): int
+    {
+        $wallets = ExchangeWallet::query()
+            ->where('exchange_request_id', $exchange->id)
+            ->where('allocation_status', 'reserved')
+            ->get();
+
+        $released = 0;
+
+        $wallets->each(function (ExchangeWallet $wallet) use (&$released) {
+            $this->releaseReservation($wallet);
+            $released++;
+        });
+
+        return $released;
+    }
+
     private function ensureWatchSubscription(ExchangeWallet $wallet): ExchangeWallet
     {
         if ((string)config('exchange_pipeline.treasury.watch_provider', 'none') === 'none') {

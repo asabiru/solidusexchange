@@ -7,6 +7,7 @@ use App\Models\ExchangePayout;
 use App\Models\ExchangeRequest;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
 use App\Services\ExchangePipeline\ExchangePayoutService;
+use App\Services\ExchangePipeline\ExchangeReservationService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use App\Traits\SendNotification;
@@ -22,6 +23,7 @@ class ExchangeController extends Controller
 
     public function __construct(
         private readonly ExchangePayoutService $payoutService,
+        private readonly ExchangeReservationService $reservationService,
     ) {
     }
 
@@ -53,7 +55,7 @@ class ExchangeController extends Controller
         $startDate = $filterDate[0];
         $endDate = isset($filterDate[1]) ? trim($filterDate[1]) : null;
 
-        $exchanges = ExchangeRequest::with(['sendCurrency', 'getCurrency', 'user:id,firstname,lastname,username,image,image_driver'])
+        $exchanges = ExchangeRequest::with(['sendCurrency', 'getCurrency', 'user:id,firstname,lastname,username,image,image_driver', 'matchedExchange'])
             ->orderBy('id', 'DESC')
             ->when(isset($exchangeType), function ($query) use ($exchangeType) {
                 if ($exchangeType == 'pending') {
@@ -98,7 +100,22 @@ class ExchangeController extends Controller
 
             })
             ->addColumn('trx_id', function ($item) {
-                return $item->utr;
+                $routeBadge = '';
+                if (filled($item->execution_route)) {
+                    $label = ucfirst(str_replace('_', ' ', $item->execution_route));
+                    $class = $item->execution_route === 'internal_match'
+                        ? 'bg-soft-success text-success'
+                        : ($item->execution_route === 'manual_review' ? 'bg-soft-warning text-warning' : 'bg-soft-secondary text-body');
+
+                    $routeBadge = '<div class="mt-1"><span class="badge ' . $class . '">' . e($label) . '</span></div>';
+                }
+
+                $matchedLink = '';
+                if (optional($item->matchedExchange)->id) {
+                    $matchedLink = '<div class="fs-6 text-body mt-1">' . trans('Matched with') . ': <a href="' . route('admin.exchangeView', ['id' => $item->matchedExchange->id]) . '">' . e($item->matchedExchange->utr) . '</a></div>';
+                }
+
+                return '<div><strong>' . e($item->utr) . '</strong>' . $routeBadge . $matchedLink . '</div>';
             })
             ->addColumn('send_amount', function ($item) {
                 $url = getFile(optional($item->sendCurrency)->driver, optional($item->sendCurrency)->image);
@@ -181,7 +198,9 @@ class ExchangeController extends Controller
 
     public function exchangeDelete($id)
     {
-        ExchangeRequest::findOrFail($id)->delete($id);
+        $exchange = ExchangeRequest::findOrFail($id);
+        $this->reservationService->releaseForExchange($exchange);
+        $exchange->delete($id);
         return back()->with('success', 'Exchange Deleted Successfully');
     }
 
@@ -192,6 +211,7 @@ class ExchangeController extends Controller
             return response()->json(['error' => 1]);
         } else {
             ExchangeRequest::whereIn('id', $request->strIds)->get()->map(function ($query) {
+                $this->reservationService->releaseForExchange($query);
                 $query->delete();
                 return $query;
             });
@@ -202,7 +222,7 @@ class ExchangeController extends Controller
 
     public function exchangeView(Request $request)
     {
-        $exchange = ExchangeRequest::with('payouts')->findOrFail($request->id);
+        $exchange = ExchangeRequest::with(['payouts', 'matchedExchange.sendCurrency', 'matchedExchange.getCurrency', 'matchedExchange.user'])->findOrFail($request->id);
         if ($exchange->status == 2 && $exchange->rate_type == 'floating') {
             $exchange = $this->rateUpdate($exchange);
         }
@@ -317,6 +337,7 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
         $exchange->status = 5;
         $exchange->save();
+        $this->reservationService->releaseForExchange($exchange);
         $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_CANCEL');
         return back()->with('success', 'Exchange Cancel Successfully');
     }

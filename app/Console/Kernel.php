@@ -3,8 +3,10 @@
 namespace App\Console;
 
 use App\Console\Commands\CryptoCurrencyUpdateCron;
+use App\Console\Commands\ExchangeReservationCleanup;
 use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
+use App\Console\Commands\PopularCryptoBootstrap;
 use App\Models\BuyRequest;
 use App\Models\Deposit;
 use App\Models\ExchangeRequest;
@@ -17,6 +19,8 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         CryptoCurrencyUpdateCron::class,
         FiatCurrencyUpdateCron::class,
+        PopularCryptoBootstrap::class,
+        ExchangeReservationCleanup::class,
         ExchangeWalletWatcherSync::class,
     ];
 
@@ -36,6 +40,8 @@ class Kernel extends ConsoleKernel
         if (config('exchange_pipeline.treasury.watch_provider') !== 'none') {
             $schedule->command('app:exchange-wallet-watcher-sync')->everyFifteenMinutes();
         }
+
+        $schedule->command('app:exchange-reservation-cleanup')->everyFiveMinutes();
 
         $schedule->command('model:prune', [
             '--model' => [
