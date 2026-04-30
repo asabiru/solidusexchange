@@ -15,7 +15,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::get('get-exchange/currency', [ExchangeController::class, 'getExchangeCurrency'])->name('getExchangeCurrency');
     Route::get('get-buy/currency', [BuyController::class, 'getBuyCurrency'])->name('getBuyCurrency');
     Route::get('get-sell/currency', [SellController::class, 'getSellCurrency'])->name('getSellCurrency');
-    Route::get('track/trade', [FrontendController::class, 'tracking'])->name('tracking');
+    Route::get('track/trade', [FrontendController::class, 'tracking'])->name('tracking.trade');
 
     Route::controller(ExchangeController::class)->group(function () {
         Route::get('get-exchange/currency', 'getExchangeCurrency')->name('getExchangeCurrency');
