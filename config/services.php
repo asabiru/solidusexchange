@@ -63,4 +63,8 @@ return [
         'bot_name' => env('TELEGRAM_BOT_USERNAME'),
         'bot_token' => env('TELEGRAM_BOT_TOKEN'),
     ],
+
+    'rapira' => [
+        'market_rates_url' => env('RAPIRA_MARKET_RATES_URL', 'https://api.rapira.net/open/market/rates'),
+    ],
 ];

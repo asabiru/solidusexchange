@@ -338,6 +338,7 @@ class FiatCurrencyController extends Controller
 
             if ($response['status']) {
                 $quotes = $this->normalizeQuotes($response['res']);
+                $syncErrors = (array) ($response['errors'] ?? []);
 
                 $baseExchangeRate = $this->resolveBaseExchangeRate($quotes);
                 if ($baseExchangeRate !== null) {
@@ -361,6 +362,14 @@ class FiatCurrencyController extends Controller
                             ]);
                         });
                     }
+                }
+
+                foreach ($syncErrors as $currencyCode => $errorMessage) {
+                    $currencies->where('code', $currencyCode)->each(function ($currency) use ($errorMessage) {
+                        $currency->update([
+                            'last_rate_sync_error' => $errorMessage,
+                        ]);
+                    });
                 }
             } else {
                 FiatCurrency::query()

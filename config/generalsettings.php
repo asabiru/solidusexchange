@@ -58,7 +58,7 @@ return [
         'exchange_API' => [
             'route' => 'admin.currency.exchange.api.config',
             'icon' => 'bi bi-arrow-down-up',
-            'short_description' => 'Currency Layer Access Key, Coin Market Cap App Key, Select update time and so on.',
+            'short_description' => 'Rapira fiat sync, Bybit crypto sync, update schedules and related exchange API settings.',
         ],
         'kyc_provider' => [
             'route' => 'admin.kyc.provider.config',

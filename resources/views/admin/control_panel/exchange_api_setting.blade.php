@@ -34,25 +34,22 @@
                             <form action="{{ route('admin.currency.exchange.api.config.update') }}" method="post"
                                   enctype="multipart/form-data">
                                 @csrf
-                                <h2 class="card-title h5  border-bottom pb-3 ">@lang('CurrencyLayer Api Config (Fiat Currency)')</h2>
+                                <h2 class="card-title h5  border-bottom pb-3 ">@lang('Rapira Public Market (Fiat Currency)')</h2>
                                 <div class="row mb-4 mt-5">
-                                    <label for="currency_layer_access_key"
-                                           class="col-sm-4 col-form-label form-label">@lang("Access Key")<i
-                                            class="bi-question-circle text-body ms-1" data-bs-toggle="tooltip"
-                                            data-bs-placement="top"
-                                            aria-label="@lang("Currency Layer Access Key.")"
-                                            data-bs-original-title="@lang("Currency Layer Access Key.")"></i></label>
+                                    <label class="col-sm-4 col-form-label form-label">@lang("Rate Source")</label>
                                     <div class="col-sm-8">
-                                        <input type="text"
-                                               class="form-control  @error('currency_layer_access_key') is-invalid @enderror"
-                                               name="currency_layer_access_key" id="currency_layer_access_key"
-                                               autocomplete="off"
-                                               placeholder="currency_layer_access_key"
-                                               aria-label="currency_layer_access_key"
-                                               value="{{ old('currency_layer_access_key',  $basicControl->currency_layer_access_key) }}">
-                                        @error('currency_layer_access_key')
-                                        <span class="invalid-feedback">{{ $message }}</span>
-                                        @enderror
+                                        <div class="alert alert-soft-primary mb-0">
+                                            <div class="d-flex align-items-start gap-2">
+                                                <i class="bi bi-info-circle mt-1"></i>
+                                                <div>
+                                                    <strong>@lang('Rapira public market')</strong>
+                                                    <div class="small text-body mt-1">
+                                                        @lang('Fiat currency rates are synced from Rapira open market rates. No API key is required for this sync.')
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <input type="hidden" name="currency_layer_access_key" value="">
                                     </div>
                                 </div>
 
@@ -175,14 +172,13 @@
             <div class="col-lg-3">
                 <div id="emailSection" class="card mb-4">
                     <div class="card-header d-flex align-items-center justify-content-between">
-                        <h2 class="card-title h4 mt-2">@lang('Currency Layer Instructions')</h2>
+                        <h2 class="card-title h4 mt-2">@lang('Rapira Sync Instructions')</h2>
                     </div>
                     <div class="card-body">
-                        <p> @lang('Currencylayer provides a simple REST API with real-time and historical exchange rates for 168 world currencies, delivering currency pairs in universally usable JSON format - compatible with any of your applications.')</p>
-
-                        <p>@lang("Spot exchange rate data is retrieved from several major forex data providers in real time, validated, processed, and delivered hourly, every 10 minutes, or even within the 60-second market window.")</p>
-                        <a href="https://currencylayer.com/product"
-                           target="_blank">@lang('Create an account') <i class="fas fa-external-link-alt"></i></a>
+                        <p>@lang('Fiat currency rates are synced from Rapira open market data. The sync uses public market rates and does not require a separate API key.')</p>
+                        <p>@lang('The project derives the base currency value directly from Rapira market data, including the live USDT/RUB market used for the Russian audience flow.')</p>
+                        <a href="https://rapira.net/"
+                           target="_blank">@lang('Open Rapira') <i class="fas fa-external-link-alt"></i></a>
                     </div>
                 </div>
 

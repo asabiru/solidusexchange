@@ -186,30 +186,101 @@ trait CurrencyRateUpdate
 
     public function fiatRateUpdate($source, $currencies)
     {
-        if (basicControl()->currency_layer_access_key) {
-            $endpoint = 'live';
-            $currency_layer_url = "http://api.currencylayer.com";
-            $currency_layer_access_key = basicControl()->currency_layer_access_key;
+        $source = strtoupper(trim((string) $source));
+        $targetCurrencies = collect(is_array($currencies) ? $currencies : explode(',', (string) $currencies))
+            ->map(fn($currency) => strtoupper(trim((string) $currency)))
+            ->filter()
+            ->unique()
+            ->values();
 
-            $baseCurrencyAPIUrl = "$currency_layer_url/$endpoint?access_key=$currency_layer_access_key&source=$source&currencies=$currencies";
-            $baseCurrencyConvert = BasicCurl::curlGetRequest($baseCurrencyAPIUrl);
-            $result = json_decode($baseCurrencyConvert);
-
-            if (isset($result->success) && isset($result->quotes)) {
-                return [
-                    'status' => true,
-                    'res' => (array) $result->quotes,
-                ];
-            }
-
+        if ($source === '') {
             return [
                 'status' => false,
-                'res' => 'something went wrong',
+                'res' => 'Base currency is not configured',
             ];
         }
+
+        if ($targetCurrencies->isEmpty()) {
+            return [
+                'status' => false,
+                'res' => 'No fiat currencies selected for sync',
+            ];
+        }
+
+        $marketRatesUrl = (string) config('services.rapira.market_rates_url', 'https://api.rapira.net/open/market/rates');
+        $marketRatesResponse = json_decode(BasicCurl::curlGetRequest($marketRatesUrl));
+
+        if (($marketRatesResponse->code ?? 1) !== 0 || !isset($marketRatesResponse->data) || !is_array($marketRatesResponse->data)) {
+            return [
+                'status' => false,
+                'res' => $marketRatesResponse->message ?? $marketRatesResponse->error ?? 'Rapira market rates are unavailable',
+            ];
+        }
+
+        $usdPerUnit = $this->extractRapiraUsdPerUnit($marketRatesResponse->data);
+        $sourceUsdRate = $usdPerUnit[$source] ?? null;
+
+        if ($sourceUsdRate === null || $sourceUsdRate <= 0) {
+            return [
+                'status' => false,
+                'res' => "Rapira market rate is unavailable for {$source}",
+            ];
+        }
+
+        $quotes = [];
+        $errors = [];
+
+        foreach ($targetCurrencies as $targetCurrency) {
+            if ($targetCurrency === $source) {
+                $quotes[$source . $targetCurrency] = 1.0;
+                continue;
+            }
+
+            $targetUsdRate = $usdPerUnit[$targetCurrency] ?? null;
+            if ($targetUsdRate === null || $targetUsdRate <= 0) {
+                $errors[$targetCurrency] = "Rapira market rate is unavailable for {$targetCurrency}";
+                continue;
+            }
+
+            $quotes[$source . $targetCurrency] = $sourceUsdRate / $targetUsdRate;
+        }
+
+        if (empty($quotes)) {
+            return [
+                'status' => false,
+                'res' => collect($errors)->values()->implode(', '),
+            ];
+        }
+
         return [
-            'status' => false,
-            'res' => 'Please set currencylayer api key',
+            'status' => true,
+            'res' => $quotes,
+            'errors' => $errors,
         ];
+    }
+
+    protected function extractRapiraUsdPerUnit(array $markets): array
+    {
+        $usdPerUnit = [
+            'USD' => 1.0,
+            'USDT' => 1.0,
+        ];
+
+        foreach ($markets as $market) {
+            $quoteCurrency = strtoupper((string) ($market->quoteCurrency ?? ''));
+            $baseCurrency = strtoupper((string) ($market->baseCurrency ?? ''));
+            $quoteUsdRate = (float) ($market->usdRate ?? 0);
+            $baseUsdRate = (float) ($market->baseUsdRate ?? 0);
+
+            if ($quoteCurrency !== '' && $quoteUsdRate > 0) {
+                $usdPerUnit[$quoteCurrency] = $quoteUsdRate;
+            }
+
+            if ($baseCurrency !== '' && $baseUsdRate > 0) {
+                $usdPerUnit[$baseCurrency] = $baseUsdRate;
+            }
+        }
+
+        return $usdPerUnit;
     }
 }
