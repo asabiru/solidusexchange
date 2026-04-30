@@ -44,6 +44,7 @@ else
 fi
 
 "${PHP_BIN}" artisan migrate --force
+"${PHP_BIN}" artisan app:switch-project-to-rub || true
 "${PHP_BIN}" artisan app:popular-crypto-bootstrap --activate || true
 "${PHP_BIN}" artisan app:crypto-currency-update-cron || true
 "${PHP_BIN}" artisan optimize:clear

@@ -278,14 +278,14 @@
 
                                                         <td>
                                                             <div class="input-group mb-1">
-                                                                <span class="input-group-text"> 1 {{ $basicControl->base_currency ? : 'USD' }} = </span>
+                                                                <span class="input-group-text"> 1 {{ $basicControl->base_currency ?: 'RUB' }} = </span>
                                                                 <input type="text"
                                                                        class="form-control @error('conversion_rate') is-invalid @enderror"
                                                                        name="receivable_currencies[{{ $i }}][conversion_rate]"
                                                                        value="{{ old("receivable_currencies.$i.conversion_rate", $method->receivable_currencies[$i]->conversion_rate ?? '') }}"
                                                                        autocomplete="off">
                                                                 <span
-                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : 'USD') }}</span>
+                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : ($basicControl->base_currency ?: 'RUB')) }}</span>
                                                                 @error("receivable_currencies.$i.conversion_rate")
                                                                 <span
                                                                     class="invalid-feedback d-block mb-1">{{ $message }}</span>
@@ -302,7 +302,7 @@
                                                                        value="{{ old("receivable_currencies.$i.min_limit", $method->receivable_currencies[$i]->min_limit ?? '')  }}"
                                                                        autocomplete="off">
                                                                 <span
-                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : "USD") }}</span>
+                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : ($basicControl->base_currency ?: 'RUB')) }}</span>
                                                                 @error("receivable_currencies.$i.min_limit")
                                                                 <span
                                                                     class="invalid-feedback d-block mb-1">{{ $message }}</span>
@@ -318,7 +318,7 @@
                                                                        value="{{ old("receivable_currencies.$i.max_limit", $method->receivable_currencies[$i]->max_limit ?? '') }}"
                                                                        autocomplete="off">
                                                                 <span
-                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : "USD") }}</span>
+                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : ($basicControl->base_currency ?: 'RUB')) }}</span>
                                                                 @error("receivable_currencies.$i.max_limit")
                                                                 <span
                                                                     class="invalid-feedback d-block mb-1">{{ $message }}</span>
@@ -350,7 +350,7 @@
                                                                        value="{{ old("receivable_currencies.$i.fixed_charge", $method->receivable_currencies[$i]->fixed_charge ?? '') }}"
                                                                        autocomplete="off">
                                                                 <span
-                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : "USD") }}</span>
+                                                                    class="input-group-text">{{ old("receivable_currencies.$i.name", $method->currency_type == 1 ? $method->receivable_currencies[$i]->name : ($basicControl->base_currency ?: 'RUB')) }}</span>
                                                                 @error("receivable_currencies.$i.fixed_charge")
                                                                 <span
                                                                     class="invalid-feedback d-block mb-1">{{ $message }}</span>
@@ -417,7 +417,7 @@
             let method = @json($method);
             function itemAppend(currency) {
                 let rowCount = $('#supported_currency_table tr').length;
-                currency = method.currency_type === 1 ? currency : 'USD';
+                currency = method.currency_type === 1 ? currency : @json(strtoupper((string) ($basicControl->base_currency ?: 'RUB')));
                 let markup = "";
                 markup += `
                         <tr class="${currency}-row">

@@ -7,6 +7,7 @@ use App\Console\Commands\ExchangeReservationCleanup;
 use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
 use App\Console\Commands\PopularCryptoBootstrap;
+use App\Console\Commands\SwitchProjectToRub;
 use App\Models\BuyRequest;
 use App\Models\Deposit;
 use App\Models\ExchangeRequest;
@@ -20,6 +21,7 @@ class Kernel extends ConsoleKernel
         CryptoCurrencyUpdateCron::class,
         FiatCurrencyUpdateCron::class,
         PopularCryptoBootstrap::class,
+        SwitchProjectToRub::class,
         ExchangeReservationCleanup::class,
         ExchangeWalletWatcherSync::class,
     ];

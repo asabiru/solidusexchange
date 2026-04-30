@@ -310,7 +310,7 @@
                                                         </td>
                                                         <td>
                                                             <div class="input-group mb-1">
-                                                                <span class="input-group-text"> 1 {{ $basicControl->base_currency ? : 'USD' }} = </span>
+                                                                <span class="input-group-text"> 1 {{ $basicControl->base_currency ?: 'RUB' }} = </span>
                                                                 <input type="text"
                                                                        class="form-control @error('conversion_rate') is-invalid @enderror"
                                                                        name="receivable_currencies[{{$i}}][conversion_rate]"
@@ -407,7 +407,7 @@
                                                     </td>
                                                     <td>
                                                         <div class="input-group mb-1">
-                                                            <span class="input-group-text"> 1 {{ $basicControl->base_currency ? : 'USD' }} = </span>
+                                                            <span class="input-group-text"> 1 {{ $basicControl->base_currency ?: 'RUB' }} = </span>
                                                             <input type="text"
                                                                    class="form-control @error('conversion_rate') is-invalid @enderror"
                                                                    name="receivable_currencies[0][conversion_rate]"

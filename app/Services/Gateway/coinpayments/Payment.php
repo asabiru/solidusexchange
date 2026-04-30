@@ -9,6 +9,7 @@ class Payment
 	public static function prepareData($deposit, $gateway)
 	{
 		$basic = basicControl();
+        $baseCurrency = strtoupper((string) ($basic->base_currency ?: 'USD'));
 
 		$isCrypto = (checkTo($gateway->currencies, $deposit->payment_method_currency) == 1) ? true : false;
 
@@ -43,7 +44,7 @@ class Payment
 
 				$req = array(
 					'amount' => round($deposit->payable_amount, 2),
-					'currency1' => 'USD',
+					'currency1' => $baseCurrency,
 					'currency2' => $deposit->payment_method_currency,
 					'custom' => $deposit->trx_id,
 					'ipn_url' => $callbackUrl,

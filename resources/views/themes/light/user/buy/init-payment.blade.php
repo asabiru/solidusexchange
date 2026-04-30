@@ -183,7 +183,8 @@
                 success: function (data) {
                     
                     if (data === "") {
-                        let markup = `<option value="USD">USD</option>`;
+                        let baseCurrency = @json(strtoupper((string) (basicControl()->base_currency ?: 'USD')));
+                        let markup = `<option value="${baseCurrency}">${baseCurrency}</option>`;
                         $('#supported_currency').append(markup);
                     }
 

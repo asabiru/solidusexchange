@@ -9,6 +9,7 @@ class Payment
 {
     public static function prepareData($deposit, $gateway)
     {
+        $baseCurrency = strtoupper((string) (basicControl()->base_currency ?: 'USD'));
 
         $apiKey = $gateway->parameters->api_key ?? '';
         $xpubCode = $gateway->parameters->xpub_code ?? '';
@@ -16,7 +17,11 @@ class Payment
         $btcPriceUrl = "https://blockchain.info/ticker";
         $btcPriceResponse = BasicCurl::curlGetRequest($btcPriceUrl);
         $btcPriceResponse = json_decode($btcPriceResponse);
-        $btcRate = $btcPriceResponse->USD->last;
+        $btcRate = (float) ($btcPriceResponse->{$baseCurrency}->last ?? $btcPriceResponse->USD->last ?? 0);
+
+        if ($btcRate <= 0) {
+            throw new \RuntimeException("Blockchain ticker does not provide a BTC rate for {$baseCurrency}.");
+        }
 
         $usd = round($deposit->payable_amount, 2);
         $btcamount = $usd / $btcRate;

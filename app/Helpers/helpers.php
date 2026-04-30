@@ -133,8 +133,9 @@ if (!function_exists('basicControl')) {
     }
 }
 
-function checkTo($currencies, $selectedCurrency = 'USD')
+function checkTo($currencies, $selectedCurrency = null)
 {
+    $selectedCurrency = strtoupper((string) ($selectedCurrency ?: basicControl()?->base_currency ?: 'USD'));
     foreach ($currencies as $key => $currency) {
         if (property_exists($currency, strtoupper($selectedCurrency))) {
             return $key;
@@ -255,12 +256,14 @@ function kebab2Title($string)
 
 function getMethodCurrency($gateway)
 {
+    $baseCurrency = strtoupper((string) (basicControl()?->base_currency ?: 'USD'));
+
     foreach ($gateway->currencies as $key => $currency) {
         if (property_exists($currency, $gateway->currency)) {
             if ($key == 0) {
                 return $gateway->currency;
             } else {
-                return 'USD';
+                return $baseCurrency;
             }
         }
     }

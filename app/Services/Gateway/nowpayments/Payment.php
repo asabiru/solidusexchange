@@ -17,6 +17,7 @@ class Payment
 	public static function prepareData($deposit, $gateway)
 	{
 		$APIkey = $gateway->parameters->api_key ?? '';
+        $baseCurrency = strtoupper((string) (basicControl()->base_currency ?: 'USD'));
 		if ($gateway->environment == 'test') {
 			$url = 'https://api-sandbox.nowpayments.io/v1/';
 		} else {
@@ -24,7 +25,7 @@ class Payment
 		}
 
 		$postField['price_amount'] = (string)round($deposit->payable_amount, 2);
-		$postField['price_currency'] = "USD";
+		$postField['price_currency'] = $baseCurrency;
 		$postField['pay_currency'] = $deposit->payment_method_currency;
 		$postField['ipn_callback_url'] = "https://nowpayments.io";
 		$postField['order_id'] = $deposit->trx_id;
