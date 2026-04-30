@@ -43,20 +43,20 @@ class SwitchProjectToRub extends Command
 
     private function resolveRubExchangeRate(BasicControl $basicControl): ?float
     {
-        $rubCurrency = FiatCurrency::query()
-            ->whereRaw('UPPER(code) = ?', ['RUB'])
-            ->first();
-
-        if ($rubCurrency && (float) $rubCurrency->usd_rate > 0) {
-            return 1 / (float) $rubCurrency->usd_rate;
-        }
-
         $response = BasicCurl::curlGetRequest('https://www.cbr-xml-daily.ru/daily_json.js');
         $payload = json_decode((string) $response, true);
         $cbrRate = (float) data_get($payload, 'Valute.USD.Value', 0);
 
         if ($cbrRate > 0) {
             return $cbrRate;
+        }
+
+        $rubCurrency = FiatCurrency::query()
+            ->whereRaw('UPPER(code) = ?', ['RUB'])
+            ->first();
+
+        if ($rubCurrency && (float) $rubCurrency->usd_rate > 0) {
+            return 1 / (float) $rubCurrency->usd_rate;
         }
 
         if (strtoupper((string) $basicControl->base_currency) === 'RUB' && (float) $basicControl->exchange_rate > 0) {
