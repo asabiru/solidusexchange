@@ -9,4 +9,5 @@
 @stack('css-lib')
 <link rel="stylesheet" href="{{asset($themeTrue.'css/style.css')}}">
 <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/global/css/solidchange-redesign.css') }}">
 @stack('style')

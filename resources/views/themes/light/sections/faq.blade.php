@@ -1,62 +1,52 @@
 <!-- Faq section start -->
-@if (isset($faq))
-    <section class="faq-section">
-        <div class="container">
-            <div class="row g-4 g-sm-5 align-items-center">
-                @if (isset($faq['single']))
-                    <div class="col-lg-6">
-                        <div class="faq-thum">
-                            {{-- <img
-                                src="{{getFile(@$faq['single']['media']->image->driver,@$faq['single']['media']->image->path)}}"
-                                alt="..."> --}}
-                            <div class="faq-img">
-                                <img src="./assets/upload/contents/faq-img.png" alt="">
-                            </div>
-                            <div class="question-mark">
-                                <img src="./assets/upload/contents/question-mark.png" alt="">
+@php
+    $scFaq = [
+        ['q' => 'Как работает обмен криптовалюты?', 'a' => 'Вы выбираете пару, вводите сумму, указываете адрес получения. Мы фиксируем курс, вы переводите средства, после подтверждений сети мы отправляем результат на ваш кошелёк.'],
+        ['q' => 'Сколько времени занимает обмен?', 'a' => 'Медианное время — около 7 минут. Скорость зависит от сети отправителя и количества подтверждений.'],
+        ['q' => 'Можно ли отследить статус обмена?', 'a' => 'Да, на странице отслеживания можно ввести ID заявки или email и увидеть текущий этап операции.'],
+        ['q' => 'Какие комиссии вы берёте?', 'a' => 'Сервисная комиссия видна в карточке обмена до подтверждения. Дополнительно учитывается комиссия сети получателя.'],
+        ['q' => 'Нужно ли проходить KYC?', 'a' => 'Для стандартных операций KYC может не требоваться. При повышенных лимитах действует понятная процедура идентификации.'],
+        ['q' => 'Как проверить ваши резервы?', 'a' => 'В блоке резервов опубликованы активы и сети. Адреса холодных кошельков можно проверить в blockchain-explorer.'],
+    ];
+@endphp
+<section class="sc-section sc-faq" id="faq">
+    <div class="container">
+        <div class="sc-faq-inner">
+            <div class="sc-section-head text-center">
+                <div>
+                    <span class="sc-kicker">@lang('09 / Частые вопросы')</span>
+                    <h2>@lang('Ответы на главное')</h2>
+                </div>
+            </div>
+            <div class="accordion" id="scFaqAccordion">
+                @foreach($scFaq as $key => $item)
+                    <div class="accordion-item">
+                        <h2 class="accordion-header" id="scFaqHeading{{ $key }}">
+                            <button class="accordion-button {{ $key === 0 ? '' : 'collapsed' }}"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#scFaqCollapse{{ $key }}"
+                                    aria-expanded="{{ $key === 0 ? 'true' : 'false' }}"
+                                    aria-controls="scFaqCollapse{{ $key }}">
+                                @lang($item['q'])
+                            </button>
+                        </h2>
+                        <div id="scFaqCollapse{{ $key }}"
+                             class="accordion-collapse collapse {{ $key === 0 ? 'show' : '' }}"
+                             aria-labelledby="scFaqHeading{{ $key }}"
+                             data-bs-parent="#scFaqAccordion">
+                            <div class="accordion-body">
+                                <p>@lang($item['a'])</p>
                             </div>
                         </div>
                     </div>
-                @endif
-                <div class="col-lg-6">
-                    <div class="faq-content">
-                        @if (isset($faq['single']))
-                            <div class="section-header">
-                                <h2 class="section-title">@lang(@$faq['single']['title'])</h2>
-                                <p class="cmn-para-text mx-auto">@lang(@$faq['single']['sub_title'])</p>
-                            </div>
-                        @endif
-                        @if (isset($faq['multiple']) && count($faq['multiple']) > 0)
-                            <div class="accordion" id="accordionExample2">
-                                @foreach ($faq['multiple'] as $key => $item)
-                                    <div class="accordion-item">
-                                        <h2 class="accordion-header" id="headin{{ $key }}">
-                                            <button class="accordion-button {{ $key != 0 ? 'collapsed' : '' }}"
-                                                type="button" data-bs-toggle="collapse"
-                                                data-bs-target="#collapse{{ $key }}" aria-expanded="true"
-                                                aria-controls="collapse{{ $key }}">
-                                                @lang(@$item['title'])
-                                            </button>
-                                        </h2>
-                                        <div id="collapse{{ $key }}"
-                                            class="accordion-collapse collapse {{ $key == 0 ? 'show' : '' }}"
-                                            aria-labelledby="headin{{ $key }}"
-                                            data-bs-parent="#accordionExample2">
-                                            <div class="accordion-body">
-                                                <div class="table-responsive">
-                                                    <p>@lang(@$item['sub_title'])</p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
-                    </div>
-                </div>
+                @endforeach
+            </div>
+            <div class="sc-faq-cta">
+                <p>@lang('Не нашли ответа?')</p>
+                <a href="{{ route('contact') }}" class="sc-secondary-btn">@lang('Написать в поддержку')</a>
             </div>
         </div>
-        <div class="bg-shape1"></div>
-    </section>
-@endif
+    </div>
+</section>
 <!-- Faq section end -->

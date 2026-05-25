@@ -1,40 +1,84 @@
-@if (isset($about['single']))
-    <section class="about-section">
-        <div class="container">
-            <div class="row g-4 g-sm-5">
-                <div class="col-lg-6">
-                    <div class="about-thum">
-                        {{-- <img src="{{@$about['mediaFile']}}" alt="..."> --}}
-                        <img class="img-1" src="./assets/upload/contents/img-2.png" alt="">
-                        <img class="img-2" src="./assets/upload/contents/fortnite-battle-royale-game2.png"
-                            alt="">
-                        <img class="star" src="./assets/upload/contents/star.png" alt="">
-                        <img class="dot" src="./assets/upload/contents/dot.png" alt="">
-                        <a href="" class="round-box-content">
-                            <span class="curved-circle">@lang('marketplace by sell exchange p2p')</span>
-                            <div class="inner-icon">
-                                <i class="fa-solid fa-play"></i>
-                            </div>
-                        </a>
+@php
+    $popularAssets = [
+        ['symbol' => 'BTC', 'name' => 'Bitcoin', 'price' => 96432.10, 'change' => 1.84],
+        ['symbol' => 'ETH', 'name' => 'Ethereum', 'price' => 3284.50, 'change' => -0.62],
+        ['symbol' => 'USDT', 'name' => 'Tether', 'price' => 1.00, 'change' => 0.01],
+        ['symbol' => 'USDC', 'name' => 'USD Coin', 'price' => 1.00, 'change' => -0.02],
+        ['symbol' => 'TON', 'name' => 'Toncoin', 'price' => 5.12, 'change' => 3.45],
+        ['symbol' => 'SOL', 'name' => 'Solana', 'price' => 184.27, 'change' => 2.18],
+        ['symbol' => 'XRP', 'name' => 'Ripple', 'price' => 2.34, 'change' => -1.12],
+        ['symbol' => 'BNB', 'name' => 'BNB', 'price' => 612.40, 'change' => 0.45],
+    ];
+@endphp
+<section class="sc-section sc-popular" id="popular">
+    <div class="container">
+        <div class="sc-section-head">
+            <div>
+                <span class="sc-kicker">@lang('03 / Популярные криптовалюты')</span>
+                <h2>@lang('Чаще всего обменивают')</h2>
+            </div>
+        </div>
+        <div class="sc-card-grid sc-card-grid-4">
+            @foreach($popularAssets as $asset)
+                <div class="sc-info-card">
+                    <div class="sc-card-top">
+                        <span class="sc-coin">{{ substr($asset['symbol'], 0, 2) }}</span>
+                        <span class="{{ $asset['change'] >= 0 ? 'is-up' : 'is-down' }}">
+                            {{ $asset['change'] >= 0 ? '+' : '' }}{{ number_format($asset['change'], 2) }}%
+                        </span>
                     </div>
+                    <div>
+                        <h3>{{ $asset['symbol'] }}</h3>
+                        <p>{{ $asset['name'] }}</p>
+                    </div>
+                    <strong>{{ number_format($asset['price'] * 90, $asset['price'] < 10 ? 2 : 0, '.', ' ') }} ₽</strong>
+                    <a href="#exchange" class="sc-secondary-btn">@lang('Обменять') {{ $asset['symbol'] }}</a>
                 </div>
-                <div class="col-lg-6">
-                    <div class="about-content mx-auto">
-                        <h2 class="section-title">
-                            @lang(wordSplice(@$about['single']['title'])['exceptTwo']) <span class="highlight">@lang(wordSplice(@$about['single']['title'])['lastTwo'])</span>
-                        </h2>
-                        <p class="cmn-para-text">@lang(@$about['single']['description'])</p>
+            @endforeach
+        </div>
+    </div>
+</section>
+
+<section class="sc-section sc-security" id="security">
+    <div class="container">
+        <div class="row g-4 g-lg-5 align-items-start">
+            <div class="col-lg-5">
+                <span class="sc-kicker">@lang('04 / Безопасность и AML / KYC')</span>
+                <h2>@lang('Безопасность как у банка, скорость как у крипты')</h2>
+                <p>@lang('Мы делаем доверие проверяемым: партнёры по AML-мониторингу, холодное хранение и понятные пороги KYC.')</p>
+            </div>
+            <div class="col-lg-7">
+                <div class="sc-card-grid sc-card-grid-2">
+                    <div class="sc-info-card">
+                        <i class="fa-regular fa-shield-check"></i>
+                        <h3>@lang('AML-проверка')</h3>
+                        <p>@lang('Каждая транзакция проходит проверку через Chainalysis и Elliptic.')</p>
                     </div>
-                    <div class="btn-area">
-                        <a href="{{ @$about['single']['media']->my_link }}" class="cmn-btn">@lang(@$about['single']['button_name'])</a>
+                    <div class="sc-info-card">
+                        <i class="fa-regular fa-file-check"></i>
+                        <h3>@lang('KYC при необходимости')</h3>
+                        <p>@lang('Прозрачные пороги и стандартная процедура идентификации за несколько минут.')</p>
+                    </div>
+                    <div class="sc-info-card">
+                        <i class="fa-regular fa-key"></i>
+                        <h3>@lang('Холодное хранение')</h3>
+                        <p>@lang('Резервы хранятся на защищённых кошельках, доступных для проверки.')</p>
+                    </div>
+                    <div class="sc-info-card">
+                        <i class="fa-regular fa-eye"></i>
+                        <h3>@lang('Двухфакторная аутентификация')</h3>
+                        <p>@lang('Поддержка TOTP-приложений и дополнительных проверок для аккаунтов.')</p>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="bg-shape1"></div>
-        <div class="shape shape2 opacity-100">
-            <img src="{{ asset($themeTrue . 'img/coin/5.png') }}" alt="...">
+        <div class="sc-partners">
+            <span>@lang('Партнёры по AML / KYC')</span>
+            <strong>Chainalysis</strong>
+            <strong>Elliptic</strong>
+            <strong>Sumsub</strong>
+            <strong>Crystal</strong>
         </div>
-    </section>
-@endif
-<!-- About section end -->
+    </div>
+</section>
+<!-- Popular and security sections end -->

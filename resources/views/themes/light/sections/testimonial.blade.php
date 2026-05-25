@@ -1,67 +1,50 @@
 <!-- Testimonial section start -->
-@if(isset($testimonial))
-    <section class="testimonial-section">
-        <div class="container">
-            @if(isset($testimonial['single']))
-                <div class="row">
-                    <div class="section-header mb-50 text-center">
-                        <h2 class="">@lang(wordSplice(@$testimonial['single']['title'])['exceptTwo']) <span
-                                class="highlight">@lang(wordSplice(@$testimonial['single']['title'])['lastTwo'])</span>
-                        </h2>
-                        <p class="cmn-para-text m-auto">@lang(@$testimonial['single']['sub_title'])</p>
-                    </div>
-                </div>
-            @endif
-            @if(isset($testimonial['multiple']) && count($testimonial['multiple']) > 0)
-                <div class="row">
-                    <div class="owl-carousel owl-theme testimonial-carousel">
-                        @foreach($testimonial['multiple'] as $key => $testimonial)
-                            <div class="item">
-                                <div class="testimonial-box">
-                                    <div class="testimonial-header">
-                                        <div class="testimonial-title-area">
-                                            <div class="testimonial-thumbs">
-                                                <img
-                                                    src="{{getFile(@$testimonial['media']->image->driver,@$testimonial['media']->image->path)}}"
-                                                    alt="..."/>
-                                            </div>
-                                            <div class="testimonial-title">
-                                                <h5 class="mb-0">@lang(@$testimonial['name'])</h5>
-                                                <p>@lang(@$testimonial['address'])</p>
-                                            </div>
-                                        </div>
-                                        @if($testimonial['star'])
-                                            <ul class="ratings">
-                                                <li>
-                                                    @php
-                                                        $starCount = 5;
-                                                    @endphp
-                                                    @for($i=0; $i< $testimonial['star']; $i++)
-                                                        <i class="active fa-solid fa-star"></i>
-                                                        @php
-                                                            $starCount--;
-                                                        @endphp
-                                                    @endfor
-                                                    @for($i=0; $i < $starCount; $i++)
-                                                        <i class="fa-solid fa-star"></i>
-                                                    @endfor
-                                                </li>
-                                            </ul>
-                                        @endif
-                                    </div>
-                                    <div class="quote-area">
-                                        <p>@lang($testimonial['description'])</p>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                </div>
-            @endif
+@php
+    $reviews = [
+        ['initials' => 'АК', 'name' => 'Артём К.', 'role' => 'Меняет дважды в неделю', 'date' => '14.05.2026', 'text' => 'Курс на странице и в реквизитах совпал до копейки. Поддержка ответила за 3 минуты, когда я перепутал сеть USDT.', 'rating' => 5],
+        ['initials' => 'М', 'name' => 'Михаил', 'role' => 'Первый обмен', 'date' => '11.05.2026', 'text' => 'Интерфейс не пугает терминологией. Сразу видно, что отдаю и что получу. Резервы можно проверить — это редкость.', 'rating' => 5],
+        ['initials' => 'ЕП', 'name' => 'Елена П.', 'role' => 'Малый бизнес', 'date' => '06.05.2026', 'text' => 'Подключила выплаты в RUB через СБП. Документы для бухгалтерии присылают по запросу, всё корректно.', 'rating' => 4],
+    ];
+@endphp
+<section class="sc-section sc-reviews" id="reviews">
+    <div class="container">
+        <div class="sc-section-head">
+            <div>
+                <span class="sc-kicker">@lang('08 / Отзывы')</span>
+                <h2>@lang('Что говорят пользователи')</h2>
+            </div>
         </div>
-        <div class="shape shape2">
-            <img src="{{$themeTrue.'img/coin/coin-1.png'}}" alt="...">
+        <div class="sc-card-grid sc-card-grid-3">
+            @foreach($reviews as $review)
+                <article class="sc-info-card">
+                    <div class="sc-review-head">
+                        <span class="sc-avatar">{{ $review['initials'] }}</span>
+                        <div>
+                            <h3>{{ $review['name'] }}</h3>
+                            <p>{{ $review['role'] }} · {{ $review['date'] }}</p>
+                        </div>
+                        <div class="sc-stars">
+                            @for($i = 1; $i <= 5; $i++)
+                                <i class="{{ $i <= $review['rating'] ? 'is-active' : '' }} fa-solid fa-star"></i>
+                            @endfor
+                        </div>
+                    </div>
+                    <p>@lang($review['text'])</p>
+                </article>
+            @endforeach
         </div>
-    </section>
-@endif
+        <div class="sc-review-summary">
+            <div class="sc-stars">
+                @for($i = 1; $i <= 5; $i++)
+                    <i class="is-active fa-solid fa-star"></i>
+                @endfor
+            </div>
+            <strong>4.8 / 5.0</strong>
+            <span>@lang('на основе 1 247 отзывов')</span>
+            <em>Trustpilot</em>
+            <em>BestChange</em>
+            <em>Reviews.io</em>
+        </div>
+    </div>
+</section>
 <!-- Testimonial section end -->

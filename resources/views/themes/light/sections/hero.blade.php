@@ -1,28 +1,35 @@
 @php
     $announces = \App\Models\CoinAnnounce::where('status',1)->get();
+    $heroHeading = @$hero['single']['heading'] ?: __('Обмен криптовалют без скрытых комиссий');
+    $heroSubHeading = @$hero['single']['sub_heading'] ?: __('Прозрачные курсы, открытые резервы и понятные условия. Видите итог до того, как нажмёте «Обменять» — без сюрпризов.');
 @endphp
     <!-- Hero section start -->
 <div class="hero-section">
+    <div class="sc-hero-grid" aria-hidden="true"></div>
     <div class="hero-section-inner">
         <div class="container">
             <div class="row g-4 g-sm-5 justify-content-between align-items-center">
-                @if(isset($hero['single']))
-                    <div class="col-xxl-6 col-lg-6">
-                        <div class="hero-content">
-                            <h1 class="hero-title">@lang(wordSplice(@$hero['single']['heading'],4)['exceptTwo']) <span
-                                    class="highlight">@lang(wordSplice(@$hero['single']['heading'],4)['lastTwo'])</span>
-                            </h1>
-                            <p class="hero-description">@lang(@$hero['single']['sub_heading'])</p>
-                            <div class="btn-area">
-                                <a href="{{@$hero['single']['media']->my_link}}"
-                                   class="cmn-btn">@lang(@$hero['single']['button_name'])</a>
-                                <a href="{{@$hero['single']['media']->video_link}}" class="cmn-btn2 text-with-icon"><i
-                                        class="fa-regular fa-circle-play"></i>@lang(@$hero['single']['video_button_name'])
-                                </a>
+                <div class="col-xxl-6 col-lg-6">
+                    <div class="hero-content">
+                        <span class="sc-eyebrow"><span></span>@lang('Среднее время обмена ~7 минут')</span>
+                        <h1 class="hero-title">@lang($heroHeading)</h1>
+                        <p class="hero-description">@lang($heroSubHeading)</p>
+                        <div class="sc-trust-list">
+                            <div class="sc-trust-item">
+                                <i class="fa-regular fa-chart-line"></i>
+                                <span>@lang('Резервы on-chain')</span>
+                            </div>
+                            <div class="sc-trust-item">
+                                <i class="fa-regular fa-shield-check"></i>
+                                <span>@lang('AML-проверка Chainalysis')</span>
+                            </div>
+                            <div class="sc-trust-item">
+                                <i class="fa-regular fa-headset"></i>
+                                <span>@lang('Поддержка 24/7')</span>
                             </div>
                         </div>
                     </div>
-                @endif
+                </div>
 
                 <div class="col-xxl-5 col-lg-6">
                     <div class="calculator-section">
@@ -55,6 +62,10 @@
                             </div>
 
                             <div class="calculator-body">
+                                <div class="sc-calculator-meta">
+                                    <span>@lang('Обмен криптовалют')</span>
+                                    <span><i></i>@lang('Курс обновляется онлайн')</span>
+                                </div>
                                 <div class="cmn-tabs">
                                     <ul class="nav nav-pills" id="pills-tab" role="tablist">
                                         <li class="nav-item" role="presentation">
@@ -99,5 +110,4 @@
     </div>
 </div>
 @include($theme.'partials.modal')
-
 
