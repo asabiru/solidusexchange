@@ -5,11 +5,12 @@ namespace App\Services\Kyc;
 use App\Models\Kyc;
 use App\Models\User;
 use App\Models\UserKyc;
+use App\Services\Kyc\Contracts\KycProviderInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use RuntimeException;
 
-class SumsubKycService
+class SumsubKycService implements KycProviderInterface
 {
     public function __construct(
         private readonly SumsubClient $client,
@@ -174,6 +175,11 @@ class SumsubKycService
         }
 
         return ['status' => 'ok'];
+    }
+
+    public function providerName(): string
+    {
+        return 'sumsub';
     }
 
     public function resolveLevelName(Kyc $kyc): string

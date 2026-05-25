@@ -24,7 +24,9 @@ class ExchangeRequest extends Model
         'profit_currency', 'payout_tx_id', 'hedge_error', 'hedged_at', 'deposit_provider',
         'deposit_provider_ref', 'deposit_network', 'payout_provider', 'execution_route',
         'matched_exchange_request_id', 'execution_notes', 'routed_at', 'aml_status', 'aml_provider',
-        'aml_risk_level', 'aml_risk_score', 'aml_notes', 'aml_checked_at'];
+        'aml_risk_level', 'aml_risk_score', 'aml_notes', 'aml_checked_at', 'consent_record_id',
+        'source_channel', 'source_metadata', 'sub_status', 'processing_deadline', 'aml_provider_reference',
+        'aml_raw_response', 'confirmation_count', 'required_confirmations'];
 
     protected $casts = [
         'expire_time' => 'datetime',
@@ -33,6 +35,9 @@ class ExchangeRequest extends Model
         'hedged_at' => 'datetime',
         'routed_at' => 'datetime',
         'aml_checked_at' => 'datetime',
+        'source_metadata' => 'array',
+        'aml_raw_response' => 'array',
+        'processing_deadline' => 'datetime',
     ];
 
     protected $appends = ['tracking_status', 'admin_status', 'user_status'];
@@ -65,6 +70,31 @@ class ExchangeRequest extends Model
     public function matchedExchange()
     {
         return $this->belongsTo(self::class, 'matched_exchange_request_id')->withTrashed();
+    }
+
+    public function consentRecord()
+    {
+        return $this->belongsTo(ConsentRecord::class);
+    }
+
+    public function proofs()
+    {
+        return $this->morphMany(DealProof::class, 'proofable');
+    }
+
+    public function notes()
+    {
+        return $this->morphMany(DealNote::class, 'notable');
+    }
+
+    public function disputes()
+    {
+        return $this->morphMany(Dispute::class, 'disputable');
+    }
+
+    public function amlChecks()
+    {
+        return $this->morphMany(AmlCheck::class, 'checkable');
     }
 
     public function prunable(): Builder

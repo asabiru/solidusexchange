@@ -9,6 +9,9 @@ use App\Models\CryptoMethod;
 use App\Models\FiatCurrency;
 use App\Models\FiatSendGateway;
 use App\Models\SellRequest;
+use App\Services\Aml\AmlScreeningService;
+use App\Services\Compliance\ConsentService;
+use App\Services\Compliance\DealProofService;
 use App\Services\Sell\TraderAssignmentService;
 use App\Services\TradeQuote\SellQuoteService;
 use App\Traits\CalculateFees;
@@ -151,12 +154,21 @@ class SellController extends Controller
             $sellRequest->processing_fee = $quote['processing_fee'];
             $sellRequest->final_amount = $quote['final_amount'];
             $sellRequest->status = 1;
+            $sellRequest->sub_status = 'crypto_deposit_pending';
             $sellRequest->fiat_send_gateway_id = $fiatSendGateway->id;
             $sellRequest->contact_telegram = $contactTelegram;
             $sellRequest->contact_telegram_id = $contactTelegramId;
             $sellRequest->contact_telegram_source = $contactTelegramSource;
             $sellRequest->parameters = $reqField;
+            $sellRequest->source_channel = app(ConsentService::class)->sourceChannel($request);
+            $sellRequest->source_metadata = $this->sourceMetadata($request);
+            $sellRequest->fulfillment_method = $this->resolveSellFulfillmentMethod($request, $fiatSendGateway);
+            $sellRequest->processing_deadline = now()->addMinutes((int) basicControl()->crypto_send_time ?: 30);
             $sellRequest->save();
+
+            app(ConsentService::class)->record($request, $sellRequest, 'trade_terms');
+            app(AmlScreeningService::class)->screen($sellRequest, ['flow' => 'sell', 'fulfillment_method' => $sellRequest->fulfillment_method]);
+            app(DealProofService::class)->storeFromRequest($request, $sellRequest);
 
             return redirect()->route('sellProcessingOverview', $sellRequest->utr);
         }
@@ -357,6 +369,24 @@ class SellController extends Controller
         }
 
         return $telegram;
+    }
+
+    private function resolveSellFulfillmentMethod(Request $request, FiatSendGateway $fiatSendGateway): string
+    {
+        $method = (string) $request->input('fulfillment_method', '');
+        if (in_array($method, ['ip_account_manual', 'p2p_counterparty'], true)) {
+            return $method;
+        }
+
+        return $fiatSendGateway->processing_mode === 'manual' ? 'ip_account_manual' : 'ip_account_manual';
+    }
+
+    private function sourceMetadata(Request $request): array
+    {
+        return array_filter([
+            'telegram_init_data_present' => $request->filled('telegram_init_data') || $request->headers->has('X-Telegram-Init-Data'),
+            'user_agent' => $request->userAgent(),
+        ], fn($value) => $value !== null);
     }
 
     protected function formatQuoteResponse(array $quote): array

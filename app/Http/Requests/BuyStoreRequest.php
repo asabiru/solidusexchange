@@ -29,6 +29,10 @@ class BuyStoreRequest extends FormRequest
             'exchangeSendCurrency' => 'required|integer',
             'exchangeGetAmount' => 'required|numeric|min:0|not_in:0',
             'exchangeGetCurrency' => 'required|integer',
+            'user_agreement' => 'required|accepted',
+            'source_channel' => 'nullable|string|max:40',
+            'fulfillment_method' => 'nullable|string|max:60',
+            'payment_proof' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:10240',
         ];
     }
 }

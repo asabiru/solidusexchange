@@ -96,6 +96,12 @@ class SocialiteController extends Controller
             ->first();
 
         if ($searchUser) {
+            $searchUser->forceFill([
+                'telegram_id' => $telegramId,
+                'telegram_username' => $telegramAuth['username'] ?? $searchUser->telegram_username,
+                'telegram_auth_date' => Carbon::createFromTimestamp((int) $telegramAuth['auth_date']),
+                'telegram_payload' => $telegramAuth,
+            ])->save();
             Auth::login($searchUser);
             return redirect()->to(url('/'));
         }
@@ -108,6 +114,10 @@ class SocialiteController extends Controller
             'password' => Hash::make(Str::random(32)),
             'provider' => 'telegram',
             'provider_id' => $telegramId,
+            'telegram_id' => $telegramId,
+            'telegram_username' => $telegramAuth['username'] ?? null,
+            'telegram_auth_date' => Carbon::createFromTimestamp((int) $telegramAuth['auth_date']),
+            'telegram_payload' => $telegramAuth,
             'language_id' => $languageId,
             'email_verification' => 1,
             'sms_verification' => 1,

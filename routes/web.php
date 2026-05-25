@@ -19,6 +19,7 @@ use App\Http\Controllers\User\VerificationController;
 use App\Http\Controllers\FaSecurityController;
 use App\Http\Controllers\User\UserProfileController;
 use App\Http\Controllers\SocialiteController;
+use App\Http\Controllers\TelegramMiniAppController;
 
 $basicControl = basicControl();
 
@@ -35,6 +36,7 @@ Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestF
 Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
 Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset')->middleware('guest');
 Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('password.reset.update');
+Route::match(['get', 'post'], 'telegram/mini-app', [TelegramMiniAppController::class, 'launch'])->name('telegram.mini-app');
     Route::get('instruction/page', function () {
         return view('instruction-page');
     })->name('instructionPage');
@@ -261,5 +263,4 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
-
 

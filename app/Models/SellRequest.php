@@ -16,9 +16,16 @@ class SellRequest extends Model
     protected $guarded = ['id'];
     protected $casts = [
         'parameters' => 'object',
+        'p2p_counterparty_info' => 'array',
+        'client_fiat_confirmed' => 'boolean',
         'assigned_at' => 'datetime',
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
+        'processing_deadline' => 'datetime',
+        'fiat_sent_at' => 'datetime',
+        'crypto_confirmed_at' => 'datetime',
+        'client_confirm_deadline' => 'datetime',
+        'aml_checked_at' => 'datetime',
     ];
 
     public function sendCurrency()
@@ -59,6 +66,31 @@ class SellRequest extends Model
     public function cancelledByTrader()
     {
         return $this->belongsTo(Admin::class, 'cancelled_by_trader_id');
+    }
+
+    public function consentRecord()
+    {
+        return $this->belongsTo(ConsentRecord::class);
+    }
+
+    public function proofs()
+    {
+        return $this->morphMany(DealProof::class, 'proofable');
+    }
+
+    public function notes()
+    {
+        return $this->morphMany(DealNote::class, 'notable');
+    }
+
+    public function disputes()
+    {
+        return $this->morphMany(Dispute::class, 'disputable');
+    }
+
+    public function amlChecks()
+    {
+        return $this->morphMany(AmlCheck::class, 'checkable');
     }
 
     public function scopeManual(Builder $query): Builder

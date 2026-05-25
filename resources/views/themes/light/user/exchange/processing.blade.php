@@ -128,11 +128,7 @@
                                            id="destinationMsg">@lang('Enter your') {{optional($exchangeRequest->getCurrency)->currency_name}} @lang("recipient address")</label>
                                 </div>
                             </div>
-                            <div class="check">
-                                <input type="checkbox" class="form-check-input" id="exampleCheck1" required>
-                                <label class="form-check-label"
-                                       for="exampleCheck1">@lang("I agree with Terms of Use and Privacy Policy")</label>
-                            </div>
+                            @include($theme.'partials.trade-agreement-card', ['id' => 'exchangeAgreement'])
                             <div class="btn-are">
                                 <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Next step")</button>
                             </div>

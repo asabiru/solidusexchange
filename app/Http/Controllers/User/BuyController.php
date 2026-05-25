@@ -8,6 +8,9 @@ use App\Models\BuyRequest;
 use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
 use App\Models\Gateway;
+use App\Services\Aml\AmlScreeningService;
+use App\Services\Compliance\ConsentService;
+use App\Services\Compliance\DealProofService;
 use App\Services\TradeQuote\BuyQuoteService;
 use App\Traits\CalculateFees;
 use App\Traits\PaymentValidationCheck;
@@ -112,8 +115,17 @@ class BuyController extends Controller
             $buyRequest->network_fee = $quote['network_fee'];
             $buyRequest->final_amount = $quote['final_amount'];
             $buyRequest->status = 1;
+            $buyRequest->sub_status = 'payment_instruction_pending';
             $buyRequest->destination_wallet = $request->destination_wallet;
+            $buyRequest->source_channel = app(ConsentService::class)->sourceChannel($request);
+            $buyRequest->source_metadata = $this->sourceMetadata($request);
+            $buyRequest->fulfillment_method = $this->resolveBuyFulfillmentMethod($request);
+            $buyRequest->processing_deadline = now()->addMinutes((int) basicControl()->fiat_send_time ?: 30);
             $buyRequest->save();
+
+            app(ConsentService::class)->record($request, $buyRequest, 'trade_terms');
+            app(AmlScreeningService::class)->screen($buyRequest, ['flow' => 'buy', 'fulfillment_method' => $buyRequest->fulfillment_method]);
+            app(DealProofService::class)->storeFromRequest($request, $buyRequest);
 
             return redirect()->route('buyProcessingOverview', $buyRequest->utr);
         }
@@ -264,6 +276,22 @@ class BuyController extends Controller
     private function resolveBuyGateway(FiatCurrency $currency, int $gatewayId): Gateway
     {
         return $this->resolveBuyGatewayQuery($currency)->findOrFail($gatewayId);
+    }
+
+    private function resolveBuyFulfillmentMethod(Request $request): string
+    {
+        $method = (string) $request->input('fulfillment_method', '');
+        return in_array($method, ['sbp_qr_auto', 'bank_transfer_manual', 'p2p_best_rate'], true)
+            ? $method
+            : 'bank_transfer_manual';
+    }
+
+    private function sourceMetadata(Request $request): array
+    {
+        return array_filter([
+            'telegram_init_data_present' => $request->filled('telegram_init_data') || $request->headers->has('X-Telegram-Init-Data'),
+            'user_agent' => $request->userAgent(),
+        ], fn($value) => $value !== null);
     }
 
     private function resolveBuyGatewayQuery(?FiatCurrency $currency)

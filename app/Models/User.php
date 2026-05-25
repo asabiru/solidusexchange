@@ -48,7 +48,11 @@ class User extends Authenticatable
         'sms_key' => 'array',
         'push_key' => 'array',
         'in_app_key' => 'array',
-        'webhook_url' => 'object'
+        'webhook_url' => 'object',
+        'telegram_auth_date' => 'datetime',
+        'telegram_payload' => 'array',
+        'telegram_notifications_enabled' => 'boolean',
+        'last_aml_refresh_at' => 'datetime',
     ];
 
     protected $dates = ['deleted_at'];
@@ -156,15 +160,16 @@ class User extends Authenticatable
 
     public function getTelegramContactAttribute(): ?string
     {
-        if (($this->provider ?? null) !== 'telegram' || empty($this->provider_id)) {
+        $telegramId = $this->telegram_id ?: (($this->provider ?? null) === 'telegram' ? $this->provider_id : null);
+        if (empty($telegramId)) {
             return null;
         }
 
-        $username = trim((string) ($this->username ?? ''));
-        if ($username !== '' && $username !== 'tg_' . $this->provider_id && !Str::startsWith($username, 'tg_')) {
+        $username = trim((string) ($this->telegram_username ?: $this->username));
+        if ($username !== '' && $username !== 'tg_' . $telegramId && !Str::startsWith($username, 'tg_')) {
             return '@' . ltrim($username, '@');
         }
 
-        return 'Telegram ID: ' . $this->provider_id;
+        return 'Telegram ID: ' . $telegramId;
     }
 }

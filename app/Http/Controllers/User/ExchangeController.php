@@ -7,6 +7,9 @@ use App\Http\Requests\ExchangeStoreRequest;
 use App\Models\CryptoCurrency;
 use App\Models\CryptoMethod;
 use App\Models\ExchangeRequest;
+use App\Services\Aml\AmlScreeningService;
+use App\Services\Compliance\ConsentService;
+use App\Services\Compliance\DealProofService;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
 use App\Services\ExchangePipeline\ExchangeReservationService;
 use App\Services\ExchangePipeline\ExchangeSettlementService;
@@ -114,8 +117,16 @@ class ExchangeController extends Controller
 
             $quoteService->applyToExchange($exchangeRequest, $quote, $rateType);
             $exchangeRequest->status = 1;
+            $exchangeRequest->sub_status = 'crypto_deposit_pending';
             $exchangeRequest->destination_wallet = $request->destination_wallet;
+            $exchangeRequest->source_channel = app(ConsentService::class)->sourceChannel($request);
+            $exchangeRequest->source_metadata = $this->sourceMetadata($request);
+            $exchangeRequest->processing_deadline = now()->addMinutes((int) basicControl()->crypto_send_time ?: 30);
             $exchangeRequest->save();
+
+            app(ConsentService::class)->record($request, $exchangeRequest, 'trade_terms');
+            app(AmlScreeningService::class)->screen($exchangeRequest, ['flow' => 'exchange', 'rate_type' => $rateType]);
+            app(DealProofService::class)->storeFromRequest($request, $exchangeRequest);
 
             return redirect()->route('exchangeProcessingOverview', $exchangeRequest->utr);
         }
@@ -260,5 +271,13 @@ class ExchangeController extends Controller
             'quoteExpiresAt' => optional($quote['quote_expires_at'])->toIso8601String(),
             'receiveReadonly' => (bool)$quote['receive_readonly'],
         ];
+    }
+
+    private function sourceMetadata(Request $request): array
+    {
+        return array_filter([
+            'telegram_init_data_present' => $request->filled('telegram_init_data') || $request->headers->has('X-Telegram-Init-Data'),
+            'user_agent' => $request->userAgent(),
+        ], fn($value) => $value !== null);
     }
 }

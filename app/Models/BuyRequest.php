@@ -15,6 +15,17 @@ class BuyRequest extends Model
 
     protected $guarded = ['id'];
     protected $appends = ['show_exchange_rate', 'tracking_status', 'admin_status'];
+    protected $casts = [
+        'source_metadata' => 'array',
+        'p2p_counterparty_info' => 'array',
+        'assigned_at' => 'datetime',
+        'completed_at' => 'datetime',
+        'cancelled_at' => 'datetime',
+        'processing_deadline' => 'datetime',
+        'fiat_confirmed_at' => 'datetime',
+        'crypto_sent_at' => 'datetime',
+        'aml_checked_at' => 'datetime',
+    ];
 
     public function sendCurrency()
     {
@@ -39,6 +50,36 @@ class BuyRequest extends Model
     public function deposit()
     {
         return $this->morphOne(Deposit::class, 'depositable')->latest();
+    }
+
+    public function consentRecord()
+    {
+        return $this->belongsTo(ConsentRecord::class);
+    }
+
+    public function assignedTrader()
+    {
+        return $this->belongsTo(Admin::class, 'assigned_trader_id');
+    }
+
+    public function proofs()
+    {
+        return $this->morphMany(DealProof::class, 'proofable');
+    }
+
+    public function notes()
+    {
+        return $this->morphMany(DealNote::class, 'notable');
+    }
+
+    public function disputes()
+    {
+        return $this->morphMany(Dispute::class, 'disputable');
+    }
+
+    public function amlChecks()
+    {
+        return $this->morphMany(AmlCheck::class, 'checkable');
     }
 
     public function getShowExchangeRateAttribute()
