@@ -11,7 +11,7 @@
             <div class="col-lg-6">
                 <div class="hero-content">
                     <div class="hero-badge">
-                        <span class="badge-text">Среднее время обмена ~7 минут</span>
+                        <span class="badge-text">Среднее время обмена — около 7 минут</span>
                     </div>
                     <h1 class="hero-title">
                         Обмен криптовалют<br>
@@ -27,7 +27,7 @@
                                     <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
                                 </svg>
                             </div>
-                            <span>Резервы on-chain</span>
+                            <span>Прозрачные резервы</span>
                         </div>
                         <div class="bullet-item">
                             <div class="bullet-icon">
@@ -35,7 +35,7 @@
                                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
                                 </svg>
                             </div>
-                            <span>AML-проверка Chainalysis</span>
+                            <span>Проверка AML</span>
                         </div>
                         <div class="bullet-item">
                             <div class="bullet-icon">

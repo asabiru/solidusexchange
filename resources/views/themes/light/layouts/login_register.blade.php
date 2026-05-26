@@ -22,7 +22,6 @@
 </head>
 
 <body  class="">
-@include($theme.'partials.loader')
 @yield('content')
 
 @include($theme.'partials.script')
@@ -30,7 +29,7 @@
 @stack('extra_scripts')
 @include($theme.'partials.flash-message')
 
-@include('plugins')
+@include('plugins', ['skipCommunicationWidgets' => true])
 
 
 </body>

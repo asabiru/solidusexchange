@@ -76,7 +76,7 @@
                                     <span class="auth-mobile-intro-badge">SolidChange</span>
                                     <h3>Вход в кабинет</h3>
                                 </div>
-                                <p>Красивый и быстрый вход с поддержкой Telegram Mini App и social login.</p>
+                                <p>Войдите по логину и паролю или откройте сайт внутри Telegram для быстрого входа.</p>
                             </div>
 
                             @if(config('socialite.telegram_status') && $telegramBotName !== '')
@@ -85,7 +85,7 @@
                                         <span class="telegram-miniapp-icon"><i class="fa-brands fa-telegram"></i></span>
                                         <span class="telegram-miniapp-copy">
                                             <strong>Войти через Telegram</strong>
-                                            <small>Для Telegram Mini App и быстрого входа</small>
+                                            <small>Быстрый вход внутри Telegram Mini App</small>
                                         </span>
                                     </button>
                                     <div class="telegram-miniapp-status" id="telegramMiniAppStatus"></div>
@@ -216,14 +216,21 @@
                                     @if(config('socialite.telegram_status') && $telegramBotName !== '')
                                         <div class="col-12 col-sm-6">
                                             @if($telegramWidgetAllowed)
-                                                <div class="telegram-login-widget text-center">
-                                                    <script async src="https://telegram.org/js/telegram-widget.js?22"
-                                                            data-telegram-login="{{ $telegramBotName }}"
-                                                            data-size="large"
-                                                            data-radius="8"
-                                                            data-auth-url="{{ $telegramAuthUrl }}"
-                                                            data-request-access="write"></script>
+                                                <div class="telegram-login-widget-shell d-none d-md-flex">
+                                                    <div class="telegram-login-widget text-center"
+                                                         id="telegramLoginWidget"
+                                                         data-bot-name="{{ $telegramBotName }}"
+                                                         data-auth-url="{{ $telegramAuthUrl }}"
+                                                         data-bot-url="https://t.me/{{ $telegramBotName }}?start=web_login">
+                                                        <span>Загружаем вход через Telegram...</span>
+                                                    </div>
                                                 </div>
+                                                <a href="https://t.me/{{ $telegramBotName }}?start=web_login"
+                                                   target="_blank" rel="noopener"
+                                                   class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex d-md-none align-items-center justify-content-center gap-2">
+                                                    <i class="fab fa-telegram-plane"></i>
+                                                    <span>Открыть Telegram</span>
+                                                </a>
                                             @else
                                                 <a href="https://t.me/{{ $telegramBotName }}?start=web_login"
                                                    target="_blank" rel="noopener"
@@ -259,7 +266,9 @@
 @endpush
 
 @push('extra_scripts')
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    @if(config('socialite.telegram_status') && $telegramBotName !== '')
+        <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+    @endif
     <style>
         .login-signup-page {
             position: relative;
@@ -532,6 +541,10 @@
             width: 100%;
         }
 
+        .telegram-login-widget-shell {
+            width: 100%;
+        }
+
         .social-login-grid .telegram-login-widget {
             min-height: 52px;
             width: 100%;
@@ -541,6 +554,9 @@
             border-radius: 12px;
             overflow: hidden;
             background: linear-gradient(120deg, var(--solidus-accent), var(--solidus-accent-2));
+            color: #0b0608;
+            font-weight: 700;
+            text-align: center;
         }
 
         .social-login-grid .telegram-login-widget iframe {
@@ -634,15 +650,44 @@
 
         const telegramMiniAppLogin = document.getElementById('telegramMiniAppLogin');
         const telegramMiniAppStatus = document.getElementById('telegramMiniAppStatus');
+        const telegramLoginWidget = document.getElementById('telegramLoginWidget');
+
+        if (telegramLoginWidget && window.matchMedia('(min-width: 768px)').matches) {
+            const renderTelegramWidget = function () {
+                telegramLoginWidget.textContent = '';
+
+                const widgetScript = document.createElement('script');
+                widgetScript.async = true;
+                widgetScript.src = 'https://telegram.org/js/telegram-widget.js?22';
+                widgetScript.setAttribute('data-telegram-login', telegramLoginWidget.dataset.botName);
+                widgetScript.setAttribute('data-size', 'large');
+                widgetScript.setAttribute('data-radius', '8');
+                widgetScript.setAttribute('data-auth-url', telegramLoginWidget.dataset.authUrl);
+                widgetScript.setAttribute('data-request-access', 'write');
+                widgetScript.onerror = function () {
+                    telegramLoginWidget.innerHTML =
+                        '<a href="' + telegramLoginWidget.dataset.botUrl + '" target="_blank" rel="noopener">Открыть Telegram для входа</a>';
+                };
+
+                telegramLoginWidget.appendChild(widgetScript);
+            };
+
+            if ('requestIdleCallback' in window) {
+                window.requestIdleCallback(renderTelegramWidget, { timeout: 1200 });
+            } else {
+                window.setTimeout(renderTelegramWidget, 300);
+            }
+        }
+
         if (telegramMiniAppLogin) {
             telegramMiniAppLogin.addEventListener('click', async function () {
                 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
                 if (!tg || !tg.initData) {
-                    telegramMiniAppStatus.textContent = 'Откройте страницу внутри Telegram Mini App или используйте виджет Telegram ниже.';
+                    telegramMiniAppStatus.textContent = 'Если вы не в Telegram, войдите по логину и паролю или откройте Telegram кнопкой ниже.';
                     return;
                 }
 
-                telegramMiniAppStatus.textContent = 'Проверяем Telegram...';
+                telegramMiniAppStatus.textContent = 'Проверяем аккаунт Telegram...';
                 try {
                     const response = await fetch('{{ route('telegram.miniapp.login') }}', {
                         method: 'POST',
@@ -659,7 +704,7 @@
                     }
                     window.location.href = data.redirect || '{{ url('/') }}';
                 } catch (error) {
-                    telegramMiniAppStatus.textContent = error.message || 'Не удалось войти через Telegram.';
+                    telegramMiniAppStatus.textContent = error.message || 'Не удалось войти через Telegram. Попробуйте ещё раз.';
                 }
             });
         }

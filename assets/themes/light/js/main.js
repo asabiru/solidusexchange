@@ -1,7 +1,7 @@
 // Preloader area
 function handlePreloader() {
     if ($('.loader-wrap').length) {
-        $('.loader-wrap').delay(1000).fadeOut(300);
+        $('.loader-wrap').stop(true, true).delay(150).fadeOut(200);
     }
 }
 $(document).ready(function () {
@@ -11,6 +11,12 @@ $(document).ready(function () {
         $(".preloader-close").on("click", function () {
             $('.loader-wrap').stop(true).fadeOut(300);
         });
+    }
+});
+
+$(window).on('load pageshow', function () {
+    if ($('.loader-wrap').length) {
+        $('.loader-wrap').stop(true, true).fadeOut(0);
     }
 });
 // Preloader area end
@@ -25,6 +31,9 @@ const toggleSideMenu = () => {
 window.addEventListener("scroll", function () {
     let scrollpos = window.scrollY;
     const header = document.querySelector("nav");
+    if (!header) {
+        return;
+    }
     const headerHeight = header.offsetHeight;
 
     if (scrollpos >= headerHeight) {
@@ -37,47 +46,50 @@ window.addEventListener("scroll", function () {
 
 $(document).ready(function () {
     // owl carousel dashboard card
-    $('.carousel-area1').owlCarousel({
-        loop: true,
-        autoplay: false,
-        margin: 10,
-        nav: true,
-        dots: false,
-        // rtl:true,
-        responsive: {
-            0: {
-                items: 1
-            },
-            400: {
-                items: 2
-            },
-            991: {
-                items: 2
+    if ($('.carousel-area1').length && typeof $.fn.owlCarousel === 'function') {
+        $('.carousel-area1').owlCarousel({
+            loop: true,
+            autoplay: false,
+            margin: 10,
+            nav: true,
+            dots: false,
+            // rtl:true,
+            responsive: {
+                0: {
+                    items: 1
+                },
+                400: {
+                    items: 2
+                },
+                991: {
+                    items: 2
+                }
             }
-        }
-    });
+        });
+    }
 
     // Swiper-slider livestream-swiper
-    var swiper = new Swiper(".livestream-swiper", {
-        effect: "coverflow",
-        grabCursor: true,
-        centeredSlides: true,
-        slidesPerView: "auto",
-        coverflowEffect: {
-            rotate: 0,
-            stretch: 0,
-            depth: 100,
-            modifier: 1,
-            slideShadows: true,
-        },
-        // Navigation arrows
-        navigation: {
-            nextEl: '.swiper-button-next',
-            prevEl: '.swiper-button-prev',
-        },
-        loop: true,
-
-    });
+    if (typeof Swiper === 'function' && document.querySelector('.livestream-swiper')) {
+        new Swiper(".livestream-swiper", {
+            effect: "coverflow",
+            grabCursor: true,
+            centeredSlides: true,
+            slidesPerView: "auto",
+            coverflowEffect: {
+                rotate: 0,
+                stretch: 0,
+                depth: 100,
+                modifier: 1,
+                slideShadows: true,
+            },
+            // Navigation arrows
+            navigation: {
+                nextEl: '.swiper-button-next',
+                prevEl: '.swiper-button-prev',
+            },
+            loop: true,
+        });
+    }
     // Testimonial section start
     const $testimonialCarousel = $('.testimonial-carousel');
     if ($testimonialCarousel.length && typeof $.fn.owlCarousel === 'function') {
@@ -121,18 +133,22 @@ $(document).ready(function () {
     }
     // Testimonial section end
     // cmn select2 start
-    $(document).ready(function () {
-        $('.cmn-select2').select2({});
-    });
+    if (typeof $.fn.select2 === 'function') {
+        $(document).ready(function () {
+            $('.cmn-select2').select2({});
+        });
+    }
     // cmn select2 end
 
     //cmn-select2 with image start
-    $(document).ready(function () {
-        $('.cmn-select2-image').select2({
-            templateResult: formatState,
-            templateSelection: formatState
+    if (typeof $.fn.select2 === 'function') {
+        $(document).ready(function () {
+            $('.cmn-select2-image').select2({
+                templateResult: formatState,
+                templateSelection: formatState
+            });
         });
-    });
+    }
 
 
     function formatState(state) {
@@ -152,9 +168,11 @@ $(document).ready(function () {
 
 
     // cmn select2 modal start
-    $(".modal-select").select2({
-        dropdownParent: $("#formModal"),
-    });
+    if (typeof $.fn.select2 === 'function') {
+        $(".modal-select").select2({
+            dropdownParent: $("#formModal"),
+        });
+    }
     // cmn select2 modal start
 
 });

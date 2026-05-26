@@ -18,8 +18,12 @@
 <!--End of Google analytic Script-->
 
 
+@php
+    $skipCommunicationWidgets = $skipCommunicationWidgets ?? false;
+@endphp
+
 <!--Start of Tawk.to Script-->
-@if(basicControl()->tawk_status)
+@if(!$skipCommunicationWidgets && basicControl()->tawk_status)
     <script type="text/javascript">
         // $(document).ready(function () {
         var Tawk_SRC = 'https://embed.tawk.to/' + "{{ trim(basicControl()->tawk_id) }}";
@@ -38,7 +42,7 @@
 
 
 <!--start of Facebook Messenger Script-->
-@if(basicControl()->fb_messenger_status)
+@if(!$skipCommunicationWidgets && basicControl()->fb_messenger_status)
     <div id="fb-root"></div>
     <script>
         "use strict";
