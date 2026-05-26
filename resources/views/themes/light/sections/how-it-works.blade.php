@@ -1,3 +1,13 @@
+@php
+    \ = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn(\) => \->where('name', 'how_it_work')->where('type', 'single'))
+        ->where('language_id', 1)
+        ->first();
+    \ = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn(\) => \->where('name', 'how_it_work')->where('type', 'multiple'))
+        ->where('language_id', 1)
+        ->get();
+@endphp
 <!-- HowItWorks Section - eazy228/design style -->
 <section class="how-it-works-section" id="how">
     <div class="container">
@@ -6,7 +16,7 @@
             <h2 class="section-title">Как работает сервис</h2>
         </div>
 
-        <h3 class="how-subtitle">Четыре шага. Без скрытых этапов.</h3>
+        <h3 class="how-subtitle">{{ \ ? __(\->description["sub_title"] ?? "") : "Четыре шага. Без скрытых этапов." }}</h3>
 
         <div class="how-steps">
             <div class="how-step">

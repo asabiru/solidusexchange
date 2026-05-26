@@ -1,3 +1,13 @@
+@php
+    \ = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn(\) => \->where('name', 'why_choose_us')->where('type', 'single'))
+        ->where('language_id', 1)
+        ->first();
+    \ = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn(\) => \->where('name', 'why_choose_us')->where('type', 'multiple'))
+        ->where('language_id', 1)
+        ->get();
+@endphp
 <!-- Advantages Section - eazy228/design style -->
 <section class="advantages-section" id="advantages">
     <div class="container">
@@ -6,7 +16,7 @@
             <h2 class="section-title">Преимущества</h2>
         </div>
 
-        <h3 class="advantages-subtitle">Почему выбирают нас</h3>
+        <h3 class="advantages-subtitle">{{ \ ? __(\->description["sub_title"] ?? "") : "Почему выбирают нас" }}</h3>
 
         <div class="advantages-grid">
             <div class="advantage-card">
