@@ -752,16 +752,23 @@ textarea.form-control {
 
 .form-control,
 .form-select {
-    border-radius: 5px;
-    background-color: var(--input-color);
-    height: 45px;
-    border: 1px solid var(--input-color);
+    border-radius: var(--radius-md);
+    background-color: var(--color-bg-elevated);
+    height: 48px;
+    border: 1px solid var(--color-border-subtle);
+    color: var(--color-text-primary);
+    transition: var(--transition);
 }
 
 .form-control:focus,
 .form-select:focus {
-    box-shadow: 0 0 0 4px rgba(0, 208, 149, 0.1);
-    border: 1px solid var(--primary-color);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
+    border: 1px solid var(--color-accent);
+    background-color: var(--color-bg);
+}
+
+.form-control::placeholder {
+    color: var(--color-text-muted);
 }
 
 .form-check label,
@@ -770,13 +777,13 @@ textarea.form-control {
 }
 
 .form-check-input:checked {
-    background-color: var(--primary-color);
-    border-color: var(--primary-color);
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
 }
 
 .form-check-input:focus {
-    border-color: var(--primary-color);
-    box-shadow: none;
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px var(--color-accent-soft);
 }
 
 .rtl .form-check {
@@ -1750,52 +1757,60 @@ Offcanvas end
 }
 
 .cmn-btn {
-    background-color: var(--primary-color);
-    padding: 10px 20px;
-    border-radius: 4px;
-    border: 1px solid var(--primary-color);
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-accent);
     transition: var(--transition);
     font-size: 16px;
-    color: var(--white);
+    color: var(--color-bg);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: capitalize;
-    gap: 5px;
+    gap: 8px;
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.25);
+    cursor: pointer;
 }
 
 .cmn-btn:hover {
-    color: var(--white);
-    background-color: var(--btn-hover-bg);
-    border: 1px solid var(--btn-hover-bg);
+    color: var(--color-bg);
+    background: linear-gradient(135deg, var(--color-accent-hover) 0%, #f8e6c8 100%);
+    border: 1px solid var(--color-accent-hover);
+    box-shadow: 0 6px 16px rgba(232, 201, 160, 0.35);
+    transform: translateY(-1px);
 }
 
 .cmn-btn2 {
-    background-color: transparent;
-    padding: 10px 20px;
-    border-radius: 4px;
-    border: 1px solid var(--primary-color);
+    background: transparent;
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-accent);
     transition: var(--transition);
     font-size: 16px;
-    color: var(--primary-color);
+    color: var(--color-accent);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-weight: 500;
+    font-weight: 600;
     text-transform: capitalize;
+    cursor: pointer;
 }
 
 .cmn-btn2:hover {
-    color: var(--white);
-    background-color: var(--primary-color);
-    border: 1px solid var(--primary-color);
+    color: var(--color-bg);
+    background: var(--color-accent);
+    border: 1px solid var(--color-accent);
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.25);
+    transform: translateY(-1px);
 }
 
 .cmn-btn3 {
-    background: var(--white);
-    padding: 10px 20px;
-    border-radius: 4px;
+    background: var(--color-bg-elevated);
+    padding: 12px 24px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-subtle);
     transition: var(--transition);
     font-size: 16px;
     display: inline-flex;
@@ -1806,8 +1821,10 @@ Offcanvas end
 }
 
 .cmn-btn3:hover {
-    color: var(--white);
-    background: var(--primary-color);
+    color: var(--color-bg);
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.25);
 }
 
 .cmn-btn3 img {
@@ -2834,10 +2851,12 @@ Padding bottom
 }
 
 .navbar {
-    transition: backgaound 0.3s ease-out;
-    padding: 10px;
+    transition: background 0.3s ease-out;
+    padding: 16px 0;
     z-index: 9999;
-    background-color: var(--bg-color3);
+    background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg) 100%);
+    border-bottom: 1px solid var(--color-border-subtle);
+    backdrop-filter: blur(8px);
 }
 
 .navbar .container {
@@ -2845,17 +2864,25 @@ Padding bottom
 }
 
 .navbar .navbar-toggler {
-    background: var(--primary-color);
-    color: var(--white);
-    height: 40px;
-    width: 40px;
+    background: var(--color-accent);
+    color: var(--color-bg);
+    height: 44px;
+    width: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 22px;
-    border: 1px solid var(--primary-color);
-    border-radius: 62% 38% 46% 54%/60% 63% 37% 40%;
-    box-shadow: none;
+    font-size: 20px;
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.25);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.navbar .navbar-toggler:hover {
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
+    transform: scale(1.05);
 }
 
 .navbar .cmn-btn-close {

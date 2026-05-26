@@ -72,18 +72,20 @@ Typography
 }
 /* Box Card section start*/
 .box-card {
-    padding: 10px;
-    border-radius: 10px;
-    background-color: hsl(var(--base)/0.1);
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg) 100%);
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    background-image: url(../img/box-card-bg.png);
+    gap: 16px;
+    border: 1px solid var(--color-border-subtle);
+    box-shadow: var(--shadow1);
+    backdrop-filter: blur(8px);
 }
 
 .grayish-custom-card {
-    background-color: rgb(106 154 157 / 20%);
-    background-image: url(../img/grayish-blue-card-shape.png);
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.15) 0%, rgba(232, 201, 160, 0.05) 100%);
+    border: 1px solid var(--color-accent-soft);
 }
 
 /*----------------------------------------------
@@ -147,31 +149,33 @@ Dark theme section (default champagne dark theme)
 }
 
 .dark-theme .grayish-custom-card {
-    background-color: rgb(107 74 138 / 40%);
-    background-image: url(../img/grayish-blue-card-shape.png);
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.25) 0%, rgba(232, 201, 160, 0.1) 100%);
+    border: 1px solid var(--color-accent-soft);
 }
 
 .dark-theme .box-card {
-    background-color: var(--bg-color2);
-    color: var(--body-color);
+    background: linear-gradient(135deg, var(--color-bg-elevated) 0%, var(--color-bg) 100%);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-subtle);
 }
 
 .dark-theme .box-card .icon-box {
-    background-color: var(--bg-color3);
-    color: var(--primary-color);
+    background: linear-gradient(135deg, var(--color-accent-soft) 0%, transparent 100%);
+    color: var(--color-accent);
 }
 
 .dark-theme .box-card .bottom {
-    background-color: rgba(45, 30, 60, 0.7);
-    color: var(--body-color);
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.15) 0%, transparent 100%);
+    color: var(--color-text-primary);
+    border: 1px solid var(--color-border-subtle);
 }
 
 .dark-theme .box-card .text-box .title {
-    color: var(--heading-color);
+    color: var(--color-text-primary);
 }
 
 .dark-theme .box-card .text-box .text {
-    color: var(--body-color);
+    color: var(--color-text-secondary);
 }
 
 /* Dashboard specific dark theme styles */
