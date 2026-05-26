@@ -3,12 +3,16 @@ Hero Section - eazy228/design style
 ----------------------------------------------*/
 .hero-section {
     position: relative;
-    padding: 120px 0 80px;
-    min-height: 90vh;
-    display: flex;
-    align-items: center;
+    padding: 80px 0 60px;
+    min-height: auto;
+    display: block;
     background: var(--color-bg);
     overflow: hidden;
+}
+
+.hero-section .container {
+    position: relative;
+    z-index: 2;
 }
 
 .hero-grid {
@@ -301,7 +305,7 @@ Swap Card - eazy228/design style
     background: var(--color-accent);
     border: none;
     border-radius: var(--radius-md);
-    color: var(--color-bg);
+    color: #0b0608;
     font-size: 15px;
     font-weight: 600;
     cursor: pointer;

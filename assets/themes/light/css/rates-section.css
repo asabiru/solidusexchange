@@ -2,7 +2,7 @@
 Rates Section - eazy228/design style
 ----------------------------------------------*/
 .rates-section {
-    padding: 100px 0;
+    padding: 60px 0;
     background: var(--color-bg);
 }
 
@@ -243,6 +243,27 @@ Rates Section - eazy228/design style
     background: var(--color-accent-hover);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(232, 201, 160, 0.3);
+}
+
+.currency-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--color-accent-soft);
+    border-radius: 50%;
+    color: var(--color-accent);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.currency-flag img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
 }
 
 /* Responsive */

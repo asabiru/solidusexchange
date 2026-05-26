@@ -59,7 +59,11 @@
                     <div class="table-cell">
                         <div class="currency-info">
                             <div class="currency-flag">
-                                <img src="{{ getFile($currency->driver, $currency->image) }}" alt="{{ $currency->code }}">
+                                @if($currency->image)
+                                    <img src="{{ getFile($currency->driver, $currency->image) }}" alt="{{ $currency->code }}" onerror="this.src='https://via.placeholder.com/32?text={{ substr($currency->code, 0, 2) }}'">
+                                @else
+                                    <div class="currency-placeholder">{{ substr($currency->code, 0, 2) }}</div>
+                                @endif
                             </div>
                             <div class="currency-details">
                                 <span class="currency-code">{{ $currency->code }}</span>
@@ -68,7 +72,7 @@
                         </div>
                     </div>
                     <div class="table-cell">
-                        <span class="price-value">{{ number_format($currency->usd_rate ?? $currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
+                        <span class="price-value">{{ $currency->usd_rate ? number_format($currency->usd_rate, $currency->usd_rate < 10 ? 4 : 2) : number_format($currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
                     </div>
                     <div class="table-cell">
                         <span class="change-value {{ rand(0,1) ? 'positive' : 'negative' }}">
@@ -80,7 +84,7 @@
                             <svg width="80" height="30" viewBox="0 0 80 30">
                                 <polyline
                                     fill="none"
-                                    stroke="{{ rand(0,1) ? 'var(--color-success)' : 'var(--color-danger)' }}"
+                                    stroke="{{ rand(0,1) ? '#e8c9a0' : '#c9786a' }}"
                                     stroke-width="2"
                                     points="0,15 8,10 16,20 24,12 32,18 40,8 48,15 56,22 64,12 72,18 80,14"
                                 />
