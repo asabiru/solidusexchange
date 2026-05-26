@@ -1,3 +1,16 @@
+/* Champagne/Gold Theme Variables for Admin Panel */
+:root {
+    --admin-bg-primary: #0b0608;
+    --admin-bg-secondary: #1a0f14;
+    --admin-bg-tertiary: #2d1f24;
+    --admin-accent: #e8c9a0;
+    --admin-accent-secondary: #c9a227;
+    --admin-text-primary: #e8c9a0;
+    --admin-text-secondary: #d4c4b0;
+    --admin-border: rgba(232, 201, 160, 0.3);
+    --admin-card-bg: rgba(26, 15, 20, 0.95);
+}
+
 [v-cloak] {
     display: none;
 }
@@ -28,6 +41,154 @@
 .alert-soft-dark {
     color: #132144!important;
     background-color: rgba(19, 33, 68, .15);
+}
+
+/* Admin Panel Champagne Theme Styles */
+.card {
+    background-color: var(--admin-card-bg);
+    border: 1px solid var(--admin-border);
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.card-header {
+    background-color: var(--admin-bg-secondary);
+    border-bottom: 1px solid var(--admin-border);
+    color: var(--admin-text-primary);
+    border-radius: 12px 12px 0 0;
+}
+
+.card-body {
+    background-color: var(--admin-card-bg);
+    color: var(--admin-text-secondary);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #e8c9a0 0%, #c9a227 100%);
+    border: none;
+    color: #0b0608;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #c9a227 0%, #e8c9a0 100%);
+    box-shadow: 0 4px 15px rgba(232, 201, 160, 0.4);
+    color: #0b0608;
+}
+
+.btn-secondary {
+    background-color: var(--admin-bg-tertiary);
+    border: 1px solid var(--admin-border);
+    color: var(--admin-text-primary);
+    border-radius: 8px;
+}
+
+.btn-secondary:hover {
+    background-color: var(--admin-border);
+    color: var(--admin-accent);
+}
+
+.form-control {
+    background-color: var(--admin-bg-secondary);
+    border: 1px solid var(--admin-border);
+    color: var(--admin-text-primary);
+    border-radius: 8px;
+}
+
+.form-control:focus {
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 10px rgba(232, 201, 160, 0.3);
+    background-color: var(--admin-bg-tertiary);
+}
+
+.form-control::placeholder {
+    color: var(--admin-text-secondary);
+}
+
+.form-label {
+    color: var(--admin-text-primary);
+    font-weight: 500;
+}
+
+.navbar {
+    background-color: var(--admin-bg-primary);
+    border-bottom: 1px solid var(--admin-border);
+}
+
+.navbar-brand {
+    color: var(--admin-accent);
+}
+
+.nav-link {
+    color: var(--admin-text-secondary);
+}
+
+.nav-link:hover, .nav-link.active {
+    color: var(--admin-accent);
+}
+
+.sidebar {
+    background-color: var(--admin-bg-secondary);
+    border-right: 1px solid var(--admin-border);
+}
+
+.sidebar .nav-link {
+    color: var(--admin-text-secondary);
+    border-radius: 8px;
+    margin: 4px 8px;
+}
+
+.sidebar .nav-link:hover,
+.sidebar .nav-link.active {
+    background-color: var(--admin-bg-tertiary);
+    color: var(--admin-accent);
+    border-left: 3px solid var(--admin-accent);
+}
+
+.table {
+    color: var(--admin-text-secondary);
+}
+
+.table thead th {
+    background-color: var(--admin-bg-secondary);
+    color: var(--admin-accent);
+    border-bottom: 2px solid var(--admin-border);
+}
+
+.table tbody tr {
+    border-bottom: 1px solid var(--admin-border);
+}
+
+.table tbody tr:hover {
+    background-color: var(--admin-bg-tertiary);
+}
+
+.badge {
+    border-radius: 6px;
+}
+
+.badge-primary {
+    background-color: var(--admin-accent);
+    color: #0b0608;
+}
+
+.pagination .page-link {
+    background-color: var(--admin-bg-secondary);
+    border: 1px solid var(--admin-border);
+    color: var(--admin-text-primary);
+}
+
+.pagination .page-link:hover {
+    background-color: var(--admin-accent);
+    color: #0b0608;
+}
+
+.pagination .page-item.active .page-link {
+    background-color: var(--admin-accent);
+    border-color: var(--admin-accent);
+    color: #0b0608;
 }
 .login-form {
     max-width: 30rem;

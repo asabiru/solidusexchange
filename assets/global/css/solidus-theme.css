@@ -4,102 +4,102 @@
 :root[data-solidus-admin-theme='default'],
 :root[data-solidus-admin-theme='light'],
 :root[data-solidus-site-theme='light'] {
-    --solidus-bg: #f4f1ff;
-    --solidus-surface: rgba(255, 255, 255, 0.92);
-    --solidus-surface-soft: rgba(247, 241, 255, 0.9);
-    --solidus-border: rgba(109, 63, 192, 0.2);
-    --solidus-border-strong: rgba(109, 63, 192, 0.34);
-    --solidus-text: #27164b;
-    --solidus-muted: #60557f;
-    --solidus-accent: #b76bff !important;
-    --solidus-accent-2: #8d3dff !important;
-    --solidus-cyan: #8d3dff !important;
-    --solidus-secondary-rgb: 141, 61, 255 !important;
-    --solidus-shadow: 0 14px 36px rgba(44, 20, 98, 0.14);
-    --solidus-glow: 0 0 0 1px rgba(161, 114, 255, 0.24), 0 12px 34px rgba(74, 30, 148, 0.2);
+    --solidus-bg: #faf8f5;
+    --solidus-surface: rgba(255, 255, 255, 0.95);
+    --solidus-surface-soft: rgba(250, 248, 245, 0.9);
+    --solidus-border: rgba(201, 162, 39, 0.25);
+    --solidus-border-strong: rgba(201, 162, 39, 0.4);
+    --solidus-text: #2d2416;
+    --solidus-muted: #5a4a3a;
+    --solidus-accent: #e8c9a0 !important;
+    --solidus-accent-2: #c9a227 !important;
+    --solidus-cyan: #d4a84b !important;
+    --solidus-secondary-rgb: 201, 162, 39 !important;
+    --solidus-shadow: 0 14px 36px rgba(45, 36, 22, 0.12);
+    --solidus-glow: 0 0 0 1px rgba(232, 201, 160, 0.3), 0 12px 34px rgba(201, 162, 39, 0.15);
     --solidus-body-bg:
-        radial-gradient(circle at 18% 12%, rgba(178, 133, 255, 0.26) 0, rgba(178, 133, 255, 0) 34%),
-        radial-gradient(circle at 88% 7%, rgba(204, 141, 255, 0.14) 0, rgba(204, 141, 255, 0) 30%),
-        linear-gradient(180deg, #fbf9ff 0%, #f2ecff 55%, #f8f5ff 100%);
+        radial-gradient(circle at 18% 12%, rgba(232, 201, 160, 0.15) 0, rgba(232, 201, 160, 0) 34%),
+        radial-gradient(circle at 88% 7%, rgba(201, 162, 39, 0.1) 0, rgba(201, 162, 39, 0) 30%),
+        linear-gradient(180deg, #faf8f5 0%, #f5f0e8 55%, #faf8f5 100%);
 
     --body-font: "Rajdhani", sans-serif;
     --heading-font: "Orbitron", sans-serif;
-    --primary-color: #b76bff !important;
-    --primary-color-rgb: 183, 107, 255 !important;
-    --secondary-color: #8d3dff !important;
-    --primary-color-opacity-low: rgba(183, 107, 255, 0.1) !important;
-    --secondary-color-opacity-low: rgba(141, 61, 255, 0.12) !important;
-    --heading-color: #27164b;
-    --black: #27164b;
-    --body-color: #4f456d;
-    --grayish-blue: #756a98;
-    --bg-color1: linear-gradient(180deg, #fbf9ff 0%, #f2ecff 100%);
+    --primary-color: #c9a227 !important;
+    --primary-color-rgb: 201, 162, 39 !important;
+    --secondary-color: #e8c9a0 !important;
+    --primary-color-opacity-low: rgba(201, 162, 39, 0.1) !important;
+    --secondary-color-opacity-low: rgba(232, 201, 160, 0.12) !important;
+    --heading-color: #2d2416;
+    --black: #2d2416;
+    --body-color: #4a3f2f;
+    --grayish-blue: #5a4a3a;
+    --bg-color1: linear-gradient(180deg, #faf8f5 0%, #f5f0e8 100%);
     --bg-color2: #ffffff;
-    --bg-color3: #f8f3ff;
-    --bg-grad-color: #f8f3ff;
-    --bg-grad-color-trans: rgba(248, 243, 255, 0);
-    --border-color1: rgba(109, 63, 192, 0.18);
-    --border-color2: rgba(109, 63, 192, 0.25);
-    --border-color3: #2b1d4f;
+    --bg-color3: #faf8f5;
+    --bg-grad-color: #faf8f5;
+    --bg-grad-color-trans: rgba(250, 248, 245, 0);
+    --border-color1: rgba(201, 162, 39, 0.2);
+    --border-color2: rgba(201, 162, 39, 0.3);
+    --border-color3: #2d2416;
     --input-color: #ffffff;
-    --loader-color: #f6f1ff;
-    --shadow1: 0 12px 30px rgba(63, 30, 132, 0.12);
-    --shadow2: 0 8px 24px rgba(63, 30, 132, 0.1);
-    --shadow3: 0 0 0 1px rgba(139, 76, 255, 0.24), 0 12px 30px rgba(63, 30, 132, 0.14);
-    --blue: #8d3dff !important;
-    --soft-blue: #d9bbff !important;
-    --vivid-cyan: #b76bff !important;
-    --btn-hover-bg: #9f63ff !important;
-    --bs-primary: #b76bff !important;
-    --bs-primary-rgb: 183, 107, 255 !important;
-    --bs-link-color: #8d3dff !important;
-    --bs-link-hover-color: #4d1da8 !important;
+    --loader-color: #faf8f5;
+    --shadow1: 0 12px 30px rgba(45, 36, 22, 0.1);
+    --shadow2: 0 8px 24px rgba(45, 36, 22, 0.08);
+    --shadow3: 0 0 0 1px rgba(232, 201, 160, 0.25), 0 12px 30px rgba(45, 36, 22, 0.12);
+    --blue: #c9a227 !important;
+    --soft-blue: #e8c9a0 !important;
+    --vivid-cyan: #d4a84b !important;
+    --btn-hover-bg: #b8912a !important;
+    --bs-primary: #c9a227 !important;
+    --bs-primary-rgb: 201, 162, 39 !important;
+    --bs-link-color: #c9a227 !important;
+    --bs-link-hover-color: #8b7020 !important;
 }
 
 :root[data-solidus-admin-theme='dark'],
 :root[data-solidus-site-theme='dark'],
 body.dark-theme {
-    --solidus-bg: #080613;
-    --solidus-surface: rgba(20, 13, 37, 0.92);
-    --solidus-surface-soft: rgba(30, 20, 58, 0.9);
-    --solidus-border: rgba(191, 117, 255, 0.24);
-    --solidus-border-strong: rgba(191, 117, 255, 0.42);
-    --solidus-text: #efe8ff;
-    --solidus-muted: #c3b9df;
-    --solidus-accent: #b76bff;
-    --solidus-accent-2: #8d3dff;
-    --solidus-cyan: #7ee6ff;
-    --solidus-secondary-rgb: 126, 230, 255;
-    --solidus-shadow: 0 14px 36px rgba(7, 3, 20, 0.68);
-    --solidus-glow: 0 0 0 1px rgba(197, 135, 255, 0.28), 0 15px 36px rgba(26, 10, 62, 0.55);
+    --solidus-bg: #0b0608;
+    --solidus-surface: rgba(26, 15, 20, 0.95);
+    --solidus-surface-soft: rgba(45, 31, 36, 0.9);
+    --solidus-border: rgba(232, 201, 160, 0.3);
+    --solidus-border-strong: rgba(232, 201, 160, 0.5);
+    --solidus-text: #e8c9a0;
+    --solidus-muted: #d4c4b0;
+    --solidus-accent: #e8c9a0;
+    --solidus-accent-2: #c9a227;
+    --solidus-cyan: #d4a84b;
+    --solidus-secondary-rgb: 212, 196, 176;
+    --solidus-shadow: 0 14px 36px rgba(11, 6, 8, 0.7);
+    --solidus-glow: 0 0 0 1px rgba(232, 201, 160, 0.3), 0 15px 36px rgba(26, 15, 20, 0.6);
     --solidus-body-bg:
-        radial-gradient(circle at 20% 15%, rgba(151, 74, 255, 0.3) 0, rgba(151, 74, 255, 0) 38%),
-        radial-gradient(circle at 82% 5%, rgba(111, 244, 255, 0.12) 0, rgba(111, 244, 255, 0) 32%),
-        radial-gradient(circle at 65% 100%, rgba(170, 90, 255, 0.2) 0, rgba(170, 90, 255, 0) 42%),
-        linear-gradient(180deg, #0a0716 0%, #120b25 52%, #090614 100%);
+        radial-gradient(circle at 20% 15%, rgba(232, 201, 160, 0.15) 0, rgba(232, 201, 160, 0) 38%),
+        radial-gradient(circle at 82% 5%, rgba(201, 162, 39, 0.1) 0, rgba(201, 162, 39, 0) 32%),
+        radial-gradient(circle at 65% 100%, rgba(212, 196, 176, 0.1) 0, rgba(212, 196, 176, 0) 42%),
+        linear-gradient(180deg, #0b0608 0%, #1a0f14 52%, #0b0608 100%);
 
-    --primary-color: #b76bff;
-    --primary-color-rgb: 183, 107, 255;
-    --secondary-color: #8d3dff;
-    --heading-color: #efe8ff;
-    --black: #efe8ff;
-    --body-color: #d6cbf4;
-    --grayish-blue: #c3b9df;
-    --bg-color1: linear-gradient(165deg, #0b0719 0%, #181032 60%, #0d081a 100%);
-    --bg-color2: #16102a;
-    --bg-color3: #0f0b1d;
-    --bg-grad-color: #120d24;
-    --bg-grad-color-trans: rgba(18, 13, 36, 0);
-    --border-color1: rgba(191, 117, 255, 0.24);
-    --border-color2: rgba(191, 117, 255, 0.2);
-    --border-color3: rgba(245, 236, 255, 0.88);
-    --input-color: #100b1f;
-    --loader-color: #0a0716;
-    --shadow1: 0 15px 40px rgba(5, 2, 15, 0.72), inset 0 0 0 1px rgba(191, 117, 255, 0.18);
-    --shadow2: 0 8px 28px rgba(5, 2, 15, 0.72);
-    --shadow3: 0 0 0 1px rgba(191, 117, 255, 0.22), 0 14px 40px rgba(8, 3, 20, 0.68);
-    --bs-primary: #b76bff;
-    --bs-link-color: #dec7ff;
+    --primary-color: #e8c9a0;
+    --primary-color-rgb: 232, 201, 160;
+    --secondary-color: #c9a227;
+    --heading-color: #e8c9a0;
+    --black: #e8c9a0;
+    --body-color: #d4c4b0;
+    --grayish-blue: #c4b49a;
+    --bg-color1: linear-gradient(165deg, #0b0608 0%, #1a0f14 60%, #0b0608 100%);
+    --bg-color2: #1a0f14;
+    --bg-color3: #0d080a;
+    --bg-grad-color: #120b0d;
+    --bg-grad-color-trans: rgba(18, 11, 13, 0);
+    --border-color1: rgba(232, 201, 160, 0.3);
+    --border-color2: rgba(232, 201, 160, 0.25);
+    --border-color3: rgba(232, 201, 160, 0.9);
+    --input-color: #1a0f14;
+    --loader-color: #0b0608;
+    --shadow1: 0 15px 40px rgba(11, 6, 8, 0.8), inset 0 0 0 1px rgba(232, 201, 160, 0.2);
+    --shadow2: 0 8px 28px rgba(11, 6, 8, 0.75);
+    --shadow3: 0 0 0 1px rgba(232, 201, 160, 0.25), 0 14px 40px rgba(11, 6, 8, 0.7);
+    --bs-primary: #e8c9a0;
+    --bs-link-color: #e8c9a0;
     --bs-link-hover-color: #ffffff;
 }
 
