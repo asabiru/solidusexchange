@@ -63,6 +63,14 @@
                                 $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
                             @endphp
 
+                            <div class="auth-mobile-bar d-md-none">
+                                <a href="{{ url('/') }}" class="auth-back-btn">
+                                    <i class="fa-solid fa-arrow-left"></i>
+                                    <span>Назад</span>
+                                </a>
+                                <span class="auth-mobile-brand">SolidChange</span>
+                            </div>
+
                             <div class="auth-mobile-intro d-md-none">
                                 <div class="auth-mobile-intro-top">
                                     <span class="auth-mobile-intro-badge">SolidChange</span>
@@ -388,6 +396,42 @@
             margin-bottom: 22px;
         }
 
+        .auth-mobile-bar {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .auth-back-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 999px;
+            border: 1px solid rgba(232, 201, 160, 0.18);
+            background: rgba(11, 6, 8, 0.72);
+            color: #f5ede4;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
+        }
+
+        .auth-back-btn i { color: #e8c9a0; }
+
+        .auth-mobile-brand {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(232, 201, 160, 0.12);
+            color: #e8c9a0;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
         .auth-mobile-intro {
             display: none;
             margin-bottom: 18px;
@@ -508,16 +552,26 @@
         }
 
         @media (max-width: 767px) {
+            .auth-mobile-bar {
+                display: flex;
+            }
+
             .auth-mobile-intro {
                 display: block;
+                margin-bottom: 12px;
+                text-align: center;
             }
 
             .auth-redesign-form-column {
-                padding: 12px;
+                min-height: 100dvh;
+                justify-content: center !important;
+                align-items: center;
+                padding: 14px 12px 24px;
             }
 
             .auth-redesign-card {
                 width: 100%;
+                max-width: 520px;
                 padding: 20px !important;
                 border-radius: 24px;
             }
@@ -538,8 +592,9 @@
                 height: 52px;
             }
 
+            .auth-divider,
             .auth-social-grid {
-                grid-template-columns: 1fr;
+                display: none !important;
             }
 
             .auth-row {
