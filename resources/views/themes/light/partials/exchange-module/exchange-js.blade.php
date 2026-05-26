@@ -127,7 +127,7 @@
             })
             .catch(function (error) {
                 Notiflix.Block.remove('#showLoader');
-                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to load exchange methods');
+                $("#exchangeMessage").text(error.response?.data?.message || 'Не удалось загрузить направления обмена');
                 $("#submitBtn").attr('disabled', true);
             });
     }
@@ -149,13 +149,13 @@
 
         if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
             $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+            $("#exchangeMessage").text(`Минимум ${sendMinLimit} ${sendCode}`);
             return;
         }
 
         if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
             $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+            $("#exchangeMessage").text(`Максимум ${sendMaxLimit} ${sendCode}`);
             return;
         }
 
@@ -186,7 +186,7 @@
             })
             .catch(function (error) {
                 $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
+                $("#exchangeMessage").text(error.response?.data?.message || 'Не удалось обновить курс');
             });
     }
 
@@ -210,7 +210,7 @@
             options += `<div class="item sendModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${escapeHtml(currencies[i].image_path)}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
                                 <div class="title">${escapeHtml(currencies[i].code)}</div>
@@ -234,7 +234,7 @@
             options += `<div class="item getModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${escapeHtml(currencies[i].image_path)}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
                                 <div class="title">${escapeHtml(currencies[i].code)}</div>
@@ -248,14 +248,14 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path);
+        $('#showSendIcon').text(currencyBadge(currency));
         $('#showSendCode').text(currency.code);
         $('#showSendName').text(currency.name);
         $('input[name="exchangeSendCurrency"]').val(currency.id);
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path);
+        $('#showGetIcon').text(currencyBadge(currency));
         $('#showGetCode').text(currency.code);
         $('#showGetName').text(currency.name);
         $('input[name="exchangeGetCurrency"]').val(currency.id);
@@ -278,15 +278,15 @@
     }
 
     $(document).on("click", "#pills-exchange-tab", function () {
-        activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Exchange Now");
+        activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Обменять");
     });
 
     $(document).on("click", "#pills-Buy-tab", function () {
-        activateCalculatorTab('buy', "{{ route('getBuyCurrency', [], false) }}", "{{ route('buyRequest', [], false) }}", "Buy Now");
+        activateCalculatorTab('buy', "{{ route('getBuyCurrency', [], false) }}", "{{ route('buyRequest', [], false) }}", "Купить");
     });
 
     $(document).on("click", "#pills-Sell-tab", function () {
-        activateCalculatorTab('sell', "{{ route('getSellCurrency', [], false) }}", "{{ route('sellRequest', [], false) }}", "Sell Now");
+        activateCalculatorTab('sell', "{{ route('getSellCurrency', [], false) }}", "{{ route('sellRequest', [], false) }}", "Продать");
     });
 
     function activateCalculatorTab(tabName, route, formSubmitRoute, buttonText) {
@@ -321,6 +321,11 @@
 
     function escapeHtml(value) {
         return $('<div>').text(value ?? '').html();
+    }
+
+    function currencyBadge(currency) {
+        const code = String(currency?.code || currency?.symbol || '--').replace(/[^A-Za-z0-9]/g, '');
+        return escapeHtml((code || '--').slice(0, 2).toUpperCase());
     }
 
     function plainText(value) {

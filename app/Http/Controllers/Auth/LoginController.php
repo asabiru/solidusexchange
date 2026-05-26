@@ -117,6 +117,13 @@ class LoginController extends Controller
         return $this->sendFailedLoginResponse($request);
     }
 
+    protected function sendFailedLoginResponse(Request $request)
+    {
+        throw ValidationException::withMessages([
+            'username' => [__('Неверный логин или пароль')],
+        ]);
+    }
+
 
     protected function sendLoginResponse(Request $request)
     {

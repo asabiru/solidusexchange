@@ -8,9 +8,7 @@
                      id="inputAmountBoxInner">
                     <a href="#" class="icon-area" data-bs-toggle="modal"
                        data-bs-target="#calculator-modal">
-                        <img class="img-flag" id="showSendImage"
-                             src=""
-                             alt="...">
+                        <span class="sc-currency-badge" id="showSendIcon">--</span>
                     </a>
                     <div class="text-area w-100">
                         <div
@@ -52,9 +50,7 @@
                      id="inputAmountBoxInner2">
                     <a href="#" class="icon-area" data-bs-toggle="modal"
                        data-bs-target="#calculator-modal2">
-                        <img class="img-flag" id="showGetImage"
-                             src=""
-                             alt="...">
+                        <span class="sc-currency-badge" id="showGetIcon">--</span>
                     </a>
                     <div class="text-area w-100">
                         <div

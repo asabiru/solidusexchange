@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 
 <head>
     <meta charset="UTF-8">
@@ -18,11 +18,9 @@
           type="image/x-icon">
     @include($theme.'partials.style')
 
-    @include($theme.'partials.loader-js')
 </head>
 
 <body  class="">
-@include($theme.'partials.loader')
 @yield('content')
 
 @include($theme.'partials.script')

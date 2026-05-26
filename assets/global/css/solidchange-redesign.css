@@ -1252,3 +1252,251 @@ a {
 .solidus-agreement-check a:hover {
     color: #f5ede4;
 }
+
+/* Solidus polish pass */
+.solidus-wordmark {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none !important;
+    min-width: max-content;
+}
+
+.solidus-wordmark__mark {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.32), transparent 22%),
+        linear-gradient(135deg, #e8c9a0, #8a5cf6 72%, #3a1f2b);
+    box-shadow: 0 0 0 1px rgba(232, 201, 160, 0.28), 0 14px 34px rgba(138, 92, 246, 0.22);
+}
+
+.solidus-wordmark__text {
+    color: var(--sc-text-primary);
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+}
+
+.public-navbar {
+    background: rgba(11, 6, 8, 0.92) !important;
+    border-bottom: 1px solid rgba(232, 201, 160, 0.12) !important;
+}
+
+.public-navbar .public-navbar__inner {
+    display: flex;
+    gap: 22px;
+}
+
+.public-navbar .offcanvas-body {
+    gap: 18px;
+}
+
+.public-navbar .public-navbar__menu {
+    padding: 7px;
+    border: 1px solid var(--sc-border-subtle);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.025);
+}
+
+.public-navbar .public-navbar__menu .nav-link,
+.public-navbar .nav-link {
+    color: var(--sc-text-secondary) !important;
+    font-weight: 600;
+}
+
+.public-navbar .public-navbar__menu .nav-link:hover,
+.public-navbar .public-navbar__menu .nav-link.active,
+.public-navbar .nav-link:hover {
+    color: var(--sc-text-primary) !important;
+    background: rgba(232, 201, 160, 0.08) !important;
+}
+
+.public-navbar .header-login-btn,
+.public-navbar .nav-utility-btn,
+.public-navbar .language-trigger {
+    min-height: 42px;
+    border: 1px solid var(--sc-border-strong) !important;
+    border-radius: 14px !important;
+    background: rgba(255, 255, 255, 0.035) !important;
+}
+
+.public-navbar .header-login-btn {
+    padding: 0 18px !important;
+    color: var(--sc-bg) !important;
+    background: var(--sc-accent) !important;
+    border-color: var(--sc-accent) !important;
+}
+
+.sc-currency-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.22), transparent 28%), linear-gradient(145deg, rgba(232, 201, 160, 0.24), rgba(138, 92, 246, 0.22));
+    border: 1px solid rgba(232, 201, 160, 0.28);
+    color: var(--sc-text-primary);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    box-shadow: inset 0 0 18px rgba(255, 255, 255, 0.04), 0 10px 30px rgba(0, 0, 0, 0.24);
+}
+
+.icon-area .sc-currency-badge,
+.img-area .sc-currency-badge {
+    flex: 0 0 auto;
+}
+
+.solidus-auth-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 16px;
+    background:
+        radial-gradient(circle at 50% 0%, rgba(138, 92, 246, 0.18), transparent 34%),
+        radial-gradient(circle at 10% 85%, rgba(232, 201, 160, 0.10), transparent 28%),
+        linear-gradient(180deg, #130b10 0%, #0b0608 58%, #080406 100%);
+}
+
+.solidus-auth-shell {
+    width: min(100%, 480px);
+}
+
+.solidus-auth-brand {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 26px;
+}
+
+.solidus-auth-card {
+    padding: clamp(26px, 5vw, 42px);
+    border: 1px solid rgba(232, 201, 160, 0.16);
+    border-radius: 30px;
+    background: rgba(21, 12, 16, 0.86);
+    box-shadow: 0 28px 100px rgba(0, 0, 0, 0.42);
+    backdrop-filter: blur(22px);
+}
+
+.solidus-auth-kicker {
+    display: inline-flex;
+    margin-bottom: 12px;
+    padding: 7px 12px;
+    border: 1px solid var(--sc-border-subtle);
+    border-radius: 999px;
+    color: var(--sc-accent);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.solidus-auth-card h1 {
+    margin: 0;
+    color: var(--sc-text-primary);
+    font-size: clamp(30px, 5vw, 40px);
+    font-weight: 800;
+    letter-spacing: -0.04em;
+}
+
+.solidus-auth-card p {
+    margin: 12px 0 28px;
+    color: var(--sc-text-secondary) !important;
+    line-height: 1.65;
+}
+
+.solidus-auth-field {
+    margin-bottom: 16px;
+}
+
+.solidus-auth-field label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--sc-text-primary) !important;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.solidus-auth-page .form-control {
+    height: 52px;
+    border: 1px solid rgba(232, 201, 160, 0.18) !important;
+    border-radius: 16px !important;
+    background: rgba(11, 6, 8, 0.78) !important;
+    color: var(--sc-text-primary) !important;
+    box-shadow: none !important;
+}
+
+.solidus-auth-page .form-control::placeholder {
+    color: rgba(245, 237, 228, 0.38) !important;
+}
+
+.solidus-auth-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    margin: 8px 0 22px;
+    color: var(--sc-text-secondary);
+    font-size: 14px;
+}
+
+.solidus-auth-row a,
+.solidus-auth-register a {
+    color: var(--sc-accent) !important;
+    font-weight: 700;
+}
+
+.solidus-auth-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+}
+
+.solidus-auth-submit {
+    height: 52px;
+}
+
+.solidus-auth-register {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 22px;
+    color: var(--sc-text-secondary);
+}
+
+.solidus-auth-alert {
+    margin-bottom: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(201, 120, 106, 0.28);
+    border-radius: 16px;
+    background: rgba(201, 120, 106, 0.11);
+    color: #f0b8ad;
+    font-weight: 700;
+}
+
+.solidus-auth-captcha {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.solidus-auth-captcha img {
+    border-radius: 12px;
+}
+
+@media (max-width: 991px) {
+    .public-navbar .public-navbar__menu {
+        background: transparent;
+        border: 0;
+        padding: 0;
+    }
+
+    .public-navbar .offcanvas {
+        background: var(--sc-bg-elevated);
+    }
+}
