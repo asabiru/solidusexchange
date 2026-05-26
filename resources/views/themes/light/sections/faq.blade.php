@@ -1,48 +1,78 @@
-<!-- Faq section start -->
-@if (isset($faq))
-    <section class="faq-section">
-        <div class="container">
-            <div class="sc-faq-inner">
-                <div class="sc-section-head text-center">
-                    <div>
-                        @if (isset($faq['single']))
-                            <span class="sc-kicker">@lang(@$faq['single']['sub_title'])</span>
-                            <h2>@lang(@$faq['single']['title'])</h2>
-                        @endif
-                    </div>
-                </div>
-                @if (isset($faq['multiple']) && count($faq['multiple']) > 0)
-                    <div class="accordion" id="scFaqAccordion">
-                        @foreach ($faq['multiple'] as $key => $item)
-                            <div class="accordion-item">
-                                <h2 class="accordion-header" id="scFaqHeading{{ $key }}">
-                                    <button class="accordion-button {{ $key != 0 ? 'collapsed' : '' }}"
-                                        type="button" data-bs-toggle="collapse"
-                                        data-bs-target="#scFaqCollapse{{ $key }}"
-                                        aria-expanded="{{ $key == 0 ? 'true' : 'false' }}"
-                                        aria-controls="scFaqCollapse{{ $key }}">
-                                        @lang(@$item['title'])
-                                    </button>
-                                </h2>
-                                <div id="scFaqCollapse{{ $key }}"
-                                    class="accordion-collapse collapse {{ $key == 0 ? 'show' : '' }}"
-                                    aria-labelledby="scFaqHeading{{ $key }}"
-                                    data-bs-parent="#scFaqAccordion">
-                                    <div class="accordion-body">
-                                        <p>@lang(@$item['sub_title'])</p>
-                                    </div>
-                                </div>
-                            </div>
-                        @endforeach
-                    </div>
-                @endif
-                <div class="sc-faq-cta">
-                    <p>@lang('Не нашли ответа?')</p>
-                    <a href="{{ route('contact') }}" class="sc-secondary-btn">@lang('Написать в поддержку')</a>
+@php
+    $faqs = [
+        [
+            'question' => 'Как быстро происходит обмен?',
+            'answer' => 'Среднее время обмена — 7 минут. Это включает время на подтверждение транзакции в сети и отправку средств на ваш кошелёк.'
+        ],
+        [
+            'question' => 'Какие лимиты на обмен?',
+            'answer' => 'Минимальная сумма обмена — $10 или эквивалент в криптовалюте. Максимальная сумма зависит от выбранной криптовалюты и может достигать $50,000 за одну транзакцию.'
+        ],
+        [
+            'question' => 'Нужна ли верификация?',
+            'answer' => 'Для сумм до $1,000 в сутки верификация не требуется. Для больших сумм может потребоваться стандартная KYC процедура, которая занимает около 5 минут.'
+        ],
+        [
+            'question' => 'Какие комиссии вы берете?',
+            'answer' => 'Мы берем только комиссию сервиса, которая уже включена в курс. Никаких скрытых платежей или дополнительных сборов.'
+        ],
+        [
+            'question' => 'Что делать, если обмен не прошел?',
+            'answer' => 'Если обмен не прошел по техническим причинам, средства будут автоматически возвращены на ваш кошелёк. Если у вас есть вопросы, свяжитесь с нашей поддержкой.'
+        ]
+    ];
+@endphp
+
+<!-- FAQ Section - eazy228/design style -->
+<section class="faq-section" id="faq">
+    <div class="container">
+        <div class="faq-header">
+            <span class="section-number">09 /</span>
+            <h2 class="section-title">FAQ</h2>
+        </div>
+
+        <h3 class="faq-subtitle">Часто задаваемые вопросы</h3>
+
+        <div class="faq-accordion">
+            @foreach($faqs as $index => $faq)
+            <div class="faq-item">
+                <button class="faq-question {{ $index === 0 ? 'active' : '' }}" onclick="toggleFaq({{ $index }})">
+                    <span>{{ $faq['question'] }}</span>
+                    <svg class="faq-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+                <div class="faq-answer {{ $index === 0 ? 'show' : '' }}" id="faq-answer-{{ $index }}">
+                    <p>{{ $faq['answer'] }}</p>
                 </div>
             </div>
+            @endforeach
         </div>
-        <div class="bg-shape1"></div>
-    </section>
-@endif
-<!-- Faq section end -->
+
+        <div class="faq-footer">
+            <p class="faq-footer-text">Не нашли ответ на свой вопрос?</p>
+            <a href="{{ route('contact') }}" class="faq-footer-link">Написать в поддержку</a>
+        </div>
+    </div>
+</section>
+
+<script>
+function toggleFaq(index) {
+    const allItems = document.querySelectorAll('.faq-item');
+    const allAnswers = document.querySelectorAll('.faq-answer');
+    const allQuestions = document.querySelectorAll('.faq-question');
+
+    allItems.forEach((item, i) => {
+        const answer = document.getElementById(`faq-answer-${i}`);
+        const question = item.querySelector('.faq-question');
+
+        if (i === index) {
+            answer.classList.toggle('show');
+            question.classList.toggle('active');
+        } else {
+            answer.classList.remove('show');
+            question.classList.remove('active');
+        }
+    });
+}
+</script>

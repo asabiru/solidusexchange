@@ -1,0 +1,310 @@
+/*----------------------------------------------
+Rates Section - eazy228/design style
+----------------------------------------------*/
+.rates-section {
+    padding: 100px 0;
+    background: var(--color-bg);
+}
+
+.rates-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.section-number {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+}
+
+.section-title {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.rates-subheader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+}
+
+.rates-subheader h3 {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.update-time {
+    font-size: 13px;
+    color: var(--color-text-muted);
+}
+
+/* Ticker */
+.rates-ticker {
+    overflow: hidden;
+    margin-bottom: 40px;
+    padding: 16px 0;
+    border-top: 1px solid var(--color-border-subtle);
+    border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.ticker-track {
+    display: flex;
+    gap: 32px;
+    animation: ticker-scroll 60s linear infinite;
+    white-space: nowrap;
+}
+
+.ticker-pause:hover .ticker-track {
+    animation-play-state: paused;
+}
+
+@keyframes ticker-scroll {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+.ticker-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    color: var(--color-text-secondary);
+}
+
+.ticker-pair {
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.ticker-price {
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+}
+
+.ticker-change {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+}
+
+.ticker-change.positive {
+    color: var(--color-success);
+}
+
+.ticker-change.negative {
+    color: var(--color-danger);
+}
+
+/* Rates Table */
+.rates-table-container {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.rates-table {
+    width: 100%;
+}
+
+.table-header {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1fr 1.5fr 1fr;
+    gap: 16px;
+    padding: 16px 24px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+}
+
+.table-row {
+    display: grid;
+    grid-template-columns: 2fr 1.5fr 1fr 1.5fr 1fr;
+    gap: 16px;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--color-border-subtle);
+    transition: background 0.2s;
+    align-items: center;
+}
+
+.table-row:last-child {
+    border-bottom: none;
+}
+
+.table-row:hover {
+    background: var(--color-bg);
+}
+
+.table-cell {
+    display: flex;
+    align-items: center;
+}
+
+.currency-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.currency-flag {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--color-bg);
+}
+
+.currency-flag img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.currency-details {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.currency-code {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.currency-name {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.price-value {
+    font-size: 16px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+    color: var(--color-text-primary);
+}
+
+.change-value {
+    font-size: 14px;
+    font-weight: 500;
+    font-family: var(--font-mono);
+}
+
+.change-value.positive {
+    color: var(--color-success);
+}
+
+.change-value.negative {
+    color: var(--color-danger);
+}
+
+.mini-chart {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.mini-chart svg {
+    width: 100%;
+    height: 30px;
+}
+
+.exchange-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 16px;
+    background: var(--color-accent);
+    color: var(--color-bg);
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: var(--radius-md);
+    text-decoration: none;
+    transition: all 0.2s;
+    white-space: nowrap;
+}
+
+.exchange-link:hover {
+    background: var(--color-accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.3);
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+    .rates-section {
+        padding: 80px 0;
+    }
+
+    .rates-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .rates-subheader {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+
+    .table-header,
+    .table-row {
+        grid-template-columns: 1.5fr 1fr 0.8fr 1fr 0.8fr;
+        gap: 12px;
+        padding: 12px 16px;
+    }
+}
+
+@media (max-width: 767px) {
+    .rates-section {
+        padding: 60px 0;
+    }
+
+    .section-title {
+        font-size: 24px;
+    }
+
+    .rates-subheader h3 {
+        font-size: 20px;
+    }
+
+    .table-header {
+        display: none;
+    }
+
+    .table-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .table-cell {
+        justify-content: space-between;
+    }
+
+    .table-cell::before {
+        content: attr(data-label);
+        font-size: 12px;
+        color: var(--color-text-muted);
+        font-weight: 500;
+    }
+
+    .mini-chart {
+        display: none;
+    }
+}

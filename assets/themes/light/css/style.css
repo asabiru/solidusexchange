@@ -7134,3 +7134,418 @@ img {
         padding: 15px 15px;
     }
 }
+
+/*----------------------------------------------
+Hero Section - eazy228/design style
+----------------------------------------------*/
+.hero-section {
+    position: relative;
+    padding: 120px 0 80px;
+    min-height: 90vh;
+    display: flex;
+    align-items: center;
+    background: var(--color-bg);
+    overflow: hidden;
+}
+
+.hero-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+    background-size: 48px 48px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.hero-content {
+    position: relative;
+    z-index: 2;
+}
+
+.hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--color-accent-soft);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-pill);
+    margin-bottom: 24px;
+}
+
+.badge-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-accent);
+}
+
+.hero-title {
+    font-size: clamp(36px, 5vw, 56px);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-bottom: 24px;
+    color: var(--color-text-primary);
+}
+
+.hero-title .highlight {
+    color: var(--color-accent);
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+.hero-description {
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+    margin-bottom: 32px;
+    max-width: 500px;
+}
+
+.hero-bullets {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.bullet-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 15px;
+    color: var(--color-text-secondary);
+}
+
+.bullet-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: var(--color-accent-soft);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--color-accent);
+}
+
+/*----------------------------------------------
+Swap Card - eazy228/design style
+----------------------------------------------*/
+.swap-card {
+    position: relative;
+    z-index: 2;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+}
+
+.swap-card-header {
+    margin-bottom: 20px;
+}
+
+.swap-card-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.swap-card-title h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.update-time {
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.swap-section {
+    margin-bottom: 16px;
+}
+
+.swap-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    margin-bottom: 8px;
+}
+
+.swap-reserve {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-bottom: 12px;
+}
+
+.swap-reserve span {
+    color: var(--color-text-primary);
+    font-weight: 500;
+}
+
+.swap-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    transition: border-color 0.2s;
+}
+
+.swap-input-wrapper:focus-within {
+    border-color: var(--color-accent);
+}
+
+.currency-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    min-width: 120px;
+}
+
+.currency-selector:hover {
+    border-color: var(--color-border-strong);
+}
+
+.currency-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+.currency-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.currency-info {
+    flex: 1;
+}
+
+.currency-symbol {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+}
+
+.selector-arrow {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+.swap-input-wrapper input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    font-size: 28px;
+    font-weight: 500;
+    text-align: right;
+    outline: none;
+    font-family: var(--font-mono);
+}
+
+.swap-input-wrapper input::placeholder {
+    color: var(--color-text-muted);
+}
+
+.swap-error-message {
+    color: var(--color-danger);
+    font-size: 12px;
+    margin-top: 8px;
+    min-height: 16px;
+}
+
+.swap-action {
+    display: flex;
+    justify-content: center;
+    margin: -8px 0;
+}
+
+.swap-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--color-accent);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-bg);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.swap-button:hover {
+    background: var(--color-accent-hover);
+    transform: rotate(180deg);
+}
+
+.swap-info {
+    padding: 16px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: 16px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.info-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+}
+
+.info-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    font-family: var(--font-mono);
+}
+
+.swap-submit {
+    margin-bottom: 16px;
+}
+
+.submit-button {
+    width: 100%;
+    padding: 14px;
+    background: var(--color-accent);
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-bg);
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.submit-button:hover {
+    background: var(--color-accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(232, 201, 160, 0.3);
+}
+
+.swap-features {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+}
+
+.feature-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--color-text-muted);
+}
+
+.feature-item svg {
+    flex-shrink: 0;
+}
+
+/* Calculator Banner */
+.calculator-banner {
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.calculator-banner:hover {
+    border-color: var(--color-border-strong);
+}
+
+.calculator-banner-wrapper {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.calculator-banner .left-side {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.calculator-banner .image-area {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.calculator-banner .image-area img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.calculator-banner .text-area p {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.calculator-banner .right-side {
+    color: var(--color-text-muted);
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+    .hero-section {
+        padding: 80px 0 60px;
+        min-height: auto;
+    }
+
+    .hero-content {
+        text-align: center;
+        margin-bottom: 40px;
+    }
+
+    .hero-description {
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .hero-bullets {
+        align-items: center;
+    }
+
+    .swap-card {
+        max-width: 500px;
+        margin: 0 auto;
+    }
+}
+
+@media (max-wid

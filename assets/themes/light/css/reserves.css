@@ -1,0 +1,181 @@
+/*----------------------------------------------
+Reserves Section - eazy228/design style
+----------------------------------------------*/
+.reserves-section {
+    padding: 100px 0;
+    background: var(--color-bg);
+}
+
+.reserves-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.section-number {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-accent);
+    font-family: var(--font-mono);
+}
+
+.section-title {
+    font-size: 32px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.reserves-subtitle {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 48px;
+}
+
+.reserves-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.reserve-card {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s;
+}
+
+.reserve-card:hover {
+    border-color: var(--color-border-strong);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+}
+
+.reserve-icon {
+    width: 48px;
+    height: 48px;
+    background: var(--color-accent-soft);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-placeholder {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-accent);
+}
+
+.reserve-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.reserve-currency {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text-primary);
+}
+
+.reserve-amount {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+}
+
+.reserve-value {
+    font-size: 16px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--color-accent);
+}
+
+.reserves-footer {
+    text-align: center;
+    padding: 24px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.reserves-note {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin: 0 0 16px 0;
+}
+
+.reserves-link {
+    display: inline-block;
+    color: var(--color-accent);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.2s;
+}
+
+.reserves-link:hover {
+    color: var(--color-accent-hover);
+}
+
+/* Responsive */
+@media (max-width: 991px) {
+    .reserves-section {
+        padding: 80px 0;
+    }
+
+    .reserves-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .section-title {
+        font-size: 24px;
+    }
+
+    .reserves-subtitle {
+        font-size: 22px;
+    }
+
+    .reserves-grid {
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 16px;
+    }
+
+    .reserve-card {
+        padding: 20px;
+    }
+}
+
+@media (max-width: 575px) {
+    .reserves-section {
+        padding: 60px 0;
+    }
+
+    .reserves-subtitle {
+        font-size: 18px;
+    }
+
+    .reserves-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .reserve-card {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .reserve-footer {
+        padding: 20px 16px;
+    }
+}
