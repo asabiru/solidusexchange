@@ -35,16 +35,8 @@
 
 @push('script')
     <script>
-        const dashboardTheme = window.SolidusDashboardTheme || {
-            colors: {
-                surface: '#ffffff',
-                chartLine: '#377dff',
-                textMuted: '#7d8791'
-            }
-        };
-
         Notiflix.Block.standard('#exchangePerformance', {
-            backgroundColor: dashboardTheme.colors.surface,
+            backgroundColor: loaderColor,
         });
         var options = {
             series: [{
@@ -68,18 +60,18 @@
                 ],
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
             yaxis: {
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
-            colors: [dashboardTheme.colors.chartLine],
+            colors: ['#6e71ff'],
         };
         updateExchangePerformanceGraph();
 
@@ -99,7 +91,7 @@
 
     <script>
         Notiflix.Block.standard('#buyPerformance',{
-            backgroundColor: dashboardTheme.colors.surface,
+            backgroundColor: loaderColor,
         });
         var options1 = {
             series: [{
@@ -123,18 +115,18 @@
                 ],
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
             yaxis: {
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
-            colors: [dashboardTheme.colors.chartLine],
+            colors: ['#6e71ff'],
         };
 
         updateBuyPerformanceGraph();
@@ -157,7 +149,7 @@
 
     <script>
         Notiflix.Block.standard('#sellPerformance',{
-            backgroundColor: dashboardTheme.colors.surface,
+            backgroundColor: loaderColor,
         });
         var options2 = {
             series: [{
@@ -181,18 +173,18 @@
                 ],
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
             yaxis: {
                 labels: {
                     style: {
-                        colors: dashboardTheme.colors.textMuted
+                        colors: '#7d8791'
                     }
                 }
             },
-            colors: [dashboardTheme.colors.chartLine],
+            colors: ['#6e71ff'],
         };
 
         updateSellPerformanceGraph();

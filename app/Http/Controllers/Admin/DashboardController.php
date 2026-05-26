@@ -28,29 +28,10 @@ class DashboardController extends Controller
             return redirect()->route('admin.trader.dashboard');
         }
 
-        $now = Carbon::now();
         $data['firebaseNotify'] = config('firebase');
         $data['basicControl'] = basicControl();
         $data['latestUser'] = User::latest()->limit(5)->get();
-        $totalDepositThisMonth = Deposit::whereYear('created_at', $now->year)
-            ->whereMonth('created_at', $now->month)
-            ->sum('payable_amount');
-        $data['dashboardStats'] = [
-            'totalUsers' => User::count(),
-            'usersToday' => User::whereDate('created_at', $now->toDateString())->count(),
-            'pendingTickets' => SupportTicket::where('status', 0)->count(),
-            'pendingKyc' => UserKyc::where('status', 0)->count(),
-            'transactionsMonth' => Transaction::whereYear('created_at', $now->year)
-                ->whereMonth('created_at', $now->month)
-                ->count(),
-            'depositThisMonth' => $totalDepositThisMonth,
-            'buyThisMonth' => BuyRequest::whereYear('created_at', $now->year)
-                ->whereMonth('created_at', $now->month)
-                ->count(),
-            'sellThisMonth' => SellRequest::whereYear('created_at', $now->year)
-                ->whereMonth('created_at', $now->month)
-                ->count(),
-        ];
+        $totalDepositThisMonth = Deposit::whereMonth('created_at', Carbon::now()->month)->sum('payable_amount');
         $statistics['schedule'] = $this->dayList();
         $statistics['totalDepositThisMonth'] = $totalDepositThisMonth;
 
