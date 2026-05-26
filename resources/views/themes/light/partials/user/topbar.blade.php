@@ -105,7 +105,7 @@
                 </a><!-- End Profile Iamge Icon -->
 
                 <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
-                    <li class="dropdown-header d-flex justify-content-center text-start">
+                    <li class="dropdown-header d-flex align-items-center text-start">
                         <div class="profile-thum">
                             <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white fw-semibold"
                                   style="width:48px;height:48px;background:linear-gradient(120deg,var(--solidus-accent),var(--solidus-accent-2));">

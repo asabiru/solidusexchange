@@ -282,14 +282,20 @@ footer#footer,
     border-radius: 12px;
     background: rgba(232, 201, 160, 0.10);
     border: 1px solid var(--dash-border-subtle);
+    gap: 12px;
 }
 
 body:not(.dark-theme) .dropdown-menu.profile .dropdown-header {
     background: rgba(201, 162, 39, 0.10);
 }
 
+.dropdown-menu.profile .dropdown-header .profile-thum {
+    flex-shrink: 0;
+}
+
 .dropdown-menu.profile .dropdown-header .profile-content {
     min-width: 0;
+    overflow: hidden;
 }
 
 .dropdown-menu.profile .dropdown-header .profile-content h6 {
