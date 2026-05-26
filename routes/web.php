@@ -97,7 +97,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->name('user.twoFA-Verify');
 
     $legacyPageRoutes = [
-        'home' => ['/',],
+        // 'home' removed — conflicts with Route::get("/", ...)->name('home') defined below
         'about' => ['about'],
         'feature' => ['feature'],
         'features' => ['feature', '/'],

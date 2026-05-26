@@ -29,11 +29,11 @@
 
     <nav class="header-nav ms-auto">
         @php
-            $activeLanguages = \App\Models\Language::query()
-                ->where('status', 1)
-                ->orderByDesc('default_status')
-                ->orderBy('name')
-                ->get();
+            $activeLanguages = \Illuminate\Support\Facades\Cache::remember(
+                'active_languages', now()->addHours(2),
+                fn() => \App\Models\Language::where('status', 1)
+                    ->orderByDesc('default_status')->orderBy('name')->get()
+            );
             $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
         @endphp
         <ul class="d-flex align-items-center">

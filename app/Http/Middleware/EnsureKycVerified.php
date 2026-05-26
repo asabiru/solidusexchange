@@ -17,16 +17,31 @@ class EnsureKycVerified
             return redirect()->route('login');
         }
 
-        $activeKycs = Kyc::query()->where('status', 1)->orderBy('id')->get();
+        // Fast path: user already marked as KYC-verified in the users table
+        if ((int) $user->identity_verify === 2) {
+            return $next($request);
+        }
+
+        // Cache active KYC types for 30 minutes (shared across all users)
+        $activeKycs = \Illuminate\Support\Facades\Cache::remember(
+            'active_kyc_types',
+            now()->addMinutes(30),
+            fn () => Kyc::query()->where('status', 1)->orderBy('id')->get()
+        );
+
         if ($activeKycs->isEmpty()) {
             return $next($request);
         }
 
-        if ((int) $user->identity_verify === 2 || UserKyc::query()->where('user_id', $user->id)->where('status', 1)->exists()) {
-            if ((int) $user->identity_verify !== 2) {
-                $user->forceFill(['identity_verify' => 2])->save();
-            }
+        // Cache per-user KYC approval for 10 minutes in session
+        $sessionKey = 'kyc_ok_' . $user->id;
+        if (session($sessionKey)) {
+            return $next($request);
+        }
 
+        if (UserKyc::query()->where('user_id', $user->id)->where('status', 1)->exists()) {
+            $user->forceFill(['identity_verify' => 2])->save();
+            session([$sessionKey => true]);
             return $next($request);
         }
 
