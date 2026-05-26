@@ -15,14 +15,14 @@
                         ->whereHas('content', fn($q) => $q->where('name', 'social'))
                         ->where('language_id', app()->getLocale() === 'ru' ? 20 : 1)
                         ->get()
-                        ->map(fn($d) => json_decode($d->description))
+                        ->map(fn($d) => is_string($d->description) ? json_decode($d->description) : $d->description)
                         ->filter(fn($s) => $s && !empty($s->my_link));
                     if ($socialLinks->isEmpty()) {
                         $socialLinks = \App\Models\ContentDetails::with('content')
                             ->whereHas('content', fn($q) => $q->where('name', 'social'))
                             ->where('language_id', 1)
                             ->get()
-                            ->map(fn($d) => json_decode($d->description))
+                            ->map(fn($d) => is_string($d->description) ? json_decode($d->description) : $d->description)
                             ->filter(fn($s) => $s && !empty($s->my_link));
                     }
                 @endphp
