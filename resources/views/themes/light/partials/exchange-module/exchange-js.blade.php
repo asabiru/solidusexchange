@@ -70,8 +70,8 @@
     });
 
     $(document).on("click", ".sendModal", function () {
-        activeSendCurrency = $(this).data('res');
-        if (!isCurrencySelectable('send', activeSendCurrency)) {
+        activeSendCurrency = findCurrencyById(availableSendCurrencies, $(this).data('currency-id'));
+        if (!activeSendCurrency || !isCurrencySelectable('send', activeSendCurrency)) {
             return;
         }
         setSendCurrency(activeSendCurrency);
@@ -83,8 +83,8 @@
     });
 
     $(document).on("click", ".getModal", function () {
-        activeGetCurrency = $(this).data('res');
-        if (!isCurrencySelectable('get', activeGetCurrency)) {
+        activeGetCurrency = findCurrencyById(availableGetCurrencies, $(this).data('currency-id'));
+        if (!activeGetCurrency || !isCurrencySelectable('get', activeGetCurrency)) {
             return;
         }
         setGetCurrency(activeGetCurrency);
@@ -200,21 +200,21 @@
     }
 
     function showSend(currencies) {
-        $('#show-send').html(``);
+        $('#show-send').empty();
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
             if (!isCurrencySelectable('send', currencies[i])) {
                 continue;
             }
             let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-            options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
+            options += `<div class="item sendModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <img class="img-flag" src="${escapeHtml(currencies[i].image_path)}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -224,21 +224,21 @@
     }
 
     function showGet(currencies) {
-        $('#show-get').html(``);
+        $('#show-get').empty();
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
             if (!isCurrencySelectable('get', currencies[i])) {
                 continue;
             }
             let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-            options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
+            options += `<div class="item getModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <img class="img-flag" src="${escapeHtml(currencies[i].image_path)}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -315,6 +315,18 @@
         return preferredCurrency || fallbackCurrency || currencies[0] || null;
     }
 
+    function findCurrencyById(currencies, id) {
+        return currencies.find(currency => Number(currency.id) === Number(id)) || null;
+    }
+
+    function escapeHtml(value) {
+        return $('<div>').text(value ?? '').html();
+    }
+
+    function plainText(value) {
+        return new DOMParser().parseFromString(String(value || ''), 'text/html').body.textContent || '';
+    }
+
     function formatSendAmount(amount) {
         let numericAmount = parseFloat(amount);
         if (Number.isNaN(numericAmount) || numericAmount <= 0) {
@@ -346,10 +358,11 @@
 
     $(document).on("click", ".announceClass", function () {
         let announceBodyShow = $('#announceBodyShow');
-        announceBodyShow.html('');
+        announceBodyShow.empty();
         let heading = $(this).data('heading');
         let des = $(this).data('des');
-        announceBodyShow.html(`<h4>${heading}</h4> ${des}`)
+        $('<h4>').text(heading || '').appendTo(announceBodyShow);
+        $('<div>').text(plainText(des)).appendTo(announceBodyShow);
     });
 
 </script>

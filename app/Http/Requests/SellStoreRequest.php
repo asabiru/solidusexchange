@@ -24,15 +24,20 @@ class SellStoreRequest extends FormRequest
         if ($this->method() == 'GET') {
             return [];
         }
-        return [
+        $rules = [
             'exchangeSendAmount' => 'required|numeric|min:0|not_in:0',
             'exchangeSendCurrency' => 'required|integer',
             'exchangeGetAmount' => 'required|numeric|min:0|not_in:0',
             'exchangeGetCurrency' => 'required|integer',
-            'user_agreement' => 'required|accepted',
             'source_channel' => 'nullable|string|max:40',
             'fulfillment_method' => 'nullable|string|max:60',
-            'payment_proof' => 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:10240',
         ];
+
+        if ($this->routeIs('sellProcessing')) {
+            $rules['user_agreement'] = 'required|accepted';
+            $rules['payment_proof'] = 'nullable|file|mimes:jpg,jpeg,png,pdf,webp|max:10240';
+        }
+
+        return $rules;
     }
 }
