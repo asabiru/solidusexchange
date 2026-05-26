@@ -127,11 +127,11 @@
 
             <!-- Desktop Navigation -->
             <nav class="d-none d-lg-flex gap-1">
-                <a href="#exchange" class="nav-link text-decoration-none">Обмен</a>
-                <a href="#rates" class="nav-link text-decoration-none">Курсы</a>
-                <a href="#reserves" class="nav-link text-decoration-none">Резервы</a>
-                <a href="#how" class="nav-link text-decoration-none">Как работает</a>
-                <a href="#faq" class="nav-link text-decoration-none">FAQ</a>
+                <a href="{{ url('/#exchange') }}" class="nav-link text-decoration-none">Обмен</a>
+                <a href="{{ url('/#rates') }}" class="nav-link text-decoration-none">Курсы</a>
+                <a href="{{ url('/#reserves') }}" class="nav-link text-decoration-none">Резервы</a>
+                <a href="{{ url('/#how') }}" class="nav-link text-decoration-none">Как работает</a>
+                <a href="{{ url('/#faq') }}" class="nav-link text-decoration-none">FAQ</a>
                 <a href="{{ url('tracking') }}" class="nav-link text-decoration-none">Отследить</a>
             </nav>
 
@@ -249,11 +249,11 @@
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
         </div>
         <div class="offcanvas-body d-flex flex-column gap-2 p-3">
-            <a href="#exchange" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
-            <a href="#rates" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
-            <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
-            <a href="#how" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
-            <a href="#faq" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
+            <a href="{{ url('/#exchange') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
+            <a href="{{ url('/#rates') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
+            <a href="{{ url('/#reserves') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
+            <a href="{{ url('/#how') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
+            <a href="{{ url('/#faq') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
             <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
 
             @if($activeLanguages->isNotEmpty())
