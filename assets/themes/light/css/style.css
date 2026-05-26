@@ -33,7 +33,7 @@ Typography
     --grayish-blue: #9a8e86;
     --white: #0b0608;
     --soft-blue: #3a1f2b;
-    --grayish-violet: #150c10;
+    --soft-gold-dark: #150c10;
     --btn-hover-bg: #f2d8b4;
     --soft-red: #c9786a;
     --lime-gray: #2a1f1f;
@@ -99,7 +99,7 @@ body:not(.dark-theme) {
     --grayish-blue: #5a5248;
     --white: #ffffff;
     --soft-blue: #ebe4d8;
-    --grayish-violet: #f5f0e8;
+    --soft-gold: #f5f0e8;
     --btn-hover-bg: #d4b52f;
     --soft-red: #c9786a;
     --lime-gray: #e8e4e0;
@@ -604,6 +604,8 @@ body:not(.dark-theme) .faq-section {
 .dark-theme .faq-section {
     background: linear-gradient(135deg, #0b0608 0%, #1a0f14 100%);
 }
+
+/* Comprehensive panel styling for all areas */
 
 /* Breadcrumb */
 .dark-theme .breadcrumb-item a {
@@ -5166,6 +5168,8 @@ Testimonial end
 .dark-theme .faq-section {
     background: linear-gradient(135deg, #0b0608 0%, #1a0f14 100%);
 }
+
+/* Comprehensive panel styling for all areas */
 
 .dark-theme .sc-section-head h2 {
     color: #e8c9a0;
