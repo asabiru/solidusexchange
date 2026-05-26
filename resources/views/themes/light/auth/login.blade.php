@@ -63,6 +63,14 @@
                                 $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
                             @endphp
 
+                            <div class="auth-mobile-intro d-md-none">
+                                <div class="auth-mobile-intro-top">
+                                    <span class="auth-mobile-intro-badge">SolidChange</span>
+                                    <h3>Вход в кабинет</h3>
+                                </div>
+                                <p>Красивый и быстрый вход с поддержкой Telegram Mini App и social login.</p>
+                            </div>
+
                             @if(config('socialite.telegram_status') && $telegramBotName !== '')
                                 <div class="telegram-miniapp-login-box">
                                     <button type="button" class="telegram-miniapp-login-button" id="telegramMiniAppLogin">
@@ -380,6 +388,50 @@
             margin-bottom: 22px;
         }
 
+        .auth-mobile-intro {
+            display: none;
+            margin-bottom: 18px;
+            padding: 16px;
+            border: 1px solid rgba(232, 201, 160, 0.16);
+            border-radius: 18px;
+            background: linear-gradient(135deg, rgba(232, 201, 160, 0.12), rgba(11, 6, 8, 0.86));
+        }
+
+        .auth-mobile-intro-top {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+
+        .auth-mobile-intro-badge {
+            display: inline-flex;
+            width: fit-content;
+            padding: 5px 10px;
+            border-radius: 999px;
+            background: rgba(232, 201, 160, 0.14);
+            color: #e8c9a0;
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
+        .auth-mobile-intro h3 {
+            margin: 0;
+            color: #fff6ea;
+            font-size: 24px;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+        }
+
+        .auth-mobile-intro p {
+            margin: 0;
+            color: #cdbdaf;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
         .telegram-miniapp-login-button {
             width: 100%;
             display: flex;
@@ -456,14 +508,47 @@
         }
 
         @media (max-width: 767px) {
+            .auth-mobile-intro {
+                display: block;
+            }
+
             .auth-redesign-form-column {
-                padding: 18px;
+                padding: 12px;
             }
 
             .auth-redesign-card {
                 width: 100%;
-                padding: 24px !important;
+                padding: 20px !important;
                 border-radius: 24px;
+            }
+
+            .auth-redesign-card .section-header {
+                margin-bottom: 16px;
+            }
+
+            .auth-redesign-card .section-header h3 {
+                font-size: 26px;
+            }
+
+            .auth-redesign-card .section-header .description {
+                font-size: 14px;
+            }
+
+            .auth-redesign-card .cmn-btn {
+                height: 52px;
+            }
+
+            .auth-social-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .auth-row {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .auth-telegram-widget iframe {
+                max-width: 100% !important;
             }
         }
     </style>
