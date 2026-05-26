@@ -10,7 +10,11 @@
                     <div class="col-lg-6 order-1 order-lg-2">
                         <div class="calculator-section">
                             <div class="calculator p25 mw-100">
-                                <h3>@lang("Sell Crypto")</h3>
+                                <div class="sc-flow-title">
+                                    <span>@lang('Step 2 of 3')</span>
+                                    <h3>@lang("Sell Crypto")</h3>
+                                    <p>@lang('Choose payout details and continue.')</p>
+                                </div>
                                 <div class="row">
                                     <div class="col-12" id="calLoader">
                                         <div class="input-amount-box" id="inputAmountBox">
@@ -101,7 +105,7 @@
 
                         <div class="wallet-address-section">
                             <div class="item">
-                                <h4>@lang("Get Currency Method")</h4>
+                                <h4>@lang("Payout method")</h4>
                                 <div class="fiat-currency-section">
                                     <select class="cmn-select2-image" name="payment_method" id="paymentMethod">
 
@@ -117,13 +121,13 @@
                             <div id="telegramContactBox"></div>
                             @include($theme.'partials.trade-agreement-card', ['id' => 'sellAgreement'])
                             <div class="btn-are">
-                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Next step")</button>
+                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Continue")</button>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-3 order-3 order-lg-3">
                         <div class="transaction-summery" id="autoRate">
-                            <h4 class="title">@lang("Trade details")</h4>
+                            <h4 class="title">@lang("Details")</h4>
                             <div class="transaction-item-container">
                                 <div class="item">
                                     <span>@lang("You send")</span>

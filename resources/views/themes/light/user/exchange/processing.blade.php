@@ -10,7 +10,11 @@
                     <div class="col-lg-6 order-1 order-lg-2">
                         <div class="calculator-section">
                             <div class="calculator p25 mw-100">
-                                <h3>@lang("Exchange Crypto")</h3>
+                                <div class="sc-flow-title">
+                                    <span>@lang('Step 2 of 3')</span>
+                                    <h3>@lang("Exchange Crypto")</h3>
+                                    <p>@lang('Pick rate type, add your wallet and continue.')</p>
+                                </div>
                                 <div class="row">
                                     <div class="col-12" id="calLoader">
                                         <div class="input-amount-box" id="inputAmountBox">
@@ -119,7 +123,7 @@
                         </div>
                         <div class="wallet-address-section">
                             <div class="item">
-                                <h4>@lang("Destination wallet address")</h4>
+                                <h4>@lang("Wallet address")</h4>
                                 <div class="form-floating">
                                     <input type="text" name="destination_wallet" class="form-control"
                                            id="floatingInputValue" value="{{old('destination_wallet')}}"
@@ -130,13 +134,13 @@
                             </div>
                             @include($theme.'partials.trade-agreement-card', ['id' => 'exchangeAgreement'])
                             <div class="btn-are">
-                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Next step")</button>
+                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Continue")</button>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-3 order-3 order-lg-3">
                         <div class="transaction-summery" id="autoRate">
-                            <h4 class="title">@lang("Trade details")</h4>
+                            <h4 class="title">@lang("Details")</h4>
                             <div class="transaction-item-container">
                                 <div class="item">
                                     <span>@lang("You send")</span>

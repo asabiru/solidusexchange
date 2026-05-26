@@ -80,8 +80,13 @@
         </div>
     </div>
 
+    <div class="sc-fast-checklist">
+        <span><i class="fa-regular fa-bolt"></i>@lang('1 minute request')</span>
+        <span><i class="fa-regular fa-shield-check"></i>@lang('AML checked')</span>
+        <span><i class="fa-regular fa-message"></i>@lang('Telegram support')</span>
+    </div>
+
     <div class="btn-area">
-        <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Exchange now")</button>
+        <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Start exchange")</button>
     </div>
 </div>
-
