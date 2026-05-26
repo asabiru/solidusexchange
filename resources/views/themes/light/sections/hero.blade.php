@@ -290,40 +290,35 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load currencies for exchange mode (crypto -> crypto)
 function loadExchangeCurrencies() {
-    // For exchange, don't change currencies - keep existing logic
-    console.log('Exchange mode - keeping existing currencies');
+    if (typeof activeTab !== 'undefined') {
+        activeTab = 'exchange';
+    }
+
+    if (typeof getExchangeCurrency === 'function') {
+        getExchangeCurrency("{{ route('getExchangeCurrency', [], false) }}");
+    }
 }
 
-// Load currencies for buy mode (crypto -> fiat) - покупка крипты за фиат
+// Load currencies for buy mode (fiat -> crypto)
 function loadBuyCurrencies() {
-    fetch("{{ route('getSellCurrency') }}")
-        .then(response => response.json())
-        .then(data => {
-            // Swap: send = crypto, get = fiat (для покупки крипты за фиат)
-            updateSendCurrencySelector(data.getCurrencies, data.getCurrencies[0]);
-            updateGetCurrencySelector(data.sendCurrencies, data.sendCurrencies[0]);
-            // Update initial amount
-            if (data.getCurrencies && data.getCurrencies[0]) {
-                document.getElementById('send').value = ((data.getCurrencies[0].min_send + data.getCurrencies[0].max_send) / 2).toFixed(2);
-            }
-        })
-        .catch(error => console.error('Error loading buy currencies:', error));
+    if (typeof activeTab !== 'undefined') {
+        activeTab = 'buy';
+    }
+
+    if (typeof getExchangeCurrency === 'function') {
+        getExchangeCurrency("{{ route('getBuyCurrency', [], false) }}");
+    }
 }
 
-// Load currencies for sell mode (fiat -> crypto) - продажа крипты за фиат
+// Load currencies for sell mode (crypto -> fiat)
 function loadSellCurrencies() {
-    fetch("{{ route('getBuyCurrency') }}")
-        .then(response => response.json())
-        .then(data => {
-            // Swap: send = fiat, get = crypto (для продажи крипты за фиат)
-            updateSendCurrencySelector(data.sendCurrencies, data.sendCurrencies[0]);
-            updateGetCurrencySelector(data.getCurrencies, data.getCurrencies[0]);
-            // Update initial amount
-            if (data.sendCurrencies && data.sendCurrencies[0]) {
-                document.getElementById('send').value = ((data.sendCurrencies[0].min_send + data.sendCurrencies[0].max_send) / 2).toFixed(2);
-            }
-        })
-        .catch(error => console.error('Error loading sell currencies:', error));
+    if (typeof activeTab !== 'undefined') {
+        activeTab = 'sell';
+    }
+
+    if (typeof getExchangeCurrency === 'function') {
+        getExchangeCurrency("{{ route('getSellCurrency', [], false) }}");
+    }
 }
 
 // Update send currency selector
