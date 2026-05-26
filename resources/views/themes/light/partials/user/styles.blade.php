@@ -99,6 +99,9 @@ hr,hr.dropdown-divider,.dropdown-divider { border-color:rgba(232,201,160,.08) !i
 #toggle-btn:hover { background:rgba(232,201,160,.08) !important; color:#e8c9a0 !important; }
 #toggle-btn i { font-size:16px; }
 
+/* Hide old logo image — replaced by CSS SC badge */
+#header .logo-container img#logoSet { display:none !important; }
+
 /* Footer */
 footer#footer,.footer { background:#150c10 !important; border-top:1px solid rgba(232,201,160,.06) !important; color:#5e534d !important; }
 </style>
