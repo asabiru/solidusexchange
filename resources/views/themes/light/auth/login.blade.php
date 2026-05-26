@@ -49,7 +49,7 @@
                     </div>
                 </div>
 
-                <div class="col-md-6 p-0 d-flex justify-content-center flex-column auth-redesign-form-column">
+                <div class="col-12 p-0 d-flex justify-content-center flex-column auth-redesign-form-column">
                     <div class="login-signup-form auth-redesign-card">
                         <form action="{{ route('login') }}" method="post">
                             @csrf
@@ -63,7 +63,7 @@
                                 $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
                             @endphp
 
-                            <div class="auth-mobile-bar d-md-none">
+                            <div class="auth-top-bar">
                                 <a href="{{ url('/') }}" class="auth-back-btn">
                                     <i class="fa-solid fa-arrow-left"></i>
                                     <span>Назад</span>
@@ -282,12 +282,7 @@
         }
 
         .auth-redesign-visual {
-            background-image: none !important;
-            position: relative;
-            overflow: hidden;
-            display: flex;
-            align-items: center;
-            border-right: 1px solid rgba(232, 201, 160, 0.14);
+            display: none !important;
         }
 
         .auth-redesign-visual::before {
@@ -341,12 +336,15 @@
         .auth-redesign-form-column {
             position: relative;
             z-index: 1;
-            padding: 28px;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
         }
 
         .auth-redesign-card {
-            width: min(520px, calc(100% - 32px));
-            margin: 0 auto;
+            width: min(580px, 100%);
             padding: 34px !important;
             border: 1px solid rgba(232, 201, 160, 0.22);
             border-radius: 30px;
@@ -396,12 +394,12 @@
             margin-bottom: 22px;
         }
 
-        .auth-mobile-bar {
-            display: none;
+        .auth-top-bar {
+            display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 12px;
-            margin-bottom: 14px;
+            margin-bottom: 18px;
         }
 
         .auth-back-btn {
@@ -551,11 +549,12 @@
             border: 0;
         }
 
-        @media (max-width: 767px) {
-            .auth-mobile-bar {
-                display: flex;
-            }
+        .auth-divider,
+        .auth-social-grid {
+            display: none !important;
+        }
 
+        @media (max-width: 767px) {
             .auth-mobile-intro {
                 display: block;
                 margin-bottom: 12px;
@@ -564,8 +563,6 @@
 
             .auth-redesign-form-column {
                 min-height: 100dvh;
-                justify-content: center !important;
-                align-items: center;
                 padding: 14px 12px 24px;
             }
 
@@ -590,11 +587,6 @@
 
             .auth-redesign-card .cmn-btn {
                 height: 52px;
-            }
-
-            .auth-divider,
-            .auth-social-grid {
-                display: none !important;
             }
 
             .auth-row {
