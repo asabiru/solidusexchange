@@ -173,7 +173,7 @@ class LoginController extends Controller
             return redirect()->route('check');
         }
 
-        return redirect()->to(url('/'));
+        return redirect()->route('user.dashboard');
 
     }
 
