@@ -4,7 +4,7 @@
         $cryptoCurrencies = collect();
     }
     $lastSync = \App\Models\CryptoCurrency::where('status', 1)->whereNotNull('last_rate_sync_at')->max('last_rate_sync_at');
-    $syncAgo = $lastSync ? $lastSync->diffInSeconds(now()) : null;
+    $syncAgo = $lastSync ? \Carbon\Carbon::parse($lastSync)->diffInSeconds(now()) : null;
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
