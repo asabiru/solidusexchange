@@ -1,27 +1,27 @@
 @php
-    \ = \ ?? \App\Models\ContentDetails::with('content')
-        ->whereHas('content', fn(\) => \->where('name', 'faq')->where('type', 'single'))
+    $faqSingle = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'single'))
         ->where('language_id', 1)
         ->first();
 
-    \ = \ ?? \App\Models\ContentDetails::with('content')
-        ->whereHas('content', fn(\) => \->where('name', 'faq')->where('type', 'multiple'))
+    $faqMultiple = \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'multiple'))
         ->where('language_id', 1)
         ->get();
 
-    \ = \ ? __(\->description['title'] ?? 'FAQ') : 'FAQ';
-    \ = \ ? __(\->description['sub_title'] ?? 'Часто задаваемые вопросы') : 'Часто задаваемые вопросы';
+    $sectionTitle = $faqSingle ? __($faqSingle->description['title'] ?? 'FAQ') : 'FAQ';
+    $sectionSubtitle = $faqSingle ? __($faqSingle->description['sub_title'] ?? 'Часто задаваемые вопросы') : 'Часто задаваемые вопросы';
 
-    \ = \->map(function (\) {
-        \ = is_object(\->description) ? (array) \->description : \->description;
+    $faqs = $faqMultiple->map(function ($item) {
+        $desc = is_object($item->description) ? (array) $item->description : $item->description;
         return [
-            'question' => __(\['title'] ?? ''),
-            'answer' => __(\['sub_title'] ?? ''),
+            'question' => __($desc['title'] ?? ''),
+            'answer' => __($desc['sub_title'] ?? ''),
         ];
     })->toArray();
 
-    if (empty(\)) {
-        \ = [
+    if (empty($faqs)) {
+        $faqs = [
             ['question' => 'Как быстро происходит обмен?', 'answer' => 'Среднее время обмена — 7 минут. Это включает время на подтверждение транзакции в сети и отправку средств на ваш кошелёк.'],
             ['question' => 'Какие лимиты на обмен?', 'answer' => 'Минимальная сумма обмена — 10 USD или эквивалент в криптовалюте. Максимальная сумма зависит от выбранной криптовалюты.'],
             ['question' => 'Нужна ли верификация?', 'answer' => 'Для сумм до 1000 USD в сутки верификация не требуется. Для больших сумм может потребоваться стандартная KYC процедура, которая занимает около 5 минут.'],
