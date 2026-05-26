@@ -20,7 +20,7 @@ Typography
     --color-accent: #e8c9a0;
     --color-accent-hover: #f2d8b4;
     --color-accent-soft: rgba(232, 201, 160, 0.12);
-    --color-success: #7fb28a;
+    --color-success: #e8c9a0;
     --color-warning: #d9a86a;
     --color-danger: #c9786a;
     
@@ -37,7 +37,7 @@ Typography
     --btn-hover-bg: #f2d8b4;
     --soft-red: #c9786a;
     --lime-gray: #2a1f1f;
-    --lime-green-rgb: 127, 178, 138;
+    --lime-green-rgb: 232, 201, 160;
     --vivid-orange: #d9a86a;
     --yellow: #e8c9a0;
     --loader-color: #0b0608;

@@ -19,7 +19,7 @@ Typography
     --color-accent: #e8c9a0;
     --color-accent-hover: #f2d8b4;
     --color-accent-soft: rgba(232, 201, 160, 0.12);
-    --color-success: #7fb28a;
+    --color-success: #e8c9a0;
     --color-warning: #d9a86a;
     --color-danger: #c9786a;
     
@@ -36,10 +36,10 @@ Typography
     --blue: #3a1f2b;
     --orange: #d9a86a;
     --soft-blue: #3a1f2b;
-    --soft-green: #7fb28a;
+    --soft-green: #e8c9a0;
     --loader-color: #0b0608;
     --soft-red: #c9786a;
-    --lime-green: #7fb28a;
+    --lime-green: #e8c9a0;
     --vivid-orange: #d9a86a;
     --vivid-cyan: #e8c9a0;
     --vivid-yellow: #e8c9a0;
@@ -67,7 +67,7 @@ Typography
 
 :root{
     --grayish-blue: 154, 142, 134;
-    --grayish-green: 127, 178, 138;
+    --grayish-green: 232, 201, 160;
     --strong-orange: 217, 168, 106;
 }
 /* Box Card section start*/
