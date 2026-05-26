@@ -249,12 +249,12 @@
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
         </div>
         <div class="offcanvas-body d-flex flex-column gap-2 p-3">
-            <a href="{{ url('/#exchange') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
-            <a href="{{ url('/#rates') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
-            <a href="{{ url('/#reserves') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
-            <a href="{{ url('/#how') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
-            <a href="{{ url('/#faq') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
-            <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
+            <a href="{{ url('/#exchange') }}" class="nav-link text-decoration-none">Обмен</a>
+            <a href="{{ url('/#rates') }}" class="nav-link text-decoration-none">Курсы</a>
+            <a href="{{ url('/#reserves') }}" class="nav-link text-decoration-none">Резервы</a>
+            <a href="{{ url('/#how') }}" class="nav-link text-decoration-none">Как работает</a>
+            <a href="{{ url('/#faq') }}" class="nav-link text-decoration-none">FAQ</a>
+            <a href="{{ url('tracking') }}" class="nav-link text-decoration-none">Отследить</a>
 
             @if($activeLanguages->isNotEmpty())
                 <div class="mt-4 pt-4" style="border-top: 1px solid rgba(255,255,255,0.08);">
@@ -281,7 +281,45 @@
             @endif
 
             @guest
-                <a href="{{ route('login') }}" class="btn-primary text-decoration-none mt-2 w-100 text-center" data-bs-dismiss="offcanvas">Войти</a>
+                <a href="{{ route('login') }}" class="btn-primary text-decoration-none mt-2 w-100 text-center">Войти</a>
             @endguest
         </div>
     </div>
+
+<script>
+(function () {
+    function initMobileMenu() {
+        var menu = document.getElementById('mobileMenu');
+        if (!menu) return;
+
+        menu.querySelectorAll('a').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                var href = link.getAttribute('href');
+                if (!href || href === '#' || href.startsWith('javascript')) return;
+
+                e.preventDefault();
+
+                var bsOffcanvas = (typeof bootstrap !== 'undefined' && bootstrap.Offcanvas)
+                    ? bootstrap.Offcanvas.getInstance(menu)
+                    : null;
+
+                if (bsOffcanvas) {
+                    menu.addEventListener('hidden.bs.offcanvas', function handler() {
+                        menu.removeEventListener('hidden.bs.offcanvas', handler);
+                        window.location.href = href;
+                    });
+                    bsOffcanvas.hide();
+                } else {
+                    window.location.href = href;
+                }
+            });
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMobileMenu);
+    } else {
+        initMobileMenu();
+    }
+})();
+</script>
