@@ -9,6 +9,13 @@
         backdrop-filter: blur(16px);
     }
 
+    @media (max-width: 991px) {
+        .solidchange-navbar {
+            position: relative;
+            top: auto;
+        }
+    }
+
     body:not(.dark-theme) .solidchange-navbar {
         background: rgba(250, 248, 245, 0.92);
     }
