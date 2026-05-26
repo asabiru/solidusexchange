@@ -74,16 +74,45 @@
 
     /* Mobile offcanvas fixes */
     #mobileMenu {
-        background: var(--color-bg-elevated) !important;
+        background: #150c10 !important;
+        border-left: 1px solid rgba(255,255,255,0.08) !important;
         border-radius: 0 !important;
+        color: #f5ede4 !important;
+    }
+
+    #mobileMenu .offcanvas-header {
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        padding: 16px;
     }
 
     #mobileMenu .offcanvas-body {
         overflow-y: auto;
+        background: #150c10 !important;
     }
 
     #mobileMenu .nav-link {
-        color: var(--color-text-primary) !important;
+        color: #f5ede4 !important;
+        font-size: 16px;
+        padding: 12px 8px;
+        border-radius: 8px;
+        display: block;
+    }
+
+    #mobileMenu .nav-link:hover,
+    #mobileMenu .nav-link:active {
+        background: rgba(232,201,160,0.12) !important;
+        color: #e8c9a0 !important;
+    }
+
+    #mobileMenu .btn-primary {
+        background: #e8c9a0 !important;
+        color: #0b0608 !important;
+        padding: 12px 16px;
+        display: block;
+        text-align: center;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 700;
     }
 </style>
 
@@ -136,7 +165,7 @@
                             @foreach($activeLanguages as $language)
                                 <li>
                                     <a class="dropdown-item d-flex align-items-center gap-2 text-decoration-none"
-                                       style="color: var(--color-text-secondary);"
+        
                                        href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                         <img src="{{ getFile($language->flag_driver, $language->flag) }}"
                                              alt="{{ $language->name }}"
@@ -209,15 +238,15 @@
     </div>
 
     <!-- Mobile Menu -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu" style="background: var(--color-bg); border-left: 1px solid var(--color-border-subtle);">
-        <div class="offcanvas-header" style="border-bottom: 1px solid var(--color-border-subtle);">
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu">
+        <div class="offcanvas-header">
             <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
                 <div class="logo-badge">SC</div>
                 <span>SolidChange</span>
             </a>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
         </div>
-        <div class="offcanvas-body d-flex flex-column gap-2">
+        <div class="offcanvas-body d-flex flex-column gap-2 p-3">
             <a href="#exchange" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
             <a href="#rates" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
             <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
@@ -226,12 +255,12 @@
             <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
 
             @if($activeLanguages->isNotEmpty())
-                <div class="mt-4 pt-4" style="border-top: 1px solid var(--color-border-subtle);">
+                <div class="mt-4 pt-4" style="border-top: 1px solid rgba(255,255,255,0.08);">
                     <div class="fw-semibold mb-3" style="color: var(--color-text-primary);">@lang('Language Settings')</div>
                     <div class="d-flex flex-column gap-2">
                         @foreach($activeLanguages as $language)
                             <a class="nav-link d-flex align-items-center justify-content-between text-decoration-none"
-                               style="color: var(--color-text-secondary);"
+
                                href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}"
                                data-bs-dismiss="offcanvas">
                                 <span class="d-flex align-items-center gap-2">

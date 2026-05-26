@@ -257,11 +257,14 @@ Swap Card - eazy228/design style
     border-radius: var(--radius-md);
     color: var(--color-bg);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.2s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
 }
 
 .swap-button:hover {
     background: var(--color-accent-hover);
+}
+
+.swap-button.flipped {
     transform: rotate(180deg);
 }
 
@@ -669,11 +672,14 @@ Exchange Calculator - eazy228/design style
     border-radius: var(--radius-md);
     color: var(--color-bg);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background 0.2s, transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
 }
 
 .sc-swap-icon:hover {
     background: var(--color-accent-hover);
+}
+
+.sc-swap-icon.flipped {
     transform: rotate(180deg);
 }
 

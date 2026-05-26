@@ -4532,8 +4532,11 @@ Hero end
 }
 
 .sc-swap-icon:hover {
-    transform: rotate(180deg) scale(1.1);
     box-shadow: 0 6px 16px rgba(201, 162, 39, 0.4);
+}
+
+.sc-swap-icon.flipped {
+    transform: rotate(180deg) scale(1.0);
 }
 
 .sc-compact-features {
@@ -7395,6 +7398,9 @@ Swap Card - eazy228/design style
 
 .swap-button:hover {
     background: var(--color-accent-hover);
+}
+
+.swap-button.flipped {
     transform: rotate(180deg);
 }
 
