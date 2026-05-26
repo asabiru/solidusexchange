@@ -1,0 +1,44 @@
+<IfModule mod_rewrite.c>
+    <IfModule mod_negotiation.c>
+        Options -MultiViews -Indexes
+    </IfModule>
+    <Files .env>
+       Order allow,deny
+       Deny from all
+    </Files>
+
+    <Files laravel.log>
+       Order allow,deny
+       Deny from all
+    </Files>
+
+    RewriteEngine On
+
+    # Redirect all traffic to HTTPS once an SSL certificate is installed
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP:X-Forwarded-Proto} !https [NC]
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # Force-disable legacy /license landing pages sometimes bundled by third-party scripts
+    RewriteRule ^license/?$ / [R=302,L,NC]
+    RewriteRule ^index\.php/license/?$ / [R=302,L,NC]
+
+    # Block direct web access to private application directories and files
+    RewriteRule ^(?:app|bootstrap|config|database|resources|routes|storage|tests|vendor|deployment|Documentation|SQL)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:\.git|\.github)(?:/|$) - [F,L,NC]
+    RewriteRule ^(?:\.env(?:\..*)?|artisan|composer\.(?:json|lock)|package(?:-lock)?\.json|phpunit\.xml|vite\.config\.js|README\.md|php\.local\.ini|deploy\.log)$ - [F,L,NC]
+
+    # Handle Authorization Header
+    RewriteCond %{HTTP:Authorization} .
+    RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+    # Redirect Trailing Slashes If Not A Folder...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_URI} (.+)/$
+    RewriteRule ^ %1 [L,R=301]
+
+    # Send Requests To Front Controller...
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteRule ^ index.php [L]
+</IfModule>
