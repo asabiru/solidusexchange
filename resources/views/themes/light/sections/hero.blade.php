@@ -114,7 +114,7 @@
                         <div class="swap-card-header">
                             <div class="swap-card-title">
                                 <h3 id="formTitle">Обмен криптовалют</h3>
-                                <span class="update-time">Курс обновлён 12 c назад</span>
+                                <span class="update-time">Курс обновляется автоматически</span>
                             </div>
                         </div>
 

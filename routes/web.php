@@ -19,6 +19,7 @@ use App\Http\Controllers\User\VerificationController;
 use App\Http\Controllers\FaSecurityController;
 use App\Http\Controllers\User\UserProfileController;
 use App\Http\Controllers\SocialiteController;
+use App\Http\Controllers\SchedulerController;
 
 $basicControl = basicControl();
 
@@ -38,6 +39,11 @@ Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('
     Route::get('instruction/page', function () {
         return view('instruction-page');
     })->name('instructionPage');
+
+    // HTTP-triggered scheduler endpoints (for shared hosting without crontab)
+    Route::get('__scheduler/run', [SchedulerController::class, 'run']);
+    Route::get('__scheduler/sync-crypto', [SchedulerController::class, 'syncCryptoRates']);
+    Route::get('__scheduler/sync-fiat', [SchedulerController::class, 'syncFiatRates']);
 
     Route::get('license', function () {
         return redirect()->route('page');

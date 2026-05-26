@@ -50,7 +50,7 @@
                     <h4 class="crypto-symbol">{{ $crypto->code }}</h4>
                     <p class="crypto-name">{{ $crypto->name }}</p>
                     <div class="crypto-price">
-                        ${{ number_format($crypto->usd_rate ?? $crypto->rate, $crypto->rate < 10 ? 4 : 2) }}
+                        ${{ formatCryptoRate((float)($crypto->usd_rate ?? $crypto->rate)) }}
                     </div>
                 </div>
 

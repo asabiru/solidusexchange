@@ -3,6 +3,8 @@
     if($cryptoCurrencies->isEmpty()) {
         $cryptoCurrencies = collect();
     }
+    $lastSync = \App\Models\CryptoCurrency::where('status', 1)->whereNotNull('last_rate_sync_at')->max('last_rate_sync_at');
+    $syncAgo = $lastSync ? $lastSync->diffInSeconds(now()) : null;
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
@@ -15,7 +17,7 @@
 
         <div class="rates-subheader">
             <h3>Курсы в реальном времени</h3>
-            <span class="update-time">Обновлено 12 c назад</span>
+            <span class="update-time">@if($syncAgo !== null) Обновлено {{ $syncAgo }} с назад @else Курсы загружаются... @endif</span>
         </div>
 
         <!-- Ticker -->
@@ -25,7 +27,7 @@
                 @foreach([1,2] as $duplicate)
                 <div class="ticker-item">
                     <span class="ticker-pair">{{ $currency->code }}/USD</span>
-                    <span class="ticker-price">{{ number_format($currency->usd_rate ?? $currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
+                    <span class="ticker-price">{{ formatCryptoRate((float)($currency->usd_rate ?? $currency->rate)) }}</span>
                     <span class="ticker-change {{ rand(0,1) ? 'positive' : 'negative' }}">
                         @if(rand(0,1))
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -82,7 +84,7 @@
                         </div>
                     </div>
                     <div class="table-cell" data-label="Цена, USD">
-                        <span class="price-value">{{ $currency->usd_rate ? number_format($currency->usd_rate, $currency->usd_rate < 10 ? 4 : 2) : number_format($currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
+                        <span class="price-value">{{ formatCryptoRate((float)($currency->usd_rate ?? $currency->rate)) }}</span>
                     </div>
                     <div class="table-cell" data-label="24ч">
                         <span class="change-value {{ rand(0,1) ? 'positive' : 'negative' }}">

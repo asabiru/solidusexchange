@@ -191,4 +191,16 @@ return [
             'Excel' => Maatwebsite\Excel\Facades\Excel::class
     ])->toArray(),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Scheduler Secret
+    |--------------------------------------------------------------------------
+    |
+    | Secret token used to protect the HTTP-triggered scheduler endpoint.
+    | Required on shared hosting where crontab is not available.
+    |
+    */
+
+    'scheduler_secret' => env('SCHEDULER_SECRET'),
+
 ];

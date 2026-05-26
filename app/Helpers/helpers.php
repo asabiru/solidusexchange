@@ -999,6 +999,60 @@ if (!function_exists('getBaseAmount')) {
     }
 }
 
+if (!function_exists('formatCryptoRate')) {
+    /**
+     * Format a crypto/fiat rate for display, handling very small values (meme coins)
+     * and avoiding scientific notation like 5.5215E-6.
+     *
+     * Examples:
+     *   75821.45  → "75,821.45"
+     *   1.0       → "1.0000"
+     *   0.37575   → "0.3758"
+     *   0.0000055 → "0.00000550"
+     *   0.00000000351 → "0.0000000035"
+     */
+    function formatCryptoRate(float $rate): string
+    {
+        if ($rate <= 0) {
+            return '0.00';
+        }
+
+        // For very small values (< 0.001), show enough significant digits
+        if ($rate < 0.001) {
+            $formatted = sprintf('%.10f', $rate);
+            // Trim trailing zeros but keep at least 2 decimal places
+            $formatted = rtrim(rtrim($formatted, '0'), '.');
+            // Ensure at least 2 significant digits after the leading zeros
+            // e.g. 0.0000055 → 0.00000550 (2 sig digits)
+            $dotPos = strpos($formatted, '.');
+            if ($dotPos !== false) {
+                $afterDot = substr($formatted, $dotPos + 1);
+                // Count leading zeros after decimal
+                $leadingZeros = strspn($afterDot, '0');
+                // We want at least 2 non-zero digits after the leading zeros
+                $minDigits = $leadingZeros + 2;
+                if (strlen($afterDot) < $minDigits) {
+                    $formatted = substr($formatted, 0, $dotPos + 1) . str_pad($afterDot, $minDigits, '0');
+                }
+            }
+            return $formatted;
+        }
+
+        // For values between 0.001 and 10, show 4 decimal places
+        if ($rate < 10) {
+            return number_format($rate, 4, '.', '');
+        }
+
+        // For values between 10 and 1000, show 2 decimal places
+        if ($rate < 1000) {
+            return number_format($rate, 2, '.', '');
+        }
+
+        // For values >= 1000, show 2 decimal places with thousands separator
+        return number_format($rate, 2, '.', ',');
+    }
+}
+
 if (!function_exists('getFirebaseFileName')) {
     function getFirebaseFileName()
     {
