@@ -1,5 +1,8 @@
 @php
     $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(10)->get();
+    if($cryptoCurrencies->isEmpty()) {
+        $cryptoCurrencies = collect();
+    }
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
@@ -54,7 +57,14 @@
                     <div class="table-cell">Обменять</div>
                 </div>
 
-                @foreach($cryptoCurrencies as $currency)
+                @if($cryptoCurrencies->isEmpty())
+                    <div class="table-row">
+                        <div class="table-cell" colspan="5" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
+                            Криптовалюты временно недоступны
+                        </div>
+                    </div>
+                @else
+                    @foreach($cryptoCurrencies as $currency)
                 <div class="table-row">
                     <div class="table-cell">
                         <div class="currency-info">
@@ -97,7 +107,8 @@
                         </a>
                     </div>
                 </div>
-                @endforeach
+                    @endforeach
+                @endif
             </div>
         </div>
     </div>

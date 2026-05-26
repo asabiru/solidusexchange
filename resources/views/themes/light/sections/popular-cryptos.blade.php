@@ -1,5 +1,9 @@
 @php
     $popularCryptos = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(6)->get();
+    // If no cryptos found, use empty collection to avoid errors
+    if($popularCryptos->isEmpty()) {
+        $popularCryptos = collect();
+    }
 @endphp
 
 <!-- PopularCryptos Section - eazy228/design style -->
@@ -13,7 +17,12 @@
         <h3 class="popular-subtitle">Чаще всего обменивают</h3>
 
         <div class="popular-grid">
-            @foreach($popularCryptos as $crypto)
+            @if($popularCryptos->isEmpty())
+                <div class="no-data-message">
+                    <p>Криптовалюты временно недоступны</p>
+                </div>
+            @else
+                @foreach($popularCryptos as $crypto)
             <div class="crypto-card">
                 <div class="crypto-header">
                     <div class="crypto-icon">
@@ -49,7 +58,8 @@
                     Обменять {{ $crypto->code }}
                 </a>
             </div>
-            @endforeach
+                @endforeach
+            @endif
         </div>
     </div>
 </section>

@@ -147,6 +147,21 @@ PopularCryptos Section - eazy228/design style
     box-shadow: 0 4px 12px rgba(232, 201, 160, 0.3);
 }
 
+.no-data-message {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 60px 20px;
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.no-data-message p {
+    color: var(--color-text-secondary);
+    font-size: 16px;
+    margin: 0;
+}
+
 /* Responsive */
 @media (max-width: 991px) {
     .popular-cryptos-section {

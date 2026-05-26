@@ -15,8 +15,8 @@ Typography
     --color-border-subtle: rgba(255, 255, 255, 0.06);
     --color-border-strong: rgba(255, 255, 255, 0.12);
     --color-text-primary: #f5ede4;
-    --color-text-secondary: #9a8e86;
-    --color-text-muted: #5e534d;
+    --color-text-secondary: #d4c4b8;
+    --color-text-muted: #a89a8e;
     --color-accent: #e8c9a0;
     --color-accent-hover: #f2d8b4;
     --color-accent-soft: rgba(232, 201, 160, 0.12);
@@ -30,7 +30,7 @@ Typography
     --secondary-color: #d4a574;
     --heading-color: #f5ede4;
     --black: #f5ede4;
-    --grayish-blue: #9a8e86;
+    --grayish-blue: #d4c4b8;
     --white: #0b0608;
     --soft-blue: #3a1f2b;
     --soft-gold-dark: #150c10;
@@ -83,9 +83,9 @@ body:not(.dark-theme) {
     --color-bg-gradient-to: #ebe4d8;
     --color-border-subtle: rgba(201, 162, 39, 0.25);
     --color-border-strong: rgba(201, 162, 39, 0.5);
-    --color-text-primary: #1a1614;
-    --color-text-secondary: #5a5248;
-    --color-text-muted: #8a8278;
+    --color-text-primary: #0b0608;
+    --color-text-secondary: #3d3d3d;
+    --color-text-muted: #6b6b6b;
     --color-accent: #c9a227;
     --color-accent-hover: #d4b52f;
     --color-accent-soft: rgba(201, 162, 39, 0.15);
@@ -94,9 +94,9 @@ body:not(.dark-theme) {
     --primary-color: #c9a227;
     --primary-color-rgb: 201, 162, 39;
     --secondary-color: #a8871f;
-    --heading-color: #1a1614;
-    --black: #1a1614;
-    --grayish-blue: #5a5248;
+    --heading-color: #0b0608;
+    --black: #0b0608;
+    --grayish-blue: #3d3d3d;
     --white: #ffffff;
     --soft-blue: #ebe4d8;
     --soft-gold: #f5f0e8;
@@ -107,7 +107,7 @@ body:not(.dark-theme) {
     --bg-color2: #ffffff;
     --bg-color3: #faf8f5;
     --bg-grad-color: #ffffff;
-    --body-color: #1a1614;
+    --body-color: #0b0608;
     --border-color1: rgba(201, 162, 39, 0.25);
     --border-color2: rgba(201, 162, 39, 0.35);
     --border-color3: rgba(201, 162, 39, 0.5);
@@ -130,7 +130,7 @@ Dark theme section (default champagne dark theme)
     --color-border-strong: rgba(232, 201, 160, 0.5);
     --color-text-primary: #f5ede4;
     --color-text-secondary: #d4c4b0;
-    --color-text-muted: #8a8278;
+    --color-text-muted: #6b6b6b;
     --color-accent: #e8c9a0;
     --color-accent-hover: #f2d8b4;
     --color-accent-soft: rgba(232, 201, 160, 0.2);
@@ -500,7 +500,7 @@ body:not(.dark-theme) .form-control,
 body:not(.dark-theme) .form-select {
     background: rgba(255, 255, 255, 0.9);
     border: 2px solid rgba(201, 162, 39, 0.3);
-    color: #1a1614;
+    color: #0b0608;
 }
 
 body:not(.dark-theme) .form-control:focus,
