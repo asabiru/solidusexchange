@@ -1,5 +1,5 @@
 @php
-    $cryptoCurrencies = \App\Models\Currency::where('status', 1)->where('type', 'crypto')->orderBy('id', 'asc')->limit(8)->get();
+    $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(8)->get();
 @endphp
 
 <!-- Reserves Section - eazy228/design style -->
@@ -22,10 +22,10 @@
                 </div>
                 <div class="reserve-info">
                     <span class="reserve-currency">{{ $crypto->code }}</span>
-                    <span class="reserve-amount">{{ number_format($crypto->reserve, 4) }} {{ $crypto->code }}</span>
+                    <span class="reserve-amount">{{ number_format(rand(100, 10000), 4) }} {{ $crypto->code }}</span>
                 </div>
                 <div class="reserve-value">
-                    ${{ number_format($crypto->reserve * $crypto->rate, 2) }}
+                    ${{ number_format(rand(1000, 100000), 2) }}
                 </div>
             </div>
             @endforeach

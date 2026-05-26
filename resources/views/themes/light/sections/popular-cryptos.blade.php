@@ -1,5 +1,5 @@
 @php
-    $popularCryptos = \App\Models\Currency::where('status', 1)->where('type', 'crypto')->orderBy('id', 'asc')->limit(6)->get();
+    $popularCryptos = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(6)->get();
 @endphp
 
 <!-- PopularCryptos Section - eazy228/design style -->
@@ -41,7 +41,7 @@
                     <h4 class="crypto-symbol">{{ $crypto->code }}</h4>
                     <p class="crypto-name">{{ $crypto->name }}</p>
                     <div class="crypto-price">
-                        ${{ number_format($crypto->rate, $crypto->rate < 10 ? 4 : 2) }}
+                        ${{ number_format($crypto->usd_rate ?? $crypto->rate, $crypto->rate < 10 ? 4 : 2) }}
                     </div>
                 </div>
 
