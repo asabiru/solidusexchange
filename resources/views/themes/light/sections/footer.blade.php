@@ -10,16 +10,33 @@
                 <p class="footer-description">
                     Надежная криптовалютная биржа для обмена цифровых активов с лучшими курсами и мгновенными транзакциями.
                 </p>
+                @php
+                    $socialLinks = \App\Models\ContentDetails::with('content')
+                        ->whereHas('content', fn($q) => $q->where('name', 'social'))
+                        ->where('language_id', app()->getLocale() === 'ru' ? 20 : 1)
+                        ->get()
+                        ->map(fn($d) => json_decode($d->description))
+                        ->filter(fn($s) => $s && !empty($s->my_link));
+                    if ($socialLinks->isEmpty()) {
+                        $socialLinks = \App\Models\ContentDetails::with('content')
+                            ->whereHas('content', fn($q) => $q->where('name', 'social'))
+                            ->where('language_id', 1)
+                            ->get()
+                            ->map(fn($d) => json_decode($d->description))
+                            ->filter(fn($s) => $s && !empty($s->my_link));
+                    }
+                @endphp
                 <div class="footer-social">
-                    <a href="https://t.me/solidchange" class="social-link" target="_blank" rel="noopener">
-                        <i class="fa-brands fa-telegram"></i>
-                    </a>
-                    <a href="https://twitter.com/solidchange" class="social-link" target="_blank" rel="noopener">
-                        <i class="fa-brands fa-twitter"></i>
-                    </a>
-                    <a href="mailto:support@solidchange.online" class="social-link">
-                        <i class="fa-brands fa-discord"></i>
-                    </a>
+                    @foreach($socialLinks as $social)
+                        @php
+                            $isEmail = str_starts_with($social->my_link ?? '', 'mailto:');
+                        @endphp
+                        <a href="{{ $social->my_link }}"
+                           class="social-link"
+                           {{ $isEmail ? '' : 'target="_blank" rel="noopener"' }}>
+                            <i class="{{ $social->icon ?? 'fa-solid fa-link' }}"></i>
+                        </a>
+                    @endforeach
                 </div>
             </div>
         </div>
