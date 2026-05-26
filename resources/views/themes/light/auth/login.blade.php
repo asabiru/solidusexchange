@@ -173,10 +173,7 @@
                                     || strcasecmp((string) request()->server('HTTPS'), 'on') === 0
                                     || str_starts_with($publicBaseUrl, 'https://')
                                     || (int) (basicControl()->is_force_ssl ?? 0) === 1;
-                                $hasAnySocialLogin = config('socialite.google_status')
-                                    || config('socialite.facebook_status')
-                                    || config('socialite.github_status')
-                                    || (config('socialite.telegram_status') && $telegramBotName !== '');
+                                $hasAnySocialLogin = config('socialite.telegram_status') && $telegramBotName !== '';
                                 $telegramWidgetAllowed = !in_array(request()->getHost(), ['127.0.0.1', 'localhost'], true) && $telegramRequestLooksSecure;
                             @endphp
 
@@ -186,35 +183,8 @@
 
                             <div class="cmn-btn-group">
                                 <div class="row g-2 social-login-grid">
-                                    @if(config('socialite.google_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','google')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/google.png'}}"
-                                                    alt="...">@lang('Google')
-                                            </a>
-                                        </div>
-                                    @endif
-                                    @if(config('socialite.facebook_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','facebook')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/facebook.png'}}"
-                                                    alt="...">@lang('Facebook')
-                                            </a>
-                                        </div>
-                                    @endif
-                                    @if(config('socialite.github_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','github')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/github.png'}}"
-                                                    alt="...">@lang('Github')
-                                            </a>
-                                        </div>
-                                    @endif
                                     @if(config('socialite.telegram_status') && $telegramBotName !== '')
-                                        <div class="col-12 col-sm-6">
+                                        <div class="col-12">
                                             @if($telegramWidgetAllowed)
                                                 <div class="telegram-login-widget-shell d-none d-md-flex">
                                                     <div class="telegram-login-widget text-center"
@@ -532,15 +502,6 @@
             font-size: 12px;
         }
 
-        .social-login-grid .social-unified-btn {
-            min-height: 52px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            width: 100%;
-        }
-
         .telegram-login-widget-shell {
             width: 100%;
         }
@@ -565,8 +526,7 @@
             border: 0;
         }
 
-        .auth-divider,
-        .auth-social-grid {
+        .auth-divider {
             display: none !important;
         }
 
