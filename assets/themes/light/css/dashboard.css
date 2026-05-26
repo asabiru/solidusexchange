@@ -565,7 +565,7 @@ Dark theme section start
 }
 
 .dark-theme .section-subtitle::after {
-    background: linear-gradient(90deg, #30185f, rgba(217, 217, 217, 0));
+    background: linear-gradient(90deg, #3a1f2b, rgba(217, 217, 217, 0));
 }
 
 .dark-theme hr.divider:after {
@@ -1396,7 +1396,7 @@ Offcanvas section end
 }
 
 .text-gradient {
-    background-image: linear-gradient(90deg, #47beb9, #ddcd86);
+    background-image: linear-gradient(90deg, #e8c9a0, #d9a86a);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -1689,13 +1689,13 @@ Offcanvas section end
 }
 
 .alert-success {
-    color: #3AC279;
-    border-color: #C5F7DC;
+    color: #e8c9a0;
+    border-color: #f2d8b4;
     border-left-color: #3ac279;
 }
 
 .alert-success .btn-close {
-    color: #3AC279;
+    color: #e8c9a0;
 }
 
 .alert-danger {
@@ -1745,7 +1745,7 @@ Offcanvas section end
 
 .rtl .alert-success {
     border-right-color: #3ac279;
-    border-left-color: #C5F7DC;
+    border-left-color: #f2d8b4;
 }
 
 .rtl .alert-danger {
@@ -1858,12 +1858,12 @@ section {
     justify-content: center;
     color: var(--primary-color);
     margin-right: 14px;
-    background: linear-gradient(180deg, #FFF 0.51%, #C5CADD 97.86%);
+    background: linear-gradient(180deg, #FFF 0.51%, #e8c9a0 97.86%);
     border-radius: 8px;
 }
 
 .social-area ul li a:hover {
-    box-shadow: 0 1px 0 #9da9cd, 0 6px 12px rgba(9, 30, 66, 0.2);
+    box-shadow: 0 1px 0 #d4a574, 0 6px 12px rgba(232, 201, 160, 0.2);
 }
 
 .star ul li i {
@@ -1972,7 +1972,7 @@ section {
 
 .cmn-hr {
     background-color: transparent;
-    background-image: linear-gradient(90deg, rgba(206, 211, 246, 0) 0, #CED3F6 38%, #CED3F6 64%, rgba(206, 211, 246, 0) 99%);
+    background-image: linear-gradient(90deg, rgba(232, 201, 160, 0) 0, #e8c9a0 38%, #e8c9a0 64%, rgba(232, 201, 160, 0) 99%);
     opacity: 0.3;
     border-top: initial;
     height: 1px;

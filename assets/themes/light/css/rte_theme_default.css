@@ -928,8 +928,8 @@ rte-dialog-line-action {
 rte-dialog-button {
     cursor: pointer;
     color: #fff;
-    background-color: #007bff;
-    border-color: #007bff;
+    background-color: #e8c9a0;
+    border-color: #e8c9a0;
     display: inline-block;
     text-align: center;
     white-space: nowrap;
@@ -973,8 +973,8 @@ rte-dialog-button {
 
         .rte-button-type-cancel:hover, rte-dialog-button.rte-button-type-replace:hover, rte-dialog-button.rte-button-type-replaceall:hover {
             color: #fff;
-            background-color: #007bff;
-            border-color: #007bff;
+            background-color: #e8c9a0;
+            border-color: #e8c9a0;
         }
 
 .rte-button-type-commit {
@@ -1089,8 +1089,8 @@ rte-tabui-toolbar-button {
 }
 
     rte-tabui-toolbar-button.rte-ui-active {
-        border-bottom: 2px solid #007bff;
-        color: #007bff;
+        border-bottom: 2px solid #e8c9a0;
+        color: #e8c9a0;
     }
 
 .rte-panel-forecolor, .rte-panel-backcolor {
@@ -1542,7 +1542,7 @@ rte-floatpanel {
 
 
 .rte-current-item {
-    background-color: lightblue;
+    background-color: #e8c9a0;
 }
 
 
@@ -1584,8 +1584,8 @@ rte-toast {
 }
 
 .rte-skin-blue {
-    background-color: #ccdcee !important;
-    border-color: #7e9db9 !important;
+    background-color: #e8c9a0 !important;
+    border-color: #d4a574 !important;
 }
 
     .rte-skin-blue rte-content, .rte-skin-blue textarea {
@@ -1599,25 +1599,25 @@ rte-toast {
     }
 
     .rte-skin-blue rte-toolbar {
-        background-color: #ccdcee !important;
+        background-color: #e8c9a0 !important;
     }
 
     .rte-skin-blue rte-subtoolbar {
-        background-color: #7e9db9 !important;
+        background-color: #d4a574 !important;
     }
 
 
     .rte-skin-blue rte-bottom {
-        background-color: #ccdcee !important;
+        background-color: #e8c9a0 !important;
     }
 
     .rte-skin-blue rte-dialog-inner {
-        background-color: #ccdcee !important;
+        background-color: #e8c9a0 !important;
     }
 
     .rte-skin-blue rte-dialog-header {
-        background-color: #ccdcee !important;
-        color: white !important;
+        background-color: #e8c9a0 !important;
+        color: #0b0608 !important;
     }
 
     .rte-skin-blue rte-dialog-line-action {
