@@ -102,7 +102,10 @@
                         </div>
                     </div>
                     <div class="table-cell">
-                        <a href="{{ route('home') }}#exchange" class="exchange-link">
+                        <a href="{{ route('home') }}#exchange"
+                           class="exchange-link"
+                           data-send-currency-id="{{ $currency->id }}"
+                           data-send-currency-code="{{ $currency->code }}">
                             Обменять
                         </a>
                     </div>

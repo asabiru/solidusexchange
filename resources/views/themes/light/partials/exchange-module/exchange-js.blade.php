@@ -69,7 +69,7 @@
         }
     });
 
-    $(document).on("click", ".crypto-button[data-send-currency-id]", function () {
+    $(document).on("click", ".crypto-button[data-send-currency-id], .exchange-link[data-send-currency-id]", function () {
         const preferredCurrencyId = $(this).data('send-currency-id');
 
         if (!preferredCurrencyId) {
