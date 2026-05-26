@@ -1,7 +1,13 @@
 # Manual Deployment Instructions
 
 ## Latest Changes (2026-05-26)
-**Fiat Currency Functionality Restored:**
+**Blue Color Fix:**
+- Replaced all blue colors with champagne/gold (#e8c9a0) to match eazy228/design
+- Changed in `rte_theme_default.css`: editor buttons, blue skin colors
+- Changed in `dashboard.css`: gradients, shadows, success colors
+- All blue/cyan elements now use champagne theme colors
+
+**Previous Fiat Currency Functionality Restored:**
 - Restored Buy/Sell tabs with fiat currency functionality while keeping new design
 - Buy tab: Fiat currency → Cryptocurrency (e.g., USD → BTC)
 - Sell tab: Cryptocurrency → Fiat currency (e.g., BTC → USD)
