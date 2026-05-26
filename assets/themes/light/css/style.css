@@ -4498,106 +4498,249 @@ Testimonial end
 ----------------------------------------------*/
 .faq-section {
     position: relative;
+    padding: 100px 0;
+    background: linear-gradient(135deg, var(--bg-grad-color) 0%, var(--bg-color1) 100%);
 }
 
-.faq-thum {
-    max-width: 600px;
-    position: relative;
+.sc-faq-inner {
+    max-width: 900px;
     margin: 0 auto;
+    padding: 40px;
 }
 
-.faq-thum img {
-    width: 100%;
-    height: 100%;
+.sc-section-head {
+    margin-bottom: 50px;
 }
 
-.faq-thum .question-mark {
-    position: absolute;
-    top: 45px;
-    right: 75px;
-    width: 90px;
-    animation: slideInRight 1.5s ease-in-out 0.5s forwards infinite alternate;
+.sc-section-head .sc-kicker {
+    display: inline-block;
+    padding: 8px 20px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    color: #fff;
+    border-radius: 30px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 15px rgba(201, 162, 39, 0.3);
 }
 
-.faq-section .accordion-button {
-    padding-left: 0;
-    padding-right: 0;
+.sc-section-head h2 {
+    font-size: 42px;
+    font-weight: 700;
     color: var(--heading-color);
-    font-weight: 500;
-    font-size: 18px;
+    margin-bottom: 0;
+    position: relative;
+    display: inline-block;
 }
 
-.faq-section .accordion-button:focus {
-    box-shadow: none;
-}
-
-.faq-section .accordion-button:not(.collapsed) {
-    box-shadow: none;
-    background: transparent;
-    color: var(--primary-color);
-}
-
-.faq-section .accordion-body {
-    padding-left: 0;
-    padding-right: 0;
+.sc-section-head h2::after {
+    content: '';
+    position: absolute;
+    bottom: -15px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80px;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    border-radius: 2px;
 }
 
 .accordion-item {
-    margin: 10px 0;
-    background: transparent;
-    border: none;
-    border-bottom: 1px solid var(--border-color2);
+    margin: 15px 0;
+    background: var(--bg-color2);
+    border: 1px solid var(--border-color1);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: var(--shadow1);
+    transition: all 0.3s ease;
 }
 
-.accordion-item:last-of-type {
-    border-radius: 0;
+.accordion-item:hover {
+    box-shadow: var(--shadow3);
+    border-color: var(--primary-color);
 }
 
 .accordion-button {
-    background: transparent;
+    padding: 20px 25px;
+    color: var(--heading-color);
+    font-weight: 600;
+    font-size: 18px;
+    background: var(--bg-color2);
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.accordion-button:focus {
+    box-shadow: none;
+    background: var(--bg-color3);
+}
+
+.accordion-button:not(.collapsed) {
+    box-shadow: none;
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.1) 0%, rgba(232, 201, 160, 0.1) 100%);
+    color: var(--primary-color);
 }
 
 .accordion-button::after {
-    background: url(../img/accordion/plus.png);
-    width: 25px;
-    height: 25px;
-    background-color: var(--primary-color);
-    background-size: 50%;
-    background-repeat: no-repeat;
-    background-position: center;
-    border-radius: 4px;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%232d2416'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+    transition: transform 0.3s ease;
 }
 
 .accordion-button:not(.collapsed)::after {
-    background: url(../img/accordion/minus.png);
-    width: 25px;
-    height: 25px;
-    background-color: var(--primary-color);
-    background-size: 50%;
-    background-repeat: no-repeat;
-    background-position: center;
-    border-radius: 4px;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23c9a227'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+    transform: rotate(-180deg);
+}
+
+.accordion-body {
+    padding: 25px;
+    color: var(--body-color);
+    font-size: 16px;
+    line-height: 1.8;
+    background: var(--bg-color3);
+    border-top: 1px solid var(--border-color1);
+}
+
+.sc-faq-cta {
+    text-align: center;
+    margin-top: 50px;
+    padding: 30px;
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.1) 0%, rgba(232, 201, 160, 0.1) 100%);
+    border-radius: 16px;
+    border: 1px solid var(--border-color1);
+}
+
+.sc-faq-cta p {
+    font-size: 18px;
+    color: var(--heading-color);
+    font-weight: 500;
+    margin-bottom: 20px;
+}
+
+.sc-secondary-btn {
+    display: inline-block;
+    padding: 14px 35px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    color: #fff;
+    border-radius: 30px;
+    font-weight: 600;
+    font-size: 16px;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 15px rgba(201, 162, 39, 0.3);
+    border: none;
+    cursor: pointer;
+}
+
+.sc-secondary-btn:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(201, 162, 39, 0.4);
+    color: #fff;
+    text-decoration: none;
+}
+
+/* Dark theme FAQ styles */
+.dark-theme .faq-section {
+    background: linear-gradient(135deg, #0b0608 0%, #1a0f14 100%);
+}
+
+.dark-theme .sc-section-head h2 {
+    color: #e8c9a0;
+}
+
+.dark-theme .sc-section-head h2::after {
+    background: linear-gradient(90deg, #e8c9a0 0%, #c9a227 100%);
+}
+
+.dark-theme .accordion-item {
+    background: rgba(26, 15, 20, 0.95);
+    border-color: rgba(232, 201, 160, 0.3);
+}
+
+.dark-theme .accordion-button {
+    background: rgba(26, 15, 20, 0.95);
+    color: #e8c9a0;
+}
+
+.dark-theme .accordion-button:focus {
+    background: rgba(45, 31, 36, 0.95);
+}
+
+.dark-theme .accordion-button:not(.collapsed) {
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.15) 0%, rgba(201, 162, 39, 0.15) 100%);
+    color: #e8c9a0;
+}
+
+.dark-theme .accordion-button::after {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23e8c9a0'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+}
+
+.dark-theme .accordion-button:not(.collapsed)::after {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23e8c9a0'%3e%3cpath fill-rule='evenodd' d='M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z'/%3e%3c/svg%3e");
+}
+
+.dark-theme .accordion-body {
+    background: rgba(45, 31, 36, 0.95);
+    color: #d4c4b0;
+    border-top-color: rgba(232, 201, 160, 0.3);
+}
+
+.dark-theme .sc-faq-cta {
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.1) 0%, rgba(201, 162, 39, 0.1) 100%);
+    border-color: rgba(232, 201, 160, 0.3);
+}
+
+.dark-theme .sc-faq-cta p {
+    color: #e8c9a0;
+}
+
+.dark-theme .sc-secondary-btn {
+    background: linear-gradient(135deg, #e8c9a0 0%, #c9a227 100%);
+    color: #0b0608;
 }
 
 @media (max-width: 575px) {
-    .faq-section {
-        overflow: hidden;
-    }
-    .faq-thum .question-mark{
-        right: 30px;
-        width: 60px;
+    .sc-faq-inner {
+        padding: 20px;
     }
 
+    .sc-section-head h2 {
+        font-size: 28px;
+    }
+
+    .accordion-button {
+        font-size: 16px;
+        padding: 15px 20px;
+    }
+
+    .accordion-body {
+        font-size: 14px;
+        padding: 20px;
+    }
+
+    .sc-faq-cta {
+        padding: 20px;
+    }
+
+    .sc-faq-cta p {
+        font-size: 16px;
+    }
+
+    .sc-secondary-btn {
+        padding: 12px 25px;
+        font-size: 14px;
+    }
 }
 
 .rtl .accordion-button {
     text-align: right;
-    padding: 10px;
 }
 
-.rtl .accordion-button::after {
-    margin-right: auto;
-    margin-left: 0;
+.rtl .sc-section-head h2::after {
+    right: 50%;
+    left: auto;
+    transform: translateX(50%);
 }
 
 /*----------------------------------------------
