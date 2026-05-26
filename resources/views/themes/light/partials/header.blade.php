@@ -84,7 +84,7 @@
                 <a href="#reserves" class="nav-link text-decoration-none">Резервы</a>
                 <a href="#how" class="nav-link text-decoration-none">Как работает</a>
                 <a href="#faq" class="nav-link text-decoration-none">FAQ</a>
-                <a href="{{ route('exchange.tracking') }}" class="nav-link text-decoration-none">Отследить</a>
+                <a href="{{ url('tracking') }}" class="nav-link text-decoration-none">Отследить</a>
             </nav>
 
             <!-- Right Actions -->
@@ -198,7 +198,7 @@
             <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
             <a href="#how" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
             <a href="#faq" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
-            <a href="{{ route('exchange.tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
+            <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
 
             @if($activeLanguages->isNotEmpty())
                 <div class="mt-4 pt-4" style="border-top: 1px solid var(--color-border-subtle);">
