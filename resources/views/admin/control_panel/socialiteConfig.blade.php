@@ -1,5 +1,5 @@
 @extends('admin.layouts.app')
-@section('page_title', __('Socialite Configuration'))
+@section('page_title', __('Telegram Login'))
 @section('content')
     <div class="content container-fluid">
         <div class="page-header">
@@ -7,127 +7,38 @@
                 <div class="col-sm mb-2 mb-sm-0">
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb breadcrumb-no-gutter">
-                            <li class="breadcrumb-item"><a class="breadcrumb-link"
-                                                           href="javascript:void(0)">@lang('Dashboard')</a>
-                            </li>
+                            <li class="breadcrumb-item"><a class="breadcrumb-link" href="javascript:void(0)">@lang('Dashboard')</a></li>
                             <li class="breadcrumb-item active" aria-current="page">@lang('Settings')</li>
-                            <li class="breadcrumb-item active" aria-current="page">@lang('Socialite Configuration')</li>
+                            <li class="breadcrumb-item active" aria-current="page">@lang('Telegram Login')</li>
                         </ol>
                     </nav>
-                    <h1 class="page-header-title">@lang('Socialite Configuration')</h1>
+                    <h1 class="page-header-title">@lang('Telegram Login')</h1>
                 </div>
             </div>
         </div>
+
         <div class="row">
             <div class="col-lg-3">
                 @include('admin.control_panel.components.sidebar', ['settings' => config('generalsettings.Socialite'), 'suffix' => ''])
             </div>
             <div class="col-lg-7">
-                <div class="d-grid gap-3 gap-lg-5">
-                    <div id="socialAccountsSection" class="card">
-                        <div class="card-header">
-                            <h4 class="card-title">@lang("Socialite Configuration")</h4>
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title mb-0">@lang('Telegram Login')</h4>
+                    </div>
+                    <div class="card-body">
+                        <div class="alert alert-info mb-4" role="alert">
+                            @lang('Only Telegram login is enabled in this project. All other social login providers have been removed from the public interface and admin menu.')
                         </div>
-                        <div class="card-body">
-                            <div class="list-group list-group-lg list-group-flush list-group-no-gutters">
-                                <div class="list-group-item">
-                                    <div class="d-flex">
-                                        <div class="flex-shrink-0">
-                                            <img class="avatar avatar-xs avatar-4x3 list-group-icon"
-                                                 src="{{ asset('assets/admin/google.png') }}"
-                                                 alt="Plugin Image">
-                                        </div>
-                                        <div class="flex-grow-1 ms-3">
-                                            <div class="row align-items-center">
-                                                <div class="col-sm mb-2 mb-sm-0">
-                                                    <h4 class="mb-0">@lang('Google')</h4>
-                                                    <p class="fs-5 text-body mb-0">@lang("Socialite login your customers,they\'ll love you for it")</p>
-                                                </div>
-                                                <div class="col-sm-auto">
-                                                    <a class="btn btn-white btn-sm"
-                                                       href="{{ route('admin.google.control') }}" target="_blank">
-                                                        <i class="bi-pencil-fill me-1"></i> @lang("Edit")
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+
+                        <div class="d-flex flex-column flex-sm-row gap-3 align-items-sm-center justify-content-between">
+                            <div>
+                                <h4 class="mb-1">@lang('Telegram settings')</h4>
+                                <p class="mb-0 text-body">@lang('Open the Telegram control page to update bot username, bot token and status.')</p>
                             </div>
-                            <div class="list-group list-group-lg list-group-flush list-group-no-gutters">
-                                <div class="list-group-item">
-                                    <div class="d-flex">
-                                        <div class="flex-shrink-0">
-                                            <img class="avatar avatar-xs avatar-4x3 list-group-icon"
-                                                 src="{{ asset('assets/admin/facebook.png') }}"
-                                                 alt="Plugin Image">
-                                        </div>
-                                        <div class="flex-grow-1 ms-3">
-                                            <div class="row align-items-center">
-                                                <div class="col-sm mb-2 mb-sm-0">
-                                                    <h4 class="mb-0">@lang('Facebook')</h4>
-                                                    <p class="fs-5 text-body mb-0">@lang("Socialite login your customers,they\'ll love you for it")</p>
-                                                </div>
-                                                <div class="col-sm-auto">
-                                                    <a class="btn btn-white btn-sm"
-                                                       href="{{ route('admin.facebook.control') }}" target="_blank">
-                                                        <i class="bi-pencil-fill me-1"></i> @lang("Edit")
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="list-group list-group-lg list-group-flush list-group-no-gutters">
-                                <div class="list-group-item">
-                                    <div class="d-flex">
-                                        <div class="flex-shrink-0">
-                                            <img class="avatar avatar-xs avatar-4x3 list-group-icon"
-                                                 src="{{ asset('assets/admin/github.png') }}"
-                                                 alt="Plugin Image">
-                                        </div>
-                                        <div class="flex-grow-1 ms-3">
-                                            <div class="row align-items-center">
-                                                <div class="col-sm mb-2 mb-sm-0">
-                                                    <h4 class="mb-0">@lang('Github')</h4>
-                                                    <p class="fs-5 text-body mb-0">@lang("Socialite login your customers,they\'ll love you for it")</p>
-                                                </div>
-                                                <div class="col-sm-auto">
-                                                    <a class="btn btn-white btn-sm"
-                                                       href="{{ route('admin.github.control') }}" target="_blank">
-                                                        <i class="bi-pencil-fill me-1"></i> @lang("Edit")
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="list-group list-group-lg list-group-flush list-group-no-gutters">
-                                <div class="list-group-item">
-                                    <div class="d-flex">
-                                        <div class="flex-shrink-0 d-flex align-items-center justify-content-center"
-                                             style="width:32px;height:24px;">
-                                            <i class="fab fa-telegram-plane fs-3 text-primary"></i>
-                                        </div>
-                                        <div class="flex-grow-1 ms-3">
-                                            <div class="row align-items-center">
-                                                <div class="col-sm mb-2 mb-sm-0">
-                                                    <h4 class="mb-0">@lang('Telegram')</h4>
-                                                    <p class="fs-5 text-body mb-0">@lang("Socialite login your customers,they\'ll love you for it")</p>
-                                                </div>
-                                                <div class="col-sm-auto">
-                                                    <a class="btn btn-white btn-sm"
-                                                       href="{{ route('admin.telegram.control') }}" target="_blank">
-                                                        <i class="bi-pencil-fill me-1"></i> @lang("Edit")
-                                                    </a>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <a class="btn btn-primary" href="{{ route('admin.telegram.control') }}">
+                                <i class="bi bi-telegram me-1"></i> @lang('Open Telegram settings')
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -135,4 +46,3 @@
         </div>
     </div>
 @endsection
-

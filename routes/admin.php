@@ -128,9 +128,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
             /* ===== ADMIN SOCIALITE ===== */
             Route::get('socialite', [AdminSocialiteController::class, 'index'])->name('socialite.index');
-            Route::match(['get', 'post'], 'google-config', [AdminSocialiteController::class, 'googleConfig'])->name('google.control');
-            Route::match(['get', 'post'], 'facebook-config', [AdminSocialiteController::class, 'facebookConfig'])->name('facebook.control');
-            Route::match(['get', 'post'], 'github-config', [AdminSocialiteController::class, 'githubConfig'])->name('github.control');
             Route::match(['get', 'post'], 'telegram-config', [AdminSocialiteController::class, 'telegramConfig'])->name('telegram.control');
 
             /* ===== STORAGE ===== */

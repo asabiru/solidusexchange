@@ -114,25 +114,10 @@ return [
         ],
     ],
     'Socialite' => [
-        'google-control' => [
-            'route' => 'admin.google.control',
-            'icon' => 'fab fa-google',
-            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
-        ],
-        'facebook-control' => [
-            'route' => 'admin.facebook.control',
-            'icon' => 'fab fa-facebook-f',
-            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
-        ],
-        'github-control' => [
-            'route' => 'admin.github.control',
-            'icon' => 'fab fa-github',
-            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
-        ],
         'telegram-control' => [
             'route' => 'admin.telegram.control',
             'icon' => 'fab fa-telegram-plane',
-            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
+            'short_description' => 'Telegram login settings for automatic user authorization.',
         ],
     ],
     'in-app-notification' => [
@@ -190,4 +175,3 @@ return [
         ]
     ],
 ];
-
