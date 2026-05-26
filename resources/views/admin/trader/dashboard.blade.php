@@ -8,8 +8,9 @@
             gap: 1rem;
             padding: 1rem 1.25rem;
             border-radius: 1rem;
-            background: linear-gradient(135deg, rgba(141, 61, 255, 0.12), rgba(141, 61, 255, 0.04));
-            border: 1px solid rgba(141, 61, 255, 0.16);
+            background: linear-gradient(135deg, rgba(232, 201, 160, 0.12), rgba(232, 201, 160, 0.04));
+            border: 1px solid rgba(232, 201, 160, 0.22);
+            box-shadow: 0 4px 16px rgba(11, 6, 8, 0.3);
         }
 
         .trade-availability-copy {
@@ -22,12 +23,12 @@
         .trade-availability-title {
             font-size: .875rem;
             font-weight: 600;
-            color: #1e2022;
+            color: #f5ede4;
         }
 
         .trade-availability-meta {
             font-size: .75rem;
-            color: #677788;
+            color: #9a8e86;
         }
 
         .trade-availability-switch {
@@ -50,9 +51,9 @@
             inset: 0;
             cursor: pointer;
             border-radius: 999px;
-            background: #d5dae2;
-            transition: .2s ease;
-            box-shadow: inset 0 0 0 1px rgba(30, 32, 34, 0.06);
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            transition: .25s ease;
         }
 
         .trade-availability-slider::before {
@@ -63,21 +64,25 @@
             width: 28px;
             height: 28px;
             border-radius: 50%;
-            background: #fff;
-            box-shadow: 0 6px 16px rgba(19, 33, 68, 0.18);
-            transition: .2s ease;
+            background: #9a8e86;
+            box-shadow: 0 4px 12px rgba(11, 6, 8, 0.4);
+            transition: .25s ease;
         }
 
         .trade-availability-switch input:checked + .trade-availability-slider {
-            background: linear-gradient(135deg, #8d3dff, #b16cff);
+            background: linear-gradient(135deg, #c9a227, #e8c9a0);
+            border-color: rgba(232, 201, 160, 0.4);
+            box-shadow: 0 0 0 3px rgba(232, 201, 160, 0.15);
         }
 
         .trade-availability-switch input:checked + .trade-availability-slider::before {
             transform: translateX(28px);
+            background: #0b0608;
+            box-shadow: 0 4px 12px rgba(232, 201, 160, 0.3);
         }
 
         .trade-availability-switch input:focus-visible + .trade-availability-slider {
-            outline: 3px solid rgba(141, 61, 255, 0.18);
+            outline: 3px solid rgba(232, 201, 160, 0.3);
             outline-offset: 3px;
         }
     </style>
