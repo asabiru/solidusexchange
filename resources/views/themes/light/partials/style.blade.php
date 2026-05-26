@@ -19,4 +19,5 @@
 <link rel="stylesheet" href="{{asset($themeTrue.'css/reviews.css')}}?v={{time()}}">
 <link rel="stylesheet" href="{{asset($themeTrue.'css/faq-section.css')}}?v={{time()}}">
 <link rel="stylesheet" href="{{asset($themeTrue.'css/footer.css')}}?v={{time()}}">
+<link rel="stylesheet" href="{{asset($themeTrue.'css/mobile-polish.css')}}?v={{time()}}">
 @stack('style')

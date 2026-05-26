@@ -1,0 +1,326 @@
+@media (max-width: 991px) {
+    html,
+    body {
+        overflow-x: hidden;
+    }
+
+    .container,
+    .container-fluid {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    section[class$="-section"],
+    section[class*="-section"],
+    .login-signup-page {
+        scroll-margin-top: 88px;
+    }
+
+    .section-number {
+        display: block;
+        width: 100%;
+        margin-bottom: 4px;
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-align: center;
+    }
+
+    .section-title {
+        font-size: clamp(24px, 6vw, 34px);
+        line-height: 1.05;
+        text-align: center;
+    }
+
+    .rates-header,
+    .popular-header,
+    .faq-header,
+    .security-aml-header,
+    .how-it-works-header,
+    .advantages-header,
+    .reserves-header,
+    .reviews-header {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        gap: 6px;
+    }
+
+    .hero-section {
+        padding-top: 28px !important;
+    }
+
+    .hero-title,
+    .hero-description,
+    .hero-bullets {
+        text-align: center;
+    }
+
+    .hero-bullets {
+        justify-content: center;
+    }
+
+    .swap-card,
+    .rates-table-container,
+    .popular-grid,
+    .faq-accordion,
+    .footer-section,
+    .auth-redesign-card {
+        border-radius: 20px;
+    }
+
+    .modern-tabs {
+        padding: 6px;
+        gap: 6px;
+    }
+
+    .tab-button {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .swap-section {
+        margin-bottom: 14px;
+    }
+
+    .swap-input-wrapper,
+    .sc-compact-input-wrapper {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+    }
+
+    .currency-selector,
+    .sc-currency-selector {
+        width: 100%;
+        min-width: 100%;
+        justify-content: space-between;
+    }
+
+    .swap-input-wrapper input,
+    .sc-compact-input-wrapper input {
+        width: 100%;
+        text-align: left;
+        font-size: 24px;
+    }
+
+    .swap-action .swap-button,
+    .sc-swap-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 16px;
+    }
+
+    .exchange-link,
+    .crypto-button,
+    .faq-footer-link,
+    .newsletter-button,
+    .auth-submit,
+    .auth-social-btn,
+    .telegram-miniapp-login-button {
+        width: 100%;
+        min-height: 48px;
+    }
+
+    .popular-grid {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .crypto-card {
+        padding: 20px;
+    }
+
+    .crypto-button {
+        justify-content: center;
+    }
+
+    .rates-table-container {
+        overflow: hidden;
+    }
+
+    .table-header {
+        display: none;
+    }
+
+    .table-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        margin-bottom: 12px;
+        padding: 16px;
+        background: var(--color-bg-elevated);
+        border: 1px solid var(--color-border-subtle);
+        border-radius: 18px;
+    }
+
+    .table-cell {
+        width: 100%;
+        justify-content: space-between;
+        gap: 12px;
+    }
+
+    .table-cell::before {
+        content: attr(data-label);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        flex-shrink: 0;
+    }
+
+    .currency-info {
+        min-width: 0;
+        gap: 10px;
+    }
+
+    .currency-details {
+        min-width: 0;
+    }
+
+    .currency-code,
+    .price-value {
+        font-size: 15px;
+    }
+
+    .currency-name {
+        max-width: 100%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .mini-chart {
+        display: none;
+    }
+
+    .footer-section {
+        padding-top: 56px;
+        padding-bottom: 28px;
+    }
+
+    .footer-top,
+    .footer-links,
+    .footer-bottom {
+        gap: 24px;
+    }
+
+    .footer-links {
+        grid-template-columns: 1fr;
+        padding-bottom: 24px;
+        margin-bottom: 24px;
+    }
+
+    .footer-column-title,
+    .footer-column-list,
+    .footer-disclaimer,
+    .footer-copyright {
+        text-align: center;
+    }
+
+    .footer-column-list li {
+        margin-bottom: 10px;
+    }
+
+    .footer-social {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .newsletter-form {
+        flex-direction: column;
+    }
+
+    .footer-meta {
+        justify-content: center;
+    }
+
+    .auth-redesign-form-column {
+        min-height: auto;
+    }
+
+    .auth-redesign-card {
+        margin-top: 12px;
+    }
+}
+
+@media (max-width: 575px) {
+    .container,
+    .container-fluid {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .hero-section {
+        padding-bottom: 28px !important;
+    }
+
+    .hero-title {
+        font-size: clamp(28px, 9vw, 38px);
+    }
+
+    .hero-description {
+        font-size: 15px;
+    }
+
+    .hero-bullets {
+        gap: 10px;
+    }
+
+    .bullet-item {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .swap-card {
+        padding: 16px;
+    }
+
+    .swap-form,
+    .auth-redesign-card {
+        width: 100%;
+    }
+
+    .swap-label,
+    .swap-reserve,
+    .update-time {
+        font-size: 12px;
+    }
+
+    .swap-features,
+    .footer-meta {
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .popular-card,
+    .crypto-card,
+    .faq-item,
+    .newsletter-form {
+        border-radius: 18px;
+    }
+
+    .crypto-price {
+        font-size: 22px;
+    }
+
+    .faq-question {
+        padding: 16px;
+        font-size: 14px;
+    }
+
+    .faq-answer p {
+        padding: 0 16px 16px;
+        font-size: 13px;
+    }
+
+    .footer-section {
+        padding-top: 48px;
+    }
+
+    .auth-mobile-bar,
+    .auth-mobile-intro {
+        width: 100%;
+    }
+}

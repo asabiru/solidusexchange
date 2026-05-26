@@ -66,7 +66,7 @@
                 @else
                     @foreach($cryptoCurrencies as $currency)
                 <div class="table-row">
-                    <div class="table-cell">
+                    <div class="table-cell" data-label="Пара">
                         <div class="currency-info">
                             <div class="currency-flag">
                                 @if($currency->image)
@@ -81,15 +81,15 @@
                             </div>
                         </div>
                     </div>
-                    <div class="table-cell">
+                    <div class="table-cell" data-label="Цена, USD">
                         <span class="price-value">{{ $currency->usd_rate ? number_format($currency->usd_rate, $currency->usd_rate < 10 ? 4 : 2) : number_format($currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
                     </div>
-                    <div class="table-cell">
+                    <div class="table-cell" data-label="24ч">
                         <span class="change-value {{ rand(0,1) ? 'positive' : 'negative' }}">
                             {{ number_format((rand(-5, 5) / 100), 2) }}%
                         </span>
                     </div>
-                    <div class="table-cell">
+                    <div class="table-cell" data-label="График">
                         <div class="mini-chart">
                             <svg width="80" height="30" viewBox="0 0 80 30">
                                 <polyline
@@ -101,7 +101,7 @@
                             </svg>
                         </div>
                     </div>
-                    <div class="table-cell">
+                    <div class="table-cell" data-label="Обменять">
                         <a href="{{ route('home') }}#exchange"
                            class="exchange-link"
                            data-send-currency-id="{{ $currency->id }}"
