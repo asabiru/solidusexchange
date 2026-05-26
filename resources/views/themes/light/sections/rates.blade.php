@@ -1,5 +1,5 @@
 @php
-    $cryptoCurrencies = \App\Models\Currency::where('status', 1)->where('type', 'crypto')->orderBy('id', 'asc')->limit(10)->get();
+    $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(10)->get();
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
@@ -22,7 +22,7 @@
                 @foreach([1,2] as $duplicate)
                 <div class="ticker-item">
                     <span class="ticker-pair">{{ $currency->code }}/USD</span>
-                    <span class="ticker-price">{{ number_format($currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
+                    <span class="ticker-price">{{ number_format($currency->usd_rate ?? $currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
                     <span class="ticker-change {{ rand(0,1) ? 'positive' : 'negative' }}">
                         @if(rand(0,1))
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -68,7 +68,7 @@
                         </div>
                     </div>
                     <div class="table-cell">
-                        <span class="price-value">{{ number_format($currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
+                        <span class="price-value">{{ number_format($currency->usd_rate ?? $currency->rate, $currency->rate < 10 ? 4 : 2) }}</span>
                     </div>
                     <div class="table-cell">
                         <span class="change-value {{ rand(0,1) ? 'positive' : 'negative' }}">
