@@ -40,6 +40,49 @@ class BuyController extends Controller
         ]);
     }
 
+    public function publicBuyRequest(BuyStoreRequest $request)
+    {
+        // If user is authenticated, use the normal buyRequest
+        if (auth()->check()) {
+            return $this->buyRequest($request);
+        }
+
+        // For non-authenticated users, create request and redirect to login
+        $sendCurrency = FiatCurrency::query()->active()->visibleInBuy()->findOrFail($request->exchangeSendCurrency);
+        $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
+
+        if ($sendCurrency->min_send > $request->exchangeSendAmount) {
+            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+        }
+
+        if ($sendCurrency->max_send < $request->exchangeSendAmount) {
+            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+        }
+
+        try {
+            $quote = $this->buyQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        $buyRequest = BuyRequest::create([
+            'user_id' => null,
+            'send_currency_id' => $quote['send_currency_id'],
+            'get_currency_id' => $quote['get_currency_id'],
+            'send_amount' => $quote['send_amount'],
+            'get_amount' => $quote['get_amount'],
+            'exchange_rate' => $quote['exchange_rate'],
+            'service_fee' => $quote['service_fee'],
+            'network_fee' => $quote['network_fee'],
+            'final_amount' => $quote['final_amount'],
+            'utr' => uniqid('B'),
+        ]);
+
+        // Store request data in session and redirect to login
+        session(['pending_buy_utr' => $buyRequest->utr]);
+        return redirect()->route('login')->with('info', 'Пожалуйста, войдите для продолжения покупки');
+    }
+
     public function buyRequest(BuyStoreRequest $request)
     {
         $sendCurrency = FiatCurrency::query()->active()->visibleInBuy()->findOrFail($request->exchangeSendCurrency);

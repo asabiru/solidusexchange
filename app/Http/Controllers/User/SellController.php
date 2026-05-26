@@ -44,6 +44,48 @@ class SellController extends Controller
         ]);
     }
 
+    public function publicSellRequest(SellStoreRequest $request)
+    {
+        // If user is authenticated, use the normal sellRequest
+        if (auth()->check()) {
+            return $this->sellRequest($request);
+        }
+
+        // For non-authenticated users, create request and redirect to login
+        $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
+        $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
+
+        if ($sendCurrency->min_send > $request->exchangeSendAmount) {
+            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+        }
+
+        if ($sendCurrency->max_send < $request->exchangeSendAmount) {
+            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+        }
+
+        try {
+            $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
+        } catch (RuntimeException $exception) {
+            return back()->withInput()->with('error', $exception->getMessage());
+        }
+
+        $sellRequest = SellRequest::create([
+            'user_id' => null,
+            'send_currency_id' => $quote['send_currency_id'],
+            'get_currency_id' => $quote['get_currency_id'],
+            'send_amount' => $quote['send_amount'],
+            'get_amount' => $quote['get_amount'],
+            'exchange_rate' => $quote['exchange_rate'],
+            'processing_fee' => $quote['processing_fee'],
+            'final_amount' => $quote['final_amount'],
+            'utr' => uniqid('S'),
+        ]);
+
+        // Store request data in session and redirect to login
+        session(['pending_sell_utr' => $sellRequest->utr]);
+        return redirect()->route('login')->with('info', 'Пожалуйста, войдите для продолжения продажи');
+    }
+
     public function sellRequest(SellStoreRequest $request)
     {
         $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);

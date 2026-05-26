@@ -107,11 +107,12 @@
                     <!-- Swap Card Form -->
                     <form class="swap-form" action="{{ route('exchangeRequest', [], false) }}" method="POST" id="submitFormId">
                         @csrf
+                        <input type="hidden" name="exchangeType" id="exchangeType" value="exchange">
 
                         <!-- Card Header -->
                         <div class="swap-card-header">
                             <div class="swap-card-title">
-                                <h3>Обмен криптовалют</h3>
+                                <h3 id="formTitle">Обмен криптовалют</h3>
                                 <span class="update-time">Курс обновлён 12 c назад</span>
                             </div>
                         </div>
@@ -236,10 +237,12 @@
 // Tab switching functionality
 document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-button');
+    let currentMode = 'exchange';
 
     tabButtons.forEach(button => {
         button.addEventListener('click', function() {
             const tab = this.getAttribute('data-tab');
+            currentMode = tab;
 
             // Remove active class from all buttons
             tabButtons.forEach(btn => btn.classList.remove('active'));
@@ -247,18 +250,141 @@ document.addEventListener('DOMContentLoaded', function() {
             // Add active class to clicked button
             this.classList.add('active');
 
-            // Here you can add logic to switch between different forms
-            // For example, change the form action based on tab
+            // Update form action and hidden field
+            const form = document.getElementById('submitFormId');
+            const exchangeTypeField = document.getElementById('exchangeType');
+            const formTitle = document.getElementById('formTitle');
+            const submitBtn = document.getElementById('submitBtn');
+
             if (tab === 'exchange') {
-                document.getElementById('submitFormId').action = "{{ route('exchangeRequest', [], false) }}";
+                form.action = "{{ route('exchangeRequest', [], false) }}";
+                exchangeTypeField.value = 'exchange';
+                formTitle.textContent = 'Обмен криптовалют';
+                submitBtn.textContent = 'Обменять';
+                loadExchangeCurrencies();
             } else if (tab === 'buy') {
-                document.getElementById('submitFormId').action = "{{ route('buyRequest', [], false) }}";
+                form.action = "{{ route('publicBuyRequest', [], false) }}";
+                exchangeTypeField.value = 'buy';
+                formTitle.textContent = 'Купить криптовалюту';
+                submitBtn.textContent = 'Купить';
+                loadBuyCurrencies();
             } else if (tab === 'sell') {
-                document.getElementById('submitFormId').action = "{{ route('sellRequest', [], false) }}";
+                form.action = "{{ route('publicSellRequest', [], false) }}";
+                exchangeTypeField.value = 'sell';
+                formTitle.textContent = 'Продать криптовалюту';
+                submitBtn.textContent = 'Продать';
+                loadSellCurrencies();
             }
         });
     });
+
+    // Load initial exchange currencies
+    loadExchangeCurrencies();
 });
+
+// Load currencies for exchange mode (crypto -> crypto)
+function loadExchangeCurrencies() {
+    // Use existing exchange currency loading logic
+    if (typeof getExchangeCurrency === 'function') {
+        getExchangeCurrency();
+    }
+}
+
+// Load currencies for buy mode (fiat -> crypto)
+function loadBuyCurrencies() {
+    fetch("{{ route('getBuyCurrency') }}")
+        .then(response => response.json())
+        .then(data => {
+            // Update send currencies (fiat)
+            updateSendCurrencySelector(data.sendCurrencies, data.selectedSendCurrency);
+            // Update get currencies (crypto)
+            updateGetCurrencySelector(data.getCurrencies, data.selectedGetCurrency);
+            // Update initial amount
+            if (data.initialSendAmount) {
+                document.getElementById('send').value = data.initialSendAmount;
+            }
+        })
+        .catch(error => console.error('Error loading buy currencies:', error));
+}
+
+// Load currencies for sell mode (crypto -> fiat)
+function loadSellCurrencies() {
+    fetch("{{ route('getSellCurrency') }}")
+        .then(response => response.json())
+        .then(data => {
+            // Update send currencies (crypto)
+            updateSendCurrencySelector(data.sendCurrencies, data.selectedSendCurrency);
+            // Update get currencies (fiat)
+            updateGetCurrencySelector(data.getCurrencies, data.selectedGetCurrency);
+            // Update initial amount
+            if (data.initialSendAmount) {
+                document.getElementById('send').value = data.initialSendAmount;
+            }
+        })
+        .catch(error => console.error('Error loading sell currencies:', error));
+}
+
+// Update send currency selector
+function updateSendCurrencySelector(currencies, selected) {
+    const modal = document.querySelector('#calculator-modal .modal-body');
+    if (!modal || !currencies || currencies.length === 0) return;
+
+    let html = '<div class="currency-list">';
+    currencies.forEach(currency => {
+        const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        html += `
+            <div class="currency-item ${isSelected}" data-id="${currency.id}" data-code="${currency.code}" data-image="${currency.image}">
+                <img src="${currency.image}" alt="${currency.code}">
+                <span>${currency.code}</span>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    // Update modal content
+    const currencyList = modal.querySelector('.currency-list');
+    if (currencyList) {
+        currencyList.innerHTML = html;
+    }
+
+    // Update selected currency display
+    if (selected) {
+        document.getElementById('showSendImage').src = selected.image;
+        document.getElementById('showSendCode').textContent = selected.code;
+        document.querySelector('input[name="exchangeSendCurrency"]').value = selected.id;
+    }
+}
+
+// Update get currency selector
+function updateGetCurrencySelector(currencies, selected) {
+    const modal = document.querySelector('#calculator-modal2 .modal-body');
+    if (!modal || !currencies || currencies.length === 0) return;
+
+    let html = '<div class="currency-list">';
+    currencies.forEach(currency => {
+        const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        html += `
+            <div class="currency-item ${isSelected}" data-id="${currency.id}" data-code="${currency.code}" data-image="${currency.image}">
+                <img src="${currency.image}" alt="${currency.code}">
+                <span>${currency.code}</span>
+            </div>
+        `;
+    });
+    html += '</div>';
+
+    // Update modal content
+    const currencyList = modal.querySelector('.currency-list');
+    if (currencyList) {
+        currencyList.innerHTML = html;
+    }
+
+    // Update selected currency display
+    if (selected) {
+        document.getElementById('showGetImage').src = selected.image;
+        document.getElementById('showGetCode').textContent = selected.code;
+        document.querySelector('input[name="exchangeGetCurrency"]').value = selected.id;
+    }
+}
 
 // Динамическое обновление валют в Hero секции
 function updateHeroCurrencyLabels() {

@@ -260,6 +260,11 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     })->name('language');
 
     Route::get("/", [FrontendController::class, 'home'])->name('home');
+
+    // Public buy/sell routes (create request without auth)
+    Route::post('/buy/request/public', [App\Http\Controllers\User\BuyController::class, 'publicBuyRequest'])->name('publicBuyRequest');
+    Route::post('/sell/request/public', [App\Http\Controllers\User\SellController::class, 'publicSellRequest'])->name('publicSellRequest');
+
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
 
