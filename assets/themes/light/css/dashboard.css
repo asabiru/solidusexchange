@@ -180,27 +180,41 @@ Dark theme section (default champagne dark theme)
 
 /* Dashboard specific dark theme styles */
 .dark-theme .pagetitle h3 {
-    color: var(--heading-color);
+    color: var(--color-text-primary);
+    font-weight: 700;
+    letter-spacing: -0.01em;
 }
 
 .dark-theme .sidebar {
-    background-color: var(--bg-color2);
-    border-color: var(--border-color1);
+    background: linear-gradient(180deg, #150c10 0%, #1a0f14 100%) !important;
+    border-right: 1px solid rgba(232, 201, 160, 0.12) !important;
 }
 
 .dark-theme .sidebar .nav-link {
     color: var(--body-color);
 }
 
-.dark-theme .sidebar .nav-link:hover,
-.dark-theme .sidebar .nav-link.active {
-    background-color: var(--bg-color3);
-    color: var(--heading-color);
+.dark-theme .sidebar .nav-link:hover {
+    background: rgba(232, 201, 160, 0.10);
+    color: var(--color-accent);
 }
 
+.dark-theme .sidebar .nav-link.active {
+    background: linear-gradient(135deg, #c9a227 0%, #e8c9a0 100%);
+    color: #0b0608 !important;
+    font-weight: 600;
+    box-shadow: 0 4px 14px rgba(232, 201, 160, 0.25);
+}
+
+.dark-theme .sidebar .nav-link.active i {
+    color: #0b0608 !important;
+}
+
+.dark-theme #header,
 .dark-theme .topbar {
-    background-color: var(--bg-color2);
-    border-color: var(--border-color1);
+    background: rgba(21, 12, 16, 0.95) !important;
+    border-bottom: 1px solid rgba(232, 201, 160, 0.10) !important;
+    backdrop-filter: blur(12px);
 }
 
 .dark-theme .topbar .navbar-brand {
@@ -352,8 +366,8 @@ Dark theme section (default champagne dark theme)
 
 .dark-theme main,
 .dark-theme .main {
-    background-color: var(--bg-color1);
-    color: var(--body-color);
+    background: linear-gradient(160deg, #0b0608 0%, #150c10 50%, #1a0f14 100%);
+    color: var(--color-text-primary);
 }
 
 .dark-theme footer {
@@ -510,71 +524,7 @@ Dark theme section end
 
 
 
-/*----------------------------------------------
-Dark theme section start
-----------------------------------------------*/
-.dark-theme {
-    --bg-color1: #00150F;
-    --bg-color2: #2c403d;
-    --bg-color3: #1B2D29;
-    --heading-color: #ffffff;
-    --border-color1: #37333e;
-    --border-color2: rgba(234, 219, 215, 0.06);
-    --border-color3: #ffffff;
-    --bg-grad-color: #253A33;
-    --input-color: #1B2D29;
-    --body-color: #d1cbdb;
-}
-
-.dark-theme p {
-    color: #d1cbdb;
-}
-
-.dark-theme .form-control,
-.dark-theme .form-select {
-    color: var(--white);
-    border: 1px solid var(--bg-color3);
-}
-
-.dark-theme .form-control:focus {
-    color: var(--heading-color);
-    background-color: var(--bg-color3);
-}
-
-.dark-theme .select2-dropdown {
-    background-color: var(--bg-color2);
-}
-
-.dark-theme .select2-container--default .select2-selection--single .select2-selection__rendered {
-    color: var(--white);
-}
-
-.dark-theme .select2-container .select2-dropdown .select2-search__field {
-    background-color: var(--bg-color3);
-    color: var(--white);
-}
-
-.dark-theme .cmn-box {
-    background-color: var(--bg-color2);
-}
-
-.dark-theme .cmn-btn3 {
-    background-color: var(--bg-color3);
-    border-color: var(--bg-color3);
-    color: var(--white);
-}
-
-.dark-theme .section-subtitle::after {
-    background: linear-gradient(90deg, #3a1f2b, rgba(217, 217, 217, 0));
-}
-
-.dark-theme hr.divider:after {
-    background-color: transparent;
-}
-
-/*----------------------------------------------
-Dark theme section end
-----------------------------------------------*/
+/* Removed duplicate green dark-theme block — champagne vars already defined above */
 /*----------------------------------------------
 Reset section start
 ----------------------------------------------*/
