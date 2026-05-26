@@ -1,7 +1,16 @@
 # Manual Deployment Instructions
 
 ## Latest Changes (2026-05-26)
-**Green Color Fix:**
+**Fiat Currency Functionality Restored:**
+- Restored Buy/Sell tabs with fiat currency functionality while keeping new design
+- Buy tab: Fiat currency → Cryptocurrency (e.g., USD → BTC)
+- Sell tab: Cryptocurrency → Fiat currency (e.g., BTC → USD)
+- Exchange tab: Cryptocurrency → Cryptocurrency (as before)
+- Added public routes for buy/sell requests for non-authenticated users
+- Updated hero.blade.php with mode switching and dynamic currency loading
+- Non-auth users redirected to login with pending request stored in session
+
+**Previous Green Color Fix:**
 - Replaced all green colors with champagne/gold (#e8c9a0) to match eazy228/design
 - Changed in `style.css`: --color-success, --lime-green-rgb
 - Changed in `dashboard.css`: --color-success, --soft-green, --lime-green, --grayish-green
