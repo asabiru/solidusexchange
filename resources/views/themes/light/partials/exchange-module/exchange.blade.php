@@ -5,7 +5,7 @@
             <div class="sc-compact-input-box" id="inputAmountBox">
                 <div class="swap-label-row">
                     <label class="sc-compact-label">@lang('You send')</label>
-                    <span class="swap-reserve">Доступно к обмену: <span id="sendReserve">0.00</span> <span id="sendCurrency">BTC</span></span>
+                    <span class="swap-reserve">Доступно к обмену: <span id="sendReserve">0.00</span> <span id="sendCurrency"></span></span>
                 </div>
                 <div class="sc-compact-input-wrapper">
                     <div class="sc-currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal">
@@ -13,7 +13,7 @@
                             <img class="img-flag" id="showSendImage" src="" alt="...">
                         </div>
                         <div class="currency-info">
-                            <span class="currency-symbol" id="showSendCode">BTC</span>
+                            <span class="currency-symbol" id="showSendCode"></span>
                         </div>
                         <i class="fa-regular fa-angle-down selector-arrow"></i>
                     </div>
@@ -42,7 +42,7 @@
                             <img class="img-flag" id="showGetImage" src="" alt="...">
                         </div>
                         <div class="currency-info">
-                            <span class="currency-symbol" id="showGetCode">ETH</span>
+                            <span class="currency-symbol" id="showGetCode"></span>
                         </div>
                         <i class="fa-regular fa-angle-down selector-arrow"></i>
                     </div>
@@ -64,7 +64,7 @@
                 К получению
             </span>
             <span class="info-value">
-                <span id="finalReceive">0.00</span> <span id="receiveCurrency">ETH</span>
+                <span id="finalReceive">0.00</span> <span id="receiveCurrency"></span>
             </span>
         </div>
     </div>
@@ -100,3 +100,40 @@
         <button type="submit" class="sc-exchange-btn w-100" id="submitBtn">@lang("Exchange now")</button>
     </div>
 </div>
+
+<script>
+// Динамическое обновление валют
+function updateCurrencyLabels() {
+    const sendCode = document.getElementById('showSendCode');
+    const getCode = document.getElementById('showGetCode');
+    const sendCurrency = document.getElementById('sendCurrency');
+    const receiveCurrency = document.getElementById('receiveCurrency');
+
+    if (sendCode && sendCurrency) {
+        sendCurrency.textContent = sendCode.textContent || '';
+    }
+    if (getCode && receiveCurrency) {
+        receiveCurrency.textContent = getCode.textContent || '';
+    }
+}
+
+// Наблюдение за изменениями
+document.addEventListener('DOMContentLoaded', function() {
+    updateCurrencyLabels();
+
+    // Наблюдаем за изменениями в селекторах валют
+    const observer = new MutationObserver(function(mutations) {
+        updateCurrencyLabels();
+    });
+
+    const sendCodeEl = document.getElementById('showSendCode');
+    const getCodeEl = document.getElementById('showGetCode');
+
+    if (sendCodeEl) {
+        observer.observe(sendCodeEl, { childList: true, characterData: true, subtree: true });
+    }
+    if (getCodeEl) {
+        observer.observe(getCodeEl, { childList: true, characterData: true, subtree: true });
+    }
+});
+</script>

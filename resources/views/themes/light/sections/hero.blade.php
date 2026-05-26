@@ -93,14 +93,14 @@
                         <!-- Send Section -->
                         <div class="swap-section">
                             <div class="swap-label">Вы отправляете</div>
-                            <div class="swap-reserve">Доступно к обмену: <span id="sendReserve">0.00</span> <span id="sendCurrency">BTC</span></div>
+                            <div class="swap-reserve">Доступно к обмену: <span id="sendReserve">0.00</span> <span id="sendCurrency"></span></div>
                             <div class="swap-input-wrapper">
                                 <div class="currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal">
                                     <div class="currency-icon">
                                         <img class="img-flag" id="showSendImage" src="" alt="...">
                                     </div>
                                     <div class="currency-info">
-                                        <span class="currency-symbol" id="showSendCode">BTC</span>
+                                        <span class="currency-symbol" id="showSendCode"></span>
                                     </div>
                                     <i class="fa-regular fa-angle-down selector-arrow"></i>
                                 </div>
@@ -134,7 +134,7 @@
                                         <img class="img-flag" id="showGetImage" src="" alt="...">
                                     </div>
                                     <div class="currency-info">
-                                        <span class="currency-symbol" id="showGetCode">ETH</span>
+                                        <span class="currency-symbol" id="showGetCode"></span>
                                     </div>
                                     <i class="fa-regular fa-angle-down selector-arrow"></i>
                                 </div>
@@ -159,7 +159,7 @@
                                     К получению
                                 </span>
                                 <span class="info-value">
-                                    <span id="finalReceive">0.00</span> <span id="receiveCurrency">ETH</span>
+                                    <span id="finalReceive">0.00</span> <span id="receiveCurrency"></span>
                                 </span>
                             </div>
                         </div>
@@ -205,3 +205,40 @@
 </section>
 
 @include($theme.'partials.modal')
+
+<script>
+// Динамическое обновление валют в Hero секции
+function updateHeroCurrencyLabels() {
+    const sendCode = document.querySelector('#showSendCode');
+    const getCode = document.querySelector('#showGetCode');
+    const sendCurrency = document.querySelector('#sendCurrency');
+    const receiveCurrency = document.querySelector('#receiveCurrency');
+
+    if (sendCode && sendCurrency) {
+        sendCurrency.textContent = sendCode.textContent || '';
+    }
+    if (getCode && receiveCurrency) {
+        receiveCurrency.textContent = getCode.textContent || '';
+    }
+}
+
+// Наблюдение за изменениями
+document.addEventListener('DOMContentLoaded', function() {
+    updateHeroCurrencyLabels();
+
+    // Наблюдаем за изменениями в селекторах валют
+    const observer = new MutationObserver(function(mutations) {
+        updateHeroCurrencyLabels();
+    });
+
+    const sendCodeEl = document.querySelector('#showSendCode');
+    const getCodeEl = document.querySelector('#showGetCode');
+
+    if (sendCodeEl) {
+        observer.observe(sendCodeEl, { childList: true, characterData: true, subtree: true });
+    }
+    if (getCodeEl) {
+        observer.observe(getCodeEl, { childList: true, characterData: true, subtree: true });
+    }
+});
+</script>
