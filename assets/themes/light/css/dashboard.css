@@ -5,42 +5,70 @@ Typography
 :root {
     --body-font: "IBM Plex Sans", sans-serif;
     --heading-font: "IBM Plex Sans", sans-serif;
-    --primary-color: #b76bff;
-    --heading-color: #000000;
-    --black: #000000;
-    --grayish-blue: #929cbf;
-    --btn-hover-bg: #9f63ff;
-    --white: #ffffff;
-    --magenta: #b125c0;
-    --blue: #8d3dff;
-    --orange: #FFC83E;
-    --soft-blue: #d9bbff;
-    --soft-green: #ccf888;
-    --loader-color: #F3F4F6;
-    --soft-red: #d82a68;
-    --lime-green: #40b781;
-    --vivid-orange: #fb6116;
-    --vivid-cyan: #b76bff;
-    --vivid-yellow: #ffc107;
-    --bg-color1: #F3F4F6;
-    --bg-color2: #ffffff;
-    --bg-color3: #ffffff;
-    --body-color: #707070;
-    --border-color1: #e5e7eb;
-    --border-color2: #e1e1e1;
-    --primary-color-opacity-low: rgb(183, 107, 255, 0.1);
-    --primary-color-opacity-low2: rgba(255, 153, 51, 0.3);
-    --shadow1: 0px 3px 5px 0px rgba(0, 0, 0, 0.10);
-    --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.10);
-    --shadow3: 5px 5px 20px rgba(141, 61, 255, .16);
+    
+    /* New champagne/gold dark theme colors */
+    --color-bg: #0b0608;
+    --color-bg-elevated: #150c10;
+    --color-bg-gradient-from: #1a0f14;
+    --color-bg-gradient-to: #3a1f2b;
+    --color-border-subtle: rgba(255, 255, 255, 0.06);
+    --color-border-strong: rgba(255, 255, 255, 0.12);
+    --color-text-primary: #f5ede4;
+    --color-text-secondary: #9a8e86;
+    --color-text-muted: #5e534d;
+    --color-accent: #e8c9a0;
+    --color-accent-hover: #f2d8b4;
+    --color-accent-soft: rgba(232, 201, 160, 0.12);
+    --color-success: #7fb28a;
+    --color-warning: #d9a86a;
+    --color-danger: #c9786a;
+    
+    /* Legacy variable mappings for compatibility */
+    --primary-color: #e8c9a0;
+    --primary-color-rgb: 232, 201, 160;
+    --secondary-color: #d4a574;
+    --heading-color: #f5ede4;
+    --black: #f5ede4;
+    --grayish-blue: #9a8e86;
+    --btn-hover-bg: #f2d8b4;
+    --white: #0b0608;
+    --magenta: #e8c9a0;
+    --blue: #3a1f2b;
+    --orange: #d9a86a;
+    --soft-blue: #3a1f2b;
+    --soft-green: #7fb28a;
+    --loader-color: #0b0608;
+    --soft-red: #c9786a;
+    --lime-green: #7fb28a;
+    --vivid-orange: #d9a86a;
+    --vivid-cyan: #e8c9a0;
+    --vivid-yellow: #e8c9a0;
+    --bg-color1: linear-gradient(152deg, #1a0f14 0%, #3a1f2b 100%);
+    --bg-color2: #150c10;
+    --bg-color3: #0b0608;
+    --body-color: #f5ede4;
+    --border-color1: rgba(255, 255, 255, 0.06);
+    --border-color2: rgba(255, 255, 255, 0.12);
+    --primary-color-opacity-low: rgba(232, 201, 160, 0.12);
+    --primary-color-opacity-low2: rgba(232, 201, 160, 0.18);
+    --shadow1: 0px 3px 5px 0px rgba(0, 0, 0, 0.3);
+    --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.2);
+    --shadow3: 5px 5px 20px rgba(0, 0, 0, 0.3);
     --transition: all .3s ease-in-out;
+    
+    /* Border radius */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-pill: 999px;
 }
 
 
 :root{
-    --grayish-blue: 168, 167, 212;
-    --grayish-green: 178, 214, 163;
-    --strong-orange: 198, 121, 31;
+    --grayish-blue: 154, 142, 134;
+    --grayish-green: 127, 178, 138;
+    --strong-orange: 217, 168, 106;
 }
 /* Box Card section start*/
 .box-card {
@@ -59,24 +87,63 @@ Typography
 }
 
 /*----------------------------------------------
-Dark theme section start
+Light theme section (light version of champagne design)
+----------------------------------------------*/
+body:not(.dark-theme) {
+    --color-bg: #faf8f5;
+    --color-bg-elevated: #ffffff;
+    --color-bg-gradient-from: #f5f0e8;
+    --color-bg-gradient-to: #ebe4d8;
+    --color-border-subtle: rgba(0, 0, 0, 0.08);
+    --color-border-strong: rgba(0, 0, 0, 0.12);
+    --color-text-primary: #1a1614;
+    --color-text-secondary: #5a5248;
+    --color-text-muted: #8a8278;
+    --color-accent: #c9a227;
+    --color-accent-hover: #d4b52f;
+    --color-accent-soft: rgba(201, 162, 39, 0.12);
+    
+    /* Legacy variable mappings for light theme */
+    --primary-color: #c9a227;
+    --primary-color-rgb: 201, 162, 39;
+    --secondary-color: #a8871f;
+    --heading-color: #1a1614;
+    --black: #1a1614;
+    --grayish-blue: #5a5248;
+    --white: #ffffff;
+    --bg-color1: linear-gradient(152deg, #f5f0e8 0%, #ebe4d8 100%);
+    --bg-color2: #ffffff;
+    --bg-color3: #faf8f5;
+    --body-color: #1a1614;
+    --border-color1: rgba(0, 0, 0, 0.08);
+    --border-color2: rgba(0, 0, 0, 0.12);
+    --shadow1: 0px 3px 5px 0px rgba(0, 0, 0, 0.08);
+    --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.06);
+    --shadow3: 5px 5px 20px rgba(0, 0, 0, 0.08);
+}
+
+/*----------------------------------------------
+Dark theme section (default champagne dark theme)
 ----------------------------------------------*/
 .dark-theme {
-    --bg-color1: #1a1225;
-    --bg-color2: #2d1e3c;
-    --bg-color3: #251830;
-    --heading-color: #f7e7ff;
-    --body-color: #e0d0f0;
-    --border-color1: #4a3a5c;
-    --border-color2: #3d2d4d;
-    --primary-color: #b76bff;
-    --white: #1a1225;
-    --black: #f7e7ff;
+    /* Already set in :root, but ensuring consistency */
+    --color-bg: #0b0608;
+    --color-bg-elevated: #150c10;
+    --color-bg-gradient-from: #1a0f14;
+    --color-bg-gradient-to: #3a1f2b;
+    --color-border-subtle: rgba(255, 255, 255, 0.06);
+    --color-border-strong: rgba(255, 255, 255, 0.12);
+    --color-text-primary: #f5ede4;
+    --color-text-secondary: #9a8e86;
+    --color-text-muted: #5e534d;
+    --color-accent: #e8c9a0;
+    --color-accent-hover: #f2d8b4;
+    --color-accent-soft: rgba(232, 201, 160, 0.12);
 }
 
 .dark-theme body {
-    background-color: var(--bg-color1);
-    color: var(--body-color);
+    background-color: var(--color-bg);
+    color: var(--color-text-primary);
 }
 
 .dark-theme .grayish-custom-card {
