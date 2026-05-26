@@ -75,8 +75,18 @@
 
 @push('script')
     <script>
+        const dashboardTheme = window.SolidusDashboardTheme || {
+            colors: {
+                surface: '#ffffff',
+                chartLine: '#377dff',
+                chartMuted: '#e7eaf3',
+                chartGrid: '#e7eaf3',
+                textMuted: '#97a4af'
+            }
+        };
+
         Notiflix.Block.standard('#exchangeRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartExchangeRecordsGraph'), {
             type: "line",
@@ -85,11 +95,11 @@
                 datasets: [{
                     data: [],
                     backgroundColor: "transparent",
-                    borderColor: "#377dff",
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
-                    hoverBorderColor: "#377dff",
-                    pointBackgroundColor: "#377dff",
+                    hoverBorderColor: dashboardTheme.colors.chartLine,
+                    pointBackgroundColor: dashboardTheme.colors.chartLine,
                     pointBorderColor: "#fff",
                     pointHoverRadius: 0,
                     tension: 0.4
@@ -97,11 +107,11 @@
                     {
                         data: [],
                         backgroundColor: "transparent",
-                        borderColor: "#e7eaf3",
+                        borderColor: dashboardTheme.colors.chartMuted,
                         borderWidth: 2,
                         pointRadius: 0,
-                        hoverBorderColor: "#e7eaf3",
-                        pointBackgroundColor: "#e7eaf3",
+                        hoverBorderColor: dashboardTheme.colors.chartMuted,
+                        pointBackgroundColor: dashboardTheme.colors.chartMuted,
                         pointBorderColor: "#fff",
                         pointHoverRadius: 0,
                         tension: 0.4
@@ -111,14 +121,14 @@
                 scales: {
                     y: {
                         grid: {
-                            color: "#e7eaf3",
+                            color: dashboardTheme.colors.chartMuted,
                             drawBorder: false,
-                            zeroLineColor: "#e7eaf3"
+                            zeroLineColor: dashboardTheme.colors.chartMuted
                         },
                         ticks: {
                             beginAtZero: true,
                             stepSize: 100,
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -134,7 +144,7 @@
                             drawBorder: false
                         },
                         ticks: {
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -151,7 +161,7 @@
                         mode: "index",
                         intersect: false,
                         lineMode: true,
-                        lineWithLineColor: "rgba(19, 33, 68, 0.075)"
+                        lineWithLineColor: dashboardTheme.colors.chartGrid
                     }
                 },
                 hover: {
@@ -184,7 +194,7 @@
 
     <script>
         Notiflix.Block.standard('#buyRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartBuyRecordsGraph'), {
             type: "line",
@@ -193,11 +203,11 @@
                 datasets: [{
                     data: [],
                     backgroundColor: "transparent",
-                    borderColor: "#377dff",
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
-                    hoverBorderColor: "#377dff",
-                    pointBackgroundColor: "#377dff",
+                    hoverBorderColor: dashboardTheme.colors.chartLine,
+                    pointBackgroundColor: dashboardTheme.colors.chartLine,
                     pointBorderColor: "#fff",
                     pointHoverRadius: 0,
                     tension: 0.4
@@ -205,11 +215,11 @@
                     {
                         data: [],
                         backgroundColor: "transparent",
-                        borderColor: "#e7eaf3",
+                        borderColor: dashboardTheme.colors.chartMuted,
                         borderWidth: 2,
                         pointRadius: 0,
-                        hoverBorderColor: "#e7eaf3",
-                        pointBackgroundColor: "#e7eaf3",
+                        hoverBorderColor: dashboardTheme.colors.chartMuted,
+                        pointBackgroundColor: dashboardTheme.colors.chartMuted,
                         pointBorderColor: "#fff",
                         pointHoverRadius: 0,
                         tension: 0.4
@@ -219,14 +229,14 @@
                 scales: {
                     y: {
                         grid: {
-                            color: "#e7eaf3",
+                            color: dashboardTheme.colors.chartMuted,
                             drawBorder: false,
-                            zeroLineColor: "#e7eaf3"
+                            zeroLineColor: dashboardTheme.colors.chartMuted
                         },
                         ticks: {
                             beginAtZero: true,
                             stepSize: 100,
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -242,7 +252,7 @@
                             drawBorder: false
                         },
                         ticks: {
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -259,7 +269,7 @@
                         mode: "index",
                         intersect: false,
                         lineMode: true,
-                        lineWithLineColor: "rgba(19, 33, 68, 0.075)"
+                        lineWithLineColor: dashboardTheme.colors.chartGrid
                     }
                 },
                 hover: {
@@ -293,7 +303,7 @@
 
     <script>
         Notiflix.Block.standard('#sellRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartSellRecordsGraph'), {
             type: "line",
@@ -302,11 +312,11 @@
                 datasets: [{
                     data: [],
                     backgroundColor: "transparent",
-                    borderColor: "#377dff",
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
-                    hoverBorderColor: "#377dff",
-                    pointBackgroundColor: "#377dff",
+                    hoverBorderColor: dashboardTheme.colors.chartLine,
+                    pointBackgroundColor: dashboardTheme.colors.chartLine,
                     pointBorderColor: "#fff",
                     pointHoverRadius: 0,
                     tension: 0.4
@@ -314,11 +324,11 @@
                     {
                         data: [],
                         backgroundColor: "transparent",
-                        borderColor: "#e7eaf3",
+                        borderColor: dashboardTheme.colors.chartMuted,
                         borderWidth: 2,
                         pointRadius: 0,
-                        hoverBorderColor: "#e7eaf3",
-                        pointBackgroundColor: "#e7eaf3",
+                        hoverBorderColor: dashboardTheme.colors.chartMuted,
+                        pointBackgroundColor: dashboardTheme.colors.chartMuted,
                         pointBorderColor: "#fff",
                         pointHoverRadius: 0,
                         tension: 0.4
@@ -328,14 +338,14 @@
                 scales: {
                     y: {
                         grid: {
-                            color: "#e7eaf3",
+                            color: dashboardTheme.colors.chartMuted,
                             drawBorder: false,
-                            zeroLineColor: "#e7eaf3"
+                            zeroLineColor: dashboardTheme.colors.chartMuted
                         },
                         ticks: {
                             beginAtZero: true,
                             stepSize: 100,
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -351,7 +361,7 @@
                             drawBorder: false
                         },
                         ticks: {
-                            color: "#97a4af",
+                            color: dashboardTheme.colors.textMuted,
                             font: {
                                 size: 12,
                                 family: "Open Sans, sans-serif"
@@ -368,7 +378,7 @@
                         mode: "index",
                         intersect: false,
                         lineMode: true,
-                        lineWithLineColor: "rgba(19, 33, 68, 0.075)"
+                        lineWithLineColor: dashboardTheme.colors.chartGrid
                     }
                 },
                 hover: {

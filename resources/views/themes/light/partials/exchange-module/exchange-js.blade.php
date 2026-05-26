@@ -30,6 +30,10 @@
     });
 
     $(document).on("click", "#swapBtn", function () {
+        const $btn = $(this);
+        $btn.addClass('rotated');
+        setTimeout(() => $btn.removeClass('rotated'), 600);
+
         if (!activeSendCurrency || !activeGetCurrency) {
             return;
         }

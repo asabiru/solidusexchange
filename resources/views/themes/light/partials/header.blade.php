@@ -204,12 +204,30 @@
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
         </div>
         <div class="offcanvas-body d-flex flex-column gap-2">
-            <a href="#exchange" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
-            <a href="#rates" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
-            <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
-            <a href="#how" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
-            <a href="#faq" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
-            <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
+            <a href="#exchange" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-arrow-left-right me-2" style="width: 20px; color: var(--color-accent);"></i>
+                Обмен
+            </a>
+            <a href="#rates" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-chart-line me-2" style="width: 20px; color: var(--color-accent);"></i>
+                Курсы
+            </a>
+            <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-vault me-2" style="width: 20px; color: var(--color-accent);"></i>
+                Резервы
+            </a>
+            <a href="#how" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-circle-question me-2" style="width: 20px; color: var(--color-accent);"></i>
+                Как работает
+            </a>
+            <a href="#faq" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-comments me-2" style="width: 20px; color: var(--color-accent);"></i>
+                FAQ
+            </a>
+            <a href="{{ url('tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">
+                <i class="fa-solid fa-magnifying-glass me-2" style="width: 20px; color: var(--color-accent);"></i>
+                Отследить
+            </a>
 
             @if($activeLanguages->isNotEmpty())
                 <div class="mt-4 pt-4" style="border-top: 1px solid var(--color-border-subtle);">

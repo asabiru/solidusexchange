@@ -257,12 +257,15 @@ Swap Card - eazy228/design style
     border-radius: var(--radius-md);
     color: var(--color-bg);
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.swap-button.rotated {
+    transform: rotate(180deg);
 }
 
 .swap-button:hover {
     background: var(--color-accent-hover);
-    transform: rotate(180deg);
 }
 
 .swap-info {

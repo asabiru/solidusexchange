@@ -1,395 +1,235 @@
 @extends('admin.layouts.app')
 @section('page_title', __('Dashboard'))
 @section('content')
-    <!-- Content -->
-
-    <!-- End Content -->
-    <div class="content container-fluid dashboard-height">
-
-
-        <div id="firebase-app">
-            <div class=" p-3 mb-5 alert alert-soft-dark mb-4 mb-lg-7" role="alert"
-                 v-if="notificationPermission == 'default' && !is_notification_skipped" v-cloak>
-                <div class="alert-box d-flex flex-wrap align-items-center">
-                    <div class="flex-shrink-0">
-                        <img class="avatar avatar-xl"
-                             src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="default">
-                        <img class="avatar avatar-xl"
-                             src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="dark">
-                    </div>
-
-                    <div class="flex-grow-1 ms-3">
-                        <h3 class=" mb-1">@lang("Attention!")</h3>
-                        <div class="d-flex align-items-center">
-                            <p class="mb-0 text-body"> @lang('Please allow your browser to get instant push notification. Allow it from notification setting.')</p>
-                            <button id="allow-notification" class="btn btn-sm btn-primary mx-2"><i
-                                    class="fa fa-check-circle"></i> @lang('Allow me')</button>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close"
-                            @click.prevent="skipNotification" data-bs-dismiss="alert"
-                            aria-label="Close">
-                    </button>
-                </div>
-            </div>
-            <div class="alert alert-soft-dark mb-4 mb-lg-7" role="alert"
-                 v-if="notificationPermission == 'denied' && !is_notification_skipped" v-cloak>
-                <div class="d-flex align-items-center mt-4">
-                    <div class="flex-shrink-0">
-                        <img class="avatar avatar-xl"
-                             src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="default">
-                        <img class="avatar avatar-xl"
-                             src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="dark">
-                    </div>
-
-                    <div class="flex-grow-1 ms-3">
-                        <h3 class=" mb-1">@lang("Attention!")</h3>
-                        <div class="d-flex align-items-center">
-                            <p class="mb-0 text-body"> @lang("Please allow your browser to get instant push notification. Allow it from notification setting.")</p>
-                        </div>
-                    </div>
-                    <button type="button" class="btn-close" @click.prevent="skipNotification" data-bs-dismiss="alert"
-                            aria-label="Close"></button>
-                </div>
-            </div>
-        </div>
-        <div class="row ">
-            @include('admin.partials.dashboard.recentTran')
-            @include('admin.partials.dashboard.record')
-        </div>
-
-        @include('admin.partials.dashboard.exchange-performance')
-        @include('admin.partials.dashboard.exchange-figure')
-
-        <div class="card mb-3 mb-lg-5">
-            <div class="card-header card-header-content-between">
-                <h4 class="card-header-title">@lang("Latest Users")</h4>
-
-                <a class="btn btn-ghost-secondary btn-sm" href="{{ route("admin.users") }}">@lang("View All")</a>
-            </div>
-            <div class="table-responsive">
-                <table class="table table-borderless table-thead-bordered table-align-middle card-table">
-                    <thead class="thead-light">
-                    <tr>
-                        <th>@lang('Full Name')</th>
-                        <th>@lang('Email-Phone')</th>
-                        <th>@lang('Country')</th>
-                        <th>@lang('Status')</th>
-                        <th>@lang('Last Login')</th>
-                        <th>@lang('Action')</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    @forelse($latestUser as $user)
-                        <tr>
-                            <td>
-
-                                <a class="d-flex align-items-center me-2"
-                                   href="{{ route("admin.user.view.profile", $user->id) }}">
-                                    <div class="flex-shrink-0">
-                                        {!! $user->profilePicture() !!}
-                                    </div>
-                                    <div class="flex-grow-1 ms-3">
-                                        <h5 class="text-hover-primary mb-0">{{ $user->firstname . ' ' . $user->lastname }}</h5>
-                                        <span class="fs-6 text-body">{{'@'. $user->username }}</span>
-                                    </div>
-                                </a>
-                            </td>
-                            <td>
-                                <span class="d-block h5 mb-0"> {{ $user->email }}</span>
-                                <span class="d-block fs-5">{{ $user->phone }}</span>
-                            </td>
-                            <td>
-                                {{ $user->country ?? 'N/A' }}
-                            </td>
-                            <td>
-                                @if($user->status == 1)
-                                    <span class="badge bg-soft-success text-success">
-                                        <span class="legend-indicator bg-success"></span>@lang("Active")
-                                    </span>
-                                @else
-                                    <span class="badge bg-soft-danger text-danger">
-                                        <span class="legend-indicator bg-danger"></span>@lang("Inactive")
-                                    </span>
-                                @endif
-                            </td>
-                            <td>
-                                {{ diffForHumans($user->last_login) }}
-                            </td>
-                            <td>
-                                <div class="btn-group" role="group">
-                                    <a class="btn btn-white btn-sm" href="{{ route('admin.user.edit', $user->id) }}">
-                                        <i class="bi-pencil-fill me-1"></i> @lang("Edit")
-                                    </a>
-                                    <div class="btn-group">
-                                        <button type="button"
-                                                class="btn btn-white btn-icon btn-sm dropdown-toggle dropdown-toggle-empty"
-                                                id="userEditDropdown" data-bs-toggle="dropdown"
-                                                aria-expanded="false"></button>
-                                        <div class="dropdown-menu dropdown-menu-end mt-1"
-                                             aria-labelledby="userEditDropdown">
-                                            <a class="dropdown-item"
-                                               href="{{ route('admin.user.view.profile', $user->id) }}">
-                                                <i class="bi-eye-fill dropdown-item-icon"></i> @lang("View Profile")
-                                            </a>
-                                            <a class="dropdown-item" href="{{ route('admin.send.email', $user->id) }}">
-                                                <i
-                                                    class="bi-envelope dropdown-item-icon"></i> @lang("Send Mail") </a>
-                                            <a class="dropdown-item loginAccount" href="javascript:void(0)"
-                                               data-route="{{ route('admin.login.as.user', $user->id) }}"
-                                               data-bs-toggle="modal" data-bs-target="#loginAsUserModal">
-                                                <i class="bi bi-box-arrow-in-right dropdown-item-icon"></i>
-                                                @lang("Login As User")
-                                            </a>
-                                        </div>
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <div class="text-center p-4">
-                                <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                     alt="Image Description" data-hs-theme-appearance="default">
-                                <img class="dataTables-image mb-3"
-                                     src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description"
-                                     data-hs-theme-appearance="dark">
-                                <p class="mb-0">@lang("No data to show")</p>
-                            </div>
-                        </tr>
-                    @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        @include('admin.partials.dashboard.browserHistory')
-
-    </div>
-
-    @if($basicControl->is_active_cron_notification)
-        <!-- Modal -->
-        <div class="modal fade" id="cron-info" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
-             aria-labelledby="staticBackdropLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="staticBackdropLabel"><i class="fal fa-info-circle"></i>
-                            @lang('Cron Job Set Up Instruction')</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-12">
-                                <p class="bg-orange text-white p-2">
-                                    <i>@lang('**To sending emails and manage records automatically you need to setup cron job in your server. Make sure your job is running properly. We insist to set the cron job time as minimum as possible.**')</i>
-                                </p>
-                            </div>
-                            <div class="col-md-12 form-group">
-                                <label><strong>@lang('Command for Email')</strong></label>
-                                <div class="input-group mb-3">
-                                    <input type="text" class="form-control copyText"
-                                           value="curl -s {{ route('queue.work') }}" disabled>
-                                    <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
-                                            id="button-addon2">
-                                        <i class="fas fa-copy"></i></button>
-
-                                </div>
-                            </div>
-                            <div class="col-md-12 form-group">
-                                <label><strong>@lang('Command for Cron Job')</strong></label>
-                                <div class="input-group mb-3">
-                                    <input type="text" class="form-control copyText"
-                                           value="curl -s {{ route('schedule:run') }}"
-                                           disabled>
-                                    <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
-                                            id="button-addon2">
-                                        <i class="fas fa-copy"></i></button>
-                                </div>
-                            </div>
-                            <div class="col-md-12 text-center">
-                                <p class="bg-dark text-white p-2">
-                                    @lang('*To turn off this pop up go to ')
-                                    <a href="{{route('admin.basic.control')}}"
-                                       class="text-danger">@lang('Basic control')</a>
-                                    @lang(' and disable `Cron Set Up Pop Up`.*')
-                                </p>
-                            </div>
-
-                            <div class="col-md-12">
-                                <p class="text-muted"><span class="text-secondary font-weight-bold">@lang('N.B'):</span>
-                                    @lang('If you are unable to set up cron job, Here is a video tutorial for you')
-                                    <a href="https://www.youtube.com/watch?v=wuvTRT2ety0" target="_blank"><i
-                                            class="fab fa-youtube"></i> @lang('Click Here') </a>
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    @endif
-
-    @include('admin.user_management.components.login_as_user')
-    @include('admin.user_management.components.update_balance_modal')
-
-@endsection
-
-@push('js-lib')
-    <script src="{{ asset('assets/admin/js/chart.min.js') }}"></script>
-    <script src="{{ asset('assets/global/js/apexcharts.min.js') }}"></script>
-@endpush
-
-@push("script")
-    <script>
-        'use strict';
-
-        $(document).on('click', '.loginAccount', function () {
-            let route = $(this).data('route');
-            $('.loginAccountAction').attr('action', route)
-        });
-
-        $(document).on('click', '.addBalance', function () {
-            $('.setBalanceRoute').attr('action', $(this).data('route'));
-            $('.user-contact-balance').text(new Intl.NumberFormat('en-US').format($(this).data('contacts')));
-            $('.user-email-balance').text(new Intl.NumberFormat('en-US').format($(this).data('emails')));
-        })
-
-
-        $(document).ready(function () {
-            let isActiveCronNotification = '{{ $basicControl->is_active_cron_notification }}';
-            if (isActiveCronNotification == 1)
-                $('#cron-info').modal('show');
-            $(document).on('click', '.copy-btn', function () {
-                var _this = $(this)[0];
-                var copyText = $(this).siblings('input');
-                $(copyText).prop('disabled', false);
-                copyText.select();
-                document.execCommand("copy");
-                $(copyText).prop('disabled', true);
-                $(this).text('Coppied');
-                setTimeout(function () {
-                    $(_this).text('');
-                    $(_this).html('<i class="fas fa-copy"></i>');
-                }, 500)
-            });
-        })
-
-
-    </script>
-
-@endpush
-
-@if($firebaseNotify)
     @push('script')
-        <script type="module">
-
-            import {initializeApp} from "https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js";
-            import {
-                getMessaging,
-                getToken,
-                onMessage
-            } from "https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging.js";
-
-            const firebaseConfig = {
-                apiKey: "{{$firebaseNotify['apiKey']}}",
-                authDomain: "{{$firebaseNotify['authDomain']}}",
-                projectId: "{{$firebaseNotify['projectId']}}",
-                storageBucket: "{{$firebaseNotify['storageBucket']}}",
-                messagingSenderId: "{{$firebaseNotify['messagingSenderId']}}",
-                appId: "{{$firebaseNotify['appId']}}",
-                measurementId: "{{$firebaseNotify['measurementId']}}"
-            };
-
-            const app = initializeApp(firebaseConfig);
-            const messaging = getMessaging(app);
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('{{ getProjectDirectory() }}' + `/firebase-messaging-sw.js`, {scope: './'}).then(function (registration) {
-                        requestPermissionAndGenerateToken(registration);
-                    }
-                ).catch(function (error) {
-                });
-            } else {
-            }
-
-            onMessage(messaging, (payload) => {
-                if (payload.data.foreground || parseInt(payload.data.foreground) == 1) {
-                    const title = payload.notification.title;
-                    const options = {
-                        body: payload.notification.body,
-                        icon: payload.notification.icon,
-                    };
-                    new Notification(title, options);
-                }
-            });
-
-            function requestPermissionAndGenerateToken(registration) {
-                document.addEventListener("click", function (event) {
-                    if (event.target.id == 'allow-notification') {
-                        Notification.requestPermission().then((permission) => {
-                            if (permission === 'granted') {
-                                getToken(messaging, {
-                                    serviceWorkerRegistration: registration,
-                                    vapidKey: "{{$firebaseNotify['vapidKey']}}"
-                                })
-                                    .then((token) => {
-                                        $.ajax({
-                                            url: "{{ route('admin.save.token') }}",
-                                            method: "post",
-                                            data: {
-                                                token: token,
-                                            },
-                                            success: function (res) {
-                                            }
-                                        });
-                                        window.newApp.notificationPermission = 'granted';
-                                    });
-                            } else {
-                                window.newApp.notificationPermission = 'denied';
-                            }
-                        });
-                    }
-                });
-            }
-        </script>
         <script>
-            window.newApp = new Vue({
-                el: "#firebase-app",
-                data: {
-                    admin_foreground: '',
-                    admin_background: '',
-                    notificationPermission: Notification.permission,
-                    is_notification_skipped: sessionStorage.getItem('is_notification_skipped') == '1'
-                },
-                mounted() {
-                    sessionStorage.clear();
-                    this.admin_foreground = "{{$firebaseNotify['admin_foreground']}}";
-                    this.admin_background = "{{$firebaseNotify['admin_background']}}";
-                },
-                methods: {
-                    skipNotification() {
-                        sessionStorage.setItem('is_notification_skipped', '1');
-                        this.is_notification_skipped = true;
+            window.SolidusDashboardTheme = (function () {
+                const root = document.documentElement;
+                const theme = root.getAttribute('data-solidus-admin-theme') || 'default';
+                const styles = getComputedStyle(root);
+                const pick = function (name, fallback) {
+                    const value = styles.getPropertyValue(name).trim();
+                    return value !== '' ? value : fallback;
+                };
+
+                return {
+                    theme: theme,
+                    isDark: theme === 'dark',
+                    colors: {
+                        surface: pick('--admin-card-bg', 'rgba(255, 255, 255, 0.88)'),
+                        surfaceElevated: pick('--admin-bg-elevated', '#ffffff'),
+                        surfaceTertiary: pick('--admin-bg-tertiary', '#f4eee7'),
+                        textPrimary: pick('--admin-text-primary', '#14110f'),
+                        textSecondary: pick('--admin-text-secondary', '#6b625b'),
+                        textMuted: pick('--admin-text-muted', '#9a8e86'),
+                        accent: pick('--admin-accent', '#c9a227'),
+                        accentSoft: pick('--admin-accent-soft', 'rgba(201, 162, 39, 0.12)'),
+                        borderSubtle: pick('--admin-border-subtle', 'rgba(20, 17, 15, 0.08)'),
+                        borderStrong: pick('--admin-border-strong', 'rgba(20, 17, 15, 0.14)'),
+                        chartLine: pick('--admin-accent', '#c9a227'),
+                        chartMuted: theme === 'dark' ? '#6f655f' : '#c4b7ac',
+                        chartGrid: theme === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(20, 17, 15, 0.08)',
+                        shadow: theme === 'dark' ? '0 24px 70px rgba(0, 0, 0, 0.42)' : '0 24px 70px rgba(27, 18, 13, 0.12)'
                     }
-                }
-            });
+                };
+            })();
+
+            window.loaderColor = window.SolidusDashboardTheme.isDark
+                ? 'rgba(19, 10, 14, 0.96)'
+                : 'rgba(255, 255, 255, 0.96)';
         </script>
     @endpush
-@endif
 
+    <div class="content container-fluid solidus-admin-dashboard dashboard-height-auto">
+        <div class="admin-dashboard-shell">
+            <div class="admin-dashboard-hero">
+                <div class="admin-dashboard-hero-copy">
+                    <div class="admin-dashboard-hero-topline">
+                        <span class="admin-dashboard-kicker">@lang('Admin overview')</span>
+                        <div class="admin-theme-switcher" aria-hidden="true">
+                            <span class="admin-theme-chip admin-theme-chip-dark">@lang('Dark theme')</span>
+                            <span class="admin-theme-chip admin-theme-chip-light">@lang('Light theme')</span>
+                        </div>
+                    </div>
 
+                    <h1>@lang('Exchange control room')</h1>
+                    <p>@lang('A clean, theme-aware dashboard for day-to-day exchange operations. Monitor users, support, KYC and volume without losing the visual rhythm of the main site.')</p>
 
+                    <div class="admin-dashboard-actions">
+                        <a class="btn btn-primary btn-with-icon" href="{{ route('admin.users') }}">
+                            <i class="bi bi-people"></i>
+                            <span>@lang('Users')</span>
+                        </a>
+                        <a class="btn btn-secondary btn-with-icon" href="{{ route('admin.transaction') }}">
+                            <i class="bi bi-arrow-left-right"></i>
+                            <span>@lang('Transactions')</span>
+                        </a>
+                        <a class="btn btn-secondary btn-with-icon" href="{{ route('admin.telegram.control') }}">
+                            <i class="bi bi-telegram"></i>
+                            <span>@lang('Telegram')</span>
+                        </a>
+                    </div>
 
+                    <div class="admin-dashboard-hero-meta">
+                        <span><i class="bi bi-stars"></i> @lang('Theme-aware layout')</span>
+                        <span><i class="bi bi-calendar3"></i> {{ now()->format('d M Y, H:i') }}</span>
+                    </div>
+                </div>
 
+                <div class="admin-dashboard-hero-aside">
+                    <div class="admin-hero-metric admin-hero-metric-accent">
+                        <span>@lang('Monthly volume')</span>
+                        <strong>{{ currencyPosition(fractionNumber($dashboardStats['depositThisMonth'])) }}</strong>
+                        <small>@lang('Deposits received this month')</small>
+                    </div>
+                    <div class="admin-hero-metric">
+                        <span>@lang('Open queues')</span>
+                        <strong>{{ $dashboardStats['pendingTickets'] + $dashboardStats['pendingKyc'] }}</strong>
+                        <small>@lang('Tickets and KYC awaiting review')</small>
+                    </div>
+                    <div class="admin-hero-metric">
+                        <span>@lang('Today registrations')</span>
+                        <strong>{{ $dashboardStats['usersToday'] }}</strong>
+                        <small>@lang('Fresh users joined today')</small>
+                    </div>
+                </div>
+            </div>
 
+            <div class="admin-kpi-grid">
+                <a class="admin-kpi-card" href="{{ route('admin.users') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-people"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Total users')</span>
+                        <strong>{{ $dashboardStats['totalUsers'] }}</strong>
+                        <small>@lang('All registered accounts in the platform')</small>
+                    </div>
+                </a>
 
+                <a class="admin-kpi-card" href="{{ route('admin.transaction') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-receipt"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Transactions this month')</span>
+                        <strong>{{ $dashboardStats['transactionsMonth'] }}</strong>
+                        <small>@lang('All transaction records created this month')</small>
+                    </div>
+                </a>
 
+                <a class="admin-kpi-card" href="{{ route('admin.ticket', 'tickets') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-chat-square-dots"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Pending tickets')</span>
+                        <strong>{{ $dashboardStats['pendingTickets'] }}</strong>
+                        <small>@lang('Support requests waiting for action')</small>
+                    </div>
+                </a>
 
+                <a class="admin-kpi-card" href="{{ route('admin.kyc.list') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-shield-check"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Pending KYC')</span>
+                        <strong>{{ $dashboardStats['pendingKyc'] }}</strong>
+                        <small>@lang('Verification cases to process')</small>
+                    </div>
+                </a>
 
+                <a class="admin-kpi-card" href="{{ route('admin.buy.index') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-bag-plus"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Buy orders')</span>
+                        <strong>{{ $dashboardStats['buyThisMonth'] }}</strong>
+                        <small>@lang('Orders opened this month')</small>
+                    </div>
+                </a>
 
+                <a class="admin-kpi-card" href="{{ route('admin.sell.index') }}">
+                    <div class="admin-kpi-icon"><i class="bi bi-bag-dash"></i></div>
+                    <div class="admin-kpi-copy">
+                        <span>@lang('Sell orders')</span>
+                        <strong>{{ $dashboardStats['sellThisMonth'] }}</strong>
+                        <small>@lang('Sell requests opened this month')</small>
+                    </div>
+                </a>
+            </div>
 
+            <div class="admin-dashboard-grid admin-dashboard-grid-two">
+                <section class="admin-panel admin-panel-wide">
+                    <div class="admin-panel-header">
+                        <div>
+                            <span class="admin-panel-kicker">@lang('Live feed')</span>
+                            <h2>@lang('Recent transactions')</h2>
+                        </div>
+                    </div>
+                    @include('admin.partials.dashboard.recentTran')
+                </section>
 
+                <section class="admin-panel">
+                    <div class="admin-panel-header">
+                        <div>
+                            <span class="admin-panel-kicker">@lang('Snapshot')</span>
+                            <h2>@lang('Key records')</h2>
+                        </div>
+                    </div>
+                    @include('admin.partials.dashboard.record')
+                </section>
+            </div>
+
+            <div class="admin-dashboard-grid admin-dashboard-grid-three">
+                <section class="admin-panel admin-panel-wide">
+                    <div class="admin-panel-header">
+                        <div>
+                            <span class="admin-panel-kicker">@lang('Graphs')</span>
+                            <h2>@lang('Exchange movement')</h2>
+                        </div>
+                    </div>
+                    @include('admin.partials.dashboard.exchange-performance')
+                </section>
+
+                <section class="admin-panel">
+                    <div class="admin-panel-header">
+                        <div>
+                            <span class="admin-panel-kicker">@lang('Figures')</span>
+                            <h2>@lang('Buy and sell overview')</h2>
+                        </div>
+                    </div>
+                    @include('admin.partials.dashboard.exchange-figure')
+                </section>
+            </div>
+
+            <section class="admin-panel admin-latest-users-panel">
+                <div class="admin-panel-header admin-panel-header-space">
+                    <div>
+                        <span class="admin-panel-kicker">@lang('People')</span>
+                        <h2>@lang('Latest users')</h2>
+                    </div>
+                    <a class="btn btn-secondary btn-sm" href="{{ route('admin.users') }}">@lang('View all')</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table admin-modern-table align-middle mb-0">
+                        <thead>
+                        <tr>
+                            <th>@lang('User')</th>
+                            <th>@lang('Contact')</th>
+                            <th>@lang('Country')</th>
+                            <th>@lang('Status')</th>
+                            <th>@lang('Last login')</th>
+                            <th>@lang('Action')</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        @forelse($latestUser as $user)
+                            <tr>
+                                <td>
+                                    <a class="admin-user-cell" href="{{ route('admin.user.view.profile', $user->id) }}">
+                                        <div class="admin-user-avatar">{!! $user->profilePicture() !!}</div>
+                                        <div>
+                                            <strong>{{ $user->firstname . ' ' . $user->lastname }}</strong>
+                                            <span>{{ '@' . $user->username }}</span>
+                                        </div>
+                                    </a>
+                                </td>
+                                <td>
+                                    <strong class="d-block">{{ $user->email }}</strong>
+                                    <span class="text-body">{{ $user->phone ?: '—' }}</span>
+                                </td>
+                                <td>{{ $user->country ?? 'N/A' }}</td>
+                                <td>\n+                                    @if($user->status == 1)\n+                                        <span class=\"badge bg-soft-success text-success\">\n+                                            <span class=\"legend-indicator bg-success\"></span>@lang('Active')\n+                                        </span>\n+                                    @else\n+                                        <span class=\"badge bg-soft-danger text-danger\">\n+                                            <span class=\"legend-indicator bg-danger\"></span>@lang('Inactive')\n+                                        </span>\n+                                    @endif\n+                                </td>\n+                                <td>{{ diffForHumans($user->last_login) }}</td>\n+                                <td>\n+                                    <div class=\"btn-group\" role=\"group\">\n+                                        <a class=\"btn btn-white btn-sm\" href=\"{{ route('admin.user.edit', $user->id) }}\">\n+                                            <i class=\"bi-pencil-fill me-1\"></i> @lang('Edit')\n+                                        </a>\n+                                        <button type=\"button\" class=\"btn btn-white btn-icon btn-sm dropdown-toggle dropdown-toggle-empty\" data-bs-toggle=\"dropdown\" aria-expanded=\"false\"></button>\n+                                        <div class=\"dropdown-menu dropdown-menu-end mt-1\">\n+                                            <a class=\"dropdown-item\" href=\"{{ route('admin.user.view.profile', $user->id) }}\">\n+                                                <i class=\"bi-eye-fill dropdown-item-icon\"></i> @lang('View profile')\n+                                            </a>\n+                                            <a class=\"dropdown-item\" href=\"{{ route('admin.send.email', $user->id) }}\">\n+                                                <i class=\"bi-envelope dropdown-item-icon\"></i> @lang('Send mail')\n+                                            </a>\n+                                            <a class=\"dropdown-item loginAccount\" href=\"javascript:void(0)\" data-route=\"{{ route('admin.login.as.user', $user->id) }}\" data-bs-toggle=\"modal\" data-bs-target=\"#loginAsUserModal\">\n+                                                <i class=\"bi bi-box-arrow-in-right dropdown-item-icon\"></i> @lang('Login as user')\n+                                            </a>\n+                                        </div>\n+                                    </div>\n+                                </td>\n+                            </tr>\n+                        @empty\n+                            <tr>\n+                                <td colspan=\"6\" class=\"text-center py-5 text-body\">@lang('No users yet.')</td>\n+                            </tr>\n+                        @endforelse\n+                        </tbody>\n+                    </table>\n+                </div>\n+            </section>\n+        </div>\n+\n+        <div id=\"firebase-app\">\n+            <div class=\"p-3 mb-5 alert alert-soft-dark admin-notification-banner\" role=\"alert\" v-if=\"notificationPermission == 'default' && !is_notification_skipped\" v-cloak>\n+                <div class=\"alert-box d-flex flex-wrap align-items-center\">\n+                    <div class=\"flex-shrink-0\">\n+                        <img class=\"avatar avatar-xl\" src=\"{{ asset('assets/admin/img/oc-megaphone.svg') }}\" alt=\"Image Description\" data-hs-theme-appearance=\"default\">\n+                        <img class=\"avatar avatar-xl\" src=\"{{ asset('assets/admin/img/oc-megaphone-light.svg') }}\" alt=\"Image Description\" data-hs-theme-appearance=\"dark\">\n+                    </div>\n+                    <div class=\"flex-grow-1 ms-3\">\n+                        <h3 class=\"mb-1\">@lang('Attention!')</h3>\n+                        <div class=\"d-flex align-items-center gap-2 flex-wrap\">\n+                            <p class=\"mb-0 text-body\">@lang('Please allow your browser to get instant push notification. Allow it from notification setting.')</p>\n+                            <button id=\"allow-notification\" class=\"btn btn-sm btn-primary\"><i class=\"fa fa-check-circle\"></i> @lang('Allow me')</button>\n+                        </div>\n+                    </div>\n+                    <button type=\"button\" class=\"btn-close\" @click.prevent=\"skipNotification\" data-bs-dismiss=\"alert\" aria-label=\"Close\"></button>\n+                </div>\n+            </div>\n+            <div class=\"alert alert-soft-dark admin-notification-banner\" role=\"alert\" v-if=\"notificationPermission == 'denied' && !is_notification_skipped\" v-cloak>\n+                <div class=\"d-flex align-items-center mt-4\">\n+                    <div class=\"flex-shrink-0\">\n+                        <img class=\"avatar avatar-xl\" src=\"{{ asset('assets/admin/img/oc-megaphone.svg') }}\" alt=\"Image Description\" data-hs-theme-appearance=\"default\">\n+                        <img class=\"avatar avatar-xl\" src=\"{{ asset('assets/admin/img/oc-megaphone-light.svg') }}\" alt=\"Image Description\" data-hs-theme-appearance=\"dark\">\n+                    </div>\n+                    <div class=\"flex-grow-1 ms-3\">\n+                        <h3 class=\"mb-1\">@lang('Attention!')</h3>\n+                        <p class=\"mb-0 text-body\">@lang('Please allow your browser to get instant push notification. Allow it from notification setting.')</p>\n+                    </div>\n+                    <button type=\"button\" class=\"btn-close\" @click.prevent=\"skipNotification\" data-bs-dismiss=\"alert\" aria-label=\"Close\"></button>\n+                </div>\n+            </div>\n+        </div>\n+    </div>\n+@endsection\n+\n+@if($firebaseNotify)\n+    @push('script')\n+        <script type=\"module\">\n+            import {initializeApp} from \"https://www.gstatic.com/firebasejs/9.17.1/firebase-app.js\";\n+            import {getMessaging, getToken, onMessage} from \"https://www.gstatic.com/firebasejs/9.17.1/firebase-messaging.js\";\n+\n+            const firebaseConfig = {\n+                apiKey: \"{{$firebaseNotify['apiKey']}}\",\n+                authDomain: \"{{$firebaseNotify['authDomain']}}\",\n+                projectId: \"{{$firebaseNotify['projectId']}}\",\n+                storageBucket: \"{{$firebaseNotify['storageBucket']}}\",\n+                messagingSenderId: \"{{$firebaseNotify['messagingSenderId']}}\",\n+                appId: \"{{$firebaseNotify['appId']}}\",\n+                measurementId: \"{{$firebaseNotify['measurementId']}}\"\n+            };\n+\n+            const app = initializeApp(firebaseConfig);\n+            const messaging = getMessaging(app);\n+            if ('serviceWorker' in navigator) {\n+                navigator.serviceWorker.register('{{ getProjectDirectory() }}' + `/firebase-messaging-sw.js`, {scope: './'}).then(function (registration) {\n+                        requestPermissionAndGenerateToken(registration);\n+                    }\n+                ).catch(function (error) {\n+                });\n+            }\n+\n+            onMessage(messaging, (payload) => {\n+                if (payload.data.foreground || parseInt(payload.data.foreground) == 1) {\n+                    const title = payload.notification.title;\n+                    const options = {\n+                        body: payload.notification.body,\n+                        icon: payload.notification.icon,\n+                    };\n+                    new Notification(title, options);\n+                }\n+            });\n+\n+            function requestPermissionAndGenerateToken(registration) {\n+                document.addEventListener(\"click\", function (event) {\n+                    if (event.target.id == 'allow-notification') {\n+                        Notification.requestPermission().then((permission) => {\n+                            if (permission === 'granted') {\n+                                getToken(messaging, {\n+                                    serviceWorkerRegistration: registration,\n+                                    vapidKey: \"{{$firebaseNotify['vapidKey']}}\"\n+                                })\n+                                    .then((token) => {\n+                                        $.ajax({\n+                                            url: \"{{ route('admin.save.token') }}\",\n+                                            method: \"post\",\n+                                            data: {\n+                                                token: token,\n+                                            },\n+                                            success: function (res) {\n+                                            }\n+                                        });\n+                                        window.newApp.notificationPermission = 'granted';\n+                                    });\n+                            } else {\n+                                window.newApp.notificationPermission = 'denied';\n+                            }\n+                        });\n+                    }\n+                });\n+            }\n+        </script>\n+        <script>\n+            window.newApp = new Vue({\n+                el: \"#firebase-app\",\n+                data: {\n+                    admin_foreground: '',\n+                    admin_background: '',\n+                    notificationPermission: Notification.permission,\n+                    is_notification_skipped: sessionStorage.getItem('is_notification_skipped') == '1'\n+                },\n+                mounted() {\n+                    sessionStorage.clear();\n+                    this.admin_foreground = \"{{$firebaseNotify['admin_foreground']}}\";\n+                    this.admin_background = \"{{$firebaseNotify['admin_background']}}\";\n+                },\n+                methods: {\n+                    skipNotification() {\n+                        sessionStorage.setItem('is_notification_skipped', '1');\n+                        this.is_notification_skipped = true;\n+                    }\n+                }\n+            });\n+        </script>\n+    @endpush\n+@endif\n*** End Patch

@@ -120,8 +120,17 @@
 
 @push('script')
     <script>
+        const dashboardTheme = window.SolidusDashboardTheme || {
+            colors: {
+                surface: '#ffffff',
+                chartLine: '#377dff',
+                chartMuted: '#e7eaf3',
+                chartGrid: '#e7eaf3'
+            }
+        };
+
         Notiflix.Block.standard('#userRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartUserRecordsGraph'), {
             type: 'line',
@@ -129,8 +138,8 @@
                 labels: [],
                 datasets: [{
                     data: [],
-                    backgroundColor: ["rgba(55, 125, 255, 0)", "rgba(255, 255, 255, 0)"],
-                    borderColor: "#377dff",
+                    backgroundColor: ["rgba(232, 201, 160, 0)", "rgba(255, 255, 255, 0)"],
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 0
@@ -185,7 +194,7 @@
 
     <script>
         Notiflix.Block.standard('#ticketRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartTicketRecordsGraph'), {
             type: 'line',
@@ -193,8 +202,8 @@
                 labels: [],
                 datasets: [{
                     data: [],
-                    backgroundColor: ["rgba(55, 125, 255, 0)", "rgba(255, 255, 255, 0)"],
-                    borderColor: "#377dff",
+                    backgroundColor: ["rgba(232, 201, 160, 0)", "rgba(255, 255, 255, 0)"],
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 0
@@ -249,7 +258,7 @@
 
     <script>
         Notiflix.Block.standard('#kycRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartKycRecordsGraph'), {
             type: 'line',
@@ -257,8 +266,8 @@
                 labels: [],
                 datasets: [{
                     data: [],
-                    backgroundColor: ["rgba(55, 125, 255, 0)", "rgba(255, 255, 255, 0)"],
-                    borderColor: "#377dff",
+                    backgroundColor: ["rgba(232, 201, 160, 0)", "rgba(255, 255, 255, 0)"],
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 0
@@ -313,7 +322,7 @@
 
     <script>
         Notiflix.Block.standard('#transactionRecord',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
         HSCore.components.HSChartJS.init(document.querySelector('#chartTransactionRecordsGraph'), {
             type: 'line',
@@ -321,8 +330,8 @@
                 labels: [],
                 datasets: [{
                     data: [],
-                    backgroundColor: ["rgba(55, 125, 255, 0)", "rgba(255, 255, 255, 0)"],
-                    borderColor: "#377dff",
+                    backgroundColor: ["rgba(232, 201, 160, 0)", "rgba(255, 255, 255, 0)"],
+                    borderColor: dashboardTheme.colors.chartLine,
                     borderWidth: 2,
                     pointRadius: 0,
                     pointHoverRadius: 0

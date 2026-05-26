@@ -128,12 +128,21 @@
 
 @push('script')
     <script>
+        const dashboardTheme = window.SolidusDashboardTheme || {
+            colors: {
+                surface: '#ffffff',
+                chartLine: '#377dff',
+                chartMuted: '#e7eaf3',
+                chartGrid: '#e7eaf3'
+            }
+        };
+
         var $monthlyTransaction = 0;
         var $totalTransaction = {};
 
 
         Notiflix.Block.standard('#RecentTransactionGraph',{
-            backgroundColor: loaderColor,
+            backgroundColor: dashboardTheme.colors.surface,
         });
 
         function monthlyDepositWithdraw(keyDataset = 0) {
