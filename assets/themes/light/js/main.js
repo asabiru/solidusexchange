@@ -199,6 +199,12 @@ function setTheme() {
             }
         }
         loaderColor = loaderColorDark;
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "none";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "block";
+            }
     } else if (isDarkTheme == 0) {
         $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
@@ -210,6 +216,7 @@ function setTheme() {
         }
         if (document.getElementById("sun")) {
             document.getElementById("sun").style.display = "none";
+            }
             if (document.getElementById("moon-mobile")) {
                 document.getElementById("moon-mobile").style.display = "block";
             }
@@ -219,6 +226,12 @@ function setTheme() {
         }
 
         loaderColor = loaderColorLight;
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "block";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "none";
+            }
     } else {
         if (defaultTheme == 1) {
             $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
@@ -239,6 +252,12 @@ function setTheme() {
             }
 
             loaderColor = loaderColorDark;
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "none";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "block";
+            }
         } else {
             $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
             $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
@@ -249,6 +268,7 @@ function setTheme() {
             }
             if (document.getElementById("sun")) {
                 document.getElementById("sun").style.display = "none";
+            }
             if (document.getElementById("moon-mobile")) {
                 document.getElementById("moon-mobile").style.display = "block";
             }
@@ -257,6 +277,12 @@ function setTheme() {
             }
             }
             loaderColor = loaderColorLight;
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "block";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "none";
+            }
         }
     }
 
