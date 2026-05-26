@@ -110,6 +110,18 @@
         border-radius: 16px;
     }
 
+    .swap-action,
+    .sc-compact-swap {
+        position: relative;
+        z-index: 10;
+        align-items: center;
+    }
+
+    .swap-button.flipped,
+    .sc-swap-icon.flipped {
+        transform: rotate(180deg);
+    }
+
     .exchange-link,
     .crypto-button,
     .faq-footer-link,

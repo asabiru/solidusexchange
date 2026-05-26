@@ -51,7 +51,7 @@
 
 
 @include('plugins')
-@if(request()->routeIs('page') && blank(request()->route('slug')))
+@if(request()->routeIs('home') || (request()->routeIs('page') && blank(request()->route('slug'))))
     @include($theme.'partials.exchange-module.exchange-js')
 @endif
 

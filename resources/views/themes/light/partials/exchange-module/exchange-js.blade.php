@@ -30,6 +30,7 @@
     });
 
     $(document).on("click", "#swapBtn", function () {
+        $("#swapBtn").toggleClass("flipped");
         if (!activeSendCurrency || !activeGetCurrency) {
             return;
         }

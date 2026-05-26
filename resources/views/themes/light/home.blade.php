@@ -8,9 +8,7 @@
 @section('content')
 
 <!-- Hero Section with Exchange -->
-<section class="hero-section" id="exchange">
-    @include($theme . 'sections.hero')
-</section>
+@include($theme . 'sections.hero')
 
 <!-- Rates Section -->
 <section class="rates-section" id="rates">

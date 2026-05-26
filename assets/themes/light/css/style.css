@@ -1767,7 +1767,7 @@ Offcanvas section start
 
 .offcanvas.offcanvas-end {
     border-left: 1px solid var(--border-color2);
-    transition: transform 0.5s ease 0.4s;
+    transition: transform 0.3s ease-in-out;
 }
 
 .offcanvas-backdrop {

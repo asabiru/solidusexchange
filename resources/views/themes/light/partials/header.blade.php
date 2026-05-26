@@ -71,6 +71,20 @@
     .solidchange-navbar .btn-primary:hover {
         background: var(--color-accent-hover);
     }
+
+    /* Mobile offcanvas fixes */
+    #mobileMenu {
+        background: var(--color-bg-elevated) !important;
+        border-radius: 0 !important;
+    }
+
+    #mobileMenu .offcanvas-body {
+        overflow-y: auto;
+    }
+
+    #mobileMenu .nav-link {
+        color: var(--color-text-primary) !important;
+    }
 </style>
 
 <header class="solidchange-navbar">

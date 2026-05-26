@@ -184,7 +184,6 @@ a:focus {
 .box-card,
 .dropdown-menu,
 .modal-content,
-.offcanvas,
 .accordion-item,
 .table-responsive,
 .message-wrapper .messages-box,
@@ -210,7 +209,6 @@ a:focus {
 .box-card,
 .dropdown-menu,
 .modal-content,
-.offcanvas,
 .accordion-item,
 .table-responsive,
 .message-wrapper .messages-box,
@@ -335,4 +333,8 @@ a:focus {
     background-color: var(--color-bg);
     color: var(--color-text-primary);
     border-color: var(--color-border-subtle);
+}
+
+.offcanvas {
+    border-radius: 0 !important;
 }
