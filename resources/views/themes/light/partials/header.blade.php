@@ -1,274 +1,232 @@
-<!-- Header top section start -->
-
+<!-- SolidChange Style Header -->
 <style>
-    .offer-banner-seciton .offer-overlay {
-        background: linear-gradient({{hex2rgba(basicControl()->primary_color, 0.8)}}, {{hex2rgba(basicControl()->primary_color, 0.8)}});
+    .solidchange-navbar {
+        position: sticky;
+        top: 0;
+        z-index: 40;
+        border-bottom: 1px solid var(--color-border-subtle);
+        background: rgba(11, 6, 8, 0.85);
+        backdrop-filter: blur(16px);
+    }
+
+    .solidchange-navbar .nav-link {
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: var(--color-text-secondary);
+        transition: all 0.2s;
+    }
+
+    .solidchange-navbar .nav-link:hover {
+        background: var(--color-bg-elevated);
+        color: var(--color-text-primary);
+    }
+
+    .solidchange-navbar .logo-badge {
+        display: flex;
+        height: 28px;
+        width: 28px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        border: 1px solid var(--color-border-strong);
+        font-size: 10px;
+        font-weight: bold;
+    }
+
+    .solidchange-navbar .utility-btn {
+        display: flex;
+        height: 36px;
+        width: 36px;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        color: var(--color-text-secondary);
+        transition: all 0.2s;
+        background: transparent;
+        border: none;
+    }
+
+    .solidchange-navbar .utility-btn:hover {
+        background: var(--color-bg-elevated);
+        color: var(--color-text-primary);
+    }
+
+    .solidchange-navbar .btn-primary {
+        background: var(--color-accent);
+        color: #0b0608;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        transition: all 0.2s;
+    }
+
+    .solidchange-navbar .btn-primary:hover {
+        background: var(--color-accent-hover);
     }
 </style>
 
-@if(announcement()->status && session()->get('isCLoseAnnouncement') == null)
+<header class="solidchange-navbar">
+    <div class="container" style="max-width: 1280px;">
+        <div class="d-flex align-items-center justify-content-between" style="height: 64px; padding: 0 20px;">
+            <!-- Logo -->
+            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
+                <div class="logo-badge">SC</div>
+                <span>SolidChange</span>
+            </a>
 
-    <div class="offer-banner-seciton d-none d-lg-block">
-        <button type="button" onclick="closeAnnouncement()" class="offer-close-btn">
-            <i class="fa-regular fa-xmark"></i>
-        </button>
-        <div class="container h-100">
-            <div class="row h-100">
-                <div class="col-12 gap-3 justify-content-center align-items-center d-flex">
-                    {!! announcement()->announcement_text !!}
-                    @if(announcement()->btn_display)
-                        <a href="{{announcement()->btn_link}}" class="offer-btn">{{announcement()->btn_name}}</a>
-                    @endif
-                </div>
-            </div>
-        </div>
-        <div class="offer-overlay"></div>
-    </div>
-@endif
+            <!-- Desktop Navigation -->
+            <nav class="d-none d-lg-flex gap-1">
+                <a href="#exchange" class="nav-link text-decoration-none">Обмен</a>
+                <a href="#rates" class="nav-link text-decoration-none">Курсы</a>
+                <a href="#reserves" class="nav-link text-decoration-none">Резервы</a>
+                <a href="#how" class="nav-link text-decoration-none">Как работает</a>
+                <a href="#faq" class="nav-link text-decoration-none">FAQ</a>
+                <a href="{{ route('exchange.tracking') }}" class="nav-link text-decoration-none">Отследить</a>
+            </nav>
 
-{{--Mobile Version--}}
-@if(announcement()->status && session()->get('isCLoseAnnouncement') == null)
-    <div class="mobile-offer-banner d-lg-none">
-        <button type="button" onclick="closeAnnouncement()" class="offer-close-btn">
-            <i class="fa-regular fa-xmark"></i>
-        </button>
-        <div class="gap-3 justify-content-center align-items-center d-flex flex-column">
-            {!! announcement()->announcement_text !!}
-            @if(announcement()->btn_display)
-                <a href="{{announcement()->btn_link}}" class="offer-btn">{{announcement()->btn_name}}</a>
-            @endif
-        </div>
-        <div class="mobile-offer-banner-inner">
-        </div>
-    </div>
-@endif
-<!-- Header top section end -->
+            <!-- Right Actions -->
+            <div class="d-none d-lg-flex align-items-center gap-2">
+                <!-- Theme Toggle -->
+                @if(basicControl()->changeable_mode == 1)
+                    <button id="toggle-btn" class="utility-btn" title="Сменить тему">
+                        <i class="fa-regular fa-moon" id="moon"></i>
+                        <i class="fa-regular fa-sun-bright d-none" id="sun"></i>
+                    </button>
+                @endif
 
-<!-- Nav section start -->
-<nav class="navbar public-navbar sticky-top navbar-expand-lg transparent">
-    @php
-        $activeLanguages = \App\Models\Language::query()
-            ->where('status', 1)
-            ->orderByDesc('default_status')
-            ->orderBy('name')
-            ->get();
-        $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
-    @endphp
-    <div class="container public-navbar__inner">
-        <a class="navbar-brand logo" href="{{url('/')}}"><img
-                src="{{getFile(basicControl()->logo_driver,basicControl()->logo)}}" alt="..." id="logoSet"></a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar"
-                aria-controls="offcanvasNavbar">
-            <i class="fa-light fa-list"></i>
-        </button>
-        <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar"
-             aria-labelledby="offcanvasNavbar" data-bs-scroll="true" data-bs-backdrop="true">
-            <div class="offcanvas-header">
-                <a class="navbar-brand" href="{{url('/')}}"><img class="logo"
-                                                                 src="{{getFile(basicControl()->logo_driver,basicControl()->logo)}}"
-                                                                 alt="..." id="logoSetMobile"></a>
-                <button type="button" class="cmn-btn-close btn-close" data-bs-dismiss="offcanvas"
-                        aria-label="Close"><i class="fa-light fa-arrow-right"></i></button>
-            </div>
-            <div class="offcanvas-body align-items-center justify-content-between">
-                <ul class="navbar-nav ms-auto public-navbar__menu">
-                    {!! renderHeaderMenu(getHeaderMenuData()) !!}
-                </ul>
+                <!-- Language Selector -->
+                @php
+                    $activeLanguages = \App\Models\Language::query()
+                        ->where('status', 1)
+                        ->orderByDesc('default_status')
+                        ->orderBy('name')
+                        ->get();
+                    $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
+                @endphp
 
                 @if($activeLanguages->isNotEmpty())
-                    <div class="d-lg-none mt-4 pt-4 border-top">
-                        <div class="fw-semibold mb-3">@lang('Language Settings')</div>
-                        <div class="d-flex flex-column gap-2">
+                    <div class="dropdown">
+                        <button class="utility-btn d-flex align-items-center gap-2 px-2" style="width: auto;" type="button" data-bs-toggle="dropdown">
+                            <i class="fa-solid fa-globe"></i>
+                            <span style="font-size: 12px;">{{ strtoupper($currentLanguage->short_name ?? 'RU') }}</span>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" style="background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle);">
                             @foreach($activeLanguages as $language)
-                                <a class="nav-link d-flex align-items-center justify-content-between px-0"
-                                   href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
-                                    <span class="d-flex align-items-center">
+                                <li>
+                                    <a class="dropdown-item d-flex align-items-center gap-2 text-decoration-none"
+                                       style="color: var(--color-text-secondary);"
+                                       href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
                                         <img src="{{ getFile($language->flag_driver, $language->flag) }}"
                                              alt="{{ $language->name }}"
-                                             class="me-2 rounded-circle"
-                                             style="width:20px;height:20px;object-fit:cover;">
+                                             style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
                                         <span>{{ __($language->name) }}</span>
-                                    </span>
-                                    @if(app()->getLocale() === $language->short_name)
-                                        <i class="bi-check2 text-primary"></i>
-                                    @endif
-                                </a>
+                                    </a>
+                                </li>
                             @endforeach
-                        </div>
+                        </ul>
                     </div>
                 @endif
-            </div>
-        </div>
-        <div class="nav-right public-navbar__actions">
-            <ul class="custom-nav header-action-list">
+
+                <!-- Login Button -->
                 @guest
-                    <li class="nav-item header-action-item">
-                        <a class="nav-link login-btn header-login-btn" href="{{ route('login') }}"><i
-                                class="login-icon fa-light fa-right-to-bracket"></i><span
-                                class="d-none d-md-block">@lang('Login')</span></a>
-                    </li>
+                    <a href="{{ route('login') }}" class="btn-primary text-decoration-none">Войти</a>
                 @endguest
+
                 @auth
-                    <li class="nav-item header-action-item">
-                        <div class="profile-box header-profile-box">
-                            <div class="profile header-profile-trigger">
-                                <span class="header-avatar-badge">
-                                    {{ \Illuminate\Support\Str::upper(\Illuminate\Support\Str::substr(auth()->user()->firstname ?? auth()->user()->username ?? 'U', 0, 1)) }}
-                                </span>
+                    <div class="dropdown">
+                        <button class="btn-primary d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
+                            <div class="d-flex align-items-center justify-content-center rounded-circle"
+                                 style="width: 28px; height: 28px; background: var(--color-bg);">
+                                {{ strtoupper(substr(auth()->user()->firstname ?? auth()->user()->username ?? 'U', 0, 1)) }}
                             </div>
-                            <ul class="user-dropdown">
-                                <li>
-                                    <a href="{{route('user.dashboard')}}"> <i
-                                            class="fal fa-university"></i> @lang('Dashboard') </a>
-                                </li>
-                                <li>
-                                    <a href="{{route('user.ticket.list')}}"> <i
-                                            class="fal fa-user-headset"></i> @lang('Support')
-                                    </a>
-                                </li>
-                                <li>
-                                    <a href="{{route('user.profile')}}"> <i
-                                            class="fal fa-user-cog"></i> @lang('Account Settings')
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item d-flex align-items-center" href="{{ route('logout') }}"
-                                       onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
-                                        <i class="fal fa-sign-out-alt"></i>
-                                        <span>@lang('Sign Out')</span>
-                                        <form id="logout-form" action="{{ route('logout') }}" method="POST"
-                                              class="d-none">
-                                            @csrf
-                                        </form>
-                                    </a>
-                                </li>
-                            </ul>
-                        </div>
-                    </li>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" style="background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle);">
+                            <li>
+                                <a class="dropdown-item text-decoration-none" style="color: var(--color-text-secondary);" href="{{route('user.dashboard')}}">
+                                    <i class="fa-solid fa-university me-2"></i> @lang('Dashboard')
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item text-decoration-none" style="color: var(--color-text-secondary);" href="{{route('user.ticket.list')}}">
+                                    <i class="fa-solid fa-headset me-2"></i> @lang('Support')
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item text-decoration-none" style="color: var(--color-text-secondary);" href="{{route('user.profile')}}">
+                                    <i class="fa-solid fa-user-gear me-2"></i> @lang('Account Settings')
+                                </a>
+                            </li>
+                            <li>
+                                <hr class="dropdown-divider" style="border-color: var(--color-border-subtle);">
+                            </li>
+                            <li>
+                                <a class="dropdown-item text-decoration-none" style="color: var(--color-text-secondary);" href="{{ route('logout') }}"
+                                   onclick="event.preventDefault(); document.getElementById('logout-form').submit();">
+                                    <i class="fa-solid fa-right-from-bracket me-2"></i> @lang('Sign Out')
+                                </a>
+                                <form id="logout-form" action="{{ route('logout') }}" method="POST" class="d-none">
+                                    @csrf
+                                </form>
+                            </li>
+                        </ul>
+                    </div>
                 @endauth
+            </div>
 
-                @if(basicControl()->changeable_mode == 1 )
-                    <li class="header-action-item">
-                        <a id="toggle-btn" class="nav-link d-flex align-items-center justify-content-center toggle-btn nav-utility-btn"
-                           title="@lang('Toggle theme')">
-                            <i class="fa-regular fa-moon" id="moon"></i>
-                            <i class="fa-regular fa-sun-bright" id="sun"></i>
-                        </a>
-                    </li>
-                @endif
+            <!-- Mobile Menu Button -->
+            <button class="d-lg-none utility-btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
+                <i class="fa-solid fa-bars"></i>
+            </button>
+        </div>
+    </div>
 
-                <li class="dropdown header-action-item">
-                    <button type="button"
-                            class="nav-link nav-utility-btn language-trigger"
-                            id="publicLanguageDropdown"
-                            data-bs-toggle="dropdown"
-                            aria-expanded="false"
-                            title="@lang('Language Settings')">
-                        @if($currentLanguage)
-                            <span class="language-trigger__flag">
-                                <img src="{{ getFile($currentLanguage->flag_driver, $currentLanguage->flag) }}"
-                                     alt="{{ $currentLanguage->name }}">
-                            </span>
-                            <span class="language-trigger__label d-none d-xl-inline">
-                                {{ \Illuminate\Support\Str::upper($currentLanguage->short_name) }}
-                            </span>
-                        @else
-                            <i class="fa-thin fa-globe"></i>
-                        @endif
-                    </button>
+    <!-- Mobile Menu -->
+    <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu" style="background: var(--color-bg); border-left: 1px solid var(--color-border-subtle);">
+        <div class="offcanvas-header" style="border-bottom: 1px solid var(--color-border-subtle);">
+            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
+                <div class="logo-badge">SC</div>
+                <span>SolidChange</span>
+            </a>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
+        </div>
+        <div class="offcanvas-body d-flex flex-column gap-2">
+            <a href="#exchange" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Обмен</a>
+            <a href="#rates" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Курсы</a>
+            <a href="#reserves" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Резервы</a>
+            <a href="#how" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Как работает</a>
+            <a href="#faq" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">FAQ</a>
+            <a href="{{ route('exchange.tracking') }}" class="nav-link text-decoration-none" data-bs-dismiss="offcanvas">Отследить</a>
 
-                    <div class="dropdown-menu dropdown-menu-end mt-2 language-dropdown-menu">
-                        <div class="dropdown-item-text border-bottom pb-2 mb-1">
-                            <span class="d-block fw-semibold">@lang('Language Settings')</span>
-                            @if($currentLanguage)
-                                <small class="text-body">@lang('Current'): {{ __($currentLanguage->name) }}</small>
-                            @endif
-                        </div>
-
-                        @forelse($activeLanguages as $language)
-                            <a class="dropdown-item d-flex align-items-center justify-content-between"
-                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}">
-                                <span class="d-flex align-items-center">
+            @if($activeLanguages->isNotEmpty())
+                <div class="mt-4 pt-4" style="border-top: 1px solid var(--color-border-subtle);">
+                    <div class="fw-semibold mb-3" style="color: var(--color-text-primary);">@lang('Language Settings')</div>
+                    <div class="d-flex flex-column gap-2">
+                        @foreach($activeLanguages as $language)
+                            <a class="nav-link d-flex align-items-center justify-content-between text-decoration-none"
+                               style="color: var(--color-text-secondary);"
+                               href="{{ route('language', ['locale' => $language->short_name, 'redirect' => request()->getRequestUri()]) }}"
+                               data-bs-dismiss="offcanvas">
+                                <span class="d-flex align-items-center gap-2">
                                     <img src="{{ getFile($language->flag_driver, $language->flag) }}"
                                          alt="{{ $language->name }}"
-                                         class="me-2 rounded-circle"
-                                         style="width:20px;height:20px;object-fit:cover;">
+                                         style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;">
                                     <span>{{ __($language->name) }}</span>
                                 </span>
                                 @if(app()->getLocale() === $language->short_name)
-                                    <i class="bi-check2 text-primary"></i>
+                                    <i class="fa-solid fa-check" style="color: var(--color-accent);"></i>
                                 @endif
                             </a>
-                        @empty
-                            <span class="dropdown-item-text">@lang('No data to show')</span>
-                        @endforelse
+                        @endforeach
                     </div>
-                </li>
+                </div>
+            @endif
 
-            </ul>
+            @guest
+                <a href="{{ route('login') }}" class="btn-primary text-decoration-none mt-2 w-100 text-center" data-bs-dismiss="offcanvas">Войти</a>
+            @endguest
         </div>
     </div>
-</nav>
-<script>
-    'use strict'
-
-    let isAnnouncementClosing = false;
-
-    function hideAnnouncementBanners() {
-        $('.offer-banner-seciton, .mobile-offer-banner').stop(true, true).fadeOut(160, function () {
-            $(this).remove();
-        });
-    }
-
-    function closeAnnouncement() {
-        if (isAnnouncementClosing) return;
-        isAnnouncementClosing = true;
-
-        // Hide immediately without page reload.
-        hideAnnouncementBanners();
-
-        $.ajax({
-            type: 'GET',
-            url: "{{route('closeAnnouncement')}}",
-            success: function () {
-            },
-            error: function () {
-                // Keep UI closed for current page even if request fails.
-            }
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const mobileMenu = document.getElementById('offcanvasNavbar');
-        if (!mobileMenu) return;
-
-        const fixBodyOffset = function () {
-            document.body.style.paddingRight = '0px';
-            document.body.style.marginRight = '0px';
-            document.documentElement.style.paddingRight = '0px';
-            document.documentElement.style.marginRight = '0px';
-        };
-
-        const clearBodyOffset = function () {
-            document.body.style.paddingRight = '';
-            document.body.style.marginRight = '';
-            document.documentElement.style.paddingRight = '';
-            document.documentElement.style.marginRight = '';
-            document.body.style.overflow = '';
-        };
-
-        mobileMenu.addEventListener('show.bs.offcanvas', function () {
-            fixBodyOffset();
-            requestAnimationFrame(fixBodyOffset);
-        });
-
-        mobileMenu.addEventListener('shown.bs.offcanvas', function () {
-            fixBodyOffset();
-        });
-
-        mobileMenu.addEventListener('hidden.bs.offcanvas', function () {
-            clearBodyOffset();
-        });
-    });
-</script>
-<!-- Nav section end -->
+</header>
