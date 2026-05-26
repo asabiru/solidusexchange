@@ -3587,7 +3587,7 @@ Hero end
 }
 
 .calculator {
-    max-width: 560px;
+    max-width: 480px;
     margin: 0 auto;
     background-color: rgba(26, 15, 20, 0.95);
     border-radius: 12px;
@@ -3604,9 +3604,8 @@ Hero end
     background-color: rgba(26, 15, 20, 0.95);
 }
 
-.calculator .calculator-body .sc-calculator-meta {
-    background: linear-gradient(135deg, rgba(232, 201, 160, 0.15) 0%, rgba(201, 162, 39, 0.15) 100%);
-    border-color: rgba(232, 201, 160, 0.3);
+.calculator .calculator-body .sc-calculator-compact {
+    padding: 0;
 }
 
 .calculator .calculator-header {
@@ -3664,15 +3663,15 @@ Hero end
 .calculator {
     background-color: #ffffff;
     border: 1px solid rgba(201, 162, 39, 0.3);
+    max-width: 480px;
 }
 
 .calculator .calculator-body {
     background-color: #ffffff;
 }
 
-.calculator .calculator-body .sc-calculator-meta {
-    background: linear-gradient(135deg, rgba(201, 162, 39, 0.1) 0%, rgba(232, 201, 160, 0.1) 100%);
-    border-color: rgba(201, 162, 39, 0.3);
+.calculator .calculator-body .sc-calculator-compact {
+    padding: 0;
 }
 
 .calculator .form-control {
@@ -3965,149 +3964,89 @@ Hero end
     margin: 20px 0 20px 85px;
 }
 
-/* Modern Calculator Styles */
-.sc-calculator-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 15px 20px;
-    margin-bottom: 25px;
-    background: linear-gradient(135deg, rgba(201, 162, 39, 0.1) 0%, rgba(232, 201, 160, 0.1) 100%);
-    border-radius: 12px;
-    border: 1px solid var(--border-color1);
-}
-
-.sc-calculator-meta span {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--heading-color);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.sc-calculator-meta span i {
-    color: var(--primary-color);
-}
-
-.sc-input-amount-box {
-    margin-bottom: 20px;
-    border-radius: 16px;
-    background: var(--bg-color2);
-    border: 1px solid var(--border-color1);
-    box-shadow: var(--shadow1);
-    transition: all 0.3s ease;
-    overflow: hidden;
-}
-
-.sc-input-amount-box:hover {
-    box-shadow: var(--shadow3);
-    border-color: var(--primary-color);
-}
-
-.sc-input-amount-wrapper {
+/* Compact Calculator Styles */
+.sc-calculator-compact {
     padding: 20px;
 }
 
-.sc-input-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+.sc-compact-input-box {
     margin-bottom: 15px;
 }
 
-.sc-form-label {
-    font-size: 14px;
+.sc-compact-label {
+    display: block;
+    font-size: 13px;
     font-weight: 600;
     color: var(--body-color);
+    margin-bottom: 8px;
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
-.sc-currency-selector {
+.sc-compact-input-wrapper {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 16px;
+    background: var(--bg-color2);
+    border: 2px solid var(--border-color1);
+    border-radius: 12px;
+    padding: 12px 16px;
+    transition: all 0.3s ease;
+}
+
+.sc-compact-input-wrapper:hover {
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 15px rgba(201, 162, 39, 0.2);
+}
+
+.sc-currency-select {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
     background: var(--bg-color3);
-    border-radius: 10px;
+    border-radius: 8px;
     cursor: pointer;
     transition: all 0.3s ease;
     border: 1px solid var(--border-color1);
+    min-width: 140px;
 }
 
-.sc-currency-selector:hover {
+.sc-currency-select:hover {
     background: var(--primary-color-opacity-low);
     border-color: var(--primary-color);
 }
 
-.sc-currency-icon {
-    width: 40px;
-    height: 40px;
+.sc-currency-select img {
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    overflow: hidden;
-    background: var(--bg-color2);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.sc-currency-icon img {
-    width: 100%;
-    height: 100%;
     object-fit: cover;
 }
 
-.sc-currency-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.sc-currency-code {
-    font-size: 16px;
+.sc-currency-select span {
+    font-size: 15px;
     font-weight: 700;
     color: var(--heading-color);
 }
 
-.sc-currency-name {
-    font-size: 12px;
-    color: var(--body-color);
-}
-
-.sc-dropdown-icon {
+.sc-currency-select i {
     color: var(--primary-color);
-    font-size: 14px;
-    transition: transform 0.3s ease;
+    font-size: 12px;
 }
 
-.sc-currency-selector:hover .sc-dropdown-icon {
-    transform: translateY(2px);
-}
-
-.sc-input-body {
-    position: relative;
-}
-
-.sc-input-body input {
-    width: 100%;
-    padding: 18px 20px;
-    font-size: 28px;
+.sc-compact-input-wrapper input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 20px;
     font-weight: 700;
     color: var(--heading-color);
-    background: var(--bg-color3);
-    border: 2px solid var(--border-color1);
-    border-radius: 12px;
-    transition: all 0.3s ease;
     outline: none;
+    text-align: right;
 }
 
-.sc-input-body input:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(201, 162, 39, 0.1);
-}
-
-.sc-input-body input::placeholder {
+.sc-compact-input-wrapper input::placeholder {
     color: var(--body-color);
     opacity: 0.5;
 }
@@ -4115,90 +4054,87 @@ Hero end
 .sc-error-message {
     color: #dc3545;
     font-size: 12px;
-    margin-top: 8px;
-    min-height: 18px;
+    margin-top: 6px;
+    min-height: 16px;
 }
 
-.sc-swap-area {
+.sc-compact-swap {
     display: flex;
     justify-content: center;
     align-items: center;
-    margin: -10px 0 10px 0;
+    margin: -8px 0 8px 0;
     position: relative;
     z-index: 10;
 }
 
-.sc-swap-button {
-    width: 50px;
-    height: 50px;
+.sc-swap-icon {
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    box-shadow: 0 4px 15px rgba(201, 162, 39, 0.4);
+    box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
     transition: all 0.3s ease;
     border: 3px solid var(--bg-color2);
-}
-
-.sc-swap-button:hover {
-    transform: rotate(180deg) scale(1.1);
-    box-shadow: 0 6px 20px rgba(201, 162, 39, 0.5);
-}
-
-.sc-swap-icon {
     color: #fff;
-    font-size: 20px;
+    font-size: 18px;
 }
 
-.sc-fast-checklist {
+.sc-swap-icon:hover {
+    transform: rotate(180deg) scale(1.1);
+    box-shadow: 0 6px 16px rgba(201, 162, 39, 0.4);
+}
+
+.sc-compact-features {
     display: flex;
     justify-content: space-between;
-    gap: 15px;
-    margin: 25px 0;
-    padding: 20px;
+    gap: 10px;
+    margin: 20px 0;
+    padding: 15px;
     background: var(--bg-color3);
-    border-radius: 12px;
+    border-radius: 10px;
     border: 1px solid var(--border-color1);
 }
 
-.sc-checklist-item {
+.sc-compact-features span {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-size: 13px;
+    gap: 6px;
+    font-size: 12px;
     color: var(--body-color);
     font-weight: 500;
 }
 
-.sc-checklist-item i {
+.sc-compact-features span i {
     color: var(--primary-color);
-    font-size: 16px;
+    font-size: 14px;
 }
 
-.sc-btn-area {
-    margin-top: 25px;
+.sc-compact-btn {
+    margin-top: 15px;
 }
 
 .sc-exchange-btn {
-    padding: 18px 30px;
-    font-size: 18px;
+    padding: 16px 24px;
+    font-size: 16px;
     font-weight: 700;
     background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
     color: #fff;
     border: none;
-    border-radius: 12px;
+    border-radius: 10px;
     cursor: pointer;
     transition: all 0.3s ease;
-    box-shadow: 0 4px 15px rgba(201, 162, 39, 0.3);
+    box-shadow: 0 4px 12px rgba(201, 162, 39, 0.3);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
 }
 
 .sc-exchange-btn:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(201, 162, 39, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(201, 162, 39, 0.4);
 }
 
 .sc-exchange-btn:disabled {
@@ -4207,68 +4143,44 @@ Hero end
     transform: none;
 }
 
-/* Dark theme calculator styles */
-.dark-theme .sc-calculator-meta {
-    background: linear-gradient(135deg, rgba(232, 201, 160, 0.1) 0%, rgba(201, 162, 39, 0.1) 100%);
-    border-color: rgba(232, 201, 160, 0.3);
-}
-
-.dark-theme .sc-calculator-meta span {
-    color: #e8c9a0;
-}
-
-.dark-theme .sc-input-amount-box {
+/* Dark theme compact calculator */
+.dark-theme .sc-compact-input-wrapper {
     background: rgba(26, 15, 20, 0.95);
     border-color: rgba(232, 201, 160, 0.3);
 }
 
-.dark-theme .sc-input-amount-box:hover {
+.dark-theme .sc-compact-input-wrapper:hover {
     border-color: #e8c9a0;
 }
 
-.dark-theme .sc-currency-selector {
+.dark-theme .sc-currency-select {
     background: rgba(45, 31, 36, 0.95);
     border-color: rgba(232, 201, 160, 0.3);
 }
 
-.dark-theme .sc-currency-selector:hover {
+.dark-theme .sc-currency-select:hover {
     background: rgba(232, 201, 160, 0.15);
     border-color: #e8c9a0;
 }
 
-.dark-theme .sc-currency-icon {
-    background: rgba(26, 15, 20, 0.95);
-}
-
-.dark-theme .sc-currency-code {
+.dark-theme .sc-currency-select span {
     color: #e8c9a0;
 }
 
-.dark-theme .sc-currency-name {
-    color: #d4c4b0;
-}
-
-.dark-theme .sc-input-body input {
-    background: rgba(45, 31, 36, 0.95);
-    border-color: rgba(232, 201, 160, 0.3);
+.dark-theme .sc-compact-input-wrapper input {
     color: #e8c9a0;
 }
 
-.dark-theme .sc-input-body input:focus {
-    border-color: #e8c9a0;
-    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.1);
-}
-
-.dark-theme .sc-input-body input::placeholder {
+.dark-theme .sc-compact-input-wrapper input::placeholder {
     color: #d4c4b0;
 }
 
-.dark-theme .sc-fast-checklist {
+.dark-theme .sc-compact-features {
     background: rgba(45, 31, 36, 0.95);
     border-color: rgba(232, 201, 160, 0.3);
 }
 
-.dark-theme .sc-checklist-item {
+.dark-theme .sc-compact-features span {
     color: #d4c4b0;
 }
 
@@ -4277,34 +4189,48 @@ Hero end
     color: #0b0608;
 }
 
-/* Mobile responsive calculator */
+/* Mobile responsive compact calculator */
 @media (max-width: 768px) {
-    .sc-calculator-meta {
+    .sc-calculator-compact {
+        padding: 15px;
+    }
+
+    .sc-compact-input-wrapper {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+
+    .sc-currency-select {
+        min-width: 110px;
+        padding: 6px 10px;
+    }
+
+    .sc-currency-select img {
+        width: 24px;
+        height: 24px;
+    }
+
+    .sc-currency-select span {
+        font-size: 13px;
+    }
+
+    .sc-compact-input-wrapper input {
+        font-size: 18px;
+    }
+
+    .sc-compact-features {
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         text-align: center;
     }
 
-    .sc-calculator-meta span {
+    .sc-compact-features span {
         justify-content: center;
-    }
-
-    .sc-fast-checklist {
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .sc-checklist-item {
-        justify-content: center;
-    }
-
-    .sc-input-body input {
-        font-size: 24px;
     }
 
     .sc-exchange-btn {
-        font-size: 16px;
-        padding: 15px 25px;
+        font-size: 14px;
+        padding: 14px 20px;
     }
 }
 
