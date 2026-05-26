@@ -187,11 +187,9 @@
 
                 @auth
                     <div class="dropdown">
-                        <button class="btn-primary d-flex align-items-center gap-2" type="button" data-bs-toggle="dropdown">
-                            <div class="d-flex align-items-center justify-content-center rounded-circle"
-                                 style="width: 28px; height: 28px; background: var(--color-bg);">
-                                {{ strtoupper(substr(auth()->user()->firstname ?? auth()->user()->username ?? 'U', 0, 1)) }}
-                            </div>
+                        <button class="utility-btn" type="button" data-bs-toggle="dropdown"
+                                style="width: 36px; height: 36px; border-radius: 50%; padding: 0; background: linear-gradient(135deg, #c9a227, #e8c9a0); color: #0b0608; font-weight: 700; font-size: 14px; overflow: hidden;">
+                            {{ strtoupper(substr(auth()->user()->firstname ?? auth()->user()->username ?? 'U', 0, 1)) }}
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" style="background: var(--color-bg-elevated); border: 1px solid var(--color-border-subtle);">
                             <li>

@@ -40,18 +40,18 @@ class EnsureKycVerified
 
         if ($latestUserKyc && (int) $latestUserKyc->status === 0) {
             $message = 'Your KYC verification is under review.';
+            // Keep $redirectUrl = verification.center so user sees context
         } elseif ($latestUserKyc && (int) $latestUserKyc->status === 2) {
             $message = 'Your KYC verification was rejected. Please submit it again.';
-
+            // For rejected, send directly to the form so they can resubmit
             $kyc = $activeKycs->firstWhere('id', $latestUserKyc->kyc_id) ?: $activeKycs->first();
             if ($kyc) {
                 $redirectUrl = route('user.kyc', [$kyc->slug, $kyc->id]);
             }
         } else {
-            $kyc = $activeKycs->first();
-            if ($kyc) {
-                $redirectUrl = route('user.kyc', [$kyc->slug, $kyc->id]);
-            }
+            // No KYC submitted yet — show verification center so user understands what to do
+            $message = 'Please complete KYC verification to access your dashboard.';
+            // $redirectUrl stays as verification.center (set above)
         }
 
         if ($request->expectsJson() || $request->ajax()) {
