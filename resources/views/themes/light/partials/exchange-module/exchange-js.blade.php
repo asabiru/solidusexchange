@@ -69,6 +69,27 @@
         }
     });
 
+    $(document).on("click", ".crypto-button[data-send-currency-id]", function () {
+        const preferredCurrencyId = $(this).data('send-currency-id');
+
+        if (!preferredCurrencyId) {
+            return;
+        }
+
+        pendingTabSwap = null;
+        activeTab = 'exchange';
+        $("#submitFormId").attr("action", "{{ route('exchangeRequest', [], false) }}");
+        $("#exchangeType").val("exchange");
+        $("#formTitle").text("Обмен криптовалют");
+        $("#submitBtn").text("Обменять");
+        $("#sendLabel").text("Вы отправляете (криптовалюта)");
+        $("#receiveLabel").text("Вы получаете (криптовалюта)");
+        $(".tab-button").removeClass("active");
+        $('.tab-button[data-tab="exchange"]').addClass("active");
+
+        getExchangeCurrency("{{ route('getExchangeCurrency', [], false) }}", preferredCurrencyId);
+    });
+
     $(document).on("click", ".sendModal", function () {
         activeSendCurrency = $(this).data('res');
         if (!isCurrencySelectable('send', activeSendCurrency)) {

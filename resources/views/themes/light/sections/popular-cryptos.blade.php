@@ -54,7 +54,10 @@
                     </div>
                 </div>
 
-                <a href="{{ route('home') }}#exchange" class="crypto-button">
+                <a href="{{ route('home') }}#exchange"
+                   class="crypto-button"
+                   data-send-currency-id="{{ $crypto->id }}"
+                   data-send-currency-code="{{ $crypto->code }}">
                     Обменять {{ $crypto->code }}
                 </a>
             </div>
