@@ -161,17 +161,19 @@ $(document).ready(function () {
 // Dark theme start
 const toggleBtn = document.getElementById("toggle-btn");
 const toggleBtnMobile = document.getElementById("toggle-btn-mobile");
+
+function toggleThemeMode() {
+    document.body.classList.toggle("dark-theme");
+    localStorage.setItem("dark-theme", document.body.classList.contains("dark-theme") ? 1 : 0);
+    setTheme();
+}
+
 if (toggleBtn) {
-    const body = document.querySelector("body");
-    toggleBtn.addEventListener("click", function () {
-        document.body.classList.toggle("dark-theme");
-        if (document.body.classList.contains("dark-theme")) {
-            localStorage.setItem("dark-theme", 1);
-        } else {
-            localStorage.setItem("dark-theme", 0);
-        }
-        setTheme();
-    });
+    toggleBtn.addEventListener("click", toggleThemeMode);
+}
+
+if (toggleBtnMobile) {
+    toggleBtnMobile.addEventListener("click", toggleThemeMode);
 }
 
 var loaderColor = "rgba(250, 244, 255, 0.92)";
@@ -183,80 +185,42 @@ function setTheme() {
     const head = document.querySelector("head");
     const defaultTheme = head.getAttribute("data-theme");
     const changeable_mode = head.getAttribute("data-changeable_mode");
+    const setThemeIcons = (isDark) => {
+        const moon = document.getElementById("moon");
+        const sun = document.getElementById("sun");
+        const moonMobile = document.getElementById("moon-mobile");
+        const sunMobile = document.getElementById("sun-mobile");
+
+        if (moon) moon.style.display = isDark ? "none" : "block";
+        if (sun) sun.style.display = isDark ? "block" : "none";
+        if (moonMobile) moonMobile.style.display = isDark ? "none" : "block";
+        if (sunMobile) sunMobile.style.display = isDark ? "block" : "none";
+    };
+
     if (isDarkTheme == 1) {
         $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
         document.querySelector('body').classList.add('dark-theme');
-        if (document.getElementById("moon")) {
-            document.getElementById("moon").style.display = "none";
-        }
-        if (document.getElementById("sun")) {
-            document.getElementById("sun").style.display = "block";
-            if (document.getElementById("moon-mobile")) {
-                document.getElementById("moon-mobile").style.display = "none";
-            }
-            if (document.getElementById("sun-mobile")) {
-                document.getElementById("sun-mobile").style.display = "block";
-            }
-        }
+        setThemeIcons(true);
         loaderColor = loaderColorDark;
     } else if (isDarkTheme == 0) {
         $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
         document.querySelector('body').classList.remove('dark-theme');
-
-
-        if (document.getElementById("moon")) {
-            document.getElementById("moon").style.display = "block";
-        }
-        if (document.getElementById("sun")) {
-            document.getElementById("sun").style.display = "none";
-            if (document.getElementById("moon-mobile")) {
-                document.getElementById("moon-mobile").style.display = "block";
-            }
-            if (document.getElementById("sun-mobile")) {
-                document.getElementById("sun-mobile").style.display = "none";
-            }
-        }
-
+        setThemeIcons(false);
         loaderColor = loaderColorLight;
     } else {
         if (defaultTheme == 1) {
             $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
             $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
             document.querySelector('body').classList.add('dark-theme');
-
-            if (document.getElementById("moon")) {
-                document.getElementById("moon").style.display = "none";
-            }
-            if (document.getElementById("sun")) {
-                document.getElementById("sun").style.display = "block";
-            if (document.getElementById("moon-mobile")) {
-                document.getElementById("moon-mobile").style.display = "none";
-            }
-            if (document.getElementById("sun-mobile")) {
-                document.getElementById("sun-mobile").style.display = "block";
-            }
-            }
-
+            setThemeIcons(true);
             loaderColor = loaderColorDark;
         } else {
             $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
             $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
             document.querySelector('body').classList.remove('dark-theme');
-
-            if (document.getElementById("moon")) {
-                document.getElementById("moon").style.display = "block";
-            }
-            if (document.getElementById("sun")) {
-                document.getElementById("sun").style.display = "none";
-            if (document.getElementById("moon-mobile")) {
-                document.getElementById("moon-mobile").style.display = "block";
-            }
-            if (document.getElementById("sun-mobile")) {
-                document.getElementById("sun-mobile").style.display = "none";
-            }
-            }
+            setThemeIcons(false);
             loaderColor = loaderColorLight;
         }
     }
@@ -264,19 +228,8 @@ function setTheme() {
     document.documentElement.setAttribute('data-solidus-site-theme', document.querySelector('body').classList.contains('dark-theme') ? 'dark' : 'light');
 }
 
-if (toggleBtn) {
+if (toggleBtn || toggleBtnMobile) {
     setTheme();
-}
-if (toggleBtnMobile) {
-    toggleBtnMobile.addEventListener("click", function () {
-        document.body.classList.toggle("dark-theme");
-        if (document.body.classList.contains("dark-theme")) {
-            localStorage.setItem("dark-theme", 1);
-        } else {
-            localStorage.setItem("dark-theme", 0);
-        }
-        setTheme();
-    });
 }
 // Dark theme end
 

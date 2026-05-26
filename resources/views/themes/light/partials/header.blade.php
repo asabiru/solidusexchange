@@ -9,11 +9,15 @@
         backdrop-filter: blur(16px);
     }
 
+    body:not(.dark-theme) .solidchange-navbar {
+        background: rgba(250, 248, 245, 0.92);
+    }
+
     .solidchange-navbar .nav-link {
         border-radius: 8px;
         padding: 8px 12px;
         font-size: 13px;
-        color: var(--color-text-secondary);
+        color: var(--color-text-secondary) !important;
         transition: all 0.2s;
     }
 
@@ -41,10 +45,11 @@
         align-items: center;
         justify-content: center;
         border-radius: 8px;
-        color: var(--color-text-secondary);
+        color: var(--color-text-secondary) !important;
         transition: all 0.2s;
         background: transparent;
         border: none;
+        cursor: pointer;
     }
 
     .solidchange-navbar .utility-btn:hover {
@@ -54,12 +59,12 @@
 
     .solidchange-navbar .btn-primary {
         background: var(--color-accent);
-        color: #0b0608;
+        color: #0b0608 !important;
         border: none;
         border-radius: 8px;
         padding: 8px 16px;
         font-size: 13px;
-        font-weight: 500;
+        font-weight: 700;
         transition: all 0.2s;
     }
 
