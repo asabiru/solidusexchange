@@ -12,157 +12,158 @@
     <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
 
     <!-- Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- CSS Implementing Plugins -->
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap-icons.css') }}">
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="{{ asset('assets/themes/light/css/bootstrap.min.css') }}">
+
+    <!-- SolidChange Admin Theme CSS -->
     <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
 
-    <!-- CSS Front Template -->
-    <link rel="preload" href="{{ asset('assets/admin/css/theme.min.css') }}" data-hs-appearance="default" as="style">
-    <link rel="preload" href="{{ asset('assets/admin/css/theme-dark.min.css') }}" data-hs-appearance="dark" as="style">
+    <!-- Icons -->
+    <link rel="stylesheet" href="{{ asset('assets/themes/light/css/all.min.css') }}">
 
-    <style data-hs-appearance-onload-styles>
-        * {
-            transition: unset !important;
+    <style>
+        body {
+            background: var(--solidus-body-bg);
+            color: var(--solidus-text);
+            font-family: 'IBM Plex Sans', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        body {
-            opacity: 0;
+        .login-container {
+            width: 100%;
+            max-width: 420px;
+            padding: 20px;
+        }
+
+        .admin-login-card {
+            background: var(--solidus-surface);
+            border: 1px solid var(--solidus-border);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: var(--solidus-shadow);
+            backdrop-filter: blur(10px);
+        }
+
+        .admin-logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .admin-logo .logo-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            border: 1px solid var(--solidus-border-strong);
+            background: linear-gradient(135deg, var(--solidus-accent) 0%, var(--solidus-accent-2) 100%);
+            font-size: 18px;
+            font-weight: 700;
+            color: #0b0608;
+            margin-bottom: 12px;
+        }
+
+        .admin-logo h3 {
+            color: var(--solidus-text);
+            font-weight: 600;
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .admin-logo p {
+            color: var(--solidus-muted);
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-control {
+            background: var(--input-color);
+            border: 1px solid var(--solidus-border);
+            color: var(--solidus-text);
+            border-radius: 12px;
+            padding: 14px 16px;
+            font-size: 15px;
+            transition: all 0.2s ease;
+        }
+
+        .form-control:focus {
+            border-color: var(--solidus-accent);
+            box-shadow: 0 0 0 3px rgba(232, 201, 160, 0.15);
+            background: var(--bg-color2);
+            outline: none;
+        }
+
+        .form-control::placeholder {
+            color: var(--solidus-muted);
+        }
+
+        .btn-admin-login {
+            width: 100%;
+            background: linear-gradient(135deg, var(--solidus-accent) 0%, var(--solidus-accent-2) 100%);
+            border: none;
+            color: #0b0608;
+            font-weight: 600;
+            border-radius: 12px;
+            padding: 14px;
+            font-size: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-admin-login:hover {
+            background: linear-gradient(135deg, var(--solidus-accent-2) 0%, var(--solidus-accent) 100%);
+            box-shadow: 0 4px 20px rgba(232, 201, 160, 0.3);
+            transform: translateY(-2px);
+        }
+
+        .admin-footer {
+            text-align: center;
+            margin-top: 24px;
+            color: var(--solidus-muted);
+            font-size: 14px;
+        }
+
+        .admin-footer a {
+            color: var(--solidus-accent);
+            text-decoration: none;
+        }
+
+        .admin-footer a:hover {
+            text-decoration: underline;
+        }
+
+        .alert {
+            border-radius: 12px;
+            border: none;
+            margin-bottom: 20px;
         }
     </style>
-
-    <script>
-        window.hs_config = {
-            "autopath": "@@autopath",
-            "deleteLine": "hs-builder:delete",
-            "deleteLine:build": "hs-builder:build-delete",
-            "deleteLine:dist": "hs-builder:dist-delete",
-            "previewMode": false,
-            "startPath": "/index.html",
-            "vars": {
-                "themeFont": "https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap",
-                "version": "?v=1.0"
-            },
-            "layoutBuilder": {
-                "extend": {"switcherSupport": true},
-                "header": {"layoutMode": "default", "containerMode": "container-fluid"},
-                "sidebarLayout": "default"
-            },
-            "themeAppearance": {
-                "layoutSkin": "default",
-                "sidebarSkin": "default",
-                "styles": {
-                    "colors": {
-                        "primary": "#8d3dff",
-                        "transparent": "transparent",
-                        "white": "#fff",
-                        "dark": "132144",
-                        "gray": {"100": "#f9fafc", "900": "#1e2022"}
-                    }, "font": "Inter"
-                }
-            },
-            "languageDirection": {"lang": "{{ app()->getLocale() }}"},
-            "skipFilesFromBundle": {
-                "dist": ["assets/js/hs.theme-appearance.js", "assets/js/hs.theme-appearance-charts.js", "assets/js/demo.js"],
-                "build": ["assets/css/theme.css", "assets/vendor/hs-navbar-vertical-aside/dist/hs-navbar-vertical-aside-mini-cache.js", "assets/js/demo.js", "assets/css/theme-dark.css", "assets/css/docs.css", "assets/vendor/icon-set/style.css", "assets/js/hs.theme-appearance.js", "assets/js/hs.theme-appearance-charts.js", "node_modules/chartjs-plugin-datalabels/dist/chartjs-plugin-datalabels.min.js", "assets/js/demo.js"]
-            },
-            "minifyCSSFiles": ["assets/css/theme.css", "assets/css/theme-dark.css"],
-            "copyDependencies": {
-                "dist": {"*assets/js/theme-custom.js": ""},
-                "build": {"*assets/js/theme-custom.js": "", "node_modules/bootstrap-icons/font/*fonts/**": "assets/css"}
-            },
-            "buildFolder": "",
-            "replacePathsToCDN": {},
-            "directoryNames": {"src": "./src", "dist": "./dist", "build": "./build"},
-            "fileNames": {
-                "dist": {"js": "theme.min.js", "css": "theme.min.css"},
-                "build": {
-                    "css": "theme.min.css",
-                    "js": "theme.min.js",
-                    "vendorCSS": "vendor.min.css",
-                    "vendorJS": "vendor.min.js"
-                }
-            },
-            "fileTypes": "jpg|png|svg|mp4|webm|ogv|json"
-        }
-    </script>
-    <script>
-        (function () {
-            function resolveAdminTheme() {
-                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
-                var theme = localStorage.getItem('hs_theme') || fallback;
-                if (theme === 'auto') {
-                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
-                }
-                return theme;
-            }
-
-            function applyAdminTheme(theme) {
-                document.documentElement.setAttribute('data-solidus-admin-theme', theme);
-            }
-
-            applyAdminTheme(resolveAdminTheme());
-
-            window.addEventListener('on-hs-appearance-change', function (event) {
-                applyAdminTheme(event.detail || resolveAdminTheme());
-            });
-
-            var media = window.matchMedia('(prefers-color-scheme: dark)');
-            if (media && typeof media.addEventListener === 'function') {
-                media.addEventListener('change', function () {
-                    if ((localStorage.getItem('hs_theme') || '') === 'auto') {
-                        applyAdminTheme(resolveAdminTheme());
-                    }
-                });
-            }
-        })();
-    </script>
 </head>
 
 <body>
 
-<script src="{{ asset('assets/admin/js/hs.theme-appearance.js') }}"></script>
-
-<!-- ========== MAIN CONTENT ========== -->
-<main id="content" role="main" class="main">
-    <div class="position-fixed top-0 end-0 start-0 bg-img-start">
-        <!-- Shape -->
-        <div class="shape shape-bottom zi-1">
-            <svg preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 1921 273">
-                <polygon fill="#fff" points="0,273 1921,273 1921,0 "/>
-            </svg>
-        </div>
-        <!-- End Shape -->
+<div class="login-container">
+    <div class="admin-login-card">
+        @yield('content')
     </div>
-
-    <!-- Content -->
-    <div class="container py-5 py-sm-7">
-        <div class="login-form mx-auto">
-            @yield('content')
-        </div>
-    </div>
-</main>
-<!-- ========== END MAIN CONTENT ========== -->
+</div>
 
 <!-- JS Global Compulsory  -->
 <script src="{{ asset('assets/global/js/jquery.min.js') }}"></script>
-<script src="{{ asset('assets/admin/js/jquery-migrate.min.js') }}"></script>
-<script src="{{ asset('assets/admin/js/bootstrap.bundle.min.js') }}"></script>
-<script src="{{ asset('assets/admin/js/hs-toggle-password.js') }}"></script>
-<script src="{{ asset('assets/admin/js/theme.min.js') }}"></script>
+<script src="{{ asset('assets/themes/light/js/bootstrap.bundle.min.js') }}"></script>
 
 @stack('script')
-
-<script>
-    "use strict";
-    $(document).ready(function () {
-        window.onload = function () {
-            new HSTogglePassword('.js-toggle-password')
-        }
-    })
-</script>
 
 </body>
 </html>
