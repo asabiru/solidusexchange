@@ -6,8 +6,18 @@ Footer Section - eazy228/design style
     background: var(--color-bg);
     border-top: 1px solid var(--color-border-subtle);
     position: relative;
-    z-index: 1;
+    z-index: 50;
     pointer-events: auto;
+}
+
+.footer-section .container,
+.footer-section a,
+.footer-section button,
+.footer-section input,
+.footer-section form {
+    position: relative;
+    z-index: 2;
+    pointer-events: auto !important;
 }
 
 .footer-top {
@@ -87,6 +97,7 @@ Footer Section - eazy228/design style
     font-size: 14px;
     outline: none;
     transition: border-color 0.2s;
+    pointer-events: auto;
 }
 
 .newsletter-input:focus {
@@ -166,6 +177,13 @@ Footer Section - eazy228/design style
     font-size: 14px;
     color: var(--color-text-secondary);
     margin-bottom: 12px;
+    text-decoration: none;
+    pointer-events: auto;
+    cursor: pointer;
+}
+
+.contact-item:hover {
+    color: var(--color-accent);
 }
 
 .contact-item svg {
