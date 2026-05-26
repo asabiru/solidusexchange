@@ -51,7 +51,7 @@ Footer Section - eazy228/design style
 .footer-description {
     font-size: 14px;
     line-height: 1.6;
-    color: #d4c4b8;
+    color: #d4c4b8 !important;
     margin: 0;
 }
 
@@ -102,7 +102,7 @@ Footer Section - eazy228/design style
     background: var(--color-accent);
     border: none;
     border-radius: var(--radius-md);
-    color: #0b0608;
+    color: #0b0608 !important;
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
@@ -144,7 +144,7 @@ Footer Section - eazy228/design style
 }
 
 .footer-column-list a {
-    color: #d4c4b8;
+    color: #d4c4b8 !important;
     text-decoration: none;
     font-size: 14px;
     transition: color 0.2s;

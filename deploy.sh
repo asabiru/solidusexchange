@@ -5,11 +5,11 @@
 
 echo "Deploying to server..."
 
-ssh -o StrictHostKeyChecking=no wabeitvkco@77.222.61.245 << 'ENDSSH'
-cd /var/www/solidusexchange
+ssh solidus << 'ENDSSH'
+cd ~/solidus/public_html
 git pull origin master
-php artisan cache:clear
-php artisan config:clear
-php artisan view:clear
+php8.2 artisan cache:clear
+php8.2 artisan config:clear
+php8.2 artisan view:clear
 echo "Deployment completed successfully!"
 ENDSSH
