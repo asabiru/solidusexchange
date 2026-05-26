@@ -13,7 +13,7 @@
 
     @include($theme.'partials.loader-js')
 </head>
-<body class="">
+<body class="dark-theme">
 @include($theme.'partials.loader')
 @include($theme.'partials.user.topbar')
 @include($theme.'partials.user.mobileNav')

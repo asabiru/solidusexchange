@@ -37,14 +37,13 @@
             $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
         @endphp
         <ul class="d-flex align-items-center">
-            @if(basicControl()->changeable_mode == 1 )
+            {{-- Theme toggle — always visible in dashboard --}}
             <li class="nav-item pe-3">
-                <a id="toggle-btn" class="nav-link d-flex toggle-btn">
+                <a id="toggle-btn" class="nav-link d-flex toggle-btn" title="Toggle theme" style="cursor:pointer;">
                     <i class="fa-light fa-moon" id="moon"></i>
                     <i class="fa-light fa-sun-bright" id="sun"></i>
                 </a>
             </li>
-            @endif
 
             <li class="nav-item d-none d-lg-block d-xl-none">
                 <a class="nav-link nav-icon search-bar-toggle" href="#">
