@@ -191,6 +191,12 @@ function setTheme() {
         }
         if (document.getElementById("sun")) {
             document.getElementById("sun").style.display = "block";
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "none";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "block";
+            }
         }
         loaderColor = loaderColorDark;
     } else if (isDarkTheme == 0) {
@@ -204,6 +210,12 @@ function setTheme() {
         }
         if (document.getElementById("sun")) {
             document.getElementById("sun").style.display = "none";
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "block";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "none";
+            }
         }
 
         loaderColor = loaderColorLight;
@@ -218,6 +230,12 @@ function setTheme() {
             }
             if (document.getElementById("sun")) {
                 document.getElementById("sun").style.display = "block";
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "none";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "block";
+            }
             }
 
             loaderColor = loaderColorDark;
@@ -231,6 +249,12 @@ function setTheme() {
             }
             if (document.getElementById("sun")) {
                 document.getElementById("sun").style.display = "none";
+            if (document.getElementById("moon-mobile")) {
+                document.getElementById("moon-mobile").style.display = "block";
+            }
+            if (document.getElementById("sun-mobile")) {
+                document.getElementById("sun-mobile").style.display = "none";
+            }
             }
             loaderColor = loaderColorLight;
         }
@@ -243,6 +267,20 @@ if (toggleBtn) {
     setTheme();
 }
 // Dark theme end
+
+// Mobile theme toggle
+const toggleBtnMobile = document.getElementById("toggle-btn-mobile");
+if (toggleBtnMobile) {
+    toggleBtnMobile.addEventListener("click", function () {
+        document.body.classList.toggle("dark-theme");
+        if (document.body.classList.contains("dark-theme")) {
+            localStorage.setItem("dark-theme", 1);
+        } else {
+            localStorage.setItem("dark-theme", 0);
+        }
+        setTheme();
+    });
+}
 
 
 // input file preview

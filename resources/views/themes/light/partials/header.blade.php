@@ -177,6 +177,12 @@
             </div>
 
             <!-- Mobile Menu Button -->
+            @if(basicControl()->changeable_mode == 1)
+            <button id="toggle-btn-mobile" class="d-lg-none utility-btn" type="button">
+                <i class="fa-solid fa-moon" id="moon-mobile"></i>
+                <i class="fa-solid fa-sun" id="sun-mobile"></i>
+            </button>
+            @endif
             <button class="d-lg-none utility-btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
                 <i class="fa-solid fa-bars"></i>
             </button>

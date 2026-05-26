@@ -795,6 +795,23 @@ body.dark-theme #sun {
     display: block;
 }
 
+/* Mobile theme toggle icons */
+#moon-mobile {
+    display: block;
+}
+
+#sun-mobile {
+    display: none;
+}
+
+body.dark-theme #moon-mobile {
+    display: none;
+}
+
+body.dark-theme #sun-mobile {
+    display: block;
+}
+
 /* Glow effect for active tab */
 .tab-button.active {
     position: relative;
