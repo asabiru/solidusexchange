@@ -119,7 +119,7 @@
 
                         <!-- Send Section -->
                         <div class="swap-section">
-                            <div class="swap-label">Вы отправляете</div>
+                            <div class="swap-label" id="sendLabel">Вы отправляете (криптовалюта)</div>
                             <div class="swap-reserve">Доступно к обмену: <span id="sendReserve">0.00</span> <span id="sendCurrency"></span></div>
                             <div class="swap-input-wrapper">
                                 <div class="currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal">
@@ -154,7 +154,7 @@
 
                         <!-- Receive Section -->
                         <div class="swap-section">
-                            <div class="swap-label">Вы получаете</div>
+                            <div class="swap-label" id="receiveLabel">Вы получаете (криптовалюта)</div>
                             <div class="swap-input-wrapper">
                                 <div class="currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal2">
                                     <div class="currency-icon">
@@ -261,18 +261,24 @@ document.addEventListener('DOMContentLoaded', function() {
                 exchangeTypeField.value = 'exchange';
                 formTitle.textContent = 'Обмен криптовалют';
                 submitBtn.textContent = 'Обменять';
+                document.getElementById('sendLabel').textContent = 'Вы отправляете (криптовалюта)';
+                document.getElementById('receiveLabel').textContent = 'Вы получаете (криптовалюта)';
                 loadExchangeCurrencies();
             } else if (tab === 'buy') {
                 form.action = "{{ route('publicBuyRequest', [], false) }}";
                 exchangeTypeField.value = 'buy';
                 formTitle.textContent = 'Купить криптовалюту';
                 submitBtn.textContent = 'Купить';
+                document.getElementById('sendLabel').textContent = 'Вы отправляете (фиат)';
+                document.getElementById('receiveLabel').textContent = 'Вы получаете (криптовалюта)';
                 loadBuyCurrencies();
             } else if (tab === 'sell') {
                 form.action = "{{ route('publicSellRequest', [], false) }}";
                 exchangeTypeField.value = 'sell';
                 formTitle.textContent = 'Продать криптовалюту';
                 submitBtn.textContent = 'Продать';
+                document.getElementById('sendLabel').textContent = 'Вы отправляете (криптовалюта)';
+                document.getElementById('receiveLabel').textContent = 'Вы получаете (фиат)';
                 loadSellCurrencies();
             }
         });
@@ -284,41 +290,37 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Load currencies for exchange mode (crypto -> crypto)
 function loadExchangeCurrencies() {
-    // Use existing exchange currency loading logic
-    if (typeof getExchangeCurrency === 'function') {
-        getExchangeCurrency();
-    }
+    // For exchange, don't change currencies - keep existing logic
+    console.log('Exchange mode - keeping existing currencies');
 }
 
-// Load currencies for buy mode (fiat -> crypto)
+// Load currencies for buy mode (crypto -> fiat) - покупка крипты за фиат
 function loadBuyCurrencies() {
-    fetch("{{ route('getBuyCurrency') }}")
+    fetch("{{ route('getSellCurrency') }}")
         .then(response => response.json())
         .then(data => {
-            // Update send currencies (fiat)
-            updateSendCurrencySelector(data.sendCurrencies, data.selectedSendCurrency);
-            // Update get currencies (crypto)
-            updateGetCurrencySelector(data.getCurrencies, data.selectedGetCurrency);
+            // Swap: send = crypto, get = fiat (для покупки крипты за фиат)
+            updateSendCurrencySelector(data.getCurrencies, data.getCurrencies[0]);
+            updateGetCurrencySelector(data.sendCurrencies, data.sendCurrencies[0]);
             // Update initial amount
-            if (data.initialSendAmount) {
-                document.getElementById('send').value = data.initialSendAmount;
+            if (data.getCurrencies && data.getCurrencies[0]) {
+                document.getElementById('send').value = ((data.getCurrencies[0].min_send + data.getCurrencies[0].max_send) / 2).toFixed(2);
             }
         })
         .catch(error => console.error('Error loading buy currencies:', error));
 }
 
-// Load currencies for sell mode (crypto -> fiat)
+// Load currencies for sell mode (fiat -> crypto) - продажа крипты за фиат
 function loadSellCurrencies() {
-    fetch("{{ route('getSellCurrency') }}")
+    fetch("{{ route('getBuyCurrency') }}")
         .then(response => response.json())
         .then(data => {
-            // Update send currencies (crypto)
-            updateSendCurrencySelector(data.sendCurrencies, data.selectedSendCurrency);
-            // Update get currencies (fiat)
-            updateGetCurrencySelector(data.getCurrencies, data.selectedGetCurrency);
+            // Swap: send = fiat, get = crypto (для продажи крипты за фиат)
+            updateSendCurrencySelector(data.sendCurrencies, data.sendCurrencies[0]);
+            updateGetCurrencySelector(data.getCurrencies, data.getCurrencies[0]);
             // Update initial amount
-            if (data.initialSendAmount) {
-                document.getElementById('send').value = data.initialSendAmount;
+            if (data.sendCurrencies && data.sendCurrencies[0]) {
+                document.getElementById('send').value = ((data.sendCurrencies[0].min_send + data.sendCurrencies[0].max_send) / 2).toFixed(2);
             }
         })
         .catch(error => console.error('Error loading sell currencies:', error));

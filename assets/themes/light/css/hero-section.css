@@ -742,7 +742,7 @@ Modern Tabs - eazy228/design style
 }
 
 .tab-button.active {
-    color: var(--color-bg);
+    color: #0b0608;
     background: var(--color-accent);
     font-weight: 600;
     transform: translateY(-1px);
