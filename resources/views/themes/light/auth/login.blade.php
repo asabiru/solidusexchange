@@ -17,7 +17,7 @@
             <div class="row min-vh-100">
 
                 <div class="col-md-6 p-0 d-none d-md-block">
-                    <div class="login-signup-thums h-100">
+                    <div class="login-signup-thums auth-redesign-visual h-100">
                         <div class="content-area">
                             <div class="logo-area mb-30">
                                 <a href="{{url('/')}}">
@@ -49,8 +49,8 @@
                     </div>
                 </div>
 
-                <div class="col-md-6 p-0 d-flex justify-content-center flex-column">
-                    <div class="login-signup-form">
+                <div class="col-md-6 p-0 d-flex justify-content-center flex-column auth-redesign-form-column">
+                    <div class="login-signup-form auth-redesign-card">
                         <form action="{{ route('login') }}" method="post">
                             @csrf
                             @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
@@ -59,6 +59,23 @@
                                     <div class="description">{{@$loginRegister->description->login_sub_heading}}</div>
                                 </div>
                             @endif
+                            @php
+                                $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
+                            @endphp
+
+                            @if(config('socialite.telegram_status') && $telegramBotName !== '')
+                                <div class="telegram-miniapp-login-box">
+                                    <button type="button" class="telegram-miniapp-login-button" id="telegramMiniAppLogin">
+                                        <span class="telegram-miniapp-icon"><i class="fa-brands fa-telegram"></i></span>
+                                        <span class="telegram-miniapp-copy">
+                                            <strong>Войти через Telegram</strong>
+                                            <small>Для Telegram Mini App и быстрого входа</small>
+                                        </span>
+                                    </button>
+                                    <div class="telegram-miniapp-status" id="telegramMiniAppStatus"></div>
+                                </div>
+                            @endif
+
                             <div class="row g-4">
                                 <div class="col-12">
                                     <input type="text" name="username" value="{{ old('username', config('demo.IS_DEMO') ? (request()->username ?? 'demouser') : '') }}" class="form-control" id="exampleInputEmail1"
@@ -226,7 +243,192 @@
 @endpush
 
 @push('extra_scripts')
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
+        .login-signup-page {
+            position: relative;
+            overflow: hidden;
+            background:
+                radial-gradient(circle at 14% 16%, rgba(232, 201, 160, 0.18), transparent 30%),
+                radial-gradient(circle at 85% 80%, rgba(76, 37, 26, 0.22), transparent 34%),
+                linear-gradient(135deg, #0b0608 0%, #160b10 52%, #070405 100%);
+        }
+
+        .login-signup-page::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image:
+                linear-gradient(rgba(232, 201, 160, 0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(232, 201, 160, 0.04) 1px, transparent 1px);
+            background-size: 48px 48px;
+            pointer-events: none;
+        }
+
+        .auth-redesign-visual {
+            background-image: none !important;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            border-right: 1px solid rgba(232, 201, 160, 0.14);
+        }
+
+        .auth-redesign-visual::before {
+            content: '';
+            position: absolute;
+            width: 720px;
+            height: 720px;
+            left: -260px;
+            top: 50%;
+            transform: translateY(-50%);
+            border-radius: 50%;
+            background:
+                radial-gradient(circle, rgba(232, 201, 160, 0.20), transparent 58%),
+                conic-gradient(from 120deg, transparent, rgba(232, 201, 160, 0.22), transparent 62%);
+            filter: blur(1px);
+        }
+
+        .auth-redesign-visual::after {
+            content: 'SC';
+            position: absolute;
+            right: 8%;
+            bottom: 10%;
+            color: rgba(232, 201, 160, 0.08);
+            font-size: 190px;
+            font-weight: 900;
+            letter-spacing: -0.12em;
+        }
+
+        .auth-redesign-visual .content-area {
+            position: relative;
+            z-index: 1;
+            max-width: 620px;
+            padding: 70px;
+        }
+
+        .auth-redesign-visual .middle-content .section-title,
+        .auth-redesign-visual .middle-content h3 {
+            color: #f7ead8 !important;
+            font-size: clamp(42px, 5.5vw, 76px);
+            line-height: 0.95;
+            letter-spacing: -0.06em;
+        }
+
+        .auth-redesign-visual .middle-content p {
+            max-width: 520px;
+            color: #cdbdaf !important;
+            font-size: 18px;
+            line-height: 1.6;
+        }
+
+        .auth-redesign-form-column {
+            position: relative;
+            z-index: 1;
+            padding: 28px;
+        }
+
+        .auth-redesign-card {
+            width: min(520px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 34px !important;
+            border: 1px solid rgba(232, 201, 160, 0.22);
+            border-radius: 30px;
+            background: rgba(18, 9, 13, 0.92) !important;
+            box-shadow: 0 30px 90px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+        }
+
+        .auth-redesign-card .section-header h3 {
+            color: #fff6ea;
+            font-size: 34px;
+            font-weight: 850;
+            letter-spacing: -0.04em;
+        }
+
+        .auth-redesign-card .section-header .description,
+        .auth-redesign-card .form-check-label,
+        .auth-redesign-card .pt-20 {
+            color: #cdbdaf;
+        }
+
+        .auth-redesign-card .form-control,
+        .auth-redesign-card input[type="text"],
+        .auth-redesign-card input[type="password"] {
+            height: 54px;
+            border: 1px solid rgba(232, 201, 160, 0.22) !important;
+            border-radius: 16px !important;
+            background: #0b0608 !important;
+            color: #f5ede4 !important;
+        }
+
+        .auth-redesign-card .form-control:focus {
+            border-color: #e8c9a0 !important;
+            box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.08) !important;
+        }
+
+        .auth-redesign-card .cmn-btn {
+            height: 56px;
+            border: none;
+            border-radius: 16px;
+            background: linear-gradient(135deg, #e8c9a0, #f2d8b4);
+            color: #0b0608 !important;
+            font-weight: 850;
+        }
+
+        .telegram-miniapp-login-box {
+            margin-bottom: 22px;
+        }
+
+        .telegram-miniapp-login-button {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid rgba(34, 158, 217, 0.48);
+            border-radius: 18px;
+            background: linear-gradient(135deg, #229ed9, #1787c5);
+            color: #fff;
+            text-align: left;
+            cursor: pointer;
+            transition: 0.25s ease;
+        }
+
+        .telegram-miniapp-login-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 16px 32px rgba(34, 158, 217, 0.22);
+        }
+
+        .telegram-miniapp-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.16);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .telegram-miniapp-copy strong,
+        .telegram-miniapp-copy small {
+            display: block;
+        }
+
+        .telegram-miniapp-copy small {
+            color: rgba(255,255,255,0.74);
+            font-size: 12px;
+        }
+
+        .telegram-miniapp-status {
+            min-height: 18px;
+            margin-top: 8px;
+            color: #e8c9a0;
+            font-size: 12px;
+        }
+
         .social-login-grid .social-unified-btn {
             min-height: 52px;
             display: inline-flex;
@@ -252,6 +454,18 @@
             min-width: 100% !important;
             border: 0;
         }
+
+        @media (max-width: 767px) {
+            .auth-redesign-form-column {
+                padding: 18px;
+            }
+
+            .auth-redesign-card {
+                width: 100%;
+                padding: 24px !important;
+                border-radius: 24px;
+            }
+        }
     </style>
 
     <script>
@@ -260,15 +474,17 @@
         const password = document.querySelector('.password');
         const passwordIcon = document.querySelector('.password-icon');
 
-        passwordIcon.addEventListener("click", function () {
-            if (password.type == 'password') {
-                password.type = 'text';
-                passwordIcon.classList.add('fa-eye-slash');
-            } else {
-                password.type = 'password';
-                passwordIcon.classList.remove('fa-eye-slash');
-            }
-        })
+        if (password && passwordIcon) {
+            passwordIcon.addEventListener("click", function () {
+                if (password.type == 'password') {
+                    password.type = 'text';
+                    passwordIcon.classList.add('fa-eye-slash');
+                } else {
+                    password.type = 'password';
+                    passwordIcon.classList.remove('fa-eye-slash');
+                }
+            })
+        }
 
         function refreshCaptcha() {
             let img = document.images['captcha_image'];
@@ -282,6 +498,38 @@
             img.src = img.src.substring(
                 0, img.src.lastIndexOf("?")
             ) + "?rand=" + Math.random() * 1000;
+        }
+
+        const telegramMiniAppLogin = document.getElementById('telegramMiniAppLogin');
+        const telegramMiniAppStatus = document.getElementById('telegramMiniAppStatus');
+        if (telegramMiniAppLogin) {
+            telegramMiniAppLogin.addEventListener('click', async function () {
+                const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+                if (!tg || !tg.initData) {
+                    telegramMiniAppStatus.textContent = 'Откройте страницу внутри Telegram Mini App или используйте виджет Telegram ниже.';
+                    return;
+                }
+
+                telegramMiniAppStatus.textContent = 'Проверяем Telegram...';
+                try {
+                    const response = await fetch('{{ route('telegram.miniapp.login') }}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                        },
+                        body: JSON.stringify({initData: tg.initData}),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.message || 'Telegram login failed');
+                    }
+                    window.location.href = data.redirect || '{{ url('/') }}';
+                } catch (error) {
+                    telegramMiniAppStatus.textContent = error.message || 'Не удалось войти через Telegram.';
+                }
+            });
         }
     </script>
 
