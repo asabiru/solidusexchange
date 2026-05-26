@@ -16,7 +16,7 @@
             <h2 class="section-title">Преимущества</h2>
         </div>
 
-        <h3 class="advantages-subtitle">{{ $whyContentSingle ? __($whyContentSingle->description["sub_title"] ?? "") : "Почему выбирают нас" }}</h3>
+        <h3 class="advantages-subtitle">{{ $whyContentSingle ? __($whyContentSingle->description->sub_title ?? "") : "Почему выбирают нас" }}</h3>
 
         <div class="advantages-grid">
             <div class="advantage-card">

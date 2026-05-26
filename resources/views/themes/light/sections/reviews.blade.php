@@ -12,8 +12,8 @@
         ->where('language_id', 1)
         ->get();
 
-    $sectionTitle = $testimonialSingle ? __($testimonialSingle->description['title'] ?? 'Отзывы') : 'Отзывы';
-    $sectionSubtitle = $testimonialSingle ? __($testimonialSingle->description['sub_title'] ?? 'Что говорят наши клиенты') : 'Что говорят наши клиенты';
+    $sectionTitle = $testimonialSingle ? __($testimonialSingle->description->title ?? 'Отзывы') : 'Отзывы';
+    $sectionSubtitle = $testimonialSingle ? __($testimonialSingle->description->sub_title ?? 'Что говорят наши клиенты') : 'Что говорят наши клиенты';
 @endphp
 
 <!-- Reviews Section - eazy228/design style -->

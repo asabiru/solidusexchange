@@ -9,8 +9,8 @@
         ->where('language_id', 1)
         ->get();
 
-    $sectionTitle = $faqSingle ? __($faqSingle->description['title'] ?? 'FAQ') : 'FAQ';
-    $sectionSubtitle = $faqSingle ? __($faqSingle->description['sub_title'] ?? 'Часто задаваемые вопросы') : 'Часто задаваемые вопросы';
+    $sectionTitle = $faqSingle ? __($faqSingle->description->title ?? 'FAQ') : 'FAQ';
+    $sectionSubtitle = $faqSingle ? __($faqSingle->description->sub_title ?? 'Часто задаваемые вопросы') : 'Часто задаваемые вопросы';
 
     $faqs = $faqMultiple->map(function ($item) {
         $desc = is_object($item->description) ? (array) $item->description : $item->description;
