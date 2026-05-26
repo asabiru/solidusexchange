@@ -1,6 +1,13 @@
 # Manual Deployment Instructions
 
-## Changes Made
+## Latest Changes (2026-05-26)
+**Green Color Fix:**
+- Replaced all green colors with champagne/gold (#e8c9a0) to match eazy228/design
+- Changed in `style.css`: --color-success, --lime-green-rgb
+- Changed in `dashboard.css`: --color-success, --soft-green, --lime-green, --grayish-green
+- All green elements now use champagne theme colors
+
+## Previous Changes Made
 1. **Removed theme toggle** from header - now single champagne/dark theme
 2. **Created new homepage** (`home.blade.php`) with eazy228/design sections:
    - Hero Section (with exchange form)
