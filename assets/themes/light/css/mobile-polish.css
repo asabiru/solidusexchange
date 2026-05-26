@@ -1,7 +1,8 @@
 @media (max-width: 991px) {
+    /* overflow-x: clip instead of hidden — hidden breaks position:sticky on iOS Safari */
     html,
     body {
-        overflow-x: hidden;
+        overflow-x: clip;
     }
 
     .container,
