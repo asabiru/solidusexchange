@@ -690,3 +690,115 @@ Exchange Calculator - eazy228/design style
         gap: 12px;
     }
 }
+
+/*----------------------------------------------
+Modern Tabs - eazy228/design style
+----------------------------------------------*/
+.modern-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    padding: 6px;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.tab-button {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-md);
+    color: var(--color-text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.tab-button::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--color-accent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.tab-button:hover {
+    color: var(--color-text-primary);
+    background: var(--color-bg-elevated);
+}
+
+.tab-button.active {
+    color: var(--color-bg);
+    background: var(--color-accent);
+    font-weight: 600;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(232, 201, 160, 0.3);
+}
+
+.tab-button.active::before {
+    opacity: 1;
+}
+
+.tab-button svg {
+    position: relative;
+    z-index: 1;
+    flex-shrink: 0;
+}
+
+.tab-button span {
+    position: relative;
+    z-index: 1;
+}
+
+/* Tab button animation */
+@keyframes tabPulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.02);
+    }
+}
+
+.tab-button:active {
+    animation: tabPulse 0.2s ease;
+}
+
+/* Glow effect for active tab */
+.tab-button.active {
+    position: relative;
+}
+
+.tab-button.active::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(135deg, var(--color-accent) 0%, var(--color-accent-hover) 100%);
+    border-radius: calc(var(--radius-md) + 2px);
+    opacity: 0.3;
+    z-index: -1;
+    filter: blur(8px);
+}
+
+/* Responsive */
+@media (max-width: 575px) {
+    .modern-tabs {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .tab-button {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+}

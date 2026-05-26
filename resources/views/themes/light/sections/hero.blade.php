@@ -53,6 +53,32 @@
             <!-- Right Content - SwapCard -->
             <div class="col-lg-6">
                 <div class="swap-card">
+                    <!-- Modern Tabs -->
+                    <div class="modern-tabs">
+                        <button class="tab-button active" data-tab="exchange">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="17 1 21 5 12 5 12 5"></polyline>
+                                <path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"></path>
+                            </svg>
+                            <span>Обмен</span>
+                        </button>
+                        <button class="tab-button" data-tab="buy">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4-1 1-5.5-5.5a2.121 2.121 0 0 1 3-3"></path>
+                            </svg>
+                            <span>Купить</span>
+                        </button>
+                        <button class="tab-button" data-tab="sell">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"></path>
+                                <path d="M9 9l3 3-3 3"></path>
+                                <path d="M9 15h6"></path>
+                            </svg>
+                            <span>Продать</span>
+                        </button>
+                    </div>
+
                     <!-- Announcements Banner -->
                     @if(count($announces)>0)
                     <div class="autoplay" data-bs-toggle="modal" data-bs-target="#exampleModal">
@@ -207,6 +233,33 @@
 @include($theme.'partials.modal')
 
 <script>
+// Tab switching functionality
+document.addEventListener('DOMContentLoaded', function() {
+    const tabButtons = document.querySelectorAll('.tab-button');
+
+    tabButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const tab = this.getAttribute('data-tab');
+
+            // Remove active class from all buttons
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+
+            // Add active class to clicked button
+            this.classList.add('active');
+
+            // Here you can add logic to switch between different forms
+            // For example, change the form action based on tab
+            if (tab === 'exchange') {
+                document.getElementById('submitFormId').action = "{{ route('exchangeRequest', [], false) }}";
+            } else if (tab === 'buy') {
+                document.getElementById('submitFormId').action = "{{ route('buyRequest', [], false) }}";
+            } else if (tab === 'sell') {
+                document.getElementById('submitFormId').action = "{{ route('sellRequest', [], false) }}";
+            }
+        });
+    });
+});
+
 // Динамическое обновление валют в Hero секции
 function updateHeroCurrencyLabels() {
     const sendCode = document.querySelector('#showSendCode');
