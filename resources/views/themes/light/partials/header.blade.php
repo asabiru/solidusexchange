@@ -237,8 +237,10 @@
         </div>
     </div>
 
-    <!-- Mobile Menu -->
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu">
+</header>
+
+<!-- Mobile Menu (outside <header> to avoid fixed-in-sticky iOS Safari bug) -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu">
         <div class="offcanvas-header">
             <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
                 <div class="logo-badge">SC</div>
@@ -283,4 +285,3 @@
             @endguest
         </div>
     </div>
-</header>
