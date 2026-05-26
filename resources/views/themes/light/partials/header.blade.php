@@ -89,14 +89,6 @@
 
             <!-- Right Actions -->
             <div class="d-none d-lg-flex align-items-center gap-2">
-                <!-- Theme Toggle -->
-                @if(basicControl()->changeable_mode == 1)
-                    <button id="toggle-btn" class="utility-btn" title="Сменить тему">
-                        <i class="fa-regular fa-moon" id="moon"></i>
-                        <i class="fa-regular fa-sun-bright d-none" id="sun"></i>
-                    </button>
-                @endif
-
                 <!-- Language Selector -->
                 @php
                     $activeLanguages = \App\Models\Language::query()

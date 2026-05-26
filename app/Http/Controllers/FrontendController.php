@@ -30,6 +30,20 @@ class FrontendController extends Controller
         $this->theme = template();
     }
 
+    public function home()
+    {
+        try {
+            $selectedTheme = basicControl()->theme ?? 'light';
+            return view("themes.{$selectedTheme}.home");
+        } catch (\Exception $exception) {
+            report($exception);
+            if (config('app.debug')) {
+                throw $exception;
+            }
+            return redirect()->route('instructionPage');
+        }
+    }
+
     public function page($slug = '/')
     {
         try {

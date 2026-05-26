@@ -36,7 +36,9 @@
 @include($theme.'partials.breadcrumb')
 @yield('content')
 
-@include($theme.'partials.footer')
+@unless(request()->routeIs('home'))
+    @include($theme.'partials.footer')
+@endunless
 
 
 @include($theme.'partials.script')

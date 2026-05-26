@@ -25,7 +25,7 @@ $basicControl = basicControl();
 
 Route::get('maintenance-mode', function () {
     if (!basicControl()->is_maintenance_mode) {
-        return redirect(route('page'));
+        return redirect(route('home'));
     }
     $data['maintenanceMode'] = \App\Models\MaintenanceMode::first();
     return view(template() . 'maintenance', $data);
@@ -259,6 +259,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         return redirect('/');
     })->name('language');
 
+    Route::get("/", [FrontendController::class, 'home'])->name('home');
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
 
