@@ -718,7 +718,7 @@ Modern Tabs - eazy228/design style
     background: transparent;
     border: none;
     border-radius: var(--radius-md);
-    color: var(--color-text-secondary);
+    color: #6b7280;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -737,7 +737,7 @@ Modern Tabs - eazy228/design style
 }
 
 .tab-button:hover {
-    color: var(--color-text-primary);
+    color: #0b0608;
     background: var(--color-bg-elevated);
 }
 
