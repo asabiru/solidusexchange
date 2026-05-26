@@ -1,69 +1,60 @@
-<div class="col-12 d-none d-lg-block">
-    <h5 class="mb-10 mt-4"> @lang('Exchange Crypto Statistics')</h5>
-    <div class="row g-4">
-
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-custom-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-spinner"></i>@lang('Pending Exchange')
-                    </h5>
+{{-- Exchange Statistics --}}
+<div class="col-12">
+    <h5 class="dash-section-title">
+        <i class="fa-light fa-arrow-right-arrow-left"></i>
+        @lang('Exchange Statistics')
+    </h5>
+    <div class="row g-3">
+        <div class="col-md-4 box-item">
+            <div class="box-card">
+                <div class="dash-stat-icon dash-stat-icon--pending">
+                    <i class="fa-light fa-clock"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"><span class="pendingExchange"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalExchange"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysPendingPercentage"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Pending')</span>
+                    <div class="dash-stat-value"><span class="pendingExchange">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalExchange">0</b></span>
+                        <span class="dash-stat-trend">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysPendingPercentage">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-blue-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-check"></i>@lang('Complete Exchange')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--success">
+                <div class="dash-stat-icon dash-stat-icon--success">
+                    <i class="fa-light fa-circle-check"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"><span class="completeExchange"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalExchange"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysCompletePercentage"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Completed')</span>
+                    <div class="dash-stat-value"><span class="completeExchange">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalExchange">0</b></span>
+                        <span class="dash-stat-trend dash-trend--up">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysCompletePercentage">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-green-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fa-exclamation-triangle"></i>@lang('Cancel Exchange')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--danger">
+                <div class="dash-stat-icon dash-stat-icon--danger">
+                    <i class="fa-light fa-circle-xmark"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"><span class="cancelExchange"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalExchange"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth down"><i
-                                class="fa-light fa-chart-line-down"></i><span
-                                class="last30DaysCancelPercentage"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Cancelled')</span>
+                    <div class="dash-stat-value"><span class="cancelExchange">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalExchange">0</b></span>
+                        <span class="dash-stat-trend dash-trend--down">
+                            <i class="fa-light fa-chart-line-down"></i>
+                            <span class="last30DaysCancelPercentage">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
@@ -71,182 +62,269 @@
     </div>
 </div>
 
-<div class="col-12 d-none d-lg-block mt-30">
-    <h5 class="mb-10"> @lang('Buy Crypto Statistics')</h5>
-    <div class="row g-4">
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card strong-orange-card  exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-spinner"></i>@lang('Pending Buy')
-                    </h5>
+{{-- Buy Statistics --}}
+<div class="col-12 mt-4">
+    <h5 class="dash-section-title">
+        <i class="fa-light fa-circle-plus"></i>
+        @lang('Buy Statistics')
+    </h5>
+    <div class="row g-3">
+        <div class="col-md-4 box-item">
+            <div class="box-card">
+                <div class="dash-stat-icon dash-stat-icon--pending">
+                    <i class="fa-light fa-clock"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"><span class="pendingBuy"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalBuy"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysPendingPercentageBuy"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Pending')</span>
+                    <div class="dash-stat-value"><span class="pendingBuy">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalBuy">0</b></span>
+                        <span class="dash-stat-trend">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysPendingPercentageBuy">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-green-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-check"></i>@lang('Complete Buy')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--success">
+                <div class="dash-stat-icon dash-stat-icon--success">
+                    <i class="fa-light fa-circle-check"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"> <span class="completeBuy"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalBuy"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysCompletePercentageBuy"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Completed')</span>
+                    <div class="dash-stat-value"><span class="completeBuy">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalBuy">0</b></span>
+                        <span class="dash-stat-trend dash-trend--up">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysCompletePercentageBuy">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-blue-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fa-exclamation-triangle"></i>@lang('Cancel Buy')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--danger">
+                <div class="dash-stat-icon dash-stat-icon--danger">
+                    <i class="fa-light fa-circle-xmark"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"> <span class="cancelBuy"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalBuy"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth down"><i
-                                class="fa-light fa-chart-line-down"></i><span
-                                class="last30DaysCancelPercentageBuy"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Cancelled')</span>
+                    <div class="dash-stat-value"><span class="cancelBuy">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalBuy">0</b></span>
+                        <span class="dash-stat-trend dash-trend--down">
+                            <i class="fa-light fa-chart-line-down"></i>
+                            <span class="last30DaysCancelPercentageBuy">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
-<div class="col-12 d-none d-lg-block mt-30">
-    <h5 class="mb-10"> @lang('Sell Crypto Statistics')</h5>
-    <div class="row g-4">
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-custom-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-spinner"></i>@lang('Pending Sell')
-                    </h5>
+
+{{-- Sell Statistics --}}
+<div class="col-12 mt-4">
+    <h5 class="dash-section-title">
+        <i class="fa-light fa-circle-minus"></i>
+        @lang('Sell Statistics')
+    </h5>
+    <div class="row g-3">
+        <div class="col-md-4 box-item">
+            <div class="box-card">
+                <div class="dash-stat-icon dash-stat-icon--pending">
+                    <i class="fa-light fa-clock"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"> <span class="pendingSell"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalSell"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysPendingPercentageSell"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Pending')</span>
+                    <div class="dash-stat-value"><span class="pendingSell">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalSell">0</b></span>
+                        <span class="dash-stat-trend">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysPendingPercentageSell">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card grayish-blue-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fas fa-check"></i>@lang('Complete Sell')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--success">
+                <div class="dash-stat-icon dash-stat-icon--success">
+                    <i class="fa-light fa-circle-check"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"> <span class="completeSell"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalSell"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth"><i
-                                class="fa-light fa-chart-line-up"></i><span
-                                class="last30DaysCompletePercentageSell"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Completed')</span>
+                    <div class="dash-stat-value"><span class="completeSell">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalSell">0</b></span>
+                        <span class="dash-stat-trend dash-trend--up">
+                            <i class="fa-light fa-chart-line-up"></i>
+                            <span class="last30DaysCompletePercentageSell">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
-        <div class="col-xxl-3 col-sm-6 box-item">
-            <div class="box-card strong-orange-card exchangeRecord">
-                <div class="box-card-header">
-                    <h5 class="box-card-title"><i
-                            class="fa-light fa-exclamation-triangle"></i>@lang('Cancel Sell')
-                    </h5>
+        <div class="col-md-4 box-item">
+            <div class="box-card dash-card--danger">
+                <div class="dash-stat-icon dash-stat-icon--danger">
+                    <i class="fa-light fa-circle-xmark"></i>
                 </div>
-                <div class="box-card-body">
-                    <h4 class="mb-0"> <span class="cancelSell"></span>
-                        <sub><small>@lang('from') <span
-                                    class="totalSell"></span></small></sub>
-                    </h4>
-                    <div class="statistics">
-                        <p class="growth down"><i
-                                class="fa-light fa-chart-line-down"></i><span class="last30DaysCancelPercentageSell"></span>
-                            %</p>
-                        <div class="time">@lang('last 30 days')</div>
+                <div class="dash-stat-body">
+                    <span class="dash-stat-label">@lang('Cancelled')</span>
+                    <div class="dash-stat-value"><span class="cancelSell">0</span></div>
+                    <div class="dash-stat-footer">
+                        <span class="dash-stat-total">@lang('Total'): <b class="totalSell">0</b></span>
+                        <span class="dash-stat-trend dash-trend--down">
+                            <i class="fa-light fa-chart-line-down"></i>
+                            <span class="last30DaysCancelPercentageSell">0</span>%
+                        </span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
-@push('extra_scripts')
-    <script>
-        'use strict';
-        Notiflix.Block.standard('.exchangeRecord', {
-            backgroundColor: loaderColor,
-        });
 
-        axios.get("{{route('user.getRecords')}}")
-            .then(function (res) {
-                $('.totalExchange').text(res.data.totalExchange);
-                $('.pendingExchange').text(res.data.pendingExchange);
-                $('.last30DaysPendingPercentage').text(res.data.last30DaysPendingPercentage);
-                $('.completeExchange').text(res.data.completeExchange);
-                $('.last30DaysCompletePercentage').text(res.data.last30DaysCompletePercentage);
-                $('.cancelExchange').text(res.data.cancelExchange);
-                $('.last30DaysCancelPercentage').text(res.data.last30DaysCancelPercentage);
-                $('.totalBuy').text(res.data.totalBuy);
-                $('.pendingBuy').text(res.data.pendingBuy);
-                $('.last30DaysPendingPercentageBuy').text(res.data.last30DaysPendingPercentageBuy);
-                $('.completeBuy').text(res.data.completeBuy);
-                $('.last30DaysCompletePercentageBuy').text(res.data.last30DaysCompletePercentageBuy);
-                $('.cancelBuy').text(res.data.cancelBuy);
-                $('.last30DaysCancelPercentageBuy').text(res.data.last30DaysCancelPercentageBuy);
-                $('.totalSell').text(res.data.totalSell);
-                $('.pendingSell').text(res.data.pendingSell);
-                $('.last30DaysPendingPercentageSell').text(res.data.last30DaysPendingPercentageSell);
-                $('.completeSell').text(res.data.completeSell);
-                $('.last30DaysCompletePercentageSell').text(res.data.last30DaysCompletePercentageSell);
-                $('.cancelSell').text(res.data.cancelSell);
-                $('.last30DaysCancelPercentageSell').text(res.data.last30DaysCancelPercentageSell);
+<style>
+/* Section titles */
+.dash-section-title {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.07em !important;
+    text-transform: uppercase !important;
+    color: #5e534d !important;
+    margin-bottom: 12px !important;
+    border-left: 3px solid rgba(232,201,160,0.4) !important;
+    padding-left: 10px !important;
+}
 
-                Notiflix.Block.remove('.exchangeRecord');
-            })
-            .catch(function (error) {
+.dash-section-title i {
+    color: rgba(232,201,160,0.5);
+    font-size: 13px;
+}
 
-            });
-    </script>
-@endpush
+/* Stat card layout */
+.box-card {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: flex-start !important;
+    gap: 16px !important;
+    padding: 20px !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.box-card::before {
+    content: "";
+    position: absolute;
+    top: -20px; right: -20px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,201,160,0.06) 0%, transparent 70%);
+    pointer-events: none;
+}
+
+.dash-stat-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+}
+
+.dash-stat-icon--pending {
+    background: rgba(217,168,106,0.12);
+    color: #d9a86a;
+}
+
+.dash-stat-icon--success {
+    background: rgba(127,178,138,0.12);
+    color: #7fb28a;
+}
+
+.dash-stat-icon--danger {
+    background: rgba(201,120,106,0.12);
+    color: #c9786a;
+}
+
+.dash-card--success { border-color: rgba(127,178,138,0.12) !important; }
+.dash-card--success .dash-stat-value { color: #7fb28a !important; }
+.dash-card--danger { border-color: rgba(201,120,106,0.12) !important; }
+
+.dash-stat-body {
+    flex: 1;
+    min-width: 0;
+}
+
+.dash-stat-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5e534d;
+    margin-bottom: 6px;
+}
+
+.dash-stat-value {
+    font-size: 36px;
+    font-weight: 700;
+    color: #f5ede4;
+    line-height: 1;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+}
+
+.dash-stat-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+.dash-stat-total {
+    font-size: 12px;
+    color: #5e534d;
+}
+
+.dash-stat-total b {
+    color: #9a8e86;
+    font-weight: 600;
+}
+
+.dash-stat-trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #9a8e86;
+    background: rgba(255,255,255,0.04);
+    padding: 3px 7px;
+    border-radius: 99px;
+}
+
+.dash-trend--up {
+    color: #7fb28a;
+    background: rgba(127,178,138,0.08);
+}
+
+.dash-trend--down {
+    color: #c9786a;
+    background: rgba(201,120,106,0.08);
+}
+</style>
