@@ -92,6 +92,7 @@
                                         <img src="{{getFile($announce->driver,$announce->image)}}" alt="...">
                                     </div>
                                     <div class="text-area">
+                                        <span class="banner-kicker">Горячее предложение</span>
                                         <p class="fw-bold mb-0">@lang(\Illuminate\Support\Str::limit($announce->heading,55))</p>
                                     </div>
                                 </div>
