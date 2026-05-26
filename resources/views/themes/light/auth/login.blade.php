@@ -651,6 +651,7 @@
         const telegramMiniAppLogin = document.getElementById('telegramMiniAppLogin');
         const telegramMiniAppStatus = document.getElementById('telegramMiniAppStatus');
         const telegramLoginWidget = document.getElementById('telegramLoginWidget');
+        let telegramMiniAppLoginInProgress = false;
 
         if (telegramLoginWidget && window.matchMedia('(min-width: 768px)').matches) {
             const renderTelegramWidget = function () {
@@ -679,35 +680,87 @@
             }
         }
 
-        if (telegramMiniAppLogin) {
-            telegramMiniAppLogin.addEventListener('click', async function () {
-                const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-                if (!tg || !tg.initData) {
-                    telegramMiniAppStatus.textContent = 'Если вы не в Telegram, войдите по логину и паролю или откройте Telegram кнопкой ниже.';
-                    return;
+        const loginWithTelegramMiniApp = async function (source) {
+            const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+            if (!tg || !tg.initData) {
+                if (source === 'auto' && telegramMiniAppStatus) {
+                    telegramMiniAppStatus.textContent = 'Откройте сайт внутри Telegram, чтобы выполнить вход автоматически.';
                 }
+                return false;
+            }
 
-                telegramMiniAppStatus.textContent = 'Проверяем аккаунт Telegram...';
-                try {
-                    const response = await fetch('{{ route('telegram.miniapp.login') }}', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                        },
-                        body: JSON.stringify({initData: tg.initData}),
-                    });
-                    const data = await response.json();
-                    if (!response.ok) {
-                        throw new Error(data.message || 'Telegram login failed');
-                    }
-                    window.location.href = data.redirect || '{{ url('/') }}';
-                } catch (error) {
+            if (telegramMiniAppLoginInProgress) {
+                return true;
+            }
+
+            telegramMiniAppLoginInProgress = true;
+            if (telegramMiniAppLogin) {
+                telegramMiniAppLogin.disabled = true;
+                telegramMiniAppLogin.setAttribute('aria-busy', 'true');
+            }
+
+            if (telegramMiniAppStatus) {
+                telegramMiniAppStatus.textContent = source === 'auto'
+                    ? 'Автоматически входим через Telegram...'
+                    : 'Проверяем аккаунт Telegram...';
+            }
+
+            try {
+                const response = await fetch('{{ route('telegram.miniapp.login') }}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                    },
+                    body: JSON.stringify({initData: tg.initData}),
+                });
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.message || 'Telegram login failed');
+                }
+                window.location.href = data.redirect || '{{ url('/') }}';
+                return true;
+            } catch (error) {
+                telegramMiniAppLoginInProgress = false;
+                if (telegramMiniAppLogin) {
+                    telegramMiniAppLogin.disabled = false;
+                    telegramMiniAppLogin.removeAttribute('aria-busy');
+                }
+                if (telegramMiniAppStatus) {
                     telegramMiniAppStatus.textContent = error.message || 'Не удалось войти через Telegram. Попробуйте ещё раз.';
                 }
+                return false;
+            }
+        };
+
+        const bootTelegramMiniAppAutoLogin = function (attempt = 0) {
+            const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+            if (!tg) {
+                if (attempt < 20) {
+                    window.setTimeout(function () {
+                        bootTelegramMiniAppAutoLogin(attempt + 1);
+                    }, 100);
+                }
+                return;
+            }
+
+            if (tg.initData) {
+                loginWithTelegramMiniApp('auto');
+            }
+        };
+
+        if (telegramMiniAppLogin) {
+            telegramMiniAppLogin.addEventListener('click', function () {
+                loginWithTelegramMiniApp('manual');
             });
         }
+
+        if (window.Telegram && window.Telegram.WebApp && typeof window.Telegram.WebApp.ready === 'function') {
+            window.Telegram.WebApp.ready();
+        }
+
+        bootTelegramMiniAppAutoLogin();
     </script>
 
 @endpush
