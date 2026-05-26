@@ -268,6 +268,89 @@ footer#footer,
     color: var(--dash-muted) !important;
 }
 
+
+
+/* ── Profile dropdown (user menu) ───────────────────────────────────── */
+.dropdown-menu.profile {
+    padding: 10px !important;
+    min-width: 260px;
+}
+
+.dropdown-menu.profile .dropdown-header {
+    margin: 2px 2px 10px;
+    padding: 10px 10px 8px;
+    border-radius: 12px;
+    background: rgba(232, 201, 160, 0.10);
+    border: 1px solid var(--dash-border-subtle);
+}
+
+body:not(.dark-theme) .dropdown-menu.profile .dropdown-header {
+    background: rgba(201, 162, 39, 0.10);
+}
+
+.dropdown-menu.profile .dropdown-header .profile-content {
+    min-width: 0;
+}
+
+.dropdown-menu.profile .dropdown-header .profile-content h6 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--dash-text) !important;
+    letter-spacing: -0.01em;
+}
+
+.dropdown-menu.profile .dropdown-header .profile-content span {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--dash-muted) !important;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 210px;
+}
+
+.dropdown-menu.profile .dropdown-item {
+    padding: 10px 10px !important;
+    display: flex !important;
+    align-items: center;
+    gap: 10px;
+}
+
+.dropdown-menu.profile .dropdown-item i {
+    width: 18px;
+    font-size: 15px;
+    color: var(--dash-muted) !important;
+}
+
+.dropdown-menu.profile .dropdown-item:hover i {
+    color: var(--dash-accent) !important;
+}
+
+.dropdown-menu.profile .dropdown-item:hover,
+.dropdown-menu.profile .dropdown-item:focus {
+    background: rgba(232, 201, 160, 0.12) !important;
+}
+
+/* Logout item (last) */
+.dropdown-menu.profile li:last-child .dropdown-item {
+    color: #c9786a !important;
+}
+
+.dropdown-menu.profile li:last-child .dropdown-item i {
+    color: #c9786a !important;
+}
+
+.dropdown-menu.profile li:last-child .dropdown-item:hover,
+.dropdown-menu.profile li:last-child .dropdown-item:focus {
+    background: rgba(201, 120, 106, 0.12) !important;
+}
+
+.dropdown-menu.profile .dropdown-divider {
+    margin: 8px 6px !important;
+}
+
 </style>
 
 @stack('extra_styles')
