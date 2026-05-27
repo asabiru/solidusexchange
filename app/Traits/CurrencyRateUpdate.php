@@ -23,36 +23,44 @@ trait CurrencyRateUpdate
             ];
         }
 
-        $baseUrl = rtrim((string) config('exchange_engine.bybit.base_url', 'https://api.bybit.com'), '/');
-        $response = json_decode(BasicCurl::curlGetRequest("{$baseUrl}/v5/market/tickers?category=spot"));
-
-        if (($response->retCode ?? 1) !== 0 || !isset($response->result->list) || !is_array($response->result->list)) {
+        // Step 1: Fetch Rapira rates for prices + 24h change
+        $rapiraRates = $this->fetchRapiraCryptoRates();
+        if ($rapiraRates === null) {
             return [
                 'status' => false,
-                'res' => $response->retMsg ?? $response->error ?? 'Bybit market data is unavailable',
+                'res' => 'Rapira market rates are unavailable',
             ];
         }
 
-        $tickers = collect($response->result->list)->mapWithKeys(function ($ticker) {
-            return [strtoupper((string) $ticker->symbol) => $ticker];
-        });
+        // Get USDT/RUB rate from Rapira for base currency conversion
+        $usdtRubRate = $rapiraRates->get('USDT/RUB');
+        $baseRateFactor = $this->resolveRapiraBaseRateFactor((string) $convert, $usdtRubRate);
 
-        $baseRateFactor = $this->resolveBybitBaseRateFactor((string) $convert, $tickers);
+        // Step 2: Fetch Bybit sparkline data (Rapira has no kline API)
+        $bybitBaseUrl = rtrim((string) config('exchange_engine.bybit.base_url', 'https://api.bybit.com'), '/');
 
         $results = [];
         $errors = [];
 
         foreach ($codes as $code) {
-            $usdRate = $this->resolveBybitUsdRate($code, $tickers);
+            $normalizedCode = $this->normalizeBybitCurrencyCode($code);
+
+            // Resolve USD rate from Rapira
+            $usdRate = $this->resolveRapiraUsdRate($normalizedCode, $rapiraRates);
 
             if ($usdRate === null) {
-                $errors[$code] = "Bybit spot pair for {$code} was not found";
+                $errors[$code] = "Rapira rate for {$code} not found";
                 continue;
             }
 
-            $normalizedCode = $this->normalizeBybitCurrencyCode($code);
-            $change24h = $this->resolveBybit24hChange($normalizedCode, $tickers);
-            $sparkline7d = $this->resolveBybitSparkline($normalizedCode, $baseUrl);
+            // Resolve 24h change from Rapira
+            $change24h = $this->resolveRapira24hChange($normalizedCode, $rapiraRates);
+
+            // Resolve sparkline from Bybit (only for non-stablecoins)
+            $sparkline7d = null;
+            if (!in_array($normalizedCode, ['USD', 'USDT', 'USDC'], true)) {
+                $sparkline7d = $this->resolveBybitSparkline($normalizedCode, $bybitBaseUrl);
+            }
 
             $results[] = [
                 'code' => $code,
@@ -75,6 +83,117 @@ trait CurrencyRateUpdate
             'res' => $results,
             'errors' => $errors,
         ];
+    }
+
+    protected function fetchRapiraCryptoRates(): ?\Illuminate\Support\Collection
+    {
+        $marketRatesUrl = (string) config('services.rapira.market_rates_url', 'https://api.rapira.net/open/market/rates');
+        $response = json_decode(BasicCurl::curlGetRequest($marketRatesUrl));
+
+        if (!isset($response->data) || !is_array($response->data)) {
+            return null;
+        }
+
+        return collect($response->data)->mapWithKeys(function ($item) {
+            return [strtoupper((string) $item->symbol) => $item];
+        });
+    }
+
+    protected function resolveRapiraUsdRate(string $code, $rapiraRates): ?float
+    {
+        $code = strtoupper(trim($code));
+
+        if (in_array($code, ['USD', 'USDT'], true)) {
+            return 1.0;
+        }
+
+        // Try direct pair CODE/USDT
+        $ticker = $rapiraRates->get("{$code}/USDT");
+        if ($ticker) {
+            $usdRate = (float) ($ticker->usdRate ?? 0);
+            if ($usdRate > 0) {
+                return $usdRate;
+            }
+            $close = (float) ($ticker->close ?? 0);
+            if ($close > 0) {
+                return $close;
+            }
+        }
+
+        // Try inverse pair USDT/CODE
+        $inverseTicker = $rapiraRates->get("USDT/{$code}");
+        if ($inverseTicker) {
+            $close = (float) ($inverseTicker->close ?? 0);
+            if ($close > 0) {
+                return 1 / $close;
+            }
+        }
+
+        // Try cross-rate via BTC or ETH
+        foreach (['BTC', 'ETH'] as $bridge) {
+            $crossTicker = $rapiraRates->get("{$code}/{$bridge}");
+            if ($crossTicker) {
+                $crossRate = (float) ($crossTicker->usdRate ?? 0);
+                if ($crossRate > 0) {
+                    return $crossRate;
+                }
+            }
+
+            $inverseCrossTicker = $rapiraRates->get("{$bridge}/{$code}");
+            if ($inverseCrossTicker) {
+                $inverseRate = (float) ($inverseCrossTicker->close ?? 0);
+                $bridgeUsdRate = $this->resolveRapiraUsdRate($bridge, $rapiraRates);
+                if ($inverseRate > 0 && $bridgeUsdRate !== null) {
+                    return (1 / $inverseRate) * $bridgeUsdRate;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    protected function resolveRapira24hChange(string $code, $rapiraRates): ?float
+    {
+        if (in_array($code, ['USD', 'USDT'], true)) {
+            // USDT/RUB pair has its own chg
+            $rubTicker = $rapiraRates->get("USDT/RUB");
+            if ($rubTicker && isset($rubTicker->chg)) {
+                return round((float) $rubTicker->chg * 100, 2);
+            }
+            return 0.0;
+        }
+
+        $ticker = $rapiraRates->get("{$code}/USDT");
+        if ($ticker && isset($ticker->chg)) {
+            return round((float) $ticker->chg * 100, 2);
+        }
+
+        return null;
+    }
+
+    protected function resolveRapiraBaseRateFactor(string $convert, $usdtRubTicker): float
+    {
+        $convert = strtoupper(trim($convert));
+
+        if ($convert === 'USD' || $convert === 'USDT') {
+            return 1.0;
+        }
+
+        // If base currency is RUB, use USDT/RUB from Rapira
+        if ($convert === 'RUB' && $usdtRubTicker) {
+            $rate = (float) ($usdtRubTicker->close ?? 0);
+            if ($rate > 0) {
+                return $rate; // 1 USDT = X RUB, so rate = X RUB per USDT
+            }
+        }
+
+        // Fallback to stored rate
+        $storedBaseRateFactor = $this->resolveStoredBaseRateFactor($convert);
+        if ($storedBaseRateFactor !== null && $storedBaseRateFactor > 0) {
+            return 1 / $storedBaseRateFactor;
+        }
+
+        return (float) basicControl()->exchange_rate;
     }
 
     protected function resolveBybitUsdRate(string $code, $tickers): ?float
