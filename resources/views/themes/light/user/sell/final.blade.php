@@ -55,6 +55,21 @@
                                 </div>
                             @endif
                         </div>
+                        @if(isset($sbpPayment) && $sbpPayment)
+                            <div class="sbp-qr-section mt-20" style="text-align: center; padding: 20px; background: #f8f9fa; border-radius: 12px; margin-top: 20px;">
+                                <h5 style="margin-bottom: 12px;">Оплата через СБП</h5>
+                                <p class="text-muted small">Отсканируйте QR-код в приложении банка для оплаты <strong>{{number_format($sbpPayment->amount, 2)}} ₽</strong></p>
+                                <div style="display: inline-block; padding: 16px; background: white; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                                    {!! $sbpPayment->qr_svg ?? '' !!}
+                                </div>
+                                <div class="mt-3">
+                                    <small class="text-muted">QR действует до: {{optional($sbpPayment->expires_at)->format('H:i')}}</small>
+                                </div>
+                                <div id="sbp-status" class="mt-2">
+                                    <span class="badge bg-warning text-dark">Ожидание оплаты...</span>
+                                </div>
+                            </div>
+                        @endif
                         <div class="alert-message mt-20">
                             <i class="fa-solid fa-circle-info fa-rotate-180"></i>
                             <span>@lang("Please wait for a moment. "){{basicControl()->site_title}} @lang("is actively processing your trade. You can track the progress of your trade from this location.") <a
@@ -92,6 +107,28 @@
         }
 
         setInterval(getStatus, 10000);
+
+        @if(isset($sbpPayment) && $sbpPayment)
+        // SBP payment status polling
+        var sbpOrderId = "{{$sbpPayment->order_id}}";
+        function checkSbpStatus() {
+            axios.get("{{route('sbp.status', $sbpPayment->order_id ?? '')}}")
+                .then(function(response) {
+                    var status = response.data.status;
+                    var el = document.getElementById('sbp-status');
+                    if (status === 'paid' || status === 'confirmed') {
+                        el.innerHTML = '<span class="badge bg-success text-white">Оплачено ✓</span>';
+                        setTimeout(function() { getStatus(); }, 2000);
+                    } else if (status === 'rejected') {
+                        el.innerHTML = '<span class="badge bg-danger text-white">Отклонено</span>';
+                    } else if (status === 'expired') {
+                        el.innerHTML = '<span class="badge bg-secondary text-white">QR истёк</span>';
+                    }
+                })
+                .catch(function(error) {});
+        }
+        setInterval(checkSbpStatus, 5000);
+        @endif
 
         function copyTranId() {
             var textToCopy = document.getElementById('tranId').innerText;

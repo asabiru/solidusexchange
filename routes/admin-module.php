@@ -113,6 +113,14 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('sanctions/logs/list', 'logsList')->name('sanctionedLogsList');
         });
 
+        Route::controller(\App\Http\Controllers\Admin\Module\SbpPaymentController::class)->group(function () {
+            Route::get('sbp', 'index')->name('sbpIndex');
+            Route::get('sbp/list', 'list')->name('sbpList');
+            Route::get('sbp/confirm/{id}', 'confirm')->name('sbpConfirm');
+            Route::get('sbp/reject/{id}', 'reject')->name('sbpReject');
+            Route::get('sbp/settings', 'settings')->name('sbpSettings');
+        });
+
         Route::controller(BuyController::class)->group(function () {
             Route::get('buy/list', 'buyList')->name('buyList');
             Route::get('buy/list/search', 'buyListSearch')->name('buyListSearch');

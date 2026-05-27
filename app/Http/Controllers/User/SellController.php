@@ -286,7 +286,42 @@ class SellController extends Controller
     public function sellFinal($utr)
     {
         $sellRequest = SellRequest::where(['status' => 2, 'utr' => $utr])->firstOrFail();
-        return view($this->theme . 'user.sell.final', compact('sellRequest'));
+
+        // If the fiat gateway is SBP QR, generate a payment QR
+        $sbpPayment = null;
+        $fiatGateway = $sellRequest->fiatSendGateway;
+        if ($fiatGateway && $fiatGateway->driver === 'sbp_qr') {
+            try {
+                $sbpService = app(\App\Services\Sbp\SbpQrService::class);
+                $amount = $sellRequest->final_amount;
+
+                $sbpResult = $sbpService->createPayment((float) $amount, "Выплата по заявке #{$sellRequest->utr}");
+
+                $sbpPayment = \App\Models\SbpPayment::create([
+                    'order_id'           => $sellRequest->utr,
+                    'provider_payment_id' => $sbpResult['payment_id'] ?? null,
+                    'provider'           => $sbpResult['provider'] ?? 'static_qr',
+                    'amount'             => $amount,
+                    'currency_code'      => 'RUB',
+                    'qr_url'             => $sbpResult['qr_url'] ?? null,
+                    'qr_payload'         => $sbpResult['qr_payload'] ?? null,
+                    'status'             => 'pending',
+                    'purpose'            => "Выплата по заявке #{$sellRequest->utr}",
+                    'expires_at'         => now()->addMinutes(config('services.sbp.qr_ttl_minutes', 30)),
+                    'payable_type'       => SellRequest::class,
+                    'payable_id'         => $sellRequest->id,
+                ]);
+
+                // Generate QR SVG for display
+                $qrSvg = $sbpService->generateQrSvg($sbpResult['qr_payload'] ?? $sbpResult['qr_url'] ?? '');
+                $sbpPayment->qr_svg = $qrSvg;
+
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::error('SBP QR generation failed: ' . $e->getMessage());
+            }
+        }
+
+        return view($this->theme . 'user.sell.final', compact('sellRequest', 'sbpPayment'));
     }
 
     public function sellAutoRate(Request $request)

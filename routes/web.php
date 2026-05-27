@@ -206,6 +206,10 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::post('khalti/payment/verify/{trx}', [khaltiPaymentController::class, 'verifyPayment'])->name('khalti.verifyPayment');
     Route::post('khalti/payment/store', [khaltiPaymentController::class, 'storePayment'])->name('khalti.storePayment');
 
+    /* SBP QR Webhooks & Status Check */
+    Route::post('sbp/webhook/tinkoff', [\App\Http\Controllers\SbpWebhookController::class, 'tinkoffNotify'])->name('sbp.webhook.tinkoff');
+    Route::get('sbp/status/{orderId}', [\App\Http\Controllers\SbpWebhookController::class, 'checkStatus'])->name('sbp.status');
+
     Route::post('subscribe', [FrontendController::class, 'subscribe'])->name('subscribe');
     Route::post('/contact/send', [FrontendController::class, 'contactSend'])->name('contact.send');
     Route::get('blog-details', [FrontendController::class, 'blogDetails'])->name('blog.details');

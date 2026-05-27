@@ -181,6 +181,13 @@
                             <span class="nav-link-title">@lang("Sanctions List")</span>
                         </a>
                     </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.sbpIndex','admin.sbpList','admin.sbpSettings']) }}"
+                           href="{{ route('admin.sbpIndex') }}" data-placement="left">
+                            <i class="bi-qr-code nav-icon"></i>
+                            <span class="nav-link-title">@lang("SBP QR")</span>
+                        </a>
+                    </div>
 
 
                     <span class="dropdown-header mt-3">@lang('Transaction History')</span>
