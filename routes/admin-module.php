@@ -4,10 +4,8 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\Module\CryptoCurrencyController;
 use App\Http\Controllers\Admin\Module\FiatCurrencyController;
 use App\Http\Controllers\Admin\Module\CoinAnnounceController;
-use App\Http\Controllers\Admin\Module\CryptoMethodController;
 use App\Http\Controllers\Admin\Module\ExchangeController;
 use App\Http\Controllers\Admin\Module\ExchangePayoutController;
-use App\Http\Controllers\Admin\Module\ExchangeWalletController;
 use App\Http\Controllers\Admin\Module\BuyController;
 use App\Http\Controllers\Admin\Module\SellController;
 use App\Http\Controllers\Admin\Module\FiatSendGatewayController;
@@ -52,14 +50,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('coin-announce/multiple-status-change', 'coinAnnounceMultipleStatusChange')->name('coinAnnounceMultipleStatusChange');
         });
 
-        Route::controller(CryptoMethodController::class)->group(function () {
-            Route::get('crypto-method/list', 'cryptoMethodList')->name('cryptoMethodList');
-            Route::get('crypto-method/list/search', 'cryptoMethodSearch')->name('cryptoMethodSearch');
-            Route::any('crypto-method/edit', 'cryptoMethodEdit')->name('cryptoMethodEdit');
-            Route::any('crypto-method/manual/set-address', 'cryptoMethodSetAddress')->name('cryptoMethodSetAddress');
-            Route::get('crypto-method/status-change', 'cryptoMethodStatusChange')->name('cryptoMethodStatusChange');
-        });
-
         Route::controller(ExchangeController::class)->group(function () {
             Route::get('exchange/list', 'exchangeList')->name('exchangeList');
             Route::get('exchange/list/search', 'exchangeListSearch')->name('exchangeListSearch');
@@ -71,16 +61,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('exchange/confirm-deposit/{utr}', 'exchangeConfirmDeposit')->name('exchangeConfirmDeposit');
             Route::post('exchange/send-confirm/{utr}', 'exchangeSend')->name('exchangeSend');
             Route::post('exchange/cancel-confirm/{utr}', 'exchangeCancel')->name('exchangeCancel');
-        });
-
-        Route::controller(ExchangeWalletController::class)->group(function () {
-            Route::get('exchange-wallets', 'index')->name('exchangeWalletIndex');
-            Route::get('exchange-wallets/create', 'create')->name('exchangeWalletCreate');
-            Route::post('exchange-wallets/store', 'store')->name('exchangeWalletStore');
-            Route::get('exchange-wallets/edit/{id}', 'edit')->name('exchangeWalletEdit');
-            Route::put('exchange-wallets/update/{id}', 'update')->name('exchangeWalletUpdate');
-            Route::post('exchange-wallets/sync/{id}', 'sync')->name('exchangeWalletSync');
-            Route::delete('exchange-wallets/delete/{id}', 'delete')->name('exchangeWalletDelete');
         });
 
         Route::controller(ExchangePayoutController::class)->group(function () {
@@ -125,22 +105,14 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('buy/list', 'buyList')->name('buyList');
             Route::get('buy/list/search', 'buyListSearch')->name('buyListSearch');
             Route::get('buy/view', 'buyView')->name('buyView');
-            Route::delete('buy/delete/{id}', 'buyDelete')->name('buyDelete');
-            Route::post('buy/multiple-delete', 'buyMultipleDelete')->name('buyMultipleDelete');
-
-            Route::post('buy/send-confirm/{utr}', 'buySend')->name('buySend');
-            Route::post('buy/cancel-confirm/{utr}', 'buyCancel')->name('buyCancel');
+            Route::post('buy/cancel/{id}', 'buyCancel')->name('buyCancel');
         });
 
         Route::controller(SellController::class)->group(function () {
             Route::get('sell/list', 'sellList')->name('sellList');
             Route::get('sell/list/search', 'sellListSearch')->name('sellListSearch');
             Route::get('sell/view', 'sellView')->name('sellView');
-            Route::delete('sell/delete/{id}', 'sellDelete')->name('sellDelete');
-            Route::post('sell/multiple-delete', 'sellMultipleDelete')->name('sellMultipleDelete');
-
-            Route::post('sell/send-confirm/{utr}', 'sellSend')->name('sellSend');
-            Route::post('sell/cancel-confirm/{utr}', 'sellCancel')->name('sellCancel');
+            Route::post('sell/cancel/{id}', 'sellCancel')->name('sellCancel');
         });
 
         Route::controller(FiatSendGatewayController::class)->group(function () {
@@ -149,10 +121,8 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('fiat-send-gateway/store', 'store')->name('fiatSendGatewayStore');
             Route::get('fiat-send-gateway/edit/{id}', 'edit')->name('fiatSendGatewayEdit');
             Route::put('fiat-send-gateway/update/{id}', 'update')->name('fiatSendGatewayUpdate');
-            Route::post('fiat-send-gateway/status-change', 'statusChange')->name('fiatSendGatewayStatusChange');
+            Route::get('fiat-send-gateway/status/{id}', 'statusChange')->name('fiatSendGatewayStatus');
         });
+
     });
 });
-
-
-

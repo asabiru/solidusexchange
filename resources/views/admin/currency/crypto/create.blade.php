@@ -21,9 +21,7 @@
         </div>
         @if($activeCryptoMethod->code == 'manual')
             <div class="row mx-4">
-            <span class="text-danger"> <i class="fal fa-exclamation-triangle"></i> @lang("You are currently using manual crypto method after creating your crypto currency please add the corresponding crypto address here") <a
-                    target="_blank"
-                    href="{{ route('admin.cryptoMethodSetAddress').'?code=manual' }}">@lang("click here")</a> @lang("to enable seamless exchangeability.")</span>
+            <span class="text-info"> <i class="fal fa-info-circle"></i> @lang("After creating a crypto currency, generate a custodial deposit wallet via the Custodial Wallets section to enable deposits.")</span>
             </div>
         @endif
         <div class="content container-fluid">

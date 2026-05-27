@@ -91,35 +91,14 @@ class PopularCryptoBootstrap extends Command
 
     private function canActivateCurrency(string $code): bool
     {
-        $code = strtoupper(trim($code));
-        $depositProvider = (string) config('exchange_pipeline.deposit_provider', 'active_crypto_method');
-
-        if ($depositProvider !== 'active_crypto_method') {
-            return true;
-        }
-
-        $activeMethod = CryptoMethod::query()->where('status', 1)->first();
-        if (!$activeMethod || $activeMethod->code !== 'crypto_cloud') {
-            return true;
-        }
-
-        return !in_array($code, ['TON', 'USDT_TON'], true);
+        // With custodial HD wallets, all currencies are supported for deposits.
+        // No CryptoCloud restrictions apply.
+        return true;
     }
 
     private function markUnsupportedCurrencies($currencies): void
     {
-        foreach ($currencies as $currency) {
-            if (!$currency instanceof CryptoCurrency) {
-                continue;
-            }
-
-            if ($this->canActivateCurrency($currency->code)) {
-                continue;
-            }
-
-            $currency->status = 0;
-            $currency->last_rate_sync_error = 'Inserted but left inactive because CryptoCloud static wallets do not support this network for auto deposits.';
-            $currency->save();
-        }
+        // No currencies are unsupported with custodial HD wallets.
+        // This method is kept for compatibility but does nothing.
     }
 }

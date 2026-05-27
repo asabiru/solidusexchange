@@ -137,20 +137,6 @@
                     <span class="dropdown-header mt-3">@lang('API Setting')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.cryptoMethodList','admin.cryptoMethodEdit','admin.cryptoMethodSetAddress','admin.exchangeWalletIndex','admin.exchangeWalletCreate','admin.exchangeWalletEdit']) }}"
-                           href="{{ route('admin.cryptoMethodList') }}" data-placement="left">
-                            <i class="fa-light fas fa-cogs nav-icon"></i>
-                            <span class="nav-link-title">@lang("Crypto Methods")</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.exchangeWalletIndex','admin.exchangeWalletCreate','admin.exchangeWalletEdit']) }}"
-                           href="{{ route('admin.exchangeWalletIndex') }}" data-placement="left">
-                            <i class="bi-wallet2 nav-icon"></i>
-                            <span class="nav-link-title">@lang("Exchange Wallets")</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.exchangePayoutIndex']) }}"
                            href="{{ route('admin.exchangePayoutIndex') }}" data-placement="left">
                             <i class="bi-cash-stack nav-icon"></i>
@@ -293,21 +279,6 @@
                         </a>
                     </div>
 
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.payment.log']) }}"
-                           href="{{ route('admin.payment.log') }}" data-placement="left">
-                            <i class="bi bi-credit-card-2-front nav-icon"></i>
-                            <span class="nav-link-title">@lang("Payment Log")</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.payment.pending']) }}"
-                           href="{{ route('admin.payment.pending') }}" data-placement="left">
-                            <i class="bi bi-cash nav-icon"></i>
-                            <span class="nav-link-title">@lang("Payment Request")</span>
-                        </a>
-                    </div>
-
                     <span class="dropdown-header mt-3"> @lang("Ticket Panel")</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
@@ -334,16 +305,6 @@
                             <a class="nav-link {{ request()->is('admin/tickets/closed') ? 'active' : '' }}"
                                href="{{ route('admin.ticket', 'closed') }}">@lang("Closed Ticket")</a>
                         </div>
-                    </div>
-
-                    <span class="dropdown-header mt-3">@lang('Subscribers')</span>
-                    <small class="bi-three-dots nav-subtitle-replacer"></small>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.subscriber.index','admin.subscriber.mail']) }}"
-                           href="{{ route('admin.subscriber.index') }}" data-placement="left">
-                            <i class="fa-light fa-mail-bulk nav-icon"></i>
-                            <span class="nav-link-title">@lang("Subscriber")</span>
-                        </a>
                     </div>
 
                     <span class="dropdown-header mt-3"> @lang('Kyc Management')</span>
@@ -429,45 +390,6 @@
 
                     <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.announcement']) }}"
-                           href="{{ route('admin.announcement') }}" data-placement="left">
-                            <i class="fal fa-bullhorn nav-icon"></i>
-                            <span class="nav-link-title">@lang('Announcement')</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.coinAnnounceList','admin.coinAnnounceCreate','admin.coinAnnounceEdit']) }}"
-                           href="{{ route('admin.coinAnnounceList') }}" data-placement="left">
-                            <i class="fal fa-scroll nav-icon"></i>
-                            <span class="nav-link-title">@lang('Coin Announce')</span>
-                        </a>
-                    </div>
-
-                    <div
-                        class="nav-item {{ menuActive(['admin.payment.methods', 'admin.deposit.manual.index',
-                         'admin.fiatSendGatewayIndex'.'admin.fiatSendGatewayCreate','admin.fiatSendGatewayEdit'], 3) }}">
-                        <a class="nav-link dropdown-toggle"
-                           href="#navbarVerticalGatewayMenu"
-                           role="button"
-                           data-bs-toggle="collapse"
-                           data-bs-target="#navbarVerticalGatewayMenu"
-                           aria-expanded="false"
-                           aria-controls="navbarVerticalGatewayMenu">
-                            <i class="bi-briefcase nav-icon"></i>
-                            <span class="nav-link-title">@lang('Payment Setting')</span>
-                        </a>
-                        <div id="navbarVerticalGatewayMenu"
-                             class="nav-collapse collapse {{ menuActive(['admin.payment.methods', 'admin.deposit.manual.index',
-                             'admin.fiatSendGatewayIndex','admin.fiatSendGatewayCreate','admin.fiatSendGatewayEdit'], 2) }}"
-                             data-bs-parent="#navbarVerticalGatewayMenu">
-                            <a class="nav-link {{ menuActive(['admin.payment.methods']) }}"
-                               href="{{ route('admin.payment.methods') }}">@lang('Payment Gateway')</a>
-                            <a class="nav-link {{ menuActive(['admin.deposit.manual.index']) }}"
-                               href="{{ route('admin.deposit.manual.index') }}">@lang('Manual Gateway')</a>
-
-                            <a class="nav-link {{ menuActive(['admin.fiatSendGatewayIndex']) }}"
-                               href="{{ route('admin.fiatSendGatewayIndex') }}">@lang('Fiat Send Gateway')</a>
-                        </div>
-                    </div>
 
 
                     <span class="dropdown-header mt-3">@lang("Themes Settings")</span>

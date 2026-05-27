@@ -39,6 +39,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | TON Jetton Contracts
+    |--------------------------------------------------------------------------
+    |
+    | Jetton master contracts for token monitoring on TON.
+    | USDT_TON: EQCxF6145v3R7rU4EoLmD5JD3t4c2GqBv5vL6cRt5Qq7Hv2m (official Tether)
+    */
+    'ton_jettons' => [
+        'USDT_TON' => env('CUSTODIAL_USDT_TON_JETTON', 'EQCxF6145v3R7rU4EoLmD5JD3t4c2GqBv5vL6cRt5Qq7Hv2m'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | TRC20 Token Contract Addresses
     |--------------------------------------------------------------------------
     */
@@ -60,6 +72,7 @@ return [
         'TRX' => (int) env('CUSTODIAL_MIN_CONF_TRX', 20),
         'SOL' => (int) env('CUSTODIAL_MIN_CONF_SOL', 32),
         'TON' => (int) env('CUSTODIAL_MIN_CONF_TON', 1),
+        'USDT_TON' => (int) env('CUSTODIAL_MIN_CONF_USDT_TON', 1),
     ],
 
     'scan_interval_seconds' => (int) env('CUSTODIAL_SCAN_INTERVAL', 30),

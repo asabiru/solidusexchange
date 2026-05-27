@@ -43,6 +43,7 @@ class HdWalletService
         'TRX'     => 195,
         'SOL'     => 501,
         'TON'     => 607,
+        'USDT_TON'   => 607,  // TON jetton — same chain as TON
         'USDT'    => 60,      // ERC20
         'USDT_TRC20' => 195,  // TRC20
         'USDT_BSC'   => 60,   // BEP20
@@ -78,6 +79,7 @@ class HdWalletService
         $code = strtoupper(trim($code));
 
         if (str_ends_with($code, '_TRC20') || $code === 'TRX')  return 'TRX';
+        if ($code === 'USDT_TON' || $code === 'TON')            return 'TON';
         if (str_ends_with($code, '_BSC') || $code === 'BNB')    return 'BNB';
         if (str_ends_with($code, '_ARB') || $code === 'ARB')    return 'ETH';
         if (str_ends_with($code, '_OPT') || $code === 'OP')     return 'ETH';
@@ -1005,33 +1007,133 @@ class HdWalletService
             $headers['X-API-Key'] = $apiKey;
         }
 
-        $response = Http::timeout(10)->withHeaders($headers)
-            ->get("{$baseUrl}/getTransactions", [
-                'address' => $wallet->address,
-                'limit'   => 10,
-            ]);
+        $deposits = [];
 
-        if (!$response->successful()) {
+        // Check native TON deposits
+        if ($wallet->currency_code === 'TON') {
+            $response = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getTransactions", [
+                    'address' => $wallet->address,
+                    'limit'   => 10,
+                ]);
+
+            if ($response->successful()) {
+                $result = $response->json('result', []);
+
+                foreach ($result as $tx) {
+                    $inMsg = $tx['in_msg'] ?? [];
+                    $dest = $inMsg['destination'] ?? '';
+                    $value = (float)($inMsg['value'] ?? 0) / 1e9;
+
+                    if (strcasecmp($dest, $wallet->address) === 0 && $value > 0) {
+                        $deposits[] = [
+                            'tx_id'         => $tx['hash'] ?? null,
+                            'amount'        => $value,
+                            'confirmations' => 1,
+                            'confirmed'     => true,
+                            'currency_code' => 'TON',
+                        ];
+                    }
+                }
+            }
+        }
+
+        // Check USDT_TON jetton deposits
+        if ($wallet->currency_code === 'USDT_TON') {
+            $deposits = $this->checkTonJettonDeposits($wallet, $baseUrl, $headers);
+        }
+
+        return $deposits;
+    }
+
+    /**
+     * Check USDT (jetton) deposits on TON using toncenter API.
+     * Jetton transfers on TON are messages to the jetton wallet with a forwarded payload.
+     * We use tonapi.io or toncenter to detect incoming jetton transfers.
+     */
+    private function checkTonJettonDeposits(CustodialWallet $wallet, string $baseUrl, array $headers): array
+    {
+        $jettonMaster = config('custodial.ton_jettons.USDT_TON', '');
+        if (empty($jettonMaster)) {
+            Log::warning("Custodial: USDT_TON jetton master contract not configured");
             return [];
         }
 
-        $result = $response->json('result', []);
         $deposits = [];
 
-        foreach ($result as $tx) {
-            $inMsg = $tx['in_msg'] ?? [];
-            $dest = $inMsg['destination'] ?? '';
-            $value = (float)($inMsg['value'] ?? 0) / 1e9;
+        // Use toncenter jetton API to get transfers to this address
+        // First, resolve the jetton wallet address for our custodial address
+        try {
+            // Get jetton wallet address for our custodial wallet
+            $jettonWalletResp = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getJettonWallet", [
+                    'address'   => $wallet->address,
+                    'jetton_id' => $jettonMaster,
+                ]);
 
-            if (strcasecmp($dest, $wallet->address) === 0 && $value > 0) {
-                $deposits[] = [
-                    'tx_id'         => $tx['hash'] ?? null,
-                    'amount'        => $value,
-                    'confirmations' => 1,
-                    'confirmed'     => true,
-                    'currency_code' => 'TON',
-                ];
+            if (!$jettonWalletResp->successful()) {
+                Log::warning("Custodial: failed to resolve USDT_TON jetton wallet for {$wallet->address}");
+                return [];
             }
+
+            $jettonWalletAddress = $jettonWalletResp->json('result.wallet_address', '');
+            if (empty($jettonWalletAddress)) {
+                return [];
+            }
+
+            // Now check transactions on the jetton wallet
+            $txResp = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getTransactions", [
+                    'address' => $jettonWalletAddress,
+                    'limit'   => 10,
+                ]);
+
+            if (!$txResp->successful()) {
+                return [];
+            }
+
+            $txs = $txResp->json('result', []);
+
+            foreach ($txs as $tx) {
+                $inMsg = $tx['in_msg'] ?? [];
+                $msgData = $inMsg['msg_data'] ?? '';
+                $value = 0;
+
+                // Jetton transfer: in_msg contains the transfer notification
+                // The actual amount is in the message payload (jetton_transfer body)
+                // toncenter returns decoded jetton amounts in 'amount' for jetton wallets
+                if (isset($inMsg['destination']) && strcasecmp($inMsg['destination'], $jettonWalletAddress) === 0) {
+                    // For jetton transfers, the value in the in_msg is the TON fee (nanotons)
+                    // The actual jetton amount is decoded from the message body
+                    // toncenter API v2 provides 'decoded_body' for jetton transfers
+                    $decodedBody = $tx['out_msgs'][0]['decoded_body'] ?? $inMsg['decoded_body'] ?? null;
+
+                    if ($decodedBody && isset($decodedBody['jetton_amount'])) {
+                        $value = (float)$decodedBody['jetton_amount'] / 1e6; // USDT has 6 decimals
+                    } elseif (isset($inMsg['source']) && !empty($inMsg['value'])) {
+                        // Fallback: try to extract from message data
+                        // Some APIs return the jetton amount in a different field
+                        $msgValue = (float)($inMsg['value'] ?? 0);
+                        // If value looks like a jetton amount (6 decimals, > 1000 nanotokens)
+                        if ($msgValue > 1e6) {
+                            $value = $msgValue / 1e6;
+                        }
+                    }
+                }
+
+                if ($value > 0) {
+                    $deposits[] = [
+                        'tx_id'         => $tx['hash'] ?? ($inMsg['hash'] ?? null),
+                        'amount'        => $value,
+                        'confirmations' => 1,
+                        'confirmed'     => true,
+                        'currency_code' => 'USDT_TON',
+                        'source_address' => $inMsg['source'] ?? null,
+                    ];
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::error("Custodial: USDT_TON jetton deposit check failed: " . $e->getMessage());
         }
 
         return $deposits;
