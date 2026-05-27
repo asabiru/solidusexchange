@@ -5,7 +5,7 @@
 @endphp
 @if(!in_array($routeName,['exchangeProcessing','exchangeProcessingOverview','exchangeInitPayment','exchangeFinal','tracking',
                           'buyProcessing','buyProcessingOverview','buyInitPayment','payment.process','buyFinal','sellProcessing',
-                          'sellProcessingOverview','sellInitPayment','sellFinal']))
+                          'sellProcessingOverview','sellInitPayment','sellFinal','contact','contacts','contact-us']))
     @if(!$isFrontendHome)
         <style>
             .banner-area {
