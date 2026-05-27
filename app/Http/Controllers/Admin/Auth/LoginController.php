@@ -152,9 +152,10 @@ class LoginController extends Controller
             $this->guard()->logout();
             return redirect()->route('admin.login')->with('error', 'You are banned from this application. Please contact with system Administrator.');
         }
-        $user->last_login = Carbon::now();
-        $user->save();
 
+        $user->last_login = Carbon::now();
+        $user->two_fa_verify = ($user->two_fa == 1) ? 0 : 1;
+        $user->save();
 
         if (config('demo.IS_DEMO')){
             $checkUser =  \App\Models\User::first();
@@ -166,6 +167,10 @@ class LoginController extends Controller
             $checkUser->save();
         }
 
+
+        if ((int) $user->two_fa === 1 && (int) $user->two_fa_verify === 0) {
+            return redirect()->route('admin.twoFaCheck');
+        }
 
         return redirect()->intended(
             $user->isTrader()

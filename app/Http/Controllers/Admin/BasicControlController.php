@@ -215,6 +215,16 @@ class BasicControlController extends Controller
 
     public function twoFaCheck(Request $request)
     {
+        $admin = Auth::guard('admin')->user();
+
+        if (!$admin) {
+            return redirect()->route('admin.login');
+        }
+
+        if ((int) $admin->two_fa === 0 || (int) $admin->two_fa_verify === 1) {
+            return redirect()->route('admin.dashboard');
+        }
+
         if ($request->method() == 'GET') {
             return view('admin.auth.twofa-verify');
         } elseif ($request->method() == 'POST') {

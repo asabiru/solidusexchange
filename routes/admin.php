@@ -77,7 +77,9 @@ Route::get('schedule-run', function () {
 
 Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
-    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])->middleware('throttle:two-fa')->name('twoFaCheck');
+    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])
+        ->middleware(['auth:admin', 'throttle:two-fa'])
+        ->name('twoFaCheck');
 
     Route::get('/themeMode/{themeType?}', function ($themeType = 'true') {
         session()->put('themeMode', $themeType);
