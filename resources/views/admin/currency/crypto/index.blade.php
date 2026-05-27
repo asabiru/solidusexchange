@@ -294,6 +294,7 @@
                                 <th scope="col">@lang('Network Fee')</th>
                                 <th scope="col">@lang('Min-Max Send')</th>
                                 <th scope="col">@lang('Status')</th>
+                                <th scope="col">@lang('Homepage')</th>
                                 <th scope="col">@lang('Created At')</th>
                                 <th scope="col">@lang('Action')</th>
                             </tr>
@@ -397,6 +398,7 @@
                     {data: 'network_fee', name: 'network_fee'},
                     {data: 'min_max_send', name: 'min_max_send'},
                     {data: 'status', name: 'status'},
+                    {data: 'show_on_homepage', name: 'show_on_homepage'},
                     {data: 'created_at', name: 'created_at'},
                     {data: 'action', name: 'action'},
                 ],

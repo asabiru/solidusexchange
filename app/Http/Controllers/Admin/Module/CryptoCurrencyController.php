@@ -175,6 +175,17 @@ class CryptoCurrencyController extends Controller
                   </span>';
                 }
             })
+            ->addColumn('show_on_homepage', function ($item) {
+                if ($item->show_on_homepage) {
+                    return '<span class="badge bg-soft-info text-info">
+                    <span class="legend-indicator bg-info"></span>' . trans('On Homepage') . '
+                  </span>';
+                } else {
+                    return '<span class="badge bg-soft-secondary text-body">
+                    <span class="legend-indicator bg-secondary"></span>' . trans('Hidden') . '
+                  </span>';
+                }
+            })
             ->addColumn('created_at', function ($item) {
                 return dateTime($item->created_at, basicControl()->date_time_format);
             })
@@ -213,7 +224,7 @@ class CryptoCurrencyController extends Controller
                 $html .= '</div>';
                 return $html;
             })
-            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'created_at', 'action'])
+            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'show_on_homepage', 'created_at', 'action'])
             ->make(true);
     }
 
@@ -345,6 +356,8 @@ class CryptoCurrencyController extends Controller
                             $currency->update([
                                 'rate' => $apiRes['rate'],
                                 'usd_rate' => $apiRes['usd_rate'],
+                                'change_24h' => $apiRes['change_24h'] ?? null,
+                                'sparkline_7d' => $apiRes['sparkline_7d'] ?? null,
                                 'last_rate_sync_at' => now(),
                                 'last_rate_sync_error' => null,
                             ]);

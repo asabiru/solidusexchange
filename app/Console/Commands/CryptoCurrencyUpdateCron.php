@@ -42,6 +42,8 @@ class CryptoCurrencyUpdateCron extends Command
                         $currency->update([
                             'rate' => $apiRes['rate'],
                             'usd_rate' => $apiRes['usd_rate'],
+                            'change_24h' => $apiRes['change_24h'] ?? null,
+                            'sparkline_7d' => $apiRes['sparkline_7d'] ?? null,
                             'last_rate_sync_at' => now(),
                             'last_rate_sync_error' => null,
                         ]);

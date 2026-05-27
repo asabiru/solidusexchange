@@ -232,6 +232,26 @@
                                                 @enderror
                                             </label>
 
+                                            <label class="row form-check form-switch my-4"
+                                                   for="show_on_homepage">
+                                            <span class="col-8 col-sm-9 ms-0">
+                                              <span class="d-block text-dark">@lang("Show on Homepage")</span>
+                                              <span
+                                                  class="d-block fs-5">@lang("Display this currency in the rates table and popular cryptos sections on the homepage.")</span>
+                                            </span>
+                                                <span class="col-4 col-sm-3 text-end">
+                                                    <input type="hidden" value="0" name="show_on_homepage"/>
+                                                    <input
+                                                        class="form-check-input @error('show_on_homepage') is-invalid @enderror"
+                                                        type="checkbox" name="show_on_homepage"
+                                                        id="show_on_homepage" value="1"
+                                                        {{old('show_on_homepage', $currency->show_on_homepage ? '1' : '0') == '1' ? 'checked':''}}>
+                                                </span>
+                                                @error('show_on_homepage')
+                                                <span class="invalid-feedback d-block">{{ $message }}</span>
+                                                @enderror
+                                            </label>
+
                                             <div class="mb-3">
                                                 <label class="form-label">@lang('Choose Image')</label>
                                                 <div class="col-md-4 mb-3 mb-md-0">

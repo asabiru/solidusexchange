@@ -1,10 +1,15 @@
 @php
-    $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)->orderBy('sort_by', 'asc')->limit(10)->get();
+    $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)
+        ->where('show_on_homepage', 1)
+        ->orderBy('sort_by', 'asc')
+        ->limit(10)
+        ->get();
     if($cryptoCurrencies->isEmpty()) {
         $cryptoCurrencies = collect();
     }
     $lastSync = \App\Models\CryptoCurrency::where('status', 1)->whereNotNull('last_rate_sync_at')->max('last_rate_sync_at');
     $syncAgo = $lastSync ? \Carbon\Carbon::parse($lastSync)->diffInSeconds(now()) : null;
+    $baseCurrency = strtoupper(basicControl()->base_currency ?? 'RUB');
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
@@ -26,21 +31,34 @@
                 @foreach($cryptoCurrencies as $currency)
                 @foreach([1,2] as $duplicate)
                 <div class="ticker-item">
-                    <span class="ticker-pair">{{ $currency->code }}/USD</span>
-                    <span class="ticker-price">{{ formatCryptoRate((float)($currency->usd_rate ?? $currency->rate)) }}</span>
-                    <span class="ticker-change {{ rand(0,1) ? 'positive' : 'negative' }}">
-                        @if(rand(0,1))
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                            <polyline points="17 6 23 6 23 12"></polyline>
-                        </svg>
+                    @php
+                        $isStablecoin = $currency->is_stablecoin;
+                        $tickerPrice = $isStablecoin
+                            ? number_format((float)($currency->rate ?? $currency->usd_rate), 2, '.', ' ')
+                            : formatCryptoRate((float)($currency->usd_rate ?? $currency->rate));
+                        $tickerCurrency = $isStablecoin ? $baseCurrency : 'USD';
+                        $change24h = $currency->change_24h;
+                        $isPositive = $change24h !== null && $change24h >= 0;
+                    @endphp
+                    <span class="ticker-pair">{{ $currency->code }}/{{ $tickerCurrency }}</span>
+                    <span class="ticker-price">{{ $tickerPrice }}</span>
+                    <span class="ticker-change {{ $change24h !== null ? ($isPositive ? 'positive' : 'negative') : '' }}">
+                        @if($change24h !== null)
+                            @if($isPositive)
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                                <polyline points="17 6 23 6 23 12"></polyline>
+                            </svg>
+                            @else
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
+                                <polyline points="17 18 23 18 23 12"></polyline>
+                            </svg>
+                            @endif
+                            {{ number_format(abs($change24h), 2) }}%
                         @else
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"></polyline>
-                            <polyline points="17 18 23 18 23 12"></polyline>
-                        </svg>
+                            —
                         @endif
-                        {{ number_format((rand(-5, 5) / 100), 2) }}%
                     </span>
                 </div>
                 @endforeach
@@ -53,9 +71,9 @@
             <div class="rates-table">
                 <div class="table-header">
                     <div class="table-cell">Пара</div>
-                    <div class="table-cell">Цена, USD</div>
+                    <div class="table-cell">Цена</div>
                     <div class="table-cell">24ч</div>
-                    <div class="table-cell">График</div>
+                    <div class="table-cell">7 дней</div>
                     <div class="table-cell">Обменять</div>
                 </div>
 
@@ -67,6 +85,16 @@
                     </div>
                 @else
                     @foreach($cryptoCurrencies as $currency)
+                    @php
+                        $isStablecoin = $currency->is_stablecoin;
+                        $displayPrice = $isStablecoin
+                            ? number_format((float)($currency->rate ?? $currency->usd_rate), 2, '.', ' ')
+                            : formatCryptoRate((float)($currency->usd_rate ?? $currency->rate));
+                        $priceCurrency = $isStablecoin ? $baseCurrency : 'USD';
+                        $change24h = $currency->change_24h;
+                        $isPositive = $change24h !== null && $change24h >= 0;
+                        $sparkline = $currency->sparkline_7d;
+                    @endphp
                 <div class="table-row">
                     <div class="table-cell" data-label="Пара">
                         <div class="currency-info">
@@ -83,24 +111,54 @@
                             </div>
                         </div>
                     </div>
-                    <div class="table-cell" data-label="Цена, USD">
-                        <span class="price-value">{{ formatCryptoRate((float)($currency->usd_rate ?? $currency->rate)) }}</span>
+                    <div class="table-cell" data-label="Цена">
+                        <span class="price-value">{{ $displayPrice }} {{ $priceCurrency }}</span>
                     </div>
                     <div class="table-cell" data-label="24ч">
-                        <span class="change-value {{ rand(0,1) ? 'positive' : 'negative' }}">
-                            {{ number_format((rand(-5, 5) / 100), 2) }}%
+                        @if($change24h !== null)
+                        <span class="change-value {{ $isPositive ? 'positive' : 'negative' }}">
+                            {{ $isPositive ? '+' : '' }}{{ number_format($change24h, 2) }}%
                         </span>
+                        @else
+                        <span class="change-value" style="opacity:0.4">—</span>
+                        @endif
                     </div>
-                    <div class="table-cell" data-label="График">
+                    <div class="table-cell" data-label="7 дней">
                         <div class="mini-chart">
-                            <svg width="80" height="30" viewBox="0 0 80 30">
-                                <polyline
-                                    fill="none"
-                                    stroke="{{ rand(0,1) ? '#e8c9a0' : '#c9786a' }}"
-                                    stroke-width="2"
-                                    points="0,15 8,10 16,20 24,12 32,18 40,8 48,15 56,22 64,12 72,18 80,14"
-                                />
-                            </svg>
+                            @if($sparkline && count($sparkline) > 1)
+                                @php
+                                    $min = min($sparkline);
+                                    $max = max($sparkline);
+                                    $range = $max - $min ?: 1;
+                                    $points = [];
+                                    $w = 80;
+                                    $h = 30;
+                                    $pad = 2;
+                                    foreach ($sparkline as $i => $val) {
+                                        $x = $pad + ($i / (count($sparkline) - 1)) * ($w - 2 * $pad);
+                                        $y = $h - $pad - (($val - $min) / $range) * ($h - 2 * $pad);
+                                        $points[] = round($x, 1) . ',' . round($y, 1);
+                                    }
+                                    $pointStr = implode(' ', $points);
+                                    $lastVal = end($sparkline);
+                                    $firstVal = reset($sparkline);
+                                    $chartColor = $lastVal >= $firstVal ? '#e8c9a0' : '#c9786a';
+                                @endphp
+                                <svg width="{{ $w }}" height="{{ $h }}" viewBox="0 0 {{ $w }} {{ $h }}">
+                                    <polyline
+                                        fill="none"
+                                        stroke="{{ $chartColor }}"
+                                        stroke-width="1.5"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        points="{{ $pointStr }}"
+                                    />
+                                </svg>
+                            @else
+                                <svg width="80" height="30" viewBox="0 0 80 30">
+                                    <line x1="5" y1="15" x2="75" y2="15" stroke="var(--color-text-secondary)" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
+                                </svg>
+                            @endif
                         </div>
                     </div>
                     <div class="table-cell" data-label="Обменять">

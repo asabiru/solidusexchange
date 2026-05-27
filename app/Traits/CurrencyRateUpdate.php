@@ -50,10 +50,16 @@ trait CurrencyRateUpdate
                 continue;
             }
 
+            $normalizedCode = $this->normalizeBybitCurrencyCode($code);
+            $change24h = $this->resolveBybit24hChange($normalizedCode, $tickers);
+            $sparkline7d = $this->resolveBybitSparkline($normalizedCode, $baseUrl);
+
             $results[] = [
                 'code' => $code,
                 'usd_rate' => $usdRate,
                 'rate' => $usdRate * $baseRateFactor,
+                'change_24h' => $change24h,
+                'sparkline_7d' => $sparkline7d,
             ];
         }
 
@@ -141,6 +147,46 @@ trait CurrencyRateUpdate
 
         $lastPrice = (float) ($ticker->lastPrice ?? 0);
         return $lastPrice > 0 ? $lastPrice : null;
+    }
+
+    protected function resolveBybit24hChange(string $code, $tickers): ?float
+    {
+        if (in_array($code, ['USD', 'USDT'], true)) {
+            return 0.0;
+        }
+
+        $ticker = $tickers->get(strtoupper("{$code}USDT"));
+        if ($ticker && isset($ticker->price24hPcnt)) {
+            return round((float) $ticker->price24hPcnt * 100, 2);
+        }
+
+        return null;
+    }
+
+    protected function resolveBybitSparkline(string $code, string $baseUrl): ?array
+    {
+        if (in_array($code, ['USD', 'USDT'], true)) {
+            return null;
+        }
+
+        try {
+            $symbol = strtoupper("{$code}USDT");
+            $url = "{$baseUrl}/v5/market/kline?category=spot&symbol={$symbol}&interval=240&limit=42";
+            $response = json_decode(BasicCurl::curlGetRequest($url));
+
+            if (($response->retCode ?? 1) !== 0 || !isset($response->result->list) || !is_array($response->result->list)) {
+                return null;
+            }
+
+            $prices = array_map(function ($kline) {
+                return (float) $kline[4]; // close price
+            }, $response->result->list);
+
+            // API returns newest first, reverse to chronological order
+            return array_reverse($prices);
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     protected function resolveBybitBaseRateFactor(string $convert, $tickers): float
