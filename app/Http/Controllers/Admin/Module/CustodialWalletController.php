@@ -24,6 +24,20 @@ class CustodialWalletController extends Controller
 
         return DataTables::of($wallets)
             ->addColumn('address_short', fn($w) => substr($w->address, 0, 8) . '...' . substr($w->address, -6))
+            ->addColumn('provider_badge', function ($w) {
+                return match ($w->provider) {
+                    'hd_wallet' => '<span class="badge bg-soft-primary text-primary">HD Wallet</span>',
+                    'crypto_cloud' => '<span class="badge bg-soft-info text-info">CryptoCloud</span>',
+                    'manual' => '<span class="badge bg-soft-secondary text-body">Manual</span>',
+                    default => '<span class="badge bg-soft-secondary text-body">' . $w->provider . '</span>',
+                };
+            })
+            ->addColumn('derivation', function ($w) {
+                if ($w->derivation_path) {
+                    return '<small class="text-muted">' . $w->derivation_path . '</small><br><small>Index: ' . ($w->hd_wallet_index ?? '?') . '</small>';
+                }
+                return '<span class="text-muted">—</span>';
+            })
             ->addColumn('status_badge', function ($w) {
                 return match ($w->status) {
                     'active' => '<span class="badge bg-soft-success text-success">Active</span>',
@@ -57,7 +71,7 @@ class CustodialWalletController extends Controller
                 }
                 return $html;
             })
-            ->rawColumns(['status_badge', 'assignment', 'last_deposit', 'action'])
+            ->rawColumns(['provider_badge', 'derivation', 'status_badge', 'assignment', 'last_deposit', 'action'])
             ->make(true);
     }
 

@@ -11,16 +11,21 @@ class CustodialWallet extends Model
 
     protected $fillable = [
         'currency_code', 'network', 'address', 'derivation_path',
+        'hd_wallet_index', 'encrypted_private_key',
         'provider', 'provider_reference', 'purpose', 'status',
         'assigned_exchange_id', 'assigned_at',
         'last_deposit_at', 'last_deposit_tx_id', 'last_deposit_amount',
+        'last_checked_at',
     ];
 
     protected $casts = [
         'assigned_at' => 'datetime',
         'last_deposit_at' => 'datetime',
         'last_deposit_amount' => 'decimal:8',
+        'last_checked_at' => 'datetime',
     ];
+
+    protected $hidden = ['encrypted_private_key'];
 
     public function assignedExchange()
     {

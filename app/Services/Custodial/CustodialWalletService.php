@@ -2,17 +2,24 @@
 
 namespace App\Services\Custodial;
 
-use App\Models\CryptoMethod;
 use App\Models\CustodialWallet;
 use App\Models\ExchangeRequest;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class CustodialWalletService
 {
+    private HdWalletService $hdWallet;
+
+    public function __construct(HdWalletService $hdWallet)
+    {
+        $this->hdWallet = $hdWallet;
+    }
+
     /**
      * Reserve a custodial wallet for an exchange request.
-     * If no available wallet exists, generate one via the active crypto provider.
+     * If no available wallet exists, generate one via HD derivation.
      */
     public function reserveForExchange(ExchangeRequest $exchange, string $currencyCode): CustodialWallet
     {
@@ -22,7 +29,6 @@ class CustodialWalletService
         }
 
         return DB::transaction(function () use ($exchange, $currencyCode) {
-            // Try to find an available wallet first
             $wallet = CustodialWallet::forCurrency($currencyCode)
                 ->available()
                 ->orderBy('id')
@@ -30,7 +36,6 @@ class CustodialWalletService
                 ->first();
 
             if (!$wallet) {
-                // Generate a new wallet via the active crypto provider
                 $wallet = $this->generateWallet($currencyCode);
             }
 
@@ -55,7 +60,7 @@ class CustodialWalletService
             return $existing;
         }
 
-        return DB::transaction(function () use ($currencyCode) {
+        return DB::transaction(function () use ($sellRequest, $currencyCode) {
             $wallet = CustodialWallet::forCurrency($currencyCode)
                 ->available()
                 ->where('purpose', 'deposit')
@@ -66,6 +71,10 @@ class CustodialWalletService
             if (!$wallet) {
                 $wallet = $this->generateWallet($currencyCode);
             }
+
+            $wallet->assigned_exchange_id = $sellRequest->id;
+            $wallet->assigned_at = now();
+            $wallet->save();
 
             return $wallet;
         });
@@ -83,40 +92,39 @@ class CustodialWalletService
     }
 
     /**
-     * Generate a new deposit wallet via the active crypto provider.
-     * Uses CryptoCloud (or whatever is active) for address generation.
-     * Monitoring and AML are handled by our own services.
+     * Generate a new deposit wallet using HD derivation from our mnemonic.
+     * The private key is encrypted and stored for future withdrawals.
      */
     public function generateWallet(string $currencyCode): CustodialWallet
     {
-        $cryptoMethod = CryptoMethod::where('status', 1)->first();
-        if (!$cryptoMethod) {
-            throw new RuntimeException('No active crypto method configured.');
+        $code = strtoupper(trim($currencyCode));
+
+        try {
+            $result = $this->hdWallet->generateAddress($code);
+        } catch (\Throwable $e) {
+            Log::error("HD wallet generation failed for {$code}: " . $e->getMessage());
+            throw new RuntimeException("Failed to generate HD wallet for {$code}: " . $e->getMessage());
         }
 
-        $serviceClass = 'App\\Services\\CryptoMethod\\' . $cryptoMethod->code . '\\Service';
-        if (!class_exists($serviceClass)) {
-            throw new RuntimeException("Crypto method service [{$cryptoMethod->code}] is not available.");
-        }
-
-        $service = app($serviceClass);
-        $result = $service->prepareData($cryptoMethod, $currencyCode, 'exchange', [
-            'structured_response' => true,
-        ]);
-
-        $address = $result['address'] ?? (is_string($result) ? $result : null);
+        $address = $result['address'];
         if (blank($address)) {
-            throw new RuntimeException("Provider [{$cryptoMethod->code}] did not return a wallet address for {$currencyCode}.");
+            throw new RuntimeException("HD derivation did not produce an address for {$code}");
         }
+
+        // Encrypt private key with app key
+        $encryptedKey = $this->encryptPrivateKey($result['private_key']);
 
         return CustodialWallet::create([
-            'currency_code' => strtoupper(trim($currencyCode)),
-            'network' => $result['provider_network'] ?? null,
-            'address' => $address,
-            'provider' => $cryptoMethod->code,
-            'provider_reference' => $result['provider_reference'] ?? null,
-            'purpose' => 'deposit',
-            'status' => 'active',
+            'currency_code'         => $code,
+            'network'               => $this->hdWallet->normalizeCode($code),
+            'address'               => $address,
+            'derivation_path'       => $result['derivation_path'],
+            'hd_wallet_index'       => $result['index'],
+            'encrypted_private_key' => $encryptedKey,
+            'provider'              => 'hd_wallet',
+            'provider_reference'    => null,
+            'purpose'               => 'deposit',
+            'status'                => 'active',
         ]);
     }
 
@@ -134,5 +142,65 @@ class CustodialWalletService
         }
 
         return $this->generateWallet($currencyCode);
+    }
+
+    /**
+     * Decrypt the private key for a wallet (needed for withdrawals).
+     */
+    public function decryptPrivateKey(CustodialWallet $wallet): string
+    {
+        if (empty($wallet->encrypted_private_key)) {
+            throw new RuntimeException("Wallet {$wallet->id} has no encrypted private key");
+        }
+
+        return $this->decryptKey($wallet->encrypted_private_key);
+    }
+
+    /**
+     * Encrypt a private key using AES-256-CBC with the app key.
+     */
+    private function encryptPrivateKey(string $privateKey): string
+    {
+        $appKey = config('app.key');
+        if (empty($appKey)) {
+            throw new RuntimeException('APP_KEY is not set');
+        }
+
+        // Remove "base64:" prefix if present
+        $key = str_starts_with($appKey, 'base64:')
+            ? base64_decode(substr($appKey, 7))
+            : substr($appKey, 0, 32);
+
+        $iv = random_bytes(16);
+        $encrypted = openssl_encrypt($privateKey, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+
+        if ($encrypted === false) {
+            throw new RuntimeException('Failed to encrypt private key: ' . openssl_error_string());
+        }
+
+        return base64_encode($iv . $encrypted);
+    }
+
+    /**
+     * Decrypt a private key.
+     */
+    private function decryptKey(string $encryptedData): string
+    {
+        $appKey = config('app.key');
+        $key = str_starts_with($appKey, 'base64:')
+            ? base64_decode(substr($appKey, 7))
+            : substr($appKey, 0, 32);
+
+        $data = base64_decode($encryptedData);
+        $iv = substr($data, 0, 16);
+        $encrypted = substr($data, 16);
+
+        $decrypted = openssl_decrypt($encrypted, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+
+        if ($decrypted === false) {
+            throw new RuntimeException('Failed to decrypt private key: ' . openssl_error_string());
+        }
+
+        return $decrypted;
     }
 }

@@ -18,13 +18,13 @@ return [
     'ltc_api' => env('CUSTODIAL_LTC_API', 'https://litecoin.space/api'),
 
     // Ethereum / EVM chains (public RPC — free)
-    'eth_rpc' => env('CUSTODIAL_ETH_RPC', 'https://eth.llamarpc.com'),
-    'arb_rpc' => env('CUSTODIAL_ARB_RPC', 'https://arbitrum.llamarpc.com'),
-    'opt_rpc' => env('CUSTODIAL_OPT_RPC', 'https://optimism.llamarpc.com'),
-    'base_rpc' => env('CUSTODIAL_BASE_RPC', 'https://base.llamarpc.com'),
+    'eth_rpc' => env('CUSTODIAL_ETH_RPC', 'https://ethereum-rpc.publicnode.com'),
+    'arb_rpc' => env('CUSTODIAL_ARB_RPC', 'https://arbitrum-rpc.publicnode.com'),
+    'opt_rpc' => env('CUSTODIAL_OPT_RPC', 'https://optimism-rpc.publicnode.com'),
+    'base_rpc' => env('CUSTODIAL_BASE_RPC', 'https://base-rpc.publicnode.com'),
 
     // BNB Smart Chain (public RPC — free)
-    'bsc_rpc' => env('CUSTODIAL_BSC_RPC', 'https://bsc-dataseed.binance.org'),
+    'bsc_rpc' => env('CUSTODIAL_BSC_RPC', 'https://bsc-rpc.publicnode.com'),
 
     // Tron (TronGrid — free tier, API key recommended for higher limits)
     'trx_api' => env('CUSTODIAL_TRX_API', 'https://api.trongrid.io'),
@@ -63,4 +63,16 @@ return [
     ],
 
     'scan_interval_seconds' => (int) env('CUSTODIAL_SCAN_INTERVAL', 30),
+
+    /*
+    |--------------------------------------------------------------------------
+    | HD Wallet Mnemonic
+    |--------------------------------------------------------------------------
+    |
+    | The BIP39 mnemonic or hex seed used for HD wallet derivation.
+    | IMPORTANT: This should NEVER be changed once wallets are generated,
+    | as it would make all existing wallets inaccessible.
+    |
+    */
+    'hd_mnemonic' => env('HD_WALLET_MNEMONIC', ''),
 ];
