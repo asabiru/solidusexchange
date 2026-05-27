@@ -161,6 +161,13 @@
                         </a>
                     </div>
                     <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.custodialWithdrawals','admin.custodialWithdrawalList','admin.custodialWithdrawalCreate']) }}"
+                           href="{{ route('admin.custodialWithdrawals') }}" data-placement="left">
+                            <i class="bi-arrow-up-right nav-icon"></i>
+                            <span class="nav-link-title">@lang("Withdrawals")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.sanctionedIndex','admin.sanctionedAddressList','admin.sanctionedLogs','admin.sanctionedLogsList']) }}"
                            href="{{ route('admin.sanctionedIndex') }}" data-placement="left">
                             <i class="bi-shield-exclamation nav-icon"></i>

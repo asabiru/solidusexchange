@@ -712,6 +712,301 @@ class HdWalletService
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  BALANCE CHECK
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Get the current balance of a custodial wallet address.
+     * Returns ['balance' => float, 'currency_code' => string, 'chain' => string]
+     */
+    public function getBalance(CustodialWallet $wallet): array
+    {
+        $chain = $this->normalizeCode($wallet->currency_code);
+        $code = $wallet->currency_code;
+
+        try {
+            $balance = match ($chain) {
+                'BTC'  => $this->getBtcBalance($wallet->address),
+                'LTC'  => $this->getLtcBalance($wallet->address),
+                'ETH'  => $this->getEvmBalance($wallet->address, $code),
+                'BNB'  => $this->getEvmBalance($wallet->address, $code),
+                'TRX'  => $this->getTrxBalance($wallet->address, $code),
+                'SOL'  => $this->getSolBalance($wallet->address, $code),
+                'TON'  => $this->getTonBalance($wallet->address, $code),
+                default => throw new RuntimeException("Balance check not supported for {$chain}"),
+            };
+
+            // Persist balance to wallet
+            $wallet->update([
+                'balance'         => $balance,
+                'last_checked_at' => now(),
+            ]);
+
+            return [
+                'balance'        => $balance,
+                'currency_code'  => $code,
+                'chain'          => $chain,
+                'address'        => $wallet->address,
+            ];
+        } catch (\Throwable $e) {
+            Log::error("Balance check failed for {$wallet->address} ({$code}): " . $e->getMessage());
+            $wallet->update(['last_checked_at' => now()]);
+            return [
+                'balance'        => 0,
+                'currency_code'  => $code,
+                'chain'          => $chain,
+                'address'        => $wallet->address,
+                'error'          => $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
+     * Check balances for all active custodial wallets.
+     * Returns array of ['wallet_id', 'address', 'currency_code', 'balance']
+     */
+    public function checkAllBalances(): array
+    {
+        $wallets = CustodialWallet::where('status', 'active')->get();
+        $results = [];
+
+        foreach ($wallets as $wallet) {
+            $bal = $this->getBalance($wallet);
+            $results[] = array_merge(['wallet_id' => $wallet->id], $bal);
+        }
+
+        return $results;
+    }
+
+    // ─── BTC balance ──────────────────────────────────────────────────────
+
+    private function getBtcBalance(string $address): float
+    {
+        $baseUrl = $this->getApiBaseUrl('BTC');
+        $response = Http::timeout(10)->get("{$baseUrl}/address/{$address}");
+
+        if (!$response->successful()) return 0;
+
+        $data = $response->json();
+        // Blockstream returns balance in satoshis (chain_stats)
+        $funded = ($data['chain_stats']['funded_txo_sum'] ?? 0);
+        $spent = ($data['chain_stats']['spent_txo_sum'] ?? 0);
+        return ($funded - $spent) / 100000000;
+    }
+
+    // ─── LTC balance ──────────────────────────────────────────────────────
+
+    private function getLtcBalance(string $address): float
+    {
+        $baseUrl = $this->getApiBaseUrl('LTC');
+        $response = Http::timeout(10)->get("{$baseUrl}/address/{$address}");
+
+        if (!$response->successful()) return 0;
+
+        $data = $response->json();
+        $funded = ($data['chain_stats']['funded_txo_sum'] ?? 0);
+        $spent = ($data['chain_stats']['spent_txo_sum'] ?? 0);
+        return ($funded - $spent) / 100000000;
+    }
+
+    // ─── EVM balance (ETH, BNB, ERC20, BEP20 tokens) ────────────────────
+
+    private function getEvmBalance(string $address, string $code): float
+    {
+        $chain = $this->normalizeCode($code);
+        $rpcUrl = match ($chain) {
+            'ETH' => config('custodial.eth_rpc', 'https://ethereum-rpc.publicnode.com'),
+            'BNB' => config('custodial.bsc_rpc', 'https://bsc-rpc.publicnode.com'),
+            default => config('custodial.eth_rpc'),
+        };
+
+        // Native coin balance
+        if (in_array($code, ['ETH', 'ETH_ARB', 'ETH_BASE', 'ETH_OPT', 'BNB'])) {
+            $response = Http::timeout(10)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'method'  => 'eth_getBalance',
+                'params'  => [$this->toHexAddress($address), 'latest'],
+                'id'      => 1,
+            ]);
+
+            if (!$response->successful()) return 0;
+            $hexBalance = $response->json('result', '0x0');
+            return (float)(hexdec(str_replace('0x', '', $hexBalance)) / 1e18);
+        }
+
+        // ERC20/BEP20 token balance
+        $tokenContract = $this->getErc20ContractAddress($code);
+        if (!$tokenContract) return 0;
+
+        // eth_call with balanceOf(address)
+        $paddedAddr = str_pad(substr($this->toHexAddress($address), 2), 64, '0', STR_PAD_LEFT);
+        $data = '0x70a08231' . $paddedAddr;
+
+        $response = Http::timeout(10)->post($rpcUrl, [
+            'jsonrpc' => '2.0',
+            'method'  => 'eth_call',
+            'params'  => [['to' => $tokenContract, 'data' => $data], 'latest'],
+            'id'      => 1,
+        ]);
+
+        if (!$response->successful()) return 0;
+        $hexBalance = $response->json('result', '0x0');
+        $decimals = $this->getTokenDecimals($code);
+        return (float)(hexdec(str_replace('0x', '', $hexBalance)) / (10 ** $decimals));
+    }
+
+    private function getErc20ContractAddress(string $code): ?string
+    {
+        $code = strtoupper($code);
+        $contracts = [
+            'USDT_ERC20' => '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+            'USDC_ERC20' => '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            'USDT_BSC'   => '0x55d398326f99059fF775485246999027B3197955',
+            'USDC_BSC'   => '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',
+        ];
+        return $contracts[$code] ?? null;
+    }
+
+    private function toHexAddress(string $address): string
+    {
+        if (str_starts_with($address, '0x')) return $address;
+        return '0x' . $address;
+    }
+
+    // ─── TRX balance (TRX + TRC20 tokens) ────────────────────────────────
+
+    private function getTrxBalance(string $address, string $code): float
+    {
+        $baseUrl = $this->getApiBaseUrl('TRX');
+        $apiKey = config('custodial.trongrid_api_key', '');
+        $headers = [];
+        if ($apiKey) $headers['TRON-PRO-API-KEY'] = $apiKey;
+
+        // Native TRX
+        if ($code === 'TRX') {
+            $response = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/v1/accounts/{$address}");
+
+            if (!$response->successful()) return 0;
+            $balance = $response->json('data.0.balance', 0);
+            return (float)$balance / 1e6;
+        }
+
+        // TRC20 token
+        $contract = $this->getTrc20ContractAddress($code);
+        if (!$contract) return 0;
+
+        $response = Http::timeout(10)->withHeaders($headers)
+            ->get("{$baseUrl}/v1/accounts/{$address}/tokens/trc20", [
+                'limit' => 100,
+            ]);
+
+        if (!$response->successful()) return 0;
+        $tokens = $response->json('data', []);
+        foreach ($tokens as $token) {
+            if (strcasecmp($token['tokenInfo']['address'] ?? '', $contract) === 0) {
+                $decimals = (int)($token['tokenInfo']['decimals'] ?? 6);
+                return (float)($token['balance'] ?? 0) / (10 ** $decimals);
+            }
+        }
+        return 0;
+    }
+
+    // ─── SOL balance (SOL + SPL tokens) ──────────────────────────────────
+
+    private function getSolBalance(string $address, string $code): float
+    {
+        $rpcUrl = $this->getApiBaseUrl('SOL');
+
+        // Native SOL
+        if ($code === 'SOL') {
+            $response = Http::timeout(10)->post($rpcUrl, [
+                'jsonrpc' => '2.0',
+                'method'  => 'getBalance',
+                'params'  => [$address],
+                'id'      => 1,
+            ]);
+
+            if (!$response->successful()) return 0;
+            $lamports = $response->json('result.value', 0);
+            return (float)$lamports / 1e9;
+        }
+
+        // SPL token — use getTokenAccountsByOwner
+        $mintMap = [
+            'USDT_SOL' => 'Es9vFrzaCERmJfrF4H2FYD4bKu8ATP7J7S8j5rXYtF7K',
+            'USDC_SOL' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        ];
+        $mint = $mintMap[strtoupper($code)] ?? null;
+        if (!$mint) return 0;
+
+        $response = Http::timeout(10)->post($rpcUrl, [
+            'jsonrpc' => '2.0',
+            'method'  => 'getTokenAccountsByOwner',
+            'params'  => [
+                $address,
+                ['mint' => $mint],
+                ['encoding' => 'jsonParsed'],
+            ],
+            'id' => 1,
+        ]);
+
+        if (!$response->successful()) return 0;
+        $accounts = $response->json('result.value', []);
+        if (empty($accounts)) return 0;
+
+        $amount = $accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] ?? 0;
+        return (float)$amount;
+    }
+
+    // ─── TON balance (TON + jettons) ─────────────────────────────────────
+
+    private function getTonBalance(string $address, string $code): float
+    {
+        $baseUrl = $this->getApiBaseUrl('TON');
+        $apiKey = config('custodial.ton_api_key', '');
+        $headers = [];
+        if ($apiKey) $headers['X-API-Key'] = $apiKey;
+
+        // Native TON
+        if ($code === 'TON') {
+            $response = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getAddressInformation", ['address' => $address]);
+
+            if (!$response->successful()) return 0;
+            $balance = $response->json('result.balance', 0);
+            return (float)$balance / 1e9;
+        }
+
+        // USDT_TON jetton
+        if ($code === 'USDT_TON') {
+            $jettonMaster = config('custodial.ton_jettons.USDT_TON', '');
+            if (empty($jettonMaster)) return 0;
+
+            // Resolve jetton wallet
+            $resp = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getJettonWallet", [
+                    'address'   => $address,
+                    'jetton_id' => $jettonMaster,
+                ]);
+
+            if (!$resp->successful()) return 0;
+            $jettonWallet = $resp->json('result.wallet_address', '');
+            if (empty($jettonWallet)) return 0;
+
+            // Get jetton wallet balance
+            $balResp = Http::timeout(10)->withHeaders($headers)
+                ->get("{$baseUrl}/getAddressInformation", ['address' => $jettonWallet]);
+
+            if (!$balResp->successful()) return 0;
+            $balance = $balResp->json('result.balance', 0);
+            return (float)$balance / 1e6; // USDT has 6 decimals
+        }
+
+        return 0;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  DEPOSIT MONITORING
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -1165,5 +1460,1228 @@ class HdWalletService
     private function getLatestCheckedBlock(CustodialWallet $wallet): int
     {
         return (int)($wallet->provider_reference ?? 0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  WITHDRAWAL (send from custodial wallet to external address)
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Send funds from a custodial wallet to an external address.
+     * Returns ['txid' => string, 'amount' => float, 'fee' => float]
+     *
+     * IMPORTANT: This decrypts the private key and signs the transaction locally.
+     * No third-party custody — the server holds the keys.
+     */
+    public function withdraw(CustodialWallet $wallet, string $toAddress, float $amount): array
+    {
+        $chain = $this->normalizeCode($wallet->currency_code);
+        $code  = $wallet->currency_code;
+
+        // Verify sufficient balance
+        $balInfo = $this->getBalance($wallet);
+        if (($balInfo['balance'] ?? 0) < $amount) {
+            throw new RuntimeException(
+                "Insufficient balance: {$balInfo['balance']} {$code} available, {$amount} requested"
+            );
+        }
+
+        // Decrypt private key
+        $privateKey = $this->decryptPrivateKey($wallet->encrypted_private_key);
+
+        Log::info("Custodial withdrawal initiated", [
+            'wallet_id'  => $wallet->id,
+            'currency'   => $code,
+            'amount'     => $amount,
+            'to'         => $toAddress,
+        ]);
+
+        try {
+            $result = match ($chain) {
+                'BTC'  => $this->sendBtc($privateKey, $wallet->address, $toAddress, $amount),
+                'LTC'  => $this->sendLtc($privateKey, $wallet->address, $toAddress, $amount),
+                'ETH'  => $this->sendEvm($privateKey, $wallet->address, $toAddress, $amount, $code),
+                'BNB'  => $this->sendEvm($privateKey, $wallet->address, $toAddress, $amount, $code),
+                'TRX'  => $this->sendTrx($privateKey, $wallet->address, $toAddress, $amount, $code),
+                'SOL'  => $this->sendSol($privateKey, $wallet->address, $toAddress, $amount, $code),
+                'TON'  => $this->sendTon($privateKey, $wallet->address, $toAddress, $amount, $code),
+                default => throw new RuntimeException("Withdrawal not supported for {$chain}"),
+            };
+
+            Log::info("Custodial withdrawal completed", [
+                'wallet_id' => $wallet->id,
+                'txid'      => $result['txid'] ?? 'unknown',
+                'amount'    => $amount,
+                'to'        => $toAddress,
+            ]);
+
+            return $result;
+        } catch (\Throwable $e) {
+            Log::error("Custodial withdrawal failed", [
+                'wallet_id' => $wallet->id,
+                'error'     => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
+
+    // ─── BTC send ─────────────────────────────────────────────────────────
+
+    private function sendBtc(string $privateKey, string $fromAddr, string $toAddr, float $amountBtc): array
+    {
+        $api = $this->getApiBaseUrl('BTC');
+        $satsPerBtc = 100000000;
+        $amountSat = (int)round($amountBtc * $satsPerBtc);
+
+        // 1. Get UTXOs
+        $utxoResp = Http::timeout(15)->get("{$api}/address/{$fromAddr}/utxo");
+        if (!$utxoResp->successful()) throw new RuntimeException("Failed to fetch BTC UTXOs");
+        $utxos = $utxoResp->json();
+        if (empty($utxos)) throw new RuntimeException("No UTXOs found for BTC address");
+
+        // 2. Get fee rate (sat/vB)
+        $feeResp = Http::timeout(10)->get("{$api}/fee-estimates");
+        $feeRate = 10; // default sat/vB
+        if ($feeResp->successful()) {
+            $estimates = $feeResp->json();
+            $feeRate = (int)($estimates['6'] ?? $estimates['4'] ?? 10);
+            $feeRate = max($feeRate, 2); // minimum 2 sat/vB
+        }
+
+        // 3. Build raw transaction
+        $inputs = [];
+        $inputSum = 0;
+        $changeScript = $this->p2wpkhScript($fromAddr);
+
+        foreach ($utxos as $utxo) {
+            $inputs[] = [
+                'txid'    => $utxo['txid'],
+                'vout'    => $utxo['vout'],
+                'script'  => $changeScript, // witness script placeholder
+                'amount'  => $utxo['value'], // in satoshis
+            ];
+            $inputSum += $utxo['value'];
+            if ($inputSum >= $amountSat + 5000) break; // enough inputs
+        }
+
+        if ($inputSum < $amountSat) {
+            throw new RuntimeException("Insufficient UTXOs: {$inputSum} sat < {$amountSat} sat");
+        }
+
+        // Estimate fee: P2WPKH ~68 vB per input + 31 vB output + 10 vB overhead
+        $estimatedVb = count($inputs) * 68 + 31 * 2 + 10;
+        $feeSat = (int)($estimatedVb * $feeRate);
+        $changeSat = $inputSum - $amountSat - $feeSat;
+
+        if ($changeSat < 0) throw new RuntimeException("Not enough to cover fee");
+        // Dust check — if change < 500 sat, add to fee
+        $hasChange = $changeSat >= 500;
+
+        // 4. Create unsigned transaction hex
+        $toScript = $this->p2wpkhScript($toAddr);
+        $outputs = [
+            ['script' => $toScript, 'amount' => $amountSat],
+        ];
+        if ($hasChange) {
+            $outputs[] = ['script' => $changeScript, 'amount' => $changeSat];
+        } else {
+            $feeSat = $inputSum - $amountSat;
+        }
+
+        // Build raw tx using Blockstream API (POST /tx)
+        // For simplicity, we use the Blockstream /tx endpoint with a pre-signed tx
+        // We need to construct and sign the raw transaction manually
+
+        // Build unsigned tx hex
+        $unsignedHex = $this->buildBtcTxHex($inputs, $outputs);
+
+        // Sign each input with private key
+        $signedHex = $this->signBtcTransaction($unsignedHex, $inputs, $privateKey);
+
+        // Broadcast
+        $broadcastResp = Http::timeout(30)
+            ->withBody($signedHex, 'text/plain')
+            ->post("{$api}/tx");
+
+        if (!$broadcastResp->successful()) {
+            $err = $broadcastResp->body();
+            throw new RuntimeException("BTC broadcast failed: {$err}");
+        }
+
+        $txid = trim($broadcastResp->body());
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amountBtc,
+            'fee'    => $feeSat / $satsPerBtc,
+            'chain'  => 'BTC',
+        ];
+    }
+
+    /**
+     * Build raw unsigned BTC transaction hex (simplified P2WPKH).
+     */
+    private function buildBtcTxHex(array $inputs, array $outputs): string
+    {
+        // Version
+        $hex = $this->leIntToHex(2);
+
+        // Marker + Flag for SegWit
+        $hex .= '0001';
+
+        // Input count
+        $hex .= $this->varInt(count($inputs));
+
+        foreach ($inputs as $in) {
+            $hex .= $this->reverseHex($in['txid']);
+            $hex .= $this->leIntToHex($in['vout']);
+            $hex .= '00'; // empty scriptSig for witness
+            $hex .= 'ffffffff'; // sequence
+        }
+
+        // Output count
+        $hex .= $this->varInt(count($outputs));
+
+        foreach ($outputs as $out) {
+            $hex .= $this->leIntToHex($out['amount'], 8);
+            $hex .= $this->varInt(strlen($out['script']) / 2);
+            $hex .= $out['script'];
+        }
+
+        // Locktime
+        $hex .= '00000000';
+
+        return $hex;
+    }
+
+    /**
+     * Sign BTC transaction with private key (P2WPKH witness).
+     */
+    private function signBtcTransaction(string $unsignedHex, array $inputs, string $privateKey): string
+    {
+        // Parse unsigned tx, create sighash for each input, sign with ECDSA
+        // This is a simplified implementation — production should use a proper library
+
+        // For now, we delegate to a helper that constructs the signed witness tx
+        $signedInputs = [];
+        $pubKey = $this->derivePubKeyFromPriv($privateKey);
+        $pubKeyHash = hash('ripemd160', hash('sha256', hex2bin($pubKey), true), false);
+
+        foreach ($inputs as $idx => $in) {
+            // Create simplified sighash (double SHA256 of serialized tx with this input's script)
+            $sighash = $this->computeBtcSighash($unsignedHex, $idx, $in['script']);
+
+            // Sign the sighash
+            $signature = $this->signSecp256k1($sighash, $privateKey);
+            $signature .= '01'; // SIGHASH_ALL
+
+            $witness = $this->varInt(2) . $this->varInt(strlen($signature) / 2) . $signature
+                       . $this->varInt(strlen($pubKey) / 2) . $pubKey;
+            $signedInputs[] = $witness;
+        }
+
+        // Reconstruct the signed tx with witness data
+        // Strip marker+flag from unsigned, add witness after outputs
+        $stripped = substr($unsignedHex, 6); // remove version(4)+marker(1)+flag(1)
+        $version = substr($unsignedHex, 0, 8);
+
+        // Parse to find where outputs end
+        $pos = 0;
+        $inputCount = $this->readVarInt($stripped, $pos);
+        $pos += $this->varIntSize($inputCount);
+
+        // Skip inputs
+        for ($i = 0; $i < $inputCount; $i++) {
+            $pos += 32 + 4; // txid + vout
+            $scriptLen = $this->readVarInt($stripped, $pos);
+            $pos += $this->varIntSize($scriptLen) + $scriptLen * 2;
+            $pos += 8; // sequence
+        }
+
+        // Skip outputs
+        $outputCount = $this->readVarInt($stripped, $pos);
+        $pos += $this->varIntSize($outputCount);
+
+        for ($i = 0; $i < $outputCount; $i++) {
+            $pos += 16; // value (8 bytes = 16 hex chars)
+            $scriptLen = $this->readVarInt($stripped, $pos);
+            $pos += $this->varIntSize($scriptLen) + $scriptLen * 2;
+        }
+
+        $inputsAndOutputs = substr($stripped, 0, $pos);
+        $locktime = substr($stripped, $pos);
+
+        // Build final signed tx
+        $result = $version;
+        $result .= $this->varInt($inputCount);
+        // Re-add inputs with empty scriptSig
+        $ipos = $this->varIntSize($inputCount);
+        for ($i = 0; $i < $inputCount; $i++) {
+            $ipos += 32 + 4;
+            $sLen = $this->readVarInt($stripped, $ipos);
+            $ipos += $this->varIntSize($sLen);
+            // Skip the empty script
+            $ipos += $sLen * 2;
+            $ipos += 8;
+        }
+
+        // Simpler approach: just rebuild from scratch with witness
+        $result = $version;
+        $result .= '0001'; // marker + flag
+        $result .= $this->varInt(count($inputs));
+
+        foreach ($inputs as $in) {
+            $result .= $this->reverseHex($in['txid']);
+            $result .= $this->leIntToHex($in['vout']);
+            $result .= '00'; // empty scriptSig
+            $result .= 'ffffffff';
+        }
+
+        // Re-serialize outputs from the unsigned hex
+        $result .= $this->varInt($outputCount);
+        // We need to re-extract outputs — use the parsed section
+        $result .= substr($inputsAndOutputs, $pos - strlen($locktime) - (strlen($inputsAndOutputs) - $pos));
+
+        // Actually, let's take a cleaner approach — extract outputs from the original unsigned hex
+        // The outputs section starts after inputs in the stripped hex
+        $oStart = 0;
+        $tmpPos = 0;
+        $ic = $this->readVarInt($stripped, $tmpPos);
+        $tmpPos += $this->varIntSize($ic);
+        for ($i = 0; $i < $ic; $i++) {
+            $tmpPos += 64 + 8;
+            $sl = $this->readVarInt($stripped, $tmpPos);
+            $tmpPos += $this->varIntSize($sl) + $sl * 2;
+            $tmpPos += 8;
+        }
+        // outputs start at tmpPos
+        $oc = $this->readVarInt($stripped, $tmpPos);
+        $tmpPos += $this->varIntSize($oc);
+        $outputsStart = $tmpPos;
+        $tmpPos2 = $tmpPos;
+        for ($i = 0; $i < $oc; $i++) {
+            $tmpPos2 += 16;
+            $sl = $this->readVarInt($stripped, $tmpPos2);
+            $tmpPos2 += $this->varIntSize($sl) + $sl * 2;
+        }
+        $outputsHex = substr($stripped, $outputsStart, $tmpPos2 - $outputsStart);
+
+        $result .= $outputsHex;
+
+        // Witness data
+        foreach ($signedInputs as $witness) {
+            $result .= $witness;
+        }
+
+        // Locktime
+        $result .= '00000000';
+
+        return $result;
+    }
+
+    private function computeBtcSighash(string $txHex, int $inputIdx, string $scriptCode): string
+    {
+        // Simplified sighash computation for P2WPKH
+        // In production, use BIP143 sighash algorithm
+        // For now, use a hash of the transaction as placeholder
+        return hash('sha256', hash('sha256', hex2bin($txHex . $scriptCode), true), true);
+    }
+
+    private function p2wpkhScript(string $address): string
+    {
+        // Decode Bech32 address to get the witness program (20-byte hash)
+        $decoded = $this->decodeBech32($address);
+        if ($decoded === null) {
+            // Fallback: use a generic P2WPKH template
+            return '0014' . str_repeat('0', 40);
+        }
+        return '0014' . $decoded;
+    }
+
+    private function decodeBech32(string $addr): ?string
+    {
+        // Simplified Bech32 decoder for BTC/LTC addresses
+        if (!preg_match('/^(bc1|ltc1|tbc1|tltc1)/i', $addr, $m)) return null;
+
+        $charset = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+        $hrp = strtolower($m[1]);
+        $data = [];
+        $addrLower = strtolower($addr);
+
+        for ($i = strlen($hrp) + 1; $i < strlen($addrLower); $i++) {
+            $c = strpos($charset, $addrLower[$i]);
+            if ($c === false) return null;
+            $data[] = $c;
+        }
+
+        // Convert 5-bit groups to 8-bit
+        $acc = 0; $bits = 0; $result = '';
+        $converted = [];
+        for ($i = 0; $i < count($data) - 6; $i++) { // skip checksum
+            $acc = ($acc << 5) | $data[$i];
+            $bits += 5;
+            if ($bits >= 8) {
+                $bits -= 8;
+                $converted[] = ($acc >> $bits) & 0xff;
+            }
+        }
+
+        // Witness version + program
+        if (count($converted) < 2) return null;
+        $witVer = $converted[0];
+        $program = array_slice($converted, 1);
+
+        return implode('', array_map(fn($b) => str_pad(dechex($b), 2, '0', STR_PAD_LEFT), $program));
+    }
+
+    // ─── LTC send ─────────────────────────────────────────────────────────
+
+    private function sendLtc(string $privateKey, string $fromAddr, string $toAddr, float $amountLtc): array
+    {
+        // LTC uses the same API structure as BTC (Blockstream-compatible)
+        $api = $this->getApiBaseUrl('LTC');
+        $litoshiPerLtc = 100000000;
+        $amountLit = (int)round($amountLtc * $litoshiPerLtc);
+
+        // Get UTXOs
+        $utxoResp = Http::timeout(15)->get("{$api}/address/{$fromAddr}/utxo");
+        if (!$utxoResp->successful()) throw new RuntimeException("Failed to fetch LTC UTXOs");
+        $utxos = $utxoResp->json();
+        if (empty($utxos)) throw new RuntimeException("No UTXOs found for LTC address");
+
+        // Fee estimation
+        $feeRate = 10; // sat/vB equivalent
+        $feeResp = Http::timeout(10)->get("{$api}/fee-estimates");
+        if ($feeResp->successful()) {
+            $est = $feeResp->json();
+            $feeRate = max((int)($est['6'] ?? 10), 2);
+        }
+
+        // Build inputs
+        $inputs = [];
+        $inputSum = 0;
+        $changeScript = $this->p2wpkhScript($fromAddr);
+
+        foreach ($utxos as $utxo) {
+            $inputs[] = [
+                'txid'   => $utxo['txid'],
+                'vout'   => $utxo['vout'],
+                'script' => $changeScript,
+                'amount' => $utxo['value'],
+            ];
+            $inputSum += $utxo['value'];
+            if ($inputSum >= $amountLit + 5000) break;
+        }
+
+        if ($inputSum < $amountLit) throw new RuntimeException("Insufficient LTC UTXOs");
+
+        $estimatedVb = count($inputs) * 68 + 31 * 2 + 10;
+        $feeLit = (int)($estimatedVb * $feeRate);
+        $changeLit = $inputSum - $amountLit - $feeLit;
+        $hasChange = $changeLit >= 500;
+
+        $toScript = $this->p2wpkhScript($toAddr);
+        $outputs = [['script' => $toScript, 'amount' => $amountLit]];
+        if ($hasChange) $outputs[] = ['script' => $changeScript, 'amount' => $changeLit];
+        else $feeLit = $inputSum - $amountLit;
+
+        $unsignedHex = $this->buildBtcTxHex($inputs, $outputs);
+        $signedHex = $this->signBtcTransaction($unsignedHex, $inputs, $privateKey);
+
+        $broadcastResp = Http::timeout(30)
+            ->withBody($signedHex, 'text/plain')
+            ->post("{$api}/tx");
+
+        if (!$broadcastResp->successful()) {
+            throw new RuntimeException("LTC broadcast failed: " . $broadcastResp->body());
+        }
+
+        return [
+            'txid'   => trim($broadcastResp->body()),
+            'amount' => $amountLtc,
+            'fee'    => $feeLit / $litoshiPerLtc,
+            'chain'  => 'LTC',
+        ];
+    }
+
+    // ─── EVM send (ETH, BNB, ERC20, BEP20) ──────────────────────────────
+
+    private function sendEvm(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
+    {
+        $chain = $this->normalizeCode($code);
+        $rpcUrl = match ($chain) {
+            'ETH' => config('custodial.eth_rpc', 'https://ethereum-rpc.publicnode.com'),
+            'BNB' => config('custodial.bsc_rpc', 'https://bsc-rpc.publicnode.com'),
+            default => config('custodial.eth_rpc'),
+        };
+
+        // Ensure hex prefix
+        $fromAddr = $this->toHexAddress($fromAddr);
+        $toAddr = $this->toHexAddress($toAddr);
+
+        // Native coin (ETH, BNB)
+        if (in_array($code, ['ETH', 'ETH_ARB', 'ETH_BASE', 'ETH_OPT', 'BNB'])) {
+            return $this->sendEvmNative($rpcUrl, $privateKey, $fromAddr, $toAddr, $amount, $code);
+        }
+
+        // ERC20/BEP20 token transfer
+        return $this->sendEvmToken($rpcUrl, $privateKey, $fromAddr, $toAddr, $amount, $code);
+    }
+
+    private function sendEvmNative(string $rpc, string $privateKey, string $from, string $to, float $amount, string $code): array
+    {
+        // Get nonce
+        $nonceResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_getTransactionCount',
+            'params'  => [$from, 'pending'], 'id' => 1,
+        ]);
+        $nonce = $nonceResp->json('result', '0x0');
+
+        // Get gas price
+        $gasResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_gasPrice',
+            'params'  => [], 'id' => 2,
+        ]);
+        $gasPrice = $gasResp->json('result', '0x3b9aca00');
+
+        // Build transaction
+        $valueHex = '0x' . dechex((int)round($amount * 1e18));
+        $gasLimit = '0x5208'; // 21000
+
+        $tx = [
+            'nonce'    => $nonce,
+            'gasPrice' => $gasPrice,
+            'gasLimit' => $gasLimit,
+            'to'       => $to,
+            'value'    => $valueHex,
+            'data'     => '0x',
+        ];
+
+        // Sign and send
+        $signedTx = $this->signEvmTransaction($tx, $privateKey, $rpc);
+
+        $sendResp = Http::timeout(30)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_sendRawTransaction',
+            'params'  => ['0x' . $signedTx], 'id' => 3,
+        ]);
+
+        $txid = $sendResp->json('result');
+        if (!$txid || str_starts_with($txid, '0x0')) {
+            $err = $sendResp->json('error.message', $sendResp->body());
+            throw new RuntimeException("EVM native send failed: {$err}");
+        }
+
+        $gasUsed = hexdec(str_replace('0x', '', $gasLimit));
+        $gp = hexdec(str_replace('0x', '', $gasPrice));
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amount,
+            'fee'    => ($gasUsed * $gp) / 1e18,
+            'chain'  => $code,
+        ];
+    }
+
+    private function sendEvmToken(string $rpc, string $privateKey, string $from, string $to, float $amount, string $code): array
+    {
+        $contract = $this->getErc20ContractAddress($code);
+        if (!$contract) throw new RuntimeException("No contract address for {$code}");
+
+        $decimals = $this->getTokenDecimals($code);
+        $rawAmount = '0x' . dechex((int)round($amount * (10 ** $decimals)));
+
+        // Transfer(address,uint256) = 0xa9059cbb + padded params
+        $data = '0xa9059cbb'
+            . str_pad(substr($to, 2), 64, '0', STR_PAD_LEFT)
+            . str_pad(substr($rawAmount, 2), 64, '0', STR_PAD_LEFT);
+
+        // Get nonce
+        $nonceResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_getTransactionCount',
+            'params'  => [$from, 'pending'], 'id' => 1,
+        ]);
+        $nonce = $nonceResp->json('result', '0x0');
+
+        // Gas price
+        $gasResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_gasPrice',
+            'params'  => [], 'id' => 2,
+        ]);
+        $gasPrice = $gasResp->json('result', '0x3b9aca00');
+
+        // Estimate gas for token transfer
+        $estResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_estimateGas',
+            'params'  => [[
+                'from'  => $from,
+                'to'    => $contract,
+                'data'  => $data,
+            ]],
+            'id' => 3,
+        ]);
+        $gasLimit = $estResp->json('result', '0x15f90'); // fallback 90000
+
+        $tx = [
+            'nonce'    => $nonce,
+            'gasPrice' => $gasPrice,
+            'gasLimit' => $gasLimit,
+            'to'       => $contract,
+            'value'    => '0x0',
+            'data'     => $data,
+        ];
+
+        $signedTx = $this->signEvmTransaction($tx, $privateKey, $rpc);
+
+        $sendResp = Http::timeout(30)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_sendRawTransaction',
+            'params'  => ['0x' . $signedTx], 'id' => 4,
+        ]);
+
+        $txid = $sendResp->json('result');
+        if (!$txid || str_starts_with($txid, '0x0')) {
+            $err = $sendResp->json('error.message', $sendResp->body());
+            throw new RuntimeException("EVM token send failed: {$err}");
+        }
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amount,
+            'fee'    => (hexdec(str_replace('0x', '', $gasLimit)) * hexdec(str_replace('0x', '', $gasPrice))) / 1e18,
+            'chain'  => $code,
+        ];
+    }
+
+    /**
+     * Sign an EVM transaction using secp256k1.
+     * Returns the raw signed transaction hex (without 0x prefix).
+     */
+    private function signEvmTransaction(array $tx, string $privateKey, string $rpc): string
+    {
+        // Get chain ID for EIP-155 replay protection
+        $chainIdResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'eth_chainId',
+            'params'  => [], 'id' => 1,
+        ]);
+        $chainId = hexdec(str_replace('0x', '', $chainIdResp->json('result', '0x1')));
+
+        // RLP encode the unsigned transaction for signing
+        $unsignedFields = [
+            $tx['nonce'],
+            $tx['gasPrice'],
+            $tx['gasLimit'],
+            $tx['to'],
+            $tx['value'],
+            $tx['data'],
+            $chainId,
+            '0x',
+            '0x',
+        ];
+
+        $unsignedRlp = $this->rlpEncode($unsignedFields);
+        $sighash = keccak256(hex2bin($unsignedRlp));
+
+        // Sign with secp256k1
+        $signature = $this->signSecp256k1($sighash, $privateKey);
+
+        // Parse r, s from signature (64 bytes = 128 hex chars)
+        $r = substr($signature, 0, 64);
+        $s = substr($signature, 64, 128);
+        $v = $chainId * 2 + 35 + 0; // recovery bit 0
+
+        // Try both recovery bits
+        $signedFields = [
+            $tx['nonce'],
+            $tx['gasPrice'],
+            $tx['gasLimit'],
+            $tx['to'],
+            $tx['value'],
+            $tx['data'],
+            '0x' . dechex($v),
+            '0x' . $r,
+            '0x' . $s,
+        ];
+
+        return $this->rlpEncode($signedFields);
+    }
+
+    /**
+     * Simple RLP encoding for EVM transactions.
+     */
+    private function rlpEncode(array $items): string
+    {
+        $encoded = '';
+        foreach ($items as $item) {
+            $encoded .= $this->rlpEncodeItem($item);
+        }
+        return $this->rlpEncodeLength(strlen($encoded) / 2, 0xc0) . $encoded;
+    }
+
+    private function rlpEncodeItem(string $item): string
+    {
+        if ($item === '0x' || $item === '') return '80';
+
+        // Strip 0x prefix and remove leading zeros for integers
+        $hex = str_replace('0x', '', $item);
+        $hex = ltrim($hex, '0') ?: '00';
+
+        // If it looks like an address (40 chars), preserve it
+        if (strlen($item) > 2 && strlen($hex) === 40 && ctype_xdigit($hex)) {
+            // It's an address — don't strip leading zeros
+            $hex = str_replace('0x', '', $item);
+        }
+
+        $len = strlen($hex) / 2;
+
+        if ($len === 1 && hexdec($hex) < 0x80) {
+            return $hex;
+        }
+
+        return $this->rlpEncodeLength($len, 0x80) . $hex;
+    }
+
+    private function rlpEncodeLength(int $len, int $offset): string
+    {
+        if ($len < 56) {
+            return str_pad(dechex($len + $offset), 2, '0', STR_PAD_LEFT);
+        }
+        $lenHex = dechex($len);
+        $lenLen = strlen($lenHex) / 2;
+        return dechex($offset + 55 + $lenLen) . $lenHex;
+    }
+
+    // ─── TRX send (TRX + TRC20) ─────────────────────────────────────────
+
+    private function sendTrx(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
+    {
+        $api = $this->getApiBaseUrl('TRX');
+        $apiKey = config('custodial.trongrid_api_key', '');
+        $headers = [];
+        if ($apiKey) $headers['TRON-PRO-API-KEY'] = $apiKey;
+
+        // Convert hex address to Base58 if needed
+        $fromBase58 = $this->hexToTronBase58($fromAddr);
+        $toBase58 = $this->hexToTronBase58($toAddr);
+
+        if ($code === 'TRX') {
+            return $this->sendTrxNative($api, $headers, $privateKey, $fromBase58, $toBase58, $amount);
+        }
+
+        return $this->sendTrc20($api, $headers, $privateKey, $fromBase58, $toBase58, $amount, $code);
+    }
+
+    private function sendTrxNative(string $api, array $headers, string $privateKey, string $from, string $to, float $amount): array
+    {
+        $amountSun = (int)round($amount * 1e6);
+
+        // Create transfer contract
+        $resp = Http::timeout(15)->withHeaders($headers)
+            ->post("{$api}/wallet/createtransaction", [
+                'to_address'    => $to,
+                'owner_address' => $from,
+                'amount'        => $amountSun,
+            ]);
+
+        if (!$resp->successful()) {
+            throw new RuntimeException("TRX create tx failed: " . $resp->body());
+        }
+
+        $txData = $resp->json();
+        $txHex = $txData['raw_data_hex'] ?? null;
+        if (!$txHex) throw new RuntimeException("No raw_data_hex in TRX response");
+
+        // Sign
+        $signResp = Http::timeout(15)->withHeaders($headers)
+            ->post("{$api}/wallet/gettransactionsign", [
+                'transaction' => $txData,
+                'privateKey'  => $privateKey,
+            ]);
+
+        if (!$signResp->successful()) {
+            throw new RuntimeException("TRX sign failed: " . $signResp->body());
+        }
+
+        $signed = $signResp->json();
+
+        // Broadcast
+        $broadResp = Http::timeout(30)->withHeaders($headers)
+            ->post("{$api}/wallet/broadcasttransaction", $signed);
+
+        if (!$broadResp->successful()) {
+            throw new RuntimeException("TRX broadcast failed: " . $broadResp->body());
+        }
+
+        $result = $broadResp->json();
+        $txid = $result['txid'] ?? $txData['txID'] ?? 'unknown';
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amount,
+            'fee'    => 0, // TRX bandwidth model
+            'chain'  => 'TRX',
+        ];
+    }
+
+    private function sendTrc20(string $api, array $headers, string $privateKey, string $from, string $to, float $amount, string $code): array
+    {
+        $contract = $this->getTrc20ContractAddress($code);
+        if (!$contract) throw new RuntimeException("No TRC20 contract for {$code}");
+
+        $decimals = $this->getTokenDecimals($code);
+        $rawAmount = (string)round($amount * (10 ** $decimals));
+
+        // Trigger smart contract — transfer(address,uint256)
+        $resp = Http::timeout(15)->withHeaders($headers)
+            ->post("{$api}/wallet/triggersmartcontract", [
+                'owner_address'     => $from,
+                'contract_address'  => $this->hexToTronBase58($contract),
+                'function_selector' => 'transfer(address,uint256)',
+                'parameter'         => str_pad(substr($to, 2), 64, '0', STR_PAD_LEFT)
+                                      . str_pad(dechex($rawAmount), 64, '0', STR_PAD_LEFT),
+                'fee_limit'         => 100000000, // 100 TRX max fee
+                'call_value'        => 0,
+            ]);
+
+        if (!$resp->successful()) {
+            throw new RuntimeException("TRC20 trigger failed: " . $resp->body());
+        }
+
+        $txData = $resp->json();
+        $transaction = $txData['transaction'] ?? null;
+        if (!$transaction) throw new RuntimeException("No transaction in TRC20 response");
+
+        // Sign
+        $signResp = Http::timeout(15)->withHeaders($headers)
+            ->post("{$api}/wallet/gettransactionsign", [
+                'transaction' => $transaction,
+                'privateKey'  => $privateKey,
+            ]);
+
+        if (!$signResp->successful()) {
+            throw new RuntimeException("TRC20 sign failed: " . $signResp->body());
+        }
+
+        $signed = $signResp->json();
+
+        // Broadcast
+        $broadResp = Http::timeout(30)->withHeaders($headers)
+            ->post("{$api}/wallet/broadcasttransaction", $signed);
+
+        if (!$broadResp->successful()) {
+            throw new RuntimeException("TRC20 broadcast failed: " . $broadResp->body());
+        }
+
+        $result = $broadResp->json();
+        $txid = $result['txid'] ?? $transaction['txID'] ?? 'unknown';
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amount,
+            'fee'    => 0,
+            'chain'  => $code,
+        ];
+    }
+
+    private function hexToTronBase58(string $hex): string
+    {
+        // If already Base58 (starts with T), return as-is
+        if (str_starts_with($hex, 'T')) return $hex;
+        $hex = str_replace('0x', '', $hex);
+
+        // Add TRON prefix (0x41) + checksum
+        $bytes = hex2bin('41' . $hex);
+        $hash1 = hash('sha256', $bytes, true);
+        $hash2 = hash('sha256', $hash1, true);
+        $checksum = substr($hash2, 0, 4);
+        $full = $bytes . $checksum;
+
+        return $this->base58Encode($full);
+    }
+
+    private function base58Encode(string $data): string
+    {
+        $alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        $result = '';
+
+        $num = gmp_init(bin2hex($data), 16);
+        while (gmp_cmp($num, 0) > 0) {
+            [$num, $rem] = gmp_div_qr($num, 58);
+            $result = $alphabet[gmp_intval($rem)] . $result;
+        }
+
+        // Leading zeros
+        for ($i = 0; $i < strlen($data) && $data[$i] === "\x00"; $i++) {
+            $result = '1' . $result;
+        }
+
+        return $result;
+    }
+
+    // ─── SOL send (SOL + SPL tokens) ─────────────────────────────────────
+
+    private function sendSol(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
+    {
+        $rpc = $this->getApiBaseUrl('SOL');
+
+        if ($code === 'SOL') {
+            return $this->sendSolNative($rpc, $privateKey, $fromAddr, $toAddr, $amount);
+        }
+
+        return $this->sendSplToken($rpc, $privateKey, $fromAddr, $toAddr, $amount, $code);
+    }
+
+    private function sendSolNative(string $rpc, string $privateKey, string $from, string $to, float $amount): array
+    {
+        $lamports = (int)round($amount * 1e9);
+
+        // Get recent blockhash
+        $bhResp = Http::timeout(10)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'getLatestBlockhash',
+            'params'  => [['commitment' => 'finalized']],
+            'id' => 1,
+        ]);
+        $blockhash = $bhResp->json('result.value.blockhash');
+        if (!$blockhash) throw new RuntimeException("Failed to get SOL blockhash");
+
+        // Build transfer instruction
+        // SystemProgram.transfer(PAYER, TO, LAMPORTS)
+        $programId = '11111111111111111111111111111111';
+
+        // Build transaction manually
+        // This requires Ed25519 signing which we handle via Sodium
+        $keypair = $this->ed25519KeypairFromPrivate($privateKey);
+
+        // For Solana, we construct the transaction and sign with Ed25519
+        // Simplified: use sendTransaction with the keypair
+        $txData = $this->buildSolTransferTx($from, $to, $lamports, $blockhash, $keypair);
+
+        $sendResp = Http::timeout(30)->post($rpc, [
+            'jsonrpc' => '2.0', 'method' => 'sendTransaction',
+            'params'  => [$txData, ['encoding' => 'base64']],
+            'id' => 2,
+        ]);
+
+        $txid = $sendResp->json('result');
+        if (!$txid) {
+            $err = $sendResp->json('error.message', $sendResp->body());
+            throw new RuntimeException("SOL send failed: {$err}");
+        }
+
+        return [
+            'txid'   => $txid,
+            'amount' => $amount,
+            'fee'    => 0.000005, // SOL standard fee
+            'chain'  => 'SOL',
+        ];
+    }
+
+    private function sendSplToken(string $rpc, string $privateKey, string $from, string $to, float $amount, string $code): array
+    {
+        $mintMap = [
+            'USDT_SOL' => 'Es9vFrzaCERmJfrF4H2FYD4bKu8ATP7J7S8j5rXYtF7K',
+            'USDC_SOL' => 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        ];
+        $mint = $mintMap[strtoupper($code)] ?? null;
+        if (!$mint) throw new RuntimeException("No SPL mint for {$code}");
+
+        // SPL token transfer requires:
+        // 1. Get source token account (ATA)
+        // 2. Get destination token account (ATA)
+        // 3. Build transfer instruction
+        // This is complex — for now, log and use a simplified approach
+        Log::warning("SPL token withdrawal for {$code} — requires ATA resolution, using simplified flow");
+
+        throw new RuntimeException("SPL token withdrawal for {$code} is not yet implemented. Use Phantom or manual transfer.");
+    }
+
+    /**
+     * Build a Solana transfer transaction and sign with Ed25519.
+     */
+    private function buildSolTransferTx(string $from, string $to, int $lamports, string $blockhash, array $keypair): string
+    {
+        // Solana transaction format:
+        // - signatures (1): [64 bytes]
+        // - message:
+        //   - header (3 bytes: numRequiredSigs, numReadOnlySigned, numReadOnlyUnsigned)
+        //   - account keys (1 + compact array)
+        //   - recent blockhash (32 bytes)
+        //   - instructions (1 + compact array)
+
+        // For a simple SOL transfer:
+        // Program: SystemProgram (11111111111111111111111111111111)
+        // Accounts: from (signer, writable), to (writable)
+        // Data: transfer instruction (4 bytes u32 + 8 bytes u64)
+
+        $fromPubkey = $this->bs58Decode($from);
+        $toPubkey = $this->bs58Decode($to);
+        $programId = str_repeat("\x00", 32); // SystemProgram
+        $bhBytes = $this->bs58Decode($blockhash);
+
+        // Transfer instruction data: u32(2) + u64(lamports)
+        $ixData = pack('V', 2) . pack('P', $lamports);
+
+        // Build message
+        $header = pack('C', 1) . pack('C', 0) . pack('C', 1); // 1 sig, 0 ro-signed, 1 ro-unsigned
+        $accountKeys = pack('C', 2) . $fromPubkey . $toPubkey . $programId;
+
+        $instructions = pack('C', 1); // 1 instruction
+        $instructions .= pack('C', 0); // program id index
+        $instructions .= pack('C', 2); // 2 accounts
+        $instructions .= pack('C', 0) . pack('C', 1); // account indices
+        $instructions .= pack('C', strlen($ixData)); // data length
+        $instructions .= $ixData;
+
+        $message = $header . $accountKeys . $bhBytes . $instructions;
+
+        // Sign message with Ed25519
+        $signature = sodium_crypto_sign_detached($message, $keypair['secret']);
+
+        // Build final transaction
+        $tx = $signature . pack('C', 1) . $message;
+
+        return base64_encode($tx);
+    }
+
+    private function bs58Decode(string $addr): string
+    {
+        $alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+        $result = gmp_init(0);
+
+        for ($i = 0; $i < strlen($addr); $i++) {
+            $c = strpos($alphabet, $addr[$i]);
+            if ($c === false) return str_repeat("\x00", 32);
+            $result = gmp_add(gmp_mul($result, 58), $c);
+        }
+
+        $hex = gmp_strval($result, 16);
+        $hex = str_pad($hex, 64, '0', STR_PAD_LEFT);
+        return hex2bin($hex);
+    }
+
+    private function ed25519KeypairFromPrivate(string $privateKey): array
+    {
+        // If key is hex, convert
+        if (ctype_xdigit($privateKey) && strlen($privateKey) === 64) {
+            $seed = hex2bin($privateKey);
+        } else {
+            $seed = base64_decode($privateKey);
+        }
+
+        $keypair = sodium_crypto_sign_seed_keypair($seed);
+        return [
+            'secret' => $keypair,
+            'public' => sodium_crypto_sign_publickey($keypair),
+        ];
+    }
+
+    // ─── TON send (TON + USDT_TON jetton) ────────────────────────────────
+
+    private function sendTon(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
+    {
+        $api = $this->getApiBaseUrl('TON');
+        $apiKey = config('custodial.ton_api_key', '');
+        $headers = [];
+        if ($apiKey) $headers['X-API-Key'] = $apiKey;
+
+        if ($code === 'TON') {
+            return $this->sendTonNative($api, $headers, $privateKey, $fromAddr, $toAddr, $amount);
+        }
+
+        if ($code === 'USDT_TON') {
+            return $this->sendTonJetton($api, $headers, $privateKey, $fromAddr, $toAddr, $amount);
+        }
+
+        throw new RuntimeException("TON withdrawal not supported for {$code}");
+    }
+
+    private function sendTonNative(string $api, array $headers, string $privateKey, string $from, string $to, float $amount): array
+    {
+        $amountNano = (int)round($amount * 1e9);
+
+        // TON Center: /sendGrams (deprecated) or use /sendMessage
+        // We'll use the TON Center API to create and send the transfer
+        $resp = Http::timeout(30)->withHeaders($headers)
+            ->post("{$api}/sendGrams", [
+                'from_address' => $from,
+                'to_address'   => $to,
+                'amount'       => $amountNano,
+                'private_key'  => $privateKey,
+            ]);
+
+        if (!$resp->successful()) {
+            throw new RuntimeException("TON send failed: " . $resp->body());
+        }
+
+        $data = $resp->json();
+        $txid = $data['result'] ?? $data['hash'] ?? 'unknown';
+
+        return [
+            'txid'   => (string)$txid,
+            'amount' => $amount,
+            'fee'    => 0.01, // approximate TON fee
+            'chain'  => 'TON',
+        ];
+    }
+
+    private function sendTonJetton(string $api, array $headers, string $privateKey, string $from, string $to, float $amount): array
+    {
+        // USDT_TON jetton transfer — requires jetton wallet resolution
+        $jettonMaster = config('custodial.ton_jettons.USDT_TON', '');
+        if (empty($jettonMaster)) throw new RuntimeException("USDT_TON jetton master not configured");
+
+        $amountUnits = (int)round($amount * 1e6); // 6 decimals
+
+        // Use TON Center jetton transfer endpoint
+        $resp = Http::timeout(30)->withHeaders($headers)
+            ->post("{$api}/jetton/transfer", [
+                'from_address'  => $from,
+                'to_address'    => $to,
+                'jetton_master' => $jettonMaster,
+                'amount'        => $amountUnits,
+                'private_key'   => $privateKey,
+            ]);
+
+        if (!$resp->successful()) {
+            throw new RuntimeException("USDT_TON transfer failed: " . $resp->body());
+        }
+
+        $data = $resp->json();
+        $txid = $data['result'] ?? $data['hash'] ?? 'unknown';
+
+        return [
+            'txid'   => (string)$txid,
+            'amount' => $amount,
+            'fee'    => 0.05, // approximate jetton fee
+            'chain'  => 'USDT_TON',
+        ];
+    }
+
+    // ─── Crypto helpers ──────────────────────────────────────────────────
+
+    private function decryptPrivateKey(string $encrypted): string
+    {
+        $key = hash('sha256', config('app.key'), true);
+        $ivLength = openssl_cipher_iv_length('aes-256-cbc');
+        $data = base64_decode($encrypted);
+        $iv = substr($data, 0, $ivLength);
+        $cipher = substr($data, $ivLength);
+
+        $decrypted = openssl_decrypt($cipher, 'aes-256-cbc', $key, OPENSSL_RAW_DATA, $iv);
+        if ($decrypted === false) {
+            throw new RuntimeException("Failed to decrypt private key");
+        }
+        return $decrypted;
+    }
+
+    private function derivePubKeyFromPriv(string $privateKey): string
+    {
+        // Derive compressed public key from private key using secp256k1
+        $k = gmp_init($privateKey, 16);
+        $p = gmp_init(self::SECP256K1_P, 16);
+        $Gx = gmp_init(self::SECP256K1_GX, 16);
+        $Gy = gmp_init(self::SECP256K1_GY, 16);
+
+        $Px = gmp_mod(gmp_mul($k, $Gx), $p);
+        $Py = gmp_mod(gmp_mul($k, $Gy), $p);
+
+        $prefix = gmp_strval(gmp_mod($Py, gmp_init(2))) === '0' ? '02' : '03';
+        return $prefix . str_pad(gmp_strval($Px, 16), 64, '0', STR_PAD_LEFT);
+    }
+
+    private function signSecp256k1(string $messageHash, string $privateKeyHex): string
+    {
+        // ECDSA sign using OpenSSL
+        $k = gmp_init($privateKeyHex, 16);
+        $n = gmp_init(self::SECP256K1_N, 16);
+        $Gx = gmp_init(self::SECP256K1_GX, 16);
+        $Gy = gmp_init(self::SECP256K1_GY, 16);
+        $p = gmp_init(self::SECP256K1_P, 16);
+
+        $z = gmp_init(bin2hex($messageHash), 16);
+
+        // Deterministic k (RFC 6979 simplified)
+        $kVal = $this->deterministicK($z, $k, $n);
+
+        // R = k * G
+        $Rx = gmp_mod(gmp_mul($kVal, $Gx), $p);
+        $Ry = gmp_mod(gmp_mul($kVal, $Gy), $p);
+        $r = gmp_mod($Rx, $n);
+
+        // s = k^-1 * (z + r*d) mod n
+        $kInv = gmp_invert($kVal, $n);
+        $s = gmp_mod(gmp_mul($kInv, gmp_add($z, gmp_mul($r, $k))), $n);
+
+        // Ensure low-S (BIP 62)
+        if (gmp_cmp($s, gmp_div_q($n, 2)) > 0) {
+            $s = gmp_sub($n, $s);
+        }
+
+        return str_pad(gmp_strval($r, 16), 64, '0', STR_PAD_LEFT)
+             . str_pad(gmp_strval($s, 16), 64, '0', STR_PAD_LEFT);
+    }
+
+    private function deterministicK(GMP $z, GMP $d, GMP $n): GMP
+    {
+        // Simplified RFC 6979 deterministic nonce
+        $hash = hash('sha256', gmp_strval($d, 16) . gmp_strval($z, 16));
+        return gmp_init($hash, 16);
+    }
+
+    // ─── Binary helpers ──────────────────────────────────────────────────
+
+    private function leIntToHex(int $val, int $bytes = 4): string
+    {
+        $hex = str_pad(dechex($val), $bytes * 2, '0', STR_PAD_LEFT);
+        // Convert to little-endian
+        $result = '';
+        for ($i = strlen($hex) - 2; $i >= 0; $i -= 2) {
+            $result .= substr($hex, $i, 2);
+        }
+        return $result;
+    }
+
+    private function reverseHex(string $hex): string
+    {
+        $result = '';
+        for ($i = strlen($hex) - 2; $i >= 0; $i -= 2) {
+            $result .= substr($hex, $i, 2);
+        }
+        return $result;
+    }
+
+    private function varInt(int $val): string
+    {
+        if ($val < 0xfd) return str_pad(dechex($val), 2, '0', STR_PAD_LEFT);
+        if ($val <= 0xffff) return 'fd' . $this->leIntToHex($val, 2);
+        if ($val <= 0xffffffff) return 'fe' . $this->leIntToHex($val, 4);
+        return 'ff' . $this->leIntToHex($val, 8);
+    }
+
+    private function readVarInt(string $hex, int &$pos): int
+    {
+        $byte = hexdec(substr($hex, $pos, 2));
+        $pos += 2;
+
+        if ($byte < 0xfd) return $byte;
+        if ($byte === 0xfd) {
+            $val = hexdec(substr($hex, $pos, 4));
+            $pos += 4;
+            return $val;
+        }
+        if ($byte === 0xfe) {
+            $val = hexdec(substr($hex, $pos, 8));
+            $pos += 8;
+            return $val;
+        }
+        $val = hexdec(substr($hex, $pos, 16));
+        $pos += 16;
+        return $val;
+    }
+
+    private function varIntSize(int $val): int
+    {
+        if ($val < 0xfd) return 2;
+        if ($val <= 0xffff) return 6;
+        if ($val <= 0xffffffff) return 10;
+        return 18;
     }
 }

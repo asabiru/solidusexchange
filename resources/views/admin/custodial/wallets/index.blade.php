@@ -14,8 +14,11 @@
                     <h1 class="page-header-title">@lang("Custodial Wallets")</h1>
                 </div>
                 <div class="col-sm-auto">
-                    <a class="btn btn-outline-primary me-2" href="{{ route('admin.custodialScanNow') }}">
-                        <i class="bi-search me-1"></i> @lang('Scan Now')
+                    <a class="btn btn-outline-primary me-2" href="{{ route('admin.custodialCheckAllBalances') }}">
+                        <i class="bi-wallet2 me-1"></i> @lang('Check Balances')
+                    </a>
+                    <a class="btn btn-outline-secondary me-2" href="{{ route('admin.custodialScanNow') }}">
+                        <i class="bi-search me-1"></i> @lang('Scan Deposits')
                     </a>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateWalletModal">
                         <i class="bi-plus me-1"></i> @lang('Generate Wallet')
@@ -42,6 +45,7 @@
                             <th>Derivation</th>
                             <th>Status</th>
                             <th>Assignment</th>
+                            <th>Balance</th>
                             <th>Last Deposit</th>
                             <th>Action</th>
                         </tr>
@@ -112,6 +116,7 @@
                     {data: 'derivation', name: 'derivation'},
                     {data: 'status_badge', name: 'status_badge'},
                     {data: 'assignment', name: 'assignment'},
+                    {data: 'balance_info', name: 'balance_info'},
                     {data: 'last_deposit', name: 'last_deposit'},
                     {data: 'action', name: 'action', orderable: false},
                 ],

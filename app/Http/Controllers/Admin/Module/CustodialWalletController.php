@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin\Module;
 use App\Http\Controllers\Controller;
 use App\Models\CustodialDeposit;
 use App\Models\CustodialWallet;
+use App\Models\CustodialWithdrawal;
 use App\Services\Custodial\CustodialDepositService;
 use App\Services\Custodial\CustodialWalletService;
+use App\Services\Custodial\CustodialWithdrawalService;
 use App\Services\Custodial\HdWalletService;
 use Illuminate\Http\Request;
 use Yajra\DataTables\Facades\DataTables;
@@ -58,20 +60,33 @@ class CustodialWalletController extends Controller
                 }
                 return '<span class="text-muted">No deposits</span>';
             })
+            ->addColumn('balance_info', function ($w) {
+                $bal = number_format((float)$w->balance, 8);
+                $checked = $w->last_checked_at ? $w->last_checked_at->diffForHumans() : 'Never';
+                return "<strong>{$bal}</strong> <small class=\"text-muted\">{$w->currency_code}</small><br><small class=\"text-muted\">Checked: {$checked}</small>";
+            })
             ->addColumn('action', function ($w) {
                 $freezeUrl = route('admin.custodialWalletFreeze', $w->id);
                 $releaseUrl = route('admin.custodialWalletRelease', $w->id);
+                $checkUrl = route('admin.custodialWalletCheckBalance', $w->id);
+                $withdrawUrl = route('admin.custodialWithdrawalCreate', $w->id);
                 $html = '';
 
+                $html .= "<a href=\"{$checkUrl}\" class=\"btn btn-sm btn-outline-primary\"><i class=\"bi-wallet2\"></i></a> ";
+
+                if ($w->status === 'active' && (float)$w->balance > 0) {
+                    $html .= "<a href=\"{$withdrawUrl}\" class=\"btn btn-sm btn-outline-info\"><i class=\"bi-arrow-up-right\"></i></a> ";
+                }
+
                 if ($w->status === 'active') {
-                    $html .= "<a href=\"{$freezeUrl}\" class=\"btn btn-sm btn-outline-warning\" onclick=\"return confirm('Freeze this wallet?')\"><i class=\"bi-snow\"></i> Freeze</a> ";
+                    $html .= "<a href=\"{$freezeUrl}\" class=\"btn btn-sm btn-outline-warning\" onclick=\"return confirm('Freeze this wallet?')\"><i class=\"bi-snow\"></i></a> ";
                 }
                 if ($w->assigned_exchange_id) {
-                    $html .= "<a href=\"{$releaseUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Release this wallet?')\"><i class=\"bi-unlock\"></i> Release</a>";
+                    $html .= "<a href=\"{$releaseUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Release this wallet?')\"><i class=\"bi-unlock\"></i></a>";
                 }
                 return $html;
             })
-            ->rawColumns(['provider_badge', 'derivation', 'status_badge', 'assignment', 'last_deposit', 'action'])
+            ->rawColumns(['provider_badge', 'derivation', 'status_badge', 'assignment', 'last_deposit', 'balance_info', 'action'])
             ->make(true);
     }
 
@@ -160,5 +175,147 @@ class CustodialWalletController extends Controller
     {
         $results = app(CustodialDepositService::class)->scanAllWallets();
         return back()->with('success', "Scanned: {$results['scanned']}, New: {$results['new_deposits']}, Errors: {$results['errors']}");
+    }
+
+    // ─── Balance Check ────────────────────────────────────────────────────
+
+    public function checkAllBalances()
+    {
+        $results = app(HdWalletService::class)->checkAllBalances();
+        $total = count($results);
+        $errors = count(array_filter($results, fn($r) => isset($r['error'])));
+        return back()->with('success', "Checked {$total} wallets, {$errors} errors");
+    }
+
+    public function checkWalletBalance($id)
+    {
+        $wallet = CustodialWallet::findOrFail($id);
+        $result = app(HdWalletService::class)->getBalance($wallet);
+
+        if (isset($result['error'])) {
+            return back()->with('error', "Balance check failed: {$result['error']}");
+        }
+
+        return back()->with('success', "Balance: {$result['balance']} {$result['currency_code']}");
+    }
+
+    // ─── Withdrawals ─────────────────────────────────────────────────────
+
+    public function withdrawalsIndex()
+    {
+        return view('admin.custodial.withdrawals.index');
+    }
+
+    public function withdrawalsList(Request $request)
+    {
+        $withdrawals = CustodialWithdrawal::with('wallet')->orderByDesc('id');
+
+        return DataTables::of($withdrawals)
+            ->addColumn('wallet_address', fn($w) => substr($w->from_address, 0, 10) . '...')
+            ->addColumn('to_short', fn($w) => substr($w->to_address, 0, 10) . '...' . substr($w->to_address, -6))
+            ->addColumn('status_badge', function ($w) {
+                return match ($w->status) {
+                    'pending'    => '<span class="badge bg-soft-warning text-warning">Pending</span>',
+                    'approved'  => '<span class="badge bg-soft-info text-info">Approved</span>',
+                    'processing' => '<span class="badge bg-soft-primary text-primary">Processing</span>',
+                    'completed'  => '<span class="badge bg-soft-success text-success">Completed</span>',
+                    'failed'     => '<span class="badge bg-soft-danger text-danger">Failed</span>',
+                    'rejected'   => '<span class="badge bg-soft-secondary text-body">Rejected</span>',
+                    default      => '<span class="badge bg-soft-secondary text-body">' . $w->status . '</span>',
+                };
+            })
+            ->addColumn('tx_link', function ($w) {
+                if (!$w->txid) return '<span class="text-muted">—</span>';
+                return '<small title="' . $w->txid . '">' . substr($w->txid, 0, 12) . '...</small>';
+            })
+            ->addColumn('action', function ($w) {
+                $html = '';
+                if ($w->status === 'pending') {
+                    $approveUrl = route('admin.custodialWithdrawalApprove', $w->id);
+                    $rejectUrl = route('admin.custodialWithdrawalReject', $w->id);
+                    $html .= "<a href=\"{$approveUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Approve?')\"><i class=\"bi-check\"></i></a> ";
+                    $html .= "<a href=\"{$rejectUrl}\" class=\"btn btn-sm btn-outline-danger\" onclick=\"return confirm('Reject?')\"><i class=\"bi-x\"></i></a>";
+                }
+                if ($w->status === 'approved') {
+                    $execUrl = route('admin.custodialWithdrawalExecute', $w->id);
+                    $html .= "<a href=\"{$execUrl}\" class=\"btn btn-sm btn-outline-primary\" onclick=\"return confirm('Execute withdrawal now? This will send funds.')\"><i class=\"bi-send\"></i> Send</a>";
+                }
+                if ($w->status === 'failed') {
+                    $retryUrl = route('admin.custodialWithdrawalRetry', $w->id);
+                    $html .= "<a href=\"{$retryUrl}\" class=\"btn btn-sm btn-outline-warning\" onclick=\"return confirm('Retry?')\"><i class=\"bi-arrow-clockwise\"></i></a>";
+                }
+                return $html;
+            })
+            ->rawColumns(['status_badge', 'tx_link', 'action'])
+            ->make(true);
+    }
+
+    public function createWithdrawal($walletId)
+    {
+        $wallet = CustodialWallet::findOrFail($walletId);
+        return view('admin.custodial.withdrawals.create', compact('wallet'));
+    }
+
+    public function storeWithdrawal(Request $request)
+    {
+        $request->validate([
+            'wallet_id'   => 'required|exists:custodial_wallets,id',
+            'to_address'  => 'required|string',
+            'amount'      => 'required|numeric|min:0.00001',
+            'note'        => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $withdrawal = app(CustodialWithdrawalService::class)
+                ->createRequest($request->wallet_id, $request->to_address, $request->amount, $request->note);
+
+            return redirect()
+                ->route('admin.custodialWithdrawals')
+                ->with('success', "Withdrawal #{$withdrawal->id} created ({$request->amount} {$withdrawal->currency_code})");
+        } catch (\Throwable $e) {
+            return back()->withInput()->with('error', 'Failed: ' . $e->getMessage());
+        }
+    }
+
+    public function approveWithdrawal($id)
+    {
+        try {
+            $w = app(CustodialWithdrawalService::class)->approve($id);
+            return back()->with('success', "Withdrawal #{$id} approved");
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function rejectWithdrawal($id)
+    {
+        try {
+            $w = app(CustodialWithdrawalService::class)->reject($id);
+            return back()->with('success', "Withdrawal #{$id} rejected");
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function executeWithdrawal($id)
+    {
+        try {
+            $w = app(CustodialWithdrawalService::class)->execute($id);
+            return back()->with('success', "Withdrawal #{$id} completed! TXID: {$w->txid}");
+        } catch (\Throwable $e) {
+            return back()->with('error', "Withdrawal failed: " . $e->getMessage());
+        }
+    }
+
+    public function retryWithdrawal($id)
+    {
+        $withdrawal = CustodialWithdrawal::findOrFail($id);
+        if ($withdrawal->status !== 'failed') {
+            return back()->with('error', 'Can only retry failed withdrawals');
+        }
+
+        // Reset to approved so it can be re-executed
+        $withdrawal->update(['status' => 'approved', 'error' => null]);
+        return back()->with('success', "Withdrawal #{$id} reset to approved — click Send to retry");
     }
 }

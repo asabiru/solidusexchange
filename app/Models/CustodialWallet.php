@@ -15,6 +15,7 @@ class CustodialWallet extends Model
         'provider', 'provider_reference', 'purpose', 'status',
         'assigned_exchange_id', 'assigned_at',
         'last_deposit_at', 'last_deposit_tx_id', 'last_deposit_amount',
+        'balance',
         'last_checked_at',
     ];
 
@@ -22,6 +23,7 @@ class CustodialWallet extends Model
         'assigned_at' => 'datetime',
         'last_deposit_at' => 'datetime',
         'last_deposit_amount' => 'decimal:8',
+        'balance' => 'decimal:8',
         'last_checked_at' => 'datetime',
     ];
 
