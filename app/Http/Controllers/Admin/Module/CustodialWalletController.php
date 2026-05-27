@@ -15,6 +15,19 @@ use Yajra\DataTables\Facades\DataTables;
 
 class CustodialWalletController extends Controller
 {
+    private function postButton(string $url, string $icon, string $class, ?string $confirm = null, string $label = ''): string
+    {
+        $confirmAttr = $confirm ? " onclick=\"return confirm('".e($confirm)."')\"" : '';
+        $labelHtml = $label !== '' ? ' ' . e($label) : '';
+
+        return '<form action="'.e($url).'" method="POST" style="display:inline-block;margin:0">'
+            . csrf_field()
+            . '<button type="submit" class="'.e($class).'"'.$confirmAttr.'>'
+            . '<i class="'.e($icon).'"></i>'.$labelHtml
+            . '</button>'
+            . '</form>';
+    }
+
     public function index()
     {
         return view('admin.custodial.wallets.index');
@@ -72,17 +85,17 @@ class CustodialWalletController extends Controller
                 $withdrawUrl = route('admin.custodialWithdrawalCreate', $w->id);
                 $html = '';
 
-                $html .= "<a href=\"{$checkUrl}\" class=\"btn btn-sm btn-outline-primary\"><i class=\"bi-wallet2\"></i></a> ";
+                $html .= $this->postButton($checkUrl, 'bi-wallet2', 'btn btn-sm btn-outline-primary') . ' ';
 
                 if ($w->status === 'active' && (float)$w->balance > 0) {
                     $html .= "<a href=\"{$withdrawUrl}\" class=\"btn btn-sm btn-outline-info\"><i class=\"bi-arrow-up-right\"></i></a> ";
                 }
 
                 if ($w->status === 'active') {
-                    $html .= "<a href=\"{$freezeUrl}\" class=\"btn btn-sm btn-outline-warning\" onclick=\"return confirm('Freeze this wallet?')\"><i class=\"bi-snow\"></i></a> ";
+                    $html .= $this->postButton($freezeUrl, 'bi-snow', 'btn btn-sm btn-outline-warning', 'Freeze this wallet?') . ' ';
                 }
                 if ($w->assigned_exchange_id) {
-                    $html .= "<a href=\"{$releaseUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Release this wallet?')\"><i class=\"bi-unlock\"></i></a>";
+                    $html .= $this->postButton($releaseUrl, 'bi-unlock', 'btn btn-sm btn-outline-success', 'Release this wallet?');
                 }
                 return $html;
             })
@@ -105,6 +118,9 @@ class CustodialWalletController extends Controller
     public function freezeWallet($id)
     {
         $wallet = CustodialWallet::findOrFail($id);
+        if ($wallet->status === 'frozen') {
+            return back()->with('error', 'Wallet is already frozen.');
+        }
         $wallet->update(['status' => 'frozen']);
         return back()->with('success', 'Wallet frozen');
     }
@@ -112,6 +128,9 @@ class CustodialWalletController extends Controller
     public function releaseWallet($id)
     {
         $wallet = CustodialWallet::findOrFail($id);
+        if ($wallet->status !== 'frozen') {
+            return back()->with('error', 'Only frozen wallets can be released.');
+        }
         app(CustodialWalletService::class)->release($wallet);
         return back()->with('success', 'Wallet released');
     }
@@ -148,8 +167,8 @@ class CustodialWalletController extends Controller
                 if ($d->status === 'aml_check' || ($d->aml_risk_level === 'medium')) {
                     $approveUrl = route('admin.custodialDepositApprove', $d->id);
                     $rejectUrl = route('admin.custodialDepositReject', $d->id);
-                    return "<a href=\"{$approveUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Approve this deposit?')\"><i class=\"bi-check\"></i></a> "
-                         . "<a href=\"{$rejectUrl}\" class=\"btn btn-sm btn-outline-danger\" onclick=\"return confirm('Reject this deposit?')\"><i class=\"bi-x\"></i></a>";
+                    return $this->postButton($approveUrl, 'bi-check', 'btn btn-sm btn-outline-success', 'Approve this deposit?') . ' '
+                         . $this->postButton($rejectUrl, 'bi-x', 'btn btn-sm btn-outline-danger', 'Reject this deposit?');
                 }
                 return '';
             })
@@ -160,6 +179,9 @@ class CustodialWalletController extends Controller
     public function approveDeposit($id)
     {
         $deposit = CustodialDeposit::findOrFail($id);
+        if (!in_array($deposit->status, ['pending', 'aml_check', 'aml_approved'], true)) {
+            return back()->with('error', 'Deposit is not in an approvable state.');
+        }
         app(CustodialDepositService::class)->manualApprove($deposit);
         return back()->with('success', 'Deposit approved');
     }
@@ -167,6 +189,9 @@ class CustodialWalletController extends Controller
     public function rejectDeposit($id, Request $request)
     {
         $deposit = CustodialDeposit::findOrFail($id);
+        if (!in_array($deposit->status, ['pending', 'aml_check', 'aml_approved'], true)) {
+            return back()->with('error', 'Deposit is not in a rejectable state.');
+        }
         app(CustodialDepositService::class)->manualReject($deposit, $request->reason ?? '');
         return back()->with('success', 'Deposit rejected');
     }
@@ -233,16 +258,16 @@ class CustodialWalletController extends Controller
                 if ($w->status === 'pending') {
                     $approveUrl = route('admin.custodialWithdrawalApprove', $w->id);
                     $rejectUrl = route('admin.custodialWithdrawalReject', $w->id);
-                    $html .= "<a href=\"{$approveUrl}\" class=\"btn btn-sm btn-outline-success\" onclick=\"return confirm('Approve?')\"><i class=\"bi-check\"></i></a> ";
-                    $html .= "<a href=\"{$rejectUrl}\" class=\"btn btn-sm btn-outline-danger\" onclick=\"return confirm('Reject?')\"><i class=\"bi-x\"></i></a>";
+                    $html .= $this->postButton($approveUrl, 'bi-check', 'btn btn-sm btn-outline-success', 'Approve?') . ' ';
+                    $html .= $this->postButton($rejectUrl, 'bi-x', 'btn btn-sm btn-outline-danger', 'Reject?');
                 }
                 if ($w->status === 'approved') {
                     $execUrl = route('admin.custodialWithdrawalExecute', $w->id);
-                    $html .= "<a href=\"{$execUrl}\" class=\"btn btn-sm btn-outline-primary\" onclick=\"return confirm('Execute withdrawal now? This will send funds.')\"><i class=\"bi-send\"></i> Send</a>";
+                    $html .= $this->postButton($execUrl, 'bi-send', 'btn btn-sm btn-outline-primary', 'Execute withdrawal now? This will send funds.', 'Send');
                 }
                 if ($w->status === 'failed') {
                     $retryUrl = route('admin.custodialWithdrawalRetry', $w->id);
-                    $html .= "<a href=\"{$retryUrl}\" class=\"btn btn-sm btn-outline-warning\" onclick=\"return confirm('Retry?')\"><i class=\"bi-arrow-clockwise\"></i></a>";
+                    $html .= $this->postButton($retryUrl, 'bi-arrow-clockwise', 'btn btn-sm btn-outline-warning', 'Retry?');
                 }
                 return $html;
             })
@@ -253,6 +278,9 @@ class CustodialWalletController extends Controller
     public function createWithdrawal($walletId)
     {
         $wallet = CustodialWallet::findOrFail($walletId);
+        if ($wallet->status !== 'active') {
+            return back()->with('error', 'Withdrawals are allowed only for active wallets.');
+        }
         return view('admin.custodial.withdrawals.create', compact('wallet'));
     }
 

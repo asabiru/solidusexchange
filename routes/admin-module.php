@@ -73,24 +73,24 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('custodial/wallets', 'index')->name('custodialWalletIndex');
             Route::get('custodial/wallets/list', 'walletsList')->name('custodialWalletList');
             Route::post('custodial/wallets/generate', 'generateWallet')->name('custodialWalletGenerate');
-            Route::get('custodial/wallets/freeze/{id}', 'freezeWallet')->name('custodialWalletFreeze');
-            Route::get('custodial/wallets/release/{id}', 'releaseWallet')->name('custodialWalletRelease');
-            Route::get('custodial/wallets/check-balance/{id}', 'checkWalletBalance')->name('custodialWalletCheckBalance');
-            Route::get('custodial/check-balances', 'checkAllBalances')->name('custodialCheckAllBalances');
+            Route::post('custodial/wallets/freeze/{id}', 'freezeWallet')->name('custodialWalletFreeze');
+            Route::post('custodial/wallets/release/{id}', 'releaseWallet')->name('custodialWalletRelease');
+            Route::post('custodial/wallets/check-balance/{id}', 'checkWalletBalance')->name('custodialWalletCheckBalance');
+            Route::post('custodial/check-balances', 'checkAllBalances')->name('custodialCheckAllBalances');
             Route::get('custodial/deposits', 'depositsIndex')->name('custodialDepositIndex');
             Route::get('custodial/deposits/list', 'depositsList')->name('custodialDepositList');
-            Route::get('custodial/deposits/approve/{id}', 'approveDeposit')->name('custodialDepositApprove');
-            Route::get('custodial/deposits/reject/{id}', 'rejectDeposit')->name('custodialDepositReject');
-            Route::get('custodial/scan-now', 'scanNow')->name('custodialScanNow');
+            Route::post('custodial/deposits/approve/{id}', 'approveDeposit')->name('custodialDepositApprove');
+            Route::post('custodial/deposits/reject/{id}', 'rejectDeposit')->name('custodialDepositReject');
+            Route::post('custodial/scan-now', 'scanNow')->name('custodialScanNow');
             // Withdrawals
             Route::get('custodial/withdrawals', 'withdrawalsIndex')->name('custodialWithdrawals');
             Route::get('custodial/withdrawals/list', 'withdrawalsList')->name('custodialWithdrawalList');
             Route::get('custodial/withdrawals/create/{walletId}', 'createWithdrawal')->name('custodialWithdrawalCreate');
             Route::post('custodial/withdrawals/store', 'storeWithdrawal')->name('custodialWithdrawalStore');
-            Route::get('custodial/withdrawals/approve/{id}', 'approveWithdrawal')->name('custodialWithdrawalApprove');
-            Route::get('custodial/withdrawals/reject/{id}', 'rejectWithdrawal')->name('custodialWithdrawalReject');
-            Route::get('custodial/withdrawals/execute/{id}', 'executeWithdrawal')->name('custodialWithdrawalExecute');
-            Route::get('custodial/withdrawals/retry/{id}', 'retryWithdrawal')->name('custodialWithdrawalRetry');
+            Route::post('custodial/withdrawals/approve/{id}', 'approveWithdrawal')->name('custodialWithdrawalApprove');
+            Route::post('custodial/withdrawals/reject/{id}', 'rejectWithdrawal')->name('custodialWithdrawalReject');
+            Route::post('custodial/withdrawals/execute/{id}', 'executeWithdrawal')->name('custodialWithdrawalExecute');
+            Route::post('custodial/withdrawals/retry/{id}', 'retryWithdrawal')->name('custodialWithdrawalRetry');
         });
 
         Route::controller(\App\Http\Controllers\Admin\Module\SanctionedAddressController::class)->group(function () {

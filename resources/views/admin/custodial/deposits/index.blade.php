@@ -14,9 +14,12 @@
                     <h1 class="page-header-title">@lang("Custodial Deposits")</h1>
                 </div>
                 <div class="col-sm-auto">
-                    <a class="btn btn-outline-primary" href="{{ route('admin.custodialScanNow') }}">
-                        <i class="bi-search me-1"></i> @lang('Scan Now')
-                    </a>
+                    <form action="{{ route('admin.custodialScanNow') }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="bi-search me-1"></i> @lang('Scan Now')
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>

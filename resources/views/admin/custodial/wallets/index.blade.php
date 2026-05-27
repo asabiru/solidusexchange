@@ -14,12 +14,18 @@
                     <h1 class="page-header-title">@lang("Custodial Wallets")</h1>
                 </div>
                 <div class="col-sm-auto">
-                    <a class="btn btn-outline-primary me-2" href="{{ route('admin.custodialCheckAllBalances') }}">
-                        <i class="bi-wallet2 me-1"></i> @lang('Check Balances')
-                    </a>
-                    <a class="btn btn-outline-secondary me-2" href="{{ route('admin.custodialScanNow') }}">
-                        <i class="bi-search me-1"></i> @lang('Scan Deposits')
-                    </a>
+                    <form action="{{ route('admin.custodialCheckAllBalances') }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-primary me-2">
+                            <i class="bi-wallet2 me-1"></i> @lang('Check Balances')
+                        </button>
+                    </form>
+                    <form action="{{ route('admin.custodialScanNow') }}" method="POST" class="d-inline">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-secondary me-2">
+                            <i class="bi-search me-1"></i> @lang('Scan Deposits')
+                        </button>
+                    </form>
                     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#generateWalletModal">
                         <i class="bi-plus me-1"></i> @lang('Generate Wallet')
                     </button>

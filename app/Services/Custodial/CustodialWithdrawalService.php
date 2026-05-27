@@ -32,6 +32,14 @@ class CustodialWithdrawalService
     {
         $wallet = CustodialWallet::findOrFail($walletId);
 
+        if ($wallet->status !== 'active') {
+            throw new RuntimeException('Withdrawals are allowed only for active wallets.');
+        }
+
+        if (empty($wallet->encrypted_private_key)) {
+            throw new RuntimeException('Wallet does not have a private key configured.');
+        }
+
         // Validate address format
         $this->validateAddress($toAddress, $wallet->currency_code);
 
@@ -85,6 +93,12 @@ class CustodialWithdrawalService
         }
 
         $wallet = CustodialWallet::findOrFail($withdrawal->custodial_wallet_id);
+        if ($wallet->status !== 'active') {
+            throw new RuntimeException('Wallet is not active.');
+        }
+        if (empty($wallet->encrypted_private_key)) {
+            throw new RuntimeException('Wallet does not have a private key configured.');
+        }
 
         $withdrawal->update(['status' => 'processing']);
 
