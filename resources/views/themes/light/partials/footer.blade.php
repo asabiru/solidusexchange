@@ -101,8 +101,6 @@
             <div class="footer-copyright">
                 <p>© {{ date('Y') }} SolidChange. Все права защищены.</p>
                 <div class="footer-meta">
-                    <span>Юрисдикция: ЕС</span>
-                    <span>Лицензия: SC-2025-0142</span>
                     @if(isset($languages))
                     <div class="footer-language">
                         @foreach($languages as $item)
