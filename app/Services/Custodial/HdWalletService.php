@@ -19,7 +19,7 @@ use RuntimeException;
  *
  * Supported chains:
  * - BTC: Blockstream API (free)
- * - LTC: litecoin.space API (free)
+ * - LTC: Blockstream-compatible public API (free)
  * - ETH/EVM: Public RPC nodes (free)
  * - TRX: TronGrid API (free tier)
  * - SOL: Solana RPC (free)
@@ -1069,7 +1069,7 @@ class HdWalletService
         return $deposits;
     }
 
-    // ─── LTC deposits via litecoin.space API ──────────────────────────────
+    // ─── LTC deposits via Blockstream-compatible API ──────────────────────
 
     private function checkLtcDeposits(CustodialWallet $wallet): array
     {

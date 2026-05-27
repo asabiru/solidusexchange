@@ -14,8 +14,8 @@ return [
     // Bitcoin (Blockstream — free, no key needed)
     'btc_api' => env('CUSTODIAL_BTC_API', 'https://blockstream.info/api'),
 
-    // Litecoin (litecoin.space — free, same API format as Blockstream)
-    'ltc_api' => env('CUSTODIAL_LTC_API', 'https://litecoin.space/api'),
+    // Litecoin (Blockstream-compatible public API)
+    'ltc_api' => env('CUSTODIAL_LTC_API', 'https://litecoin.blockstream.info/api'),
 
     // Ethereum / EVM chains (public RPC — free)
     'eth_rpc' => env('CUSTODIAL_ETH_RPC', 'https://ethereum-rpc.publicnode.com'),
