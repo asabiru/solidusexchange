@@ -3,9 +3,12 @@
 namespace App\Services\CryptoMethod\custodial;
 
 use App\Models\CustodialWallet;
+use App\Models\ExchangePayout;
 use App\Services\Custodial\CustodialWalletService;
+use App\Services\Custodial\HdWalletService;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 /**
  * Custodial HD Wallet deposit provider.
@@ -18,6 +21,7 @@ class Service
 {
     public function __construct(
         private readonly CustodialWalletService $walletService,
+        private readonly HdWalletService $hdWallet,
     ) {}
 
     /**
@@ -83,48 +87,125 @@ class Service
     /**
      * Withdraw crypto from a custodial wallet to a destination address.
      *
-     * This creates an ExchangePayout record for manual processing by admin.
-     * Automatic on-chain withdrawal is not yet implemented.
+     * This executes an on-chain transfer directly from a custodial wallet.
      */
     public function withdrawCrypto($object, $amount, $currency, $address, $type): bool
     {
         $currency = strtoupper((string)$currency);
+        $amount = (float)$amount;
 
-        // Find the custodial wallet that has funds for this currency
-        $wallet = CustodialWallet::forCurrency($currency)
-            ->where('status', 'active')
-            ->whereNotNull('encrypted_private_key')
-            ->orderByDesc('last_deposit_amount')
+        $existing = ExchangePayout::where('exchange_request_id', $object->id)
+            ->where('type', 'payout')
+            ->latest()
             ->first();
 
-        if (!$wallet) {
-            Log::warning("Custodial: no wallet with private key found for {$currency} withdrawal");
-            return false;
+        if ($existing && in_array($existing->status, ['processing', 'sent'], true)) {
+            Log::info("Custodial: payout already in progress or completed", [
+                'exchange_id' => $object->id,
+                'status' => $existing->status,
+                'tx_id' => $existing->tx_id,
+            ]);
+            return true;
         }
 
-        // Create payout record for admin to process manually
-        \App\Models\ExchangePayout::updateOrCreate(
+        $payout = ExchangePayout::updateOrCreate(
             [
                 'exchange_request_id' => $object->id,
-                'type'                => 'payout',
+                'type' => 'payout',
             ],
             [
-                'user_id'             => $object->user_id,
-                'provider'            => 'custodial',
-                'currency_code'       => $currency,
-                'amount'              => (float)$amount,
-                'destination_wallet'  => (string)$address,
-                'status'              => 'queued',
-                'tx_id'               => null,
-                'external_reference'  => 'custodial_' . substr(uniqid('', true), 0, 19),
-                'error_message'       => null,
-                'requested_at'        => now(),
-                'processed_at'        => null,
+                'user_id'            => $object->user_id,
+                'provider'           => 'custodial',
+                'currency_code'      => $currency,
+                'amount'             => $amount,
+                'destination_wallet' => (string)$address,
+                'status'             => 'processing',
+                'tx_id'              => null,
+                'external_reference' => 'custodial_' . substr(uniqid('', true), 0, 19),
+                'error_message'      => null,
+                'requested_at'       => now(),
+                'processed_at'       => null,
             ]
         );
 
-        Log::info("Custodial: queued payout of {$amount} {$currency} to {$address}");
+        $wallet = $this->findFundingWallet($currency, $amount);
+        if (!$wallet) {
+            $message = "Custodial: no active wallet with enough balance found for {$currency} payout";
+            Log::warning($message, ['exchange_id' => $object->id, 'amount' => $amount]);
+            $payout->update([
+                'status' => 'failed',
+                'error_message' => $message,
+                'processed_at' => now(),
+            ]);
+            return false;
+        }
 
-        return true;
+        try {
+            $result = $this->hdWallet->withdraw($wallet, (string)$address, $amount);
+
+            $payout->update([
+                'status' => 'sent',
+                'tx_id' => $result['txid'] ?? null,
+                'error_message' => null,
+                'processed_at' => now(),
+            ]);
+
+            $object->payout_tx_id = $result['txid'] ?? null;
+            $object->payout_provider = 'custodial';
+            if (method_exists($object, 'save')) {
+                $object->save();
+            }
+
+            Log::info("Custodial: payout sent on-chain", [
+                'exchange_id' => $object->id,
+                'wallet_id' => $wallet->id,
+                'currency' => $currency,
+                'amount' => $amount,
+                'tx_id' => $result['txid'] ?? null,
+            ]);
+
+            return true;
+        } catch (Throwable $e) {
+            $payout->update([
+                'status' => 'failed',
+                'error_message' => $e->getMessage(),
+                'processed_at' => now(),
+            ]);
+
+            Log::error("Custodial: payout failed", [
+                'exchange_id' => $object->id,
+                'currency' => $currency,
+                'amount' => $amount,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function findFundingWallet(string $currency, float $amount): ?CustodialWallet
+    {
+        $wallets = CustodialWallet::forCurrency($currency)
+            ->where('status', 'active')
+            ->whereNotNull('encrypted_private_key')
+            ->orderByDesc('balance')
+            ->orderBy('id')
+            ->get();
+
+        foreach ($wallets as $wallet) {
+            try {
+                $balanceInfo = $this->hdWallet->getBalance($wallet);
+                if (($balanceInfo['balance'] ?? 0) >= $amount) {
+                    return $wallet;
+                }
+            } catch (Throwable $e) {
+                Log::warning("Custodial: balance check failed for payout wallet {$wallet->id}", [
+                    'currency' => $currency,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return null;
     }
 }

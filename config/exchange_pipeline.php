@@ -2,7 +2,7 @@
 
 return [
     'deposit_provider' => env('EXCHANGE_PIPELINE_DEPOSIT_PROVIDER', 'custodial'),
-    'payout_provider' => env('EXCHANGE_PIPELINE_PAYOUT_PROVIDER', 'treasury_queue'),
+    'payout_provider' => env('EXCHANGE_PIPELINE_PAYOUT_PROVIDER', 'custodial'),
     'treasury' => [
         'watch_provider' => env('EXCHANGE_TREASURY_WATCH_PROVIDER', 'none'),
         'require_watch_subscription' => env('EXCHANGE_TREASURY_REQUIRE_WATCH_SUBSCRIPTION', false),
