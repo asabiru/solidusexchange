@@ -2297,25 +2297,6 @@ class HdWalletService
         return $this->base58Encode($full);
     }
 
-    private function base58Encode(string $data): string
-    {
-        $alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-        $result = '';
-
-        $num = gmp_init(bin2hex($data), 16);
-        while (gmp_cmp($num, 0) > 0) {
-            [$num, $rem] = gmp_div_qr($num, 58);
-            $result = $alphabet[gmp_intval($rem)] . $result;
-        }
-
-        // Leading zeros
-        for ($i = 0; $i < strlen($data) && $data[$i] === "\x00"; $i++) {
-            $result = '1' . $result;
-        }
-
-        return $result;
-    }
-
     // ─── SOL send (SOL + SPL tokens) ─────────────────────────────────────
 
     private function sendSol(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
