@@ -140,7 +140,9 @@ class ExchangeQuoteService
 
     private function buildInternalQuote(CryptoCurrency $sendCurrency, CryptoCurrency $getCurrency, float $sendAmount): array
     {
-        $exchangeRate = (float)$sendCurrency->usd_rate / (float)$getCurrency->usd_rate;
+        $markupPercent = $this->effectiveMarkupPercent();
+        $baseRate = (float)$sendCurrency->usd_rate / (float)$getCurrency->usd_rate;
+        $exchangeRate = $baseRate / (1 + ($markupPercent / 100));
         $getAmount = $sendAmount * $exchangeRate;
         $fees = $this->getCryptoFees($getAmount, $getCurrency);
         $serviceFee = (float)$fees['serviceFees'];
@@ -168,10 +170,10 @@ class ExchangeQuoteService
             'quote_symbol' => null,
             'quote_reference_price' => null,
             'quote_price' => $exchangeRate > 0 ? (1 / $exchangeRate) : null,
-            'quote_markup_percent' => 0.0,
+            'quote_markup_percent' => $markupPercent,
             'quote_slippage_percent' => 0.0,
             'quote_trade_fee_percent' => 0.0,
-            'quote_expires_at' => Carbon::now()->addSeconds((int)config('exchange_engine.quote_ttl_seconds', 30)),
+            'quote_expires_at' => Carbon::now()->addSeconds((int)config('exchange_engine.quote_ttl_seconds', 20)),
             'receive_readonly' => false,
         ];
     }
@@ -183,11 +185,12 @@ class ExchangeQuoteService
         $bestAsk = $this->bybitClient->getBestAsk($symbol);
         $lotFilter = $instrument['lotSizeFilter'] ?? [];
         $qtyStep = (string)($lotFilter['basePrecision'] ?? $lotFilter['qtyStep'] ?? '0.00000001');
-        $markupPercent = (float)config('exchange_engine.markup_percent', 1.0);
+        $markupPercent = $this->effectiveMarkupPercent();
         $slippagePercent = (float)config('exchange_engine.slippage_percent', 0.2);
         $tradeFeePercent = (float)config('exchange_engine.trade_fee_percent', 0.1);
+        $executionBufferPercent = (float)config('exchange_engine.execution_safety_buffer_percent', 0.75);
 
-        $protectedExecutionPrice = $bestAsk * (1 + (($slippagePercent + $tradeFeePercent) / 100));
+        $protectedExecutionPrice = $bestAsk * (1 + (($slippagePercent + $tradeFeePercent + $executionBufferPercent) / 100));
         $clientPrice = $protectedExecutionPrice * (1 + ($markupPercent / 100));
         $getAmount = $this->roundDown($sendAmount / $clientPrice, $qtyStep);
 
@@ -222,9 +225,17 @@ class ExchangeQuoteService
             'quote_markup_percent' => $markupPercent,
             'quote_slippage_percent' => $slippagePercent,
             'quote_trade_fee_percent' => $tradeFeePercent,
-            'quote_expires_at' => Carbon::now()->addSeconds((int)config('exchange_engine.quote_ttl_seconds', 30)),
+            'quote_expires_at' => Carbon::now()->addSeconds((int)config('exchange_engine.quote_ttl_seconds', 20)),
             'receive_readonly' => true,
         ];
+    }
+
+    private function effectiveMarkupPercent(): float
+    {
+        return max(
+            (float)config('exchange_engine.markup_percent', 2.0),
+            (float)config('exchange_engine.min_profit_percent', 1.5)
+        );
     }
 
     private function assertMinOrder(float $referencePrice, float $finalAmount, array $lotFilter, CryptoCurrency $sendCurrency, CryptoCurrency $getCurrency): void
