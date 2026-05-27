@@ -158,6 +158,30 @@
                         </a>
                     </div>
 
+                    <span class="dropdown-header mt-3">@lang('Custodial & AML')</span>
+                    <small class="bi-three-dots nav-subtitle-replacer"></small>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.custodialWalletIndex','admin.custodialWalletList','admin.custodialDepositIndex','admin.custodialDepositList','admin.custodialScanNow']) }}"
+                           href="{{ route('admin.custodialWalletIndex') }}" data-placement="left">
+                            <i class="bi-wallet nav-icon"></i>
+                            <span class="nav-link-title">@lang("Custodial Wallets")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.custodialDepositIndex','admin.custodialDepositList']) }}"
+                           href="{{ route('admin.custodialDepositIndex') }}" data-placement="left">
+                            <i class="bi-arrow-down-circle nav-icon"></i>
+                            <span class="nav-link-title">@lang("Deposits")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.sanctionedIndex','admin.sanctionedAddressList','admin.sanctionedLogs','admin.sanctionedLogsList']) }}"
+                           href="{{ route('admin.sanctionedIndex') }}" data-placement="left">
+                            <i class="bi-shield-exclamation nav-icon"></i>
+                            <span class="nav-link-title">@lang("Sanctions List")</span>
+                        </a>
+                    </div>
+
 
                     <span class="dropdown-header mt-3">@lang('Transaction History')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
