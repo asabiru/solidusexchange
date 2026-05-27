@@ -41,7 +41,7 @@
                 <div class="crypto-header">
                     <div class="crypto-icon">
                         @if($crypto->image)
-                            <img src="{{ getFile($crypto->driver, $crypto->image) }}" alt="{{ $crypto->code }}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;">
+                            <img src="{{ getFile($crypto->driver, $crypto->image) }}" alt="{{ $crypto->code }}">
                         @else
                             <div class="icon-placeholder">{{ substr($crypto->code, 0, 2) }}</div>
                         @endif
