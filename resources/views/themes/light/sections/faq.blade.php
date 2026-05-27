@@ -1,13 +1,30 @@
 @php
+    $currentLangId = \App\Models\Language::where('short_name', app()->getLocale())->first()?->id ?? 1;
+    $defaultLangId = \App\Models\Language::where('default_status', true)->first()?->id ?? 1;
+
     $faqSingle = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'single'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
+        ->first();
+    $faqSingle = $faqSingle ?? \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'single'))
+        ->withoutGlobalScope('language')
+        ->where('language_id', $defaultLangId)
         ->first();
 
     $faqMultiple = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'multiple'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->get();
+    if ($faqMultiple->isEmpty()) {
+        $faqMultiple = \App\Models\ContentDetails::with('content')
+            ->whereHas('content', fn($q) => $q->where('name', 'faq')->where('type', 'multiple'))
+            ->withoutGlobalScope('language')
+            ->where('language_id', $defaultLangId)
+            ->get();
+    }
 
     $sectionTitle = $faqSingle ? __($faqSingle->description->title ?? 'FAQ') : 'FAQ';
     $sectionSubtitle = $faqSingle ? __($faqSingle->description->sub_title ?? 'Часто задаваемые вопросы') : 'Часто задаваемые вопросы';
@@ -78,8 +95,8 @@ function toggleFaq(index) {
             answer.classList.toggle('show');
             question.classList.toggle('active');
         } else {
-            answer.classList.remove('show');
-            question.classList.remove('active');
+        answer.classList.remove('show');
+        question.classList.remove('active');
         }
     });
 }

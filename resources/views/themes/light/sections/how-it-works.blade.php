@@ -1,12 +1,30 @@
 @php
+    $currentLangId = \App\Models\Language::where('short_name', app()->getLocale())->first()?->id ?? 1;
+    $defaultLangId = \App\Models\Language::where('default_status', true)->first()?->id ?? 1;
+
     $howContentSingle = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'how_it_work')->where('type', 'single'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->first();
+    $howContentSingle = $howContentSingle ?? \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn($q) => $q->where('name', 'how_it_work')->where('type', 'single'))
+        ->withoutGlobalScope('language')
+        ->where('language_id', $defaultLangId)
+        ->first();
+
     $howContentMultiple = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'how_it_work')->where('type', 'multiple'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->get();
+    if ($howContentMultiple->isEmpty()) {
+        $howContentMultiple = \App\Models\ContentDetails::with('content')
+            ->whereHas('content', fn($q) => $q->where('name', 'how_it_work')->where('type', 'multiple'))
+            ->withoutGlobalScope('language')
+            ->where('language_id', $defaultLangId)
+            ->get();
+    }
 @endphp
 <!-- HowItWorks Section - eazy228/design style -->
 <section class="how-it-works-section" id="how">

@@ -1,16 +1,30 @@
 @php
+    $currentLangId = \App\Models\Language::where('short_name', app()->getLocale())->first()?->id ?? 1;
+    $defaultLangId = \App\Models\Language::where('default_status', true)->first()?->id ?? 1;
+
     $testimonialSingle = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'testimonial')->where('type', 'single'))
-        ->where('language_id', app()->getLocale() !== config('app.locale') ? 2 : 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->first();
     $testimonialSingle = $testimonialSingle ?? \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'testimonial')->where('type', 'single'))
+        ->withoutGlobalScope('language')
+        ->where('language_id', $defaultLangId)
         ->first();
 
     $testimonialMultiple = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'testimonial')->where('type', 'multiple'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->get();
+    if ($testimonialMultiple->isEmpty()) {
+        $testimonialMultiple = \App\Models\ContentDetails::with('content')
+            ->whereHas('content', fn($q) => $q->where('name', 'testimonial')->where('type', 'multiple'))
+            ->withoutGlobalScope('language')
+            ->where('language_id', $defaultLangId)
+            ->get();
+    }
 
     $sectionTitle = $testimonialSingle ? __($testimonialSingle->description->title ?? 'Отзывы') : 'Отзывы';
     $sectionSubtitle = $testimonialSingle ? __($testimonialSingle->description->sub_title ?? 'Что говорят наши клиенты') : 'Что говорят наши клиенты';

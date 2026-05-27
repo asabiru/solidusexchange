@@ -1,12 +1,30 @@
 @php
+    $currentLangId = \App\Models\Language::where('short_name', app()->getLocale())->first()?->id ?? 1;
+    $defaultLangId = \App\Models\Language::where('default_status', true)->first()?->id ?? 1;
+
     $whyContentSingle = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'why_choose_us')->where('type', 'single'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->first();
+    $whyContentSingle = $whyContentSingle ?? \App\Models\ContentDetails::with('content')
+        ->whereHas('content', fn($q) => $q->where('name', 'why_choose_us')->where('type', 'single'))
+        ->withoutGlobalScope('language')
+        ->where('language_id', $defaultLangId)
+        ->first();
+
     $whyContentMultiple = \App\Models\ContentDetails::with('content')
         ->whereHas('content', fn($q) => $q->where('name', 'why_choose_us')->where('type', 'multiple'))
-        ->where('language_id', 1)
+        ->withoutGlobalScope('language')
+        ->where('language_id', $currentLangId)
         ->get();
+    if ($whyContentMultiple->isEmpty()) {
+        $whyContentMultiple = \App\Models\ContentDetails::with('content')
+            ->whereHas('content', fn($q) => $q->where('name', 'why_choose_us')->where('type', 'multiple'))
+            ->withoutGlobalScope('language')
+            ->where('language_id', $defaultLangId)
+            ->get();
+    }
 @endphp
 <!-- Advantages Section - eazy228/design style -->
 <section class="advantages-section" id="advantages">
