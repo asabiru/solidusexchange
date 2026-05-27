@@ -189,11 +189,22 @@
                                     <i>@lang('**To sending emails and manage records automatically you need to setup cron job in your server. Make sure your job is running properly. We insist to set the cron job time as minimum as possible.**')</i>
                                 </p>
                             </div>
+
+                            @php
+                                $cronSecret = (string) config('app.scheduler_secret');
+                                $queueWorkUrl = $cronSecret !== ''
+                                    ? route('queue.work', ['secret' => $cronSecret])
+                                    : route('queue.work');
+                                $scheduleRunUrl = $cronSecret !== ''
+                                    ? route('schedule:run', ['secret' => $cronSecret])
+                                    : route('schedule:run');
+                            @endphp
+
                             <div class="col-md-12 form-group">
                                 <label><strong>@lang('Command for Email')</strong></label>
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control copyText"
-                                           value="curl -s {{ route('queue.work') }}" disabled>
+                                           value="curl -fsS '{{ $queueWorkUrl }}'" disabled>
                                     <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
                                             id="button-addon2">
                                         <i class="fas fa-copy"></i></button>
@@ -204,7 +215,7 @@
                                 <label><strong>@lang('Command for Cron Job')</strong></label>
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control copyText"
-                                           value="curl -s {{ route('schedule:run') }}"
+                                           value="curl -fsS '{{ $scheduleRunUrl }}'"
                                            disabled>
                                     <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
                                             id="button-addon2">
