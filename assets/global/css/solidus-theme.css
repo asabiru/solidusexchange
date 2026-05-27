@@ -273,6 +273,26 @@ a:focus {
     border-radius: var(--radius-md);
 }
 
+/* Admin sidebar: keep active state subtle and prevent oversized beige blocks */
+.navbar-vertical-aside .sidebar .nav-link.active,
+.navbar-vertical-aside .sidebar .nav-link.dropdown-toggle.active,
+.navbar-vertical-aside .sidebar .nav-link[aria-expanded="true"] {
+    color: var(--color-text-primary) !important;
+    background: rgba(232, 201, 160, 0.10) !important;
+    border-color: rgba(232, 201, 160, 0.18) !important;
+    box-shadow: none !important;
+    border-radius: 12px !important;
+    transform: none !important;
+}
+
+.navbar-vertical-aside .sidebar .nav-link.active:hover,
+.navbar-vertical-aside .sidebar .nav-link.dropdown-toggle.active:hover,
+.navbar-vertical-aside .sidebar .nav-link[aria-expanded="true"]:hover {
+    color: var(--color-text-primary) !important;
+    background: rgba(232, 201, 160, 0.14) !important;
+    box-shadow: none !important;
+}
+
 .btn,
 .cmn-btn,
 .cmn-btn2,
