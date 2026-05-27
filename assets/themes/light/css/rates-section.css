@@ -58,8 +58,9 @@ Rates Section - eazy228/design style
 .ticker-track {
     display: flex;
     gap: 32px;
-    animation: ticker-scroll 60s linear infinite;
+    animation: ticker-scroll 25s linear infinite;
     white-space: nowrap;
+    will-change: transform;
 }
 
 .ticker-pause:hover .ticker-track {
@@ -73,6 +74,11 @@ Rates Section - eazy228/design style
     to {
         transform: translateX(-50%);
     }
+}
+
+/* Touch devices: pause on tap/hold */
+.ticker-pause:active .ticker-track {
+    animation-play-state: paused;
 }
 
 .ticker-item {
