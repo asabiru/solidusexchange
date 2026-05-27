@@ -124,6 +124,10 @@ PopularCryptos Section - eazy228/design style
     margin: 0 0 4px 0;
 }
 
+.crypto-network-badge {
+    margin-bottom: 8px;
+}
+
 .crypto-name {
     font-size: 14px;
     color: var(--color-text-muted);

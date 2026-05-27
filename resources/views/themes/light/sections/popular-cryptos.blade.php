@@ -8,6 +8,26 @@
         $popularCryptos = collect();
     }
     $baseCurrency = strtoupper(basicControl()->base_currency ?? 'RUB');
+    $networkBadgeLabel = function (?string $code): string {
+        if (!$code || !str_contains($code, '_')) {
+            return '';
+        }
+
+        $parts = explode('_', $code);
+        $suffix = strtoupper(end($parts));
+        $aliases = [
+            'ERC20' => 'ERC20',
+            'TRC20' => 'TRC20',
+            'BSC' => 'BSC',
+            'SOL' => 'SOL',
+            'ARB' => 'ARB',
+            'BASE' => 'BASE',
+            'OPT' => 'OPT',
+            'TON' => 'TON',
+        ];
+
+        return $aliases[$suffix] ?? $suffix;
+    };
 @endphp
 
 <!-- PopularCryptos Section - eazy228/design style -->
@@ -66,6 +86,10 @@
 
                 <div class="crypto-body">
                     <h4 class="crypto-symbol">{{ $crypto->code }}</h4>
+                    @php $badge = $networkBadgeLabel($crypto->code); @endphp
+                    @if($badge)
+                        <span class="currency-network-badge crypto-network-badge">{{ $badge }}</span>
+                    @endif
                     <p class="crypto-name">{{ $crypto->name }}</p>
                     <div class="crypto-price">
                         {{ $displayPrice }} {{ $priceCurrency }}

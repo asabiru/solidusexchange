@@ -191,6 +191,26 @@
         }, delay);
     }
 
+    function getNetworkBadgeLabel(code) {
+        if (!code || code.indexOf('_') === -1) {
+            return '';
+        }
+
+        const suffix = code.split('_').pop().toUpperCase();
+        const aliases = {
+            ERC20: 'ERC20',
+            TRC20: 'TRC20',
+            BSC: 'BSC',
+            SOL: 'SOL',
+            ARB: 'ARB',
+            BASE: 'BASE',
+            OPT: 'OPT',
+            TON: 'TON',
+        };
+
+        return aliases[suffix] || suffix;
+    }
+
     function requestQuote(sendAmount) {
         const routeMap = {
             exchange: "{{ route('exchangeAutoRate', [], false) }}",
@@ -229,6 +249,7 @@
                 continue;
             }
             let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -236,6 +257,7 @@
                             </div>
                             <div class="text-area">
                                 <div class="title">${currencies[i].code}</div>
+                                ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
                         </div>
@@ -253,6 +275,7 @@
                 continue;
             }
             let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -260,6 +283,7 @@
                             </div>
                             <div class="text-area">
                                 <div class="title">${currencies[i].code}</div>
+                                ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
                         </div>
@@ -270,15 +294,27 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path);
+        $('#showSendImage').attr('src', currency.image_path || currency.image);
         $('#showSendCode').text(currency.code);
+        const sendNetwork = document.getElementById('showSendNetwork');
+        if (sendNetwork) {
+            const badge = getNetworkBadgeLabel(currency.code);
+            sendNetwork.textContent = badge;
+            sendNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         $('#showSendName').text(currency.name);
         $('input[name="exchangeSendCurrency"]').val(currency.id);
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path);
+        $('#showGetImage').attr('src', currency.image_path || currency.image);
         $('#showGetCode').text(currency.code);
+        const getNetwork = document.getElementById('showGetNetwork');
+        if (getNetwork) {
+            const badge = getNetworkBadgeLabel(currency.code);
+            getNetwork.textContent = badge;
+            getNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         $('#showGetName').text(currency.name);
         $('input[name="exchangeGetCurrency"]').val(currency.id);
     }

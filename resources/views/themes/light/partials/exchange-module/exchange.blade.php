@@ -14,6 +14,7 @@
                         </div>
                         <div class="currency-info">
                             <span class="currency-symbol" id="showSendCode"></span>
+                            <span class="currency-network-badge" id="showSendNetwork"></span>
                         </div>
                         <i class="fa-regular fa-angle-down selector-arrow"></i>
                     </div>
@@ -43,6 +44,7 @@
                         </div>
                         <div class="currency-info">
                             <span class="currency-symbol" id="showGetCode"></span>
+                            <span class="currency-network-badge" id="showGetNetwork"></span>
                         </div>
                         <i class="fa-regular fa-angle-down selector-arrow"></i>
                     </div>

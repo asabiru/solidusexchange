@@ -129,6 +129,7 @@
                                     </div>
                                     <div class="currency-info">
                                         <span class="currency-symbol" id="showSendCode"></span>
+                                        <span class="currency-network-badge" id="showSendNetwork"></span>
                                     </div>
                                     <i class="fa-regular fa-angle-down selector-arrow"></i>
                                 </div>
@@ -163,6 +164,7 @@
                                     </div>
                                     <div class="currency-info">
                                         <span class="currency-symbol" id="showGetCode"></span>
+                                        <span class="currency-network-badge" id="showGetNetwork"></span>
                                     </div>
                                     <i class="fa-regular fa-angle-down selector-arrow"></i>
                                 </div>
@@ -322,6 +324,26 @@ function loadSellCurrencies() {
     }
 }
 
+function getNetworkBadgeLabel(code) {
+    if (!code || code.indexOf('_') === -1) {
+        return '';
+    }
+
+    const suffix = code.split('_').pop().toUpperCase();
+    const aliases = {
+        ERC20: 'ERC20',
+        TRC20: 'TRC20',
+        BSC: 'BSC',
+        SOL: 'SOL',
+        ARB: 'ARB',
+        BASE: 'BASE',
+        OPT: 'OPT',
+        TON: 'TON',
+    };
+
+    return aliases[suffix] || suffix;
+}
+
 // Update send currency selector
 function updateSendCurrencySelector(currencies, selected) {
     const modal = document.querySelector('#calculator-modal .modal-body');
@@ -330,10 +352,20 @@ function updateSendCurrencySelector(currencies, selected) {
     let html = '<div class="currency-list">';
     currencies.forEach(currency => {
         const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        const networkBadge = getNetworkBadgeLabel(currency.code);
         html += `
-            <div class="currency-item ${isSelected}" data-id="${currency.id}" data-code="${currency.code}" data-image="${currency.image}">
-                <img src="${currency.image}" alt="${currency.code}">
-                <span>${currency.code}</span>
+            <div class="item sendModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
+                <div class="left-side">
+                    <div class="img-area">
+                        <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
+                    </div>
+                    <div class="text-area">
+                        <div class="title">${currency.code}</div>
+                        ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
+                        <div class="sub-title">${currency.name}</div>
+                    </div>
+                </div>
+                <div class="right-side"></div>
             </div>
         `;
     });
@@ -347,8 +379,14 @@ function updateSendCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showSendImage').src = selected.image;
+        document.getElementById('showSendImage').src = selected.image_path || selected.image;
         document.getElementById('showSendCode').textContent = selected.code;
+        const sendNetwork = document.getElementById('showSendNetwork');
+        if (sendNetwork) {
+            const badge = getNetworkBadgeLabel(selected.code);
+            sendNetwork.textContent = badge;
+            sendNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         document.querySelector('input[name="exchangeSendCurrency"]').value = selected.id;
     }
 }
@@ -361,10 +399,20 @@ function updateGetCurrencySelector(currencies, selected) {
     let html = '<div class="currency-list">';
     currencies.forEach(currency => {
         const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        const networkBadge = getNetworkBadgeLabel(currency.code);
         html += `
-            <div class="currency-item ${isSelected}" data-id="${currency.id}" data-code="${currency.code}" data-image="${currency.image}">
-                <img src="${currency.image}" alt="${currency.code}">
-                <span>${currency.code}</span>
+            <div class="item getModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
+                <div class="left-side">
+                    <div class="img-area">
+                        <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
+                    </div>
+                    <div class="text-area">
+                        <div class="title">${currency.code}</div>
+                        ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
+                        <div class="sub-title">${currency.name}</div>
+                    </div>
+                </div>
+                <div class="right-side"></div>
             </div>
         `;
     });
@@ -378,8 +426,14 @@ function updateGetCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showGetImage').src = selected.image;
+        document.getElementById('showGetImage').src = selected.image_path || selected.image;
         document.getElementById('showGetCode').textContent = selected.code;
+        const getNetwork = document.getElementById('showGetNetwork');
+        if (getNetwork) {
+            const badge = getNetworkBadgeLabel(selected.code);
+            getNetwork.textContent = badge;
+            getNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         document.querySelector('input[name="exchangeGetCurrency"]').value = selected.id;
     }
 }

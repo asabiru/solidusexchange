@@ -190,12 +190,13 @@ Swap Card - eazy228/design style
 }
 
 .currency-icon {
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
     border-radius: 50%;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.04);
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 
 .currency-icon img {
@@ -207,17 +208,40 @@ Swap Card - eazy228/design style
     display: block;
 }
 
-.currency-info {
+.currency-selector .currency-info {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
 }
 
-.currency-symbol {
+.currency-selector .currency-symbol {
     font-size: 14px;
     font-weight: 500;
     color: var(--color-text-primary);
+    line-height: 1;
 }
 
-.selector-arrow {
+.currency-network-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--color-accent-soft);
+    color: var(--color-accent);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    text-transform: uppercase;
+}
+
+.currency-network-badge:empty {
+    display: none;
+}
+
+.currency-selector .selector-arrow {
     color: var(--color-text-muted);
     font-size: 12px;
     flex: 0 0 auto;
@@ -620,22 +644,31 @@ Exchange Calculator - eazy228/design style
 .currency-icon img {
     width: 100%;
     height: 100%;
-    object-fit: cover;
+    object-fit: contain;
+    box-sizing: border-box;
+    padding: 1px;
+    display: block;
 }
 
-.currency-info {
+.sc-currency-selector .currency-info {
     flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
 }
 
-.currency-symbol {
+.sc-currency-selector .currency-symbol {
     font-size: 14px;
     font-weight: 500;
     color: var(--color-text-primary);
+    line-height: 1;
 }
 
-.selector-arrow {
+.sc-currency-selector .selector-arrow {
     color: var(--color-text-muted);
     font-size: 12px;
+    flex: 0 0 auto;
 }
 
 .sc-compact-input-wrapper input {
