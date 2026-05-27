@@ -29,12 +29,16 @@
                 <div class="footer-social">
                     @foreach($socialLinks as $social)
                         @php
-                            $isEmail = str_starts_with($social->my_link ?? '', 'mailto:');
+                            $href = trim((string) ($social->my_link ?? ''));
+                            $icon = trim((string) ($social->icon ?? ''));
+                            $icon = preg_replace('/\b(fa-light|fal)\b/', 'fa-solid', $icon);
+                            $isEmail = str_starts_with($href, 'mailto:');
                         @endphp
-                        <a href="{{ $social->my_link }}"
+                        @continue($href === '')
+                        <a href="{{ $href }}"
                            class="social-link"
                            {{ $isEmail ? '' : 'target="_blank" rel="noopener"' }}>
-                            <i class="{{ $social->icon ?? 'fa-solid fa-link' }}"></i>
+                            <i class="{{ $icon !== '' ? $icon : 'fa-solid fa-link' }}"></i>
                         </a>
                     @endforeach
                 </div>

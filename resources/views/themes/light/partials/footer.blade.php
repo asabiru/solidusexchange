@@ -84,9 +84,16 @@
                 @if(isset($extraInfo['social']) && count($extraInfo['social']) > 0)
                 <div class="footer-social">
                     @foreach($extraInfo['social'] as $social)
-                    <a href="{{@$social->content->media->my_link}}" class="social-link">
-                        <i class="{{@$social->content->media->icon}}"></i>
-                    </a>
+                        @php
+                            $socialHref = trim((string) (@$social->content->media->my_link ?? ''));
+                            $socialIcon = trim((string) (@$social->content->media->icon ?? ''));
+                            $socialIcon = preg_replace('/\b(fa-light|fal)\b/', 'fa-solid', $socialIcon);
+                            $socialIsEmail = str_starts_with($socialHref, 'mailto:');
+                        @endphp
+                        @continue($socialHref === '')
+                        <a href="{{ $socialHref }}" class="social-link" {!! $socialIsEmail ? '' : 'target="_blank" rel="noopener"' !!}>
+                            <i class="{{ $socialIcon !== '' ? $socialIcon : 'fa-solid fa-link' }}"></i>
+                        </a>
                     @endforeach
                 </div>
                 @endif

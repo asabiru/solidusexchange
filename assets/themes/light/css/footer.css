@@ -213,6 +213,11 @@ Footer Section - eazy228/design style
     cursor: pointer;
 }
 
+.social-link i {
+    font-size: 16px;
+    line-height: 1;
+}
+
 .social-link:hover {
     border-color: var(--color-accent);
     color: var(--color-accent);
