@@ -11,7 +11,7 @@ use App\Http\Controllers\Admin\Module\SellController;
 use App\Http\Controllers\Admin\Module\FiatSendGatewayController;
 
 Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
-    Route::middleware(['auth:admin','adminRole:admin','demo'])->group(function () {
+    Route::middleware(['auth:admin','verifyAdmin','adminRole:admin','demo'])->group(function () {
 
         Route::controller(CryptoCurrencyController::class)->group(function () {
             Route::get('crypto/list', 'cryptoList')->name('cryptoList');
