@@ -233,8 +233,8 @@ class ExchangeQuoteService
     private function effectiveMarkupPercent(): float
     {
         return max(
-            (float)config('exchange_engine.markup_percent', 2.0),
-            (float)config('exchange_engine.min_profit_percent', 1.5)
+            (float)config('exchange_engine.markup_percent', 2.5),
+            (float)config('exchange_engine.min_profit_percent', 2.0)
         );
     }
 

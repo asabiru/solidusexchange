@@ -4,6 +4,7 @@ namespace App\Services\CryptoMethod\custodial;
 
 use App\Models\CustodialWallet;
 use App\Models\ExchangePayout;
+use App\Services\ExchangeEngine\BybitClient;
 use App\Services\Custodial\CustodialWalletService;
 use App\Services\Custodial\HdWalletService;
 use Illuminate\Support\Facades\Log;
@@ -22,6 +23,7 @@ class Service
     public function __construct(
         private readonly CustodialWalletService $walletService,
         private readonly HdWalletService $hdWallet,
+        private readonly BybitClient $bybitClient,
     ) {}
 
     /**
@@ -129,58 +131,100 @@ class Service
         );
 
         $wallet = $this->findFundingWallet($currency, $amount);
-        if (!$wallet) {
-            $message = "Custodial: no active wallet with enough balance found for {$currency} payout";
-            Log::warning($message, ['exchange_id' => $object->id, 'amount' => $amount]);
-            $payout->update([
-                'status' => 'failed',
-                'error_message' => $message,
-                'processed_at' => now(),
-            ]);
-            return false;
-        }
+        if ($wallet) {
+            try {
+                $result = $this->hdWallet->withdraw($wallet, (string)$address, $amount);
 
-        try {
-            $result = $this->hdWallet->withdraw($wallet, (string)$address, $amount);
+                $payout->update([
+                    'status' => 'sent',
+                    'tx_id' => $result['txid'] ?? null,
+                    'error_message' => null,
+                    'processed_at' => now(),
+                ]);
 
-            $payout->update([
-                'status' => 'sent',
-                'tx_id' => $result['txid'] ?? null,
-                'error_message' => null,
-                'processed_at' => now(),
-            ]);
+                $object->payout_tx_id = $result['txid'] ?? null;
+                $object->payout_provider = 'custodial';
+                if (method_exists($object, 'save')) {
+                    $object->save();
+                }
 
-            $object->payout_tx_id = $result['txid'] ?? null;
-            $object->payout_provider = 'custodial';
-            if (method_exists($object, 'save')) {
-                $object->save();
+                Log::info("Custodial: payout sent on-chain", [
+                    'exchange_id' => $object->id,
+                    'wallet_id' => $wallet->id,
+                    'currency' => $currency,
+                    'amount' => $amount,
+                    'tx_id' => $result['txid'] ?? null,
+                ]);
+
+                return true;
+            } catch (Throwable $e) {
+                $payout->update([
+                    'status' => 'failed',
+                    'error_message' => $e->getMessage(),
+                    'processed_at' => now(),
+                ]);
+
+                Log::error("Custodial: payout failed", [
+                    'exchange_id' => $object->id,
+                    'currency' => $currency,
+                    'amount' => $amount,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return false;
             }
-
-            Log::info("Custodial: payout sent on-chain", [
-                'exchange_id' => $object->id,
-                'wallet_id' => $wallet->id,
-                'currency' => $currency,
-                'amount' => $amount,
-                'tx_id' => $result['txid'] ?? null,
-            ]);
-
-            return true;
-        } catch (Throwable $e) {
-            $payout->update([
-                'status' => 'failed',
-                'error_message' => $e->getMessage(),
-                'processed_at' => now(),
-            ]);
-
-            Log::error("Custodial: payout failed", [
-                'exchange_id' => $object->id,
-                'currency' => $currency,
-                'amount' => $amount,
-                'error' => $e->getMessage(),
-            ]);
-
-            return false;
         }
+
+        if (
+            (bool) config('exchange_engine.auto_rebalance_with_bybit', true)
+            && filled(config('exchange_engine.bybit.api_key'))
+            && filled(config('exchange_engine.bybit.api_secret'))
+        ) {
+            try {
+                $chain = $this->resolveBybitWithdrawChain($currency);
+                $result = $this->bybitClient->withdrawAsset($currency, $chain, (string)$address, $amount);
+
+                $withdrawId = $result['result']['id'] ?? $result['result']['withdrawId'] ?? null;
+                $payout->update([
+                    'status' => 'sent',
+                    'tx_id' => $withdrawId ? (string)$withdrawId : null,
+                    'error_message' => null,
+                    'processed_at' => now(),
+                ]);
+
+                $object->payout_tx_id = $withdrawId ? (string)$withdrawId : null;
+                $object->payout_provider = 'custodial';
+                if (method_exists($object, 'save')) {
+                    $object->save();
+                }
+
+                Log::info("Custodial: payout sent via Bybit withdrawal fallback", [
+                    'exchange_id' => $object->id,
+                    'currency' => $currency,
+                    'amount' => $amount,
+                    'chain' => $chain,
+                    'withdraw_id' => $withdrawId,
+                ]);
+
+                return true;
+            } catch (Throwable $e) {
+                Log::error("Custodial: Bybit withdrawal fallback failed", [
+                    'exchange_id' => $object->id,
+                    'currency' => $currency,
+                    'amount' => $amount,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $message = "Custodial: no active wallet with enough balance found for {$currency} payout";
+        Log::warning($message, ['exchange_id' => $object->id, 'amount' => $amount]);
+        $payout->update([
+            'status' => 'failed',
+            'error_message' => $message,
+            'processed_at' => now(),
+        ]);
+        return false;
     }
 
     private function findFundingWallet(string $currency, float $amount): ?CustodialWallet
@@ -207,5 +251,20 @@ class Service
         }
 
         return null;
+    }
+
+    private function resolveBybitWithdrawChain(string $currency): string
+    {
+        $currency = strtoupper($currency);
+        return match ($currency) {
+            'BTC' => 'BTC',
+            'LTC' => 'LTC',
+            'ETH', 'USDT', 'USDC', 'ARB', 'OP', 'PEPE', 'SHIB' => 'ETH',
+            'BNB' => 'BSC',
+            'TRX', 'USDT_TRC20', 'USDC_TRC20', 'USDD_TRC20' => 'TRX',
+            'SOL', 'USDT_SOL', 'USDC_SOL', 'PYUSD_SOL', 'TRUMP_SOL' => 'SOL',
+            'TON', 'USDT_TON' => 'TON',
+            default => $currency,
+        };
     }
 }
