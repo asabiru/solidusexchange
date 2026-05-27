@@ -14,7 +14,11 @@
         <p>Admin Panel</p>
     </div>
 
-    <form method="post" action="{{ route('admin.login.submit') }}" novalidate>
+    <form method="post"
+          action="{{ route('admin.login.submit') }}"
+          data-auth-transition
+          data-submitting-text="@lang('Signing in...')"
+          novalidate>
         @csrf
         <div class="form-group">
             <label class="form-label" for="username">@lang('Email or Username')</label>

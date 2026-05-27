@@ -49,6 +49,8 @@
             padding: 40px;
             box-shadow: var(--solidus-shadow);
             backdrop-filter: blur(10px);
+            animation: admin-card-in 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+            will-change: transform, opacity;
         }
 
         .admin-logo {
@@ -148,6 +150,85 @@
             border: none;
             margin-bottom: 20px;
         }
+
+        .admin-transition-note {
+            margin-top: 10px;
+            color: var(--solidus-muted);
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .auth-otp-grid {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .auth-otp-digit {
+            width: 100%;
+            height: 54px;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            padding: 0;
+        }
+
+        .admin-login-card .form-control.auth-otp-digit {
+            padding-left: 0;
+            padding-right: 0;
+        }
+
+        body.is-exiting .admin-login-card {
+            animation: admin-card-out 220ms ease-in forwards;
+        }
+
+        body.is-exiting .admin-logo,
+        body.is-exiting .form-group,
+        body.is-exiting .form-check,
+        body.is-exiting .admin-footer,
+        body.is-exiting .admin-transition-note {
+            transition: opacity 180ms ease, transform 180ms ease;
+            opacity: 0.55;
+            transform: translateY(4px);
+            pointer-events: none;
+        }
+
+        @keyframes admin-card-in {
+            from {
+                opacity: 0;
+                transform: translateY(18px) scale(0.985);
+                filter: blur(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+                filter: blur(0);
+            }
+        }
+
+        @keyframes admin-card-out {
+            from {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+            to {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.99);
+            }
+        }
+
+        @media (max-width: 575px) {
+            .auth-otp-grid {
+                gap: 8px;
+            }
+
+            .auth-otp-digit {
+                height: 48px;
+                font-size: 18px;
+            }
+        }
     </style>
 </head>
 
@@ -162,6 +243,33 @@
 <!-- JS Global Compulsory  -->
 <script src="{{ asset('assets/global/js/jquery.min.js') }}"></script>
 <script src="{{ asset('assets/themes/light/js/bootstrap.bundle.min.js') }}"></script>
+
+<script>
+    'use strict';
+
+    window.addEventListener('DOMContentLoaded', function () {
+        document.body.classList.remove('is-exiting');
+
+        document.querySelectorAll('form[data-auth-transition]').forEach(function (form) {
+            form.addEventListener('submit', function () {
+                if (document.body.classList.contains('is-exiting')) {
+                    return;
+                }
+
+                document.body.classList.add('is-exiting');
+
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.dataset.originalText = submitButton.innerHTML;
+                    if (form.dataset.submittingText) {
+                        submitButton.innerHTML = form.dataset.submittingText;
+                    }
+                }
+            });
+        });
+    });
+</script>
 
 @stack('script')
 
