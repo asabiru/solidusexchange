@@ -48,6 +48,10 @@ use App\Http\Controllers\Admin\TraderManagementController;
 
 
 Route::get('clear', function () {
+    $secret = config('app.scheduler_secret');
+    if (!$secret || request()->query('secret') !== $secret) {
+        abort(403, 'Unauthorized');
+    }
     Illuminate\Support\Facades\Artisan::call('optimize:clear');
     $output = Illuminate\Support\Facades\Artisan::output();
     return view('artisan_output', ['output' => $output]);
@@ -55,17 +59,25 @@ Route::get('clear', function () {
 
 
 Route::get('queue-work', function () {
+    $secret = config('app.scheduler_secret');
+    if (!$secret || request()->query('secret') !== $secret) {
+        abort(403, 'Unauthorized');
+    }
     return Illuminate\Support\Facades\Artisan::call('queue:work', ['--stop-when-empty' => true]);
 })->name('queue.work');
 
 Route::get('schedule-run', function () {
+    $secret = config('app.scheduler_secret');
+    if (!$secret || request()->query('secret') !== $secret) {
+        abort(403, 'Unauthorized');
+    }
     return Illuminate\Support\Facades\Artisan::call('schedule:run');
 })->name('schedule:run');
 
 
 Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
-    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])->name('twoFaCheck');
+    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])->middleware('throttle:two-fa')->name('twoFaCheck');
 
     Route::get('/themeMode/{themeType?}', function ($themeType = 'true') {
         session()->put('themeMode', $themeType);
@@ -74,10 +86,10 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
     /*== Authentication Routes ==*/
     Route::get('/', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest:admin');
-    Route::post('login', [LoginController::class, 'login'])->name('login.submit');
+    Route::post('login', [LoginController::class, 'login'])->middleware('throttle:admin-login')->name('login.submit');
     Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request')
         ->middleware('guest:admin');
-    Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+    Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->middleware('throttle:password-reset')->name('password.email');
     Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])
         ->name('password.reset')->middleware('guest:admin');
     Route::post('password/reset', [ResetPasswordController::class, 'reset'])

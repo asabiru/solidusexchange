@@ -33,17 +33,18 @@ Route::get('maintenance-mode', function () {
 })->name('maintenance');
 
 Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request');
-Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->middleware('throttle:password-reset')->name('password.email');
 Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset')->middleware('guest');
-Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('password.reset.update');
+Route::post('password/reset', [ResetPasswordController::class, 'reset'])->middleware('throttle:password-reset')->name('password.reset.update');
     Route::get('instruction/page', function () {
         return view('instruction-page');
     })->name('instructionPage');
 
     // HTTP-triggered scheduler endpoints (for shared hosting without crontab)
-    Route::get('__scheduler/run', [SchedulerController::class, 'run']);
-    Route::get('__scheduler/sync-crypto', [SchedulerController::class, 'syncCryptoRates']);
-    Route::get('__scheduler/sync-fiat', [SchedulerController::class, 'syncFiatRates']);
+    // Protected by scheduler_secret + rate-limited to prevent brute-force
+    Route::get('__scheduler/run', [SchedulerController::class, 'run'])->middleware('throttle:6,1');
+    Route::get('__scheduler/sync-crypto', [SchedulerController::class, 'syncCryptoRates'])->middleware('throttle:6,1');
+    Route::get('__scheduler/sync-fiat', [SchedulerController::class, 'syncFiatRates'])->middleware('throttle:6,1');
 
     Route::get('license', function () {
         return redirect()->route('page');
@@ -73,8 +74,8 @@ Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('
 Route::group(['middleware' => ['maintenanceMode']], function () use ($basicControl) {
     Route::group(['middleware' => ['guest']], function () {
         Route::get('/login', [UserLoginController::class, 'showLoginForm'])->name('login');
-        Route::post('/login', [UserLoginController::class, 'login'])->name('login.submit');
-        Route::post('/auth/telegram-miniapp', [SocialiteController::class, 'telegramMiniAppLogin'])->name('telegram.miniapp.login');
+        Route::post('/login', [UserLoginController::class, 'login'])->middleware('throttle:login')->name('login.submit');
+        Route::post('/auth/telegram-miniapp', [SocialiteController::class, 'telegramMiniAppLogin'])->middleware('throttle:login')->name('telegram.miniapp.login');
     });
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
@@ -98,9 +99,9 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::get('check', [VerificationController::class, 'check'])->name('check');
     Route::get('resend_code', [VerificationController::class, 'resendCode'])->name('user.resendCode');
     Route::get('verification/resend', [VerificationController::class, 'resendCode'])->name('verification.resend');
-    Route::post('mail-verify', [VerificationController::class, 'mailVerify'])->name('user.mailVerify');
-    Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->name('user.smsVerify');
-    Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->name('user.twoFA-Verify');
+    Route::post('mail-verify', [VerificationController::class, 'mailVerify'])->middleware('throttle:two-fa')->name('user.mailVerify');
+    Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->middleware('throttle:two-fa')->name('user.smsVerify');
+    Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->middleware('throttle:two-fa')->name('user.twoFA-Verify');
 
     $legacyPageRoutes = [
         // 'home' removed — conflicts with Route::get("/", ...)->name('home') defined below
