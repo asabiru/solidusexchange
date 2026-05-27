@@ -3,7 +3,7 @@
     <section class="newsletter-section">
         <div class="container">
             <div class="row g-4 align-items-center justify-content-center">
-                <div class="col-xl-5 col-lg-7">
+                <div class="col-xl-7 col-lg-8">
                     <div class="content-area">
                         @if(isset($subscribe['single']))
                             <h3 class="subscribe-normal-text">@lang(@$subscribe['single']['title'])</h3>
@@ -17,11 +17,6 @@
                         @error('email')
                         <span class="text-danger">{{$message}}</span>
                         @enderror
-                    </div>
-                </div>
-                <div class="col-md-5 d-none d-lg-block">
-                    <div class="newsletter-thumbs">
-                        <img src="{{$subscribe['mediaFile']}}" alt="...">
                     </div>
                 </div>
             </div>

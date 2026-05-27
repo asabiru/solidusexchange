@@ -13,9 +13,11 @@
     if ($themeAssetVersion === '') {
         $themeStylePath = public_path($themeTrue . 'css/style.css');
         $themeMobilePolishPath = public_path($themeTrue . 'css/mobile-polish.css');
+        $solidusThemePath = public_path('assets/global/css/solidus-theme.css');
         $styleMtime = file_exists($themeStylePath) ? filemtime($themeStylePath) : 0;
         $mobileMtime = file_exists($themeMobilePolishPath) ? filemtime($themeMobilePolishPath) : 0;
-        $themeAssetVersion = (string) max($styleMtime, $mobileMtime, 1);
+        $solidusMtime = file_exists($solidusThemePath) ? filemtime($solidusThemePath) : 0;
+        $themeAssetVersion = (string) max($styleMtime, $mobileMtime, $solidusMtime, 1);
     }
 @endphp
 
