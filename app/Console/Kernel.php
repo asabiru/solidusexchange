@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Console\Commands\CryptoCurrencyUpdateCron;
+use App\Console\Commands\CustodialDepositMonitor;
 use App\Console\Commands\ExchangeReservationCleanup;
 use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
@@ -24,6 +25,7 @@ class Kernel extends ConsoleKernel
         SwitchProjectToRub::class,
         ExchangeReservationCleanup::class,
         ExchangeWalletWatcherSync::class,
+        CustodialDepositMonitor::class,
     ];
 
     /**
@@ -44,6 +46,9 @@ class Kernel extends ConsoleKernel
         }
 
         $schedule->command('app:exchange-reservation-cleanup')->everyFiveMinutes();
+
+        // Custodial deposit monitoring — scan wallets for new deposits
+        $schedule->command('custodial:monitor-deposits')->everyMinute();
 
         $schedule->command('model:prune', [
             '--model' => [

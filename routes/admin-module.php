@@ -89,6 +89,19 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('exchange-payouts/mark-failed/{id}', 'markFailed')->name('exchangePayoutMarkFailed');
         });
 
+        Route::controller(\App\Http\Controllers\Admin\Module\CustodialWalletController::class)->group(function () {
+            Route::get('custodial/wallets', 'index')->name('custodialWalletIndex');
+            Route::get('custodial/wallets/list', 'walletsList')->name('custodialWalletList');
+            Route::post('custodial/wallets/generate', 'generateWallet')->name('custodialWalletGenerate');
+            Route::get('custodial/wallets/freeze/{id}', 'freezeWallet')->name('custodialWalletFreeze');
+            Route::get('custodial/wallets/release/{id}', 'releaseWallet')->name('custodialWalletRelease');
+            Route::get('custodial/deposits', 'depositsIndex')->name('custodialDepositIndex');
+            Route::get('custodial/deposits/list', 'depositsList')->name('custodialDepositList');
+            Route::get('custodial/deposits/approve/{id}', 'approveDeposit')->name('custodialDepositApprove');
+            Route::get('custodial/deposits/reject/{id}', 'rejectDeposit')->name('custodialDepositReject');
+            Route::get('custodial/scan-now', 'scanNow')->name('custodialScanNow');
+        });
+
         Route::controller(BuyController::class)->group(function () {
             Route::get('buy/list', 'buyList')->name('buyList');
             Route::get('buy/list/search', 'buyListSearch')->name('buyListSearch');

@@ -9,6 +9,7 @@ use App\Models\CryptoMethod;
 use App\Models\FiatCurrency;
 use App\Models\FiatSendGateway;
 use App\Models\SellRequest;
+use App\Services\Custodial\CustodialWalletService;
 use App\Services\Sell\TraderAssignmentService;
 use App\Services\TradeQuote\SellQuoteService;
 use App\Traits\CalculateFees;
@@ -215,11 +216,35 @@ class SellController extends Controller
         $sellRequest = SellRequest::where(['status' => 1, 'utr' => $utr])->firstOrFail();
         if ($request->method() == 'GET') {
             if (!$sellRequest->admin_wallet) {
-                $response = $this->getCryptoWallet($sellRequest->sendCurrency->code, 'sell', ['identifier' => $sellRequest->utr]);
-                if (!$response['status']) {
-                    return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
+                // Try custodial wallet system first
+                try {
+                    $custodialService = app(CustodialWalletService::class);
+                    $custodialWallet = $custodialService->getOrCreateWallet($sellRequest->sendCurrency->code);
+                    $sellRequest->admin_wallet = $custodialWallet->address;
+
+                    // Link custodial wallet to this sell request
+                    $custodialWallet->update([
+                        'assigned_exchange_id' => $sellRequest->id,
+                        'assigned_at' => now(),
+                    ]);
+
+                    // Create a pending deposit record to track incoming crypto
+                    \App\Models\CustodialDeposit::create([
+                        'custodial_wallet_id' => $custodialWallet->id,
+                        'currency_code' => $sellRequest->sendCurrency->code,
+                        'amount' => 0,
+                        'status' => 'pending',
+                        'sell_request_id' => $sellRequest->id,
+                        'detected_at' => null,
+                    ]);
+                } catch (\Throwable $e) {
+                    // Fallback to legacy crypto method
+                    $response = $this->getCryptoWallet($sellRequest->sendCurrency->code, 'sell', ['identifier' => $sellRequest->utr]);
+                    if (!$response['status']) {
+                        return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
+                    }
+                    $sellRequest->admin_wallet = $response['message'];
                 }
-                $sellRequest->admin_wallet = $response['message'];
                 $sellRequest->save();
             }
 
