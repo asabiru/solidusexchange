@@ -11,30 +11,60 @@ return [
     |
     */
 
-    // Bitcoin (Blockstream — free, no key needed)
-    'btc_api' => env('CUSTODIAL_BTC_API', 'https://blockstream.info/api'),
+    // Bitcoin (Blockstream-compatible public APIs)
+    'btc_api' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_BTC_APIS', env('CUSTODIAL_BTC_API', 'https://blockstream.info/api|https://mempool.space/api')))
+    ))),
 
-    // Litecoin (Blockstream-compatible public API)
-    'ltc_api' => env('CUSTODIAL_LTC_API', 'https://litecoin.blockstream.info/api'),
+    // Litecoin (Blockstream-compatible public APIs)
+    'ltc_api' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_LTC_APIS', env('CUSTODIAL_LTC_API', 'https://litecoin.blockstream.info/api|https://mempool.space/ltc/api')))
+    ))),
 
     // Ethereum / EVM chains (public RPC — free)
-    'eth_rpc' => env('CUSTODIAL_ETH_RPC', 'https://ethereum-rpc.publicnode.com'),
-    'arb_rpc' => env('CUSTODIAL_ARB_RPC', 'https://arbitrum-rpc.publicnode.com'),
-    'opt_rpc' => env('CUSTODIAL_OPT_RPC', 'https://optimism-rpc.publicnode.com'),
-    'base_rpc' => env('CUSTODIAL_BASE_RPC', 'https://base-rpc.publicnode.com'),
+    'eth_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_ETH_RPCS', env('CUSTODIAL_ETH_RPC', 'https://ethereum-rpc.publicnode.com|https://eth.llamarpc.com|https://rpc.ankr.com/eth')))
+    ))),
+    'arb_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_ARB_RPCS', env('CUSTODIAL_ARB_RPC', 'https://arbitrum-rpc.publicnode.com|https://arb1.arbitrum.io/rpc')))
+    ))),
+    'opt_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_OPT_RPCS', env('CUSTODIAL_OPT_RPC', 'https://optimism-rpc.publicnode.com|https://mainnet.optimism.io')))
+    ))),
+    'base_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_BASE_RPCS', env('CUSTODIAL_BASE_RPC', 'https://base-rpc.publicnode.com|https://mainnet.base.org')))
+    ))),
 
     // BNB Smart Chain (public RPC — free)
-    'bsc_rpc' => env('CUSTODIAL_BSC_RPC', 'https://bsc-rpc.publicnode.com'),
+    'bsc_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_BSC_RPCS', env('CUSTODIAL_BSC_RPC', 'https://bsc-rpc.publicnode.com|https://bsc-dataseed.binance.org|https://rpc.ankr.com/bsc')))
+    ))),
 
-    // Tron (TronGrid — free tier, API key recommended for higher limits)
-    'trx_api' => env('CUSTODIAL_TRX_API', 'https://api.trongrid.io'),
+    // Tron (TronGrid-compatible public APIs)
+    'trx_api' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_TRX_APIS', env('CUSTODIAL_TRX_API', 'https://api.trongrid.io|https://api.tronstack.io')))
+    ))),
     'trongrid_api_key' => env('CUSTODIAL_TRONGRID_API_KEY', ''),
 
     // Solana (public RPC — free)
-    'sol_rpc' => env('CUSTODIAL_SOL_RPC', 'https://api.mainnet-beta.solana.com'),
+    'sol_rpc' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_SOL_RPCS', env('CUSTODIAL_SOL_RPC', 'https://api.mainnet-beta.solana.com|https://solana-rpc.publicnode.com|https://rpc.ankr.com/solana')))
+    ))),
 
-    // TON (TON Center — free tier)
-    'ton_api' => env('CUSTODIAL_TON_API', 'https://toncenter.com/api/v2'),
+    // TON (TON Center-compatible APIs)
+    'ton_api' => array_values(array_filter(array_map(
+        'trim',
+        explode('|', env('CUSTODIAL_TON_APIS', env('CUSTODIAL_TON_API', 'https://toncenter.com/api/v2')))
+    ))),
     'ton_api_key' => env('CUSTODIAL_TON_API_KEY', ''),
 
     /*

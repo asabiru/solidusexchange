@@ -28,6 +28,8 @@ use RuntimeException;
  */
 class HdWalletService
 {
+    private array $apiBaseUrlCache = [];
+
     // ─── secp256k1 curve parameters ───────────────────────────────────────
     private const SECP256K1_P  = '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F';
     private const SECP256K1_N  = '0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141';
@@ -59,16 +61,93 @@ class HdWalletService
     {
         $normalized = $this->normalizeCode(strtoupper(trim($currencyCode)));
 
-        return match ($normalized) {
-            'BTC'  => config('custodial.btc_api', 'https://blockstream.info/api'),
-            'LTC'  => config('custodial.ltc_api', 'https://litecoin.space/api'),
-            'ETH'  => config('custodial.eth_rpc', 'https://eth.llamarpc.com'),
-            'BNB'  => config('custodial.bsc_rpc', 'https://bsc-dataseed.binance.org'),
-            'TRX'  => config('custodial.trx_api', 'https://api.trongrid.io'),
-            'SOL'  => config('custodial.sol_rpc', 'https://api.mainnet-beta.solana.com'),
-            'TON'  => config('custodial.ton_api', 'https://toncenter.com/api/v2'),
-            default => throw new RuntimeException("No API endpoint configured for {$currencyCode}"),
+        if (isset($this->apiBaseUrlCache[$normalized])) {
+            return $this->apiBaseUrlCache[$normalized];
+        }
+
+        $urls = $this->getApiBaseUrls($normalized);
+        if (empty($urls)) {
+            throw new RuntimeException("No API endpoint configured for {$currencyCode}");
+        }
+
+        foreach ($urls as $baseUrl) {
+            if ($this->isApiEndpointHealthy($normalized, $baseUrl)) {
+                return $this->apiBaseUrlCache[$normalized] = $baseUrl;
+            }
+        }
+
+        // Fall back to the first configured URL so callers get a useful error
+        // from the actual request if every health check fails.
+        return $this->apiBaseUrlCache[$normalized] = $urls[0];
+    }
+
+    /**
+     * Resolve configured endpoint candidates for a chain.
+     */
+    private function getApiBaseUrls(string $currencyCode): array
+    {
+        $normalized = $this->normalizeCode(strtoupper(trim($currencyCode)));
+
+        $value = match ($normalized) {
+            'BTC' => config('custodial.btc_api', []),
+            'LTC' => config('custodial.ltc_api', []),
+            'ETH' => config('custodial.eth_rpc', []),
+            'BNB' => config('custodial.bsc_rpc', []),
+            'TRX' => config('custodial.trx_api', []),
+            'SOL' => config('custodial.sol_rpc', []),
+            'TON' => config('custodial.ton_api', []),
+            default => [],
         };
+
+        if (is_string($value)) {
+            $value = explode('|', $value);
+        }
+
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_values(array_filter(array_map('trim', $value)));
+    }
+
+    /**
+     * Lightweight health probe for a chain-specific endpoint.
+     */
+    private function isApiEndpointHealthy(string $chain, string $baseUrl): bool
+    {
+        try {
+            $response = match ($chain) {
+                'BTC', 'LTC' => Http::timeout(3)->get("{$baseUrl}/blocks/tip/height"),
+                'ETH', 'BNB' => Http::timeout(3)->post($baseUrl, [
+                    'jsonrpc' => '2.0',
+                    'method'  => 'eth_chainId',
+                    'params'  => [],
+                    'id'      => 1,
+                ]),
+                'TRX' => Http::timeout(3)->get("{$baseUrl}/wallet/getnowblock"),
+                'SOL' => Http::timeout(3)->post($baseUrl, [
+                    'jsonrpc' => '2.0',
+                    'method'  => 'getHealth',
+                    'params'  => [],
+                    'id'      => 1,
+                ]),
+                'TON' => Http::timeout(3)->get("{$baseUrl}/getMasterchainInfo"),
+                default => null,
+            };
+
+            if (!$response || !$response->successful()) {
+                return false;
+            }
+
+            return match ($chain) {
+                'ETH', 'BNB' => filled($response->json('result')),
+                'SOL' => $response->json('result') === 'ok' || $response->json('result.value') !== null || $response->json('result') !== null,
+                'TON' => $response->json('result') !== null,
+                default => true,
+            };
+        } catch (\Throwable $e) {
+            return false;
+        }
     }
 
     /**
@@ -814,11 +893,7 @@ class HdWalletService
     private function getEvmBalance(string $address, string $code): float
     {
         $chain = $this->normalizeCode($code);
-        $rpcUrl = match ($chain) {
-            'ETH' => config('custodial.eth_rpc', 'https://ethereum-rpc.publicnode.com'),
-            'BNB' => config('custodial.bsc_rpc', 'https://bsc-rpc.publicnode.com'),
-            default => config('custodial.eth_rpc'),
-        };
+        $rpcUrl = $this->getApiBaseUrl($chain);
 
         // Native coin balance
         if (in_array($code, ['ETH', 'ETH_ARB', 'ETH_BASE', 'ETH_OPT', 'BNB'])) {
@@ -1909,11 +1984,7 @@ class HdWalletService
     private function sendEvm(string $privateKey, string $fromAddr, string $toAddr, float $amount, string $code): array
     {
         $chain = $this->normalizeCode($code);
-        $rpcUrl = match ($chain) {
-            'ETH' => config('custodial.eth_rpc', 'https://ethereum-rpc.publicnode.com'),
-            'BNB' => config('custodial.bsc_rpc', 'https://bsc-rpc.publicnode.com'),
-            default => config('custodial.eth_rpc'),
-        };
+        $rpcUrl = $this->getApiBaseUrl($chain);
 
         // Ensure hex prefix
         $fromAddr = $this->toHexAddress($fromAddr);
