@@ -262,7 +262,7 @@
                                class="js-datatable table table-borderless table-thead-bordered table-nowrap table-align-middle card-table"
                                data-hs-datatables-options='{
                                        "columnDefs": [{
-                                          "targets": [0, 6],
+                                          "targets": [0, 7],
                                           "orderable": false
                                         }],
                                         "ordering": false,
@@ -295,6 +295,7 @@
                                 <th scope="col">@lang('Min-Max Send')</th>
                                 <th scope="col">@lang('Status')</th>
                                 <th scope="col">@lang('Homepage')</th>
+                                <th scope="col">@lang('Reserves')</th>
                                 <th scope="col">@lang('Created At')</th>
                                 <th scope="col">@lang('Action')</th>
                             </tr>
@@ -399,6 +400,7 @@
                     {data: 'min_max_send', name: 'min_max_send'},
                     {data: 'status', name: 'status'},
                     {data: 'show_on_homepage', name: 'show_on_homepage'},
+                    {data: 'show_in_reserves', name: 'show_in_reserves'},
                     {data: 'created_at', name: 'created_at'},
                     {data: 'action', name: 'action'},
                 ],

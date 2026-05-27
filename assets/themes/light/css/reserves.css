@@ -68,6 +68,14 @@ Reserves Section - eazy228/design style
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    overflow: hidden;
+}
+
+.reserve-icon-img {
+    width: calc(100% - 4px);
+    height: calc(100% - 4px);
+    object-fit: contain;
+    border-radius: var(--radius-sm);
 }
 
 .icon-placeholder {
@@ -126,6 +134,13 @@ Reserves Section - eazy228/design style
 
 .reserves-link:hover {
     color: var(--color-accent-hover);
+}
+
+.reserves-empty {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--color-text-muted);
+    font-size: 16px;
 }
 
 /* Responsive */

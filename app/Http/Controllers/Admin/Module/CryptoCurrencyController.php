@@ -186,6 +186,18 @@ class CryptoCurrencyController extends Controller
                   </span>';
                 }
             })
+            ->addColumn('show_in_reserves', function ($item) {
+                if ($item->show_in_reserves) {
+                    $amount = $item->reserve_amount ? rtrim(rtrim(number_format($item->reserve_amount, 8), '0'), '.') . ' ' . $item->code : '—';
+                    return '<span class="badge bg-soft-success text-success">
+                    <span class="legend-indicator bg-success"></span>' . trans('Reserve') . '
+                  </span><br><small class="text-body">' . $amount . '</small>';
+                } else {
+                    return '<span class="badge bg-soft-secondary text-body">
+                    <span class="legend-indicator bg-secondary"></span>' . trans('No') . '
+                  </span>';
+                }
+            })
             ->addColumn('created_at', function ($item) {
                 return dateTime($item->created_at, basicControl()->date_time_format);
             })
@@ -224,7 +236,7 @@ class CryptoCurrencyController extends Controller
                 $html .= '</div>';
                 return $html;
             })
-            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'show_on_homepage', 'created_at', 'action'])
+            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'show_on_homepage', 'show_in_reserves', 'created_at', 'action'])
             ->make(true);
     }
 

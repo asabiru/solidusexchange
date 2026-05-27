@@ -107,6 +107,43 @@ return [
     ],
 
     // -------------------------------------------------------
+    // Reserves (резервы на главной)
+    // -------------------------------------------------------
+    'reserve' => [
+        'single' => [
+            'field_name' => [
+                'title'       => 'text',
+                'sub_title'   => 'text',
+                'note'        => 'text',
+                'button_name' => 'text',
+            ],
+            'validation' => [
+                'title.*'       => 'required|max:300',
+                'sub_title.*'   => 'required|max:3000',
+                'note.*'        => 'nullable|max:1000',
+                'button_name.*' => 'nullable|max:100',
+            ]
+        ],
+        'multiple' => [
+            'field_name' => [
+                'code'       => 'text',
+                'amount'     => 'text',
+                'value'      => 'text',
+                'sort_order' => 'text',
+                'show'       => 'switch',
+            ],
+            'validation' => [
+                'code.*'       => 'required|max:50',
+                'amount.*'     => 'required|max:100',
+                'value.*'      => 'required|max:100',
+                'sort_order.*' => 'nullable|numeric',
+                'show.*'       => 'nullable|in:0,1',
+            ]
+        ],
+        'preview' => 'assets/preview/why_choose_us.png',
+    ],
+
+    // -------------------------------------------------------
     // Subscribe / Newsletter (форма подписки)
     // -------------------------------------------------------
     'subscribe' => [
