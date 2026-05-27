@@ -148,11 +148,11 @@ class ExchangeController extends Controller
 
             $cryptoMethod = $exchangeRequest->cryptoMethod;
 
-            if (!$cryptoMethod && blank($exchangeRequest->deposit_provider)) {
-                $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
+            if (!$cryptoMethod) {
+                $cryptoMethod = CryptoMethod::where('status', 1)->first();
             }
 
-            if (!$exchangeRequest->crypto_method_id && $cryptoMethod && blank($exchangeRequest->deposit_provider)) {
+            if (!$exchangeRequest->crypto_method_id && $cryptoMethod) {
                 $exchangeRequest->crypto_method_id = $cryptoMethod->id;
                 $exchangeRequest->save();
             }

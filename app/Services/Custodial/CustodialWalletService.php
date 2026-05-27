@@ -4,6 +4,8 @@ namespace App\Services\Custodial;
 
 use App\Models\CustodialWallet;
 use App\Models\ExchangeRequest;
+use App\Models\SellRequest;
+use App\Traits\CryptoWalletGenerate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -202,5 +204,51 @@ class CustodialWalletService
         }
 
         return $decrypted;
+    }
+
+    /**
+     * Confirm a deposit for an exchange request — triggers the full pipeline.
+     * Uses the CryptoWalletGenerate::walletUpgration() method which handles
+     * status update, transaction creation, AML, automation, and notifications.
+     */
+    public function confirmDepositForExchange(ExchangeRequest $exchange, float $amount, string $txId): void
+    {
+        $walletUpgration = new class {
+            use CryptoWalletGenerate;
+        };
+
+        $walletUpgration->walletUpgration($exchange, 'exchange', [
+            'deposit_amount' => $amount,
+            'deposit_tx_id' => $txId,
+        ]);
+
+        Log::info("Custodial: exchange deposit confirmed via pipeline", [
+            'exchange_id' => $exchange->id,
+            'utr' => $exchange->utr,
+            'amount' => $amount,
+            'tx_id' => $txId,
+        ]);
+    }
+
+    /**
+     * Confirm a deposit for a sell request — triggers the sell pipeline.
+     */
+    public function confirmDepositForSell(SellRequest $sell, float $amount, string $txId): void
+    {
+        $walletUpgration = new class {
+            use CryptoWalletGenerate;
+        };
+
+        $walletUpgration->walletUpgration($sell, 'sell', [
+            'deposit_amount' => $amount,
+            'deposit_tx_id' => $txId,
+        ]);
+
+        Log::info("Custodial: sell deposit confirmed via pipeline", [
+            'sell_id' => $sell->id,
+            'utr' => $sell->utr,
+            'amount' => $amount,
+            'tx_id' => $txId,
+        ]);
     }
 }

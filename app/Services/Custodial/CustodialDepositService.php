@@ -4,6 +4,8 @@ namespace App\Services\Custodial;
 
 use App\Models\CustodialDeposit;
 use App\Models\CustodialWallet;
+use App\Models\ExchangeRequest;
+use App\Models\SellRequest;
 use App\Services\ExchangePipeline\ExchangeAmlService;
 use Illuminate\Support\Facades\Log;
 
@@ -73,6 +75,24 @@ class CustodialDepositService
             }
         }
 
+        // Link deposit to the exchange/sell request that reserved this wallet
+        $exchangeRequestId = null;
+        $sellRequestId = null;
+        if ($wallet->assigned_exchange_id) {
+            // Determine if this is an ExchangeRequest or SellRequest
+            // Check by looking at the assignedExchange relationship
+            $assignedExchange = ExchangeRequest::find($wallet->assigned_exchange_id);
+            if ($assignedExchange) {
+                $exchangeRequestId = $assignedExchange->id;
+            } else {
+                // Try SellRequest
+                $sellRequest = SellRequest::find($wallet->assigned_exchange_id);
+                if ($sellRequest) {
+                    $sellRequestId = $sellRequest->id;
+                }
+            }
+        }
+
         $deposit = CustodialDeposit::create([
             'custodial_wallet_id' => $wallet->id,
             'currency_code' => $data['currency_code'] ?? $wallet->currency_code,
@@ -82,6 +102,8 @@ class CustodialDepositService
             'confirmations' => $data['confirmations'] ?? 0,
             'status' => $data['confirmed'] ? 'confirmed' : 'pending',
             'source_address' => $data['source_address'] ?? null,
+            'exchange_request_id' => $exchangeRequestId,
+            'sell_request_id' => $sellRequestId,
             'detected_at' => now(),
             'confirmed_at' => $data['confirmed'] ? now() : null,
         ]);
@@ -169,27 +191,44 @@ class CustodialDepositService
     }
 
     /**
-     * Process an AML-approved deposit — link it to the exchange request and trigger payout.
+     * Process an AML-approved deposit — link it to the exchange/sell request
+     * and trigger the exchange pipeline (status update, payout, notifications).
      */
     public function processApprovedDeposit(CustodialDeposit $deposit): void
     {
         $deposit->update(['status' => 'processed']);
 
-        // If this deposit is linked to an exchange request, trigger payout
+        // If this deposit is linked to an exchange request, trigger the pipeline
         if ($deposit->exchange_request_id) {
             $exchange = $deposit->exchangeRequest;
             if ($exchange) {
-                $exchange->deposit_amount_confirmed = $deposit->amount;
-                $exchange->deposit_tx_id = $deposit->tx_id;
-                $exchange->deposit_confirmed_at = now();
-                $exchange->save();
+                // Use the walletUpgration trait method which handles the full pipeline:
+                // status update → transaction → AML → automation → notification
+                app(CustodialWalletService::class)->confirmDepositForExchange(
+                    $exchange,
+                    (float)$deposit->amount,
+                    $deposit->tx_id
+                );
             }
         }
 
-        // Release the wallet back to pool
+        // If this deposit is linked to a sell request
+        if ($deposit->sell_request_id) {
+            $sell = $deposit->sellRequest;
+            if ($sell) {
+                app(CustodialWalletService::class)->confirmDepositForSell(
+                    $sell,
+                    (float)$deposit->amount,
+                    $deposit->tx_id
+                );
+            }
+        }
+
+        // Release the wallet back to pool (only after exchange is fully processed)
         $wallet = $deposit->custodialWallet;
         if ($wallet && $wallet->assigned_exchange_id) {
-            app(CustodialWalletService::class)->release($wallet);
+            // Don't release immediately — the exchange may still need the wallet reference
+            // Wallet will be released when the exchange completes or is cancelled
         }
 
         Log::info("Custodial: deposit processed successfully", [

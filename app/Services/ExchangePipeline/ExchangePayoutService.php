@@ -36,7 +36,7 @@ class ExchangePayoutService
     {
         $exchange->loadMissing('cryptoMethod');
 
-        $configuredProvider = (string)($exchange->payout_provider ?: config('exchange_pipeline.payout_provider', 'active_crypto_method'));
+        $configuredProvider = (string)($exchange->payout_provider ?: config('exchange_pipeline.payout_provider', 'treasury_queue'));
 
         if ($configuredProvider === 'treasury_queue') {
             $method = new CryptoMethod([
@@ -44,6 +44,15 @@ class ExchangePayoutService
                 'name' => 'Treasury Queue',
                 'is_automatic' => 1,
             ]);
+        } elseif ($configuredProvider === 'custodial') {
+            $method = CryptoMethod::where('code', 'custodial')->first();
+            if (!$method) {
+                $method = new CryptoMethod([
+                    'code' => 'custodial',
+                    'name' => 'Custodial HD Wallets',
+                    'is_automatic' => 1,
+                ]);
+            }
         } elseif ($configuredProvider === 'active_crypto_method') {
             $method = $exchange->cryptoMethod ?: CryptoMethod::where('status', 1)->first();
         } else {

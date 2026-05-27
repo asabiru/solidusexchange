@@ -253,14 +253,14 @@ class SellController extends Controller
                 $sellRequest->save();
             }
 
-            $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
+            $cryptoMethod = CryptoMethod::where('status', 1)->first();
 
-            if (!$sellRequest->crypto_method_id) {
+            if (!$sellRequest->crypto_method_id && $cryptoMethod) {
                 $sellRequest->crypto_method_id = $cryptoMethod->id;
                 $sellRequest->save();
             }
 
-            $data['isButtonShow'] = $cryptoMethod->code == 'manual';
+            $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual';
             return view($this->theme . 'user.sell.init-payment', $data, compact('sellRequest'));
         } elseif ($request->method() == 'POST') {
             $sellRequest->status = 2;
