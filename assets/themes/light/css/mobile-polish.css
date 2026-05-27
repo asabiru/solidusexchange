@@ -80,7 +80,7 @@
     }
 
     .swap-section {
-        margin-bottom: 14px;
+        margin-bottom: 12px;
     }
 
     .swap-input-wrapper,
@@ -101,14 +101,15 @@
     .sc-compact-input-wrapper input {
         width: 100%;
         text-align: left;
-        font-size: 24px;
+        font-size: 20px;
+        line-height: 1.15;
     }
 
     .swap-action .swap-button,
     .sc-swap-icon {
-        width: 56px;
-        height: 56px;
-        border-radius: 16px;
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
     }
 
     .swap-action,
@@ -160,7 +161,7 @@
         grid-template-columns: 1fr;
         gap: 12px;
         margin-bottom: 12px;
-        padding: 16px;
+        padding: 14px;
         background: var(--color-bg-elevated);
         border: 1px solid var(--color-border-subtle);
         border-radius: 18px;
@@ -286,7 +287,7 @@
     }
 
     .swap-card {
-        padding: 16px;
+        padding: 14px;
     }
 
     .swap-form,
@@ -315,11 +316,11 @@
     }
 
     .crypto-price {
-        font-size: 22px;
+        font-size: 20px;
     }
 
     .faq-question {
-        padding: 16px;
+        padding: 14px;
         font-size: 14px;
     }
 
@@ -330,6 +331,66 @@
 
     .footer-section {
         padding-top: 48px;
+    }
+
+    .calculator-banner {
+        margin-bottom: 12px;
+        padding: 10px 12px;
+        border-radius: 16px;
+    }
+
+    .calculator-banner .image-area {
+        width: 38px;
+        height: 38px;
+        border-radius: 12px;
+    }
+
+    .calculator-banner .text-area p {
+        font-size: 13px;
+        line-height: 1.2;
+    }
+
+    .calculator-banner .right-side {
+        width: 30px;
+        height: 30px;
+    }
+
+    .banner-kicker {
+        font-size: 9px;
+        padding: 3px 7px;
+        margin-bottom: 3px;
+    }
+
+    .swap-input-wrapper {
+        padding: 10px;
+    }
+
+    .currency-selector {
+        padding: 8px 10px;
+    }
+
+    .currency-icon {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        flex: 0 0 28px;
+    }
+
+    .crypto-header {
+        margin-bottom: 14px;
+    }
+
+    .crypto-body {
+        margin-bottom: 14px;
+    }
+
+    .crypto-icon {
+        width: 40px;
+        height: 40px;
+    }
+
+    .crypto-sparkline svg {
+        height: 56px !important;
     }
 
     .auth-mobile-bar,

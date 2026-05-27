@@ -12,7 +12,10 @@
     $themeAssetVersion = (string) (config('app.asset_version') ?? env('APP_VERSION', ''));
     if ($themeAssetVersion === '') {
         $themeStylePath = public_path($themeTrue . 'css/style.css');
-        $themeAssetVersion = file_exists($themeStylePath) ? (string) filemtime($themeStylePath) : '1';
+        $themeMobilePolishPath = public_path($themeTrue . 'css/mobile-polish.css');
+        $styleMtime = file_exists($themeStylePath) ? filemtime($themeStylePath) : 0;
+        $mobileMtime = file_exists($themeMobilePolishPath) ? filemtime($themeMobilePolishPath) : 0;
+        $themeAssetVersion = (string) max($styleMtime, $mobileMtime, 1);
     }
 @endphp
 
