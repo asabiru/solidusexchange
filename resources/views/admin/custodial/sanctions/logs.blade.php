@@ -31,7 +31,7 @@
                 <div class="card">
                     <div class="card-body text-center">
                         <h5 class="card-title text-body mb-1">{{ $stats['total'] }}</h5>
-                        <p class="card-text small text-muted mb-0">All checks</p>
+                        <p class="card-text small text-muted mb-0">Latest AML cases</p>
                     </div>
                 </div>
             </div>
@@ -39,23 +39,23 @@
                 <div class="card">
                     <div class="card-body text-center">
                         <h5 class="card-title text-warning mb-1">{{ $stats['flagged'] }}</h5>
-                        <p class="card-text small text-muted mb-0">Flagged results</p>
+                        <p class="card-text small text-muted mb-0">Non-clean latest cases</p>
                     </div>
                 </div>
             </div>
             <div class="col-sm-6 col-md-3 mb-3 mb-md-0">
                 <div class="card">
                     <div class="card-body text-center">
-                        <h5 class="card-title text-info mb-1">{{ $stats['wallet_reviews'] }}</h5>
-                        <p class="card-text small text-muted mb-0">Wallet review logs</p>
+                        <h5 class="card-title text-success mb-1">{{ $stats['resolved'] }}</h5>
+                        <p class="card-text small text-muted mb-0">Resolved cases</p>
                     </div>
                 </div>
             </div>
             <div class="col-sm-6 col-md-3">
                 <div class="card">
                     <div class="card-body text-center">
-                        <h5 class="card-title text-secondary mb-1">{{ $stats['errors'] }}</h5>
-                        <p class="card-text small text-muted mb-0">Provider errors</p>
+                        <h5 class="card-title text-info mb-1">{{ $stats['wallet_reviews'] }}</h5>
+                        <p class="card-text small text-muted mb-0">Wallet review cases</p>
                     </div>
                 </div>
             </div>
@@ -100,7 +100,11 @@
                     <div class="col-md-6">
                         <div class="form-check mt-2">
                             <input id="needsReviewFilter" type="checkbox" class="form-check-input" @checked(request()->boolean('needs_review'))>
-                            <label class="form-check-label" for="needsReviewFilter">Show only match / partial / error cases</label>
+                            <label class="form-check-label" for="needsReviewFilter">Show only latest non-clean cases</label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input id="latestOnlyFilter" type="checkbox" class="form-check-input" @checked(request()->boolean('latest_only', true))>
+                            <label class="form-check-label" for="latestOnlyFilter">Collapse audit trail into latest case per record + address</label>
                         </div>
                     </div>
                     <div class="col-md-6 text-md-end">
@@ -128,6 +132,7 @@
                             <th>Currency</th>
                             <th>Provider</th>
                             <th>Result</th>
+                            <th>Review</th>
                             <th>Risk</th>
                             <th>Notes</th>
                             <th>Action</th>
@@ -158,6 +163,7 @@
                         data.screenable_type = $('#screenableTypeFilter').val();
                         data.query = $('#queryFilter').val();
                         data.needs_review = $('#needsReviewFilter').is(':checked') ? 1 : 0;
+                        data.latest_only = $('#latestOnlyFilter').is(':checked') ? 1 : 0;
                     }
                 },
                 columns: [
@@ -168,6 +174,7 @@
                     {data: 'currency_code', name: 'currency_code'},
                     {data: 'provider_badge', name: 'provider', orderable: false, searchable: false},
                     {data: 'result_badge', name: 'result', orderable: false, searchable: false},
+                    {data: 'review_status_badge', name: 'review_status_badge', orderable: false, searchable: false},
                     {data: 'risk_summary', name: 'risk_score', orderable: false, searchable: false},
                     {data: 'notes_preview', name: 'matched_entity', orderable: false, searchable: false},
                     {data: 'action', name: 'action', orderable: false, searchable: false},
@@ -185,6 +192,7 @@
                 $('#screenableTypeFilter').val('');
                 $('#queryFilter').val('');
                 $('#needsReviewFilter').prop('checked', false);
+                $('#latestOnlyFilter').prop('checked', true);
                 table.ajax.reload();
             });
         });

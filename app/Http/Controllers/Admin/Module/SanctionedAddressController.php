@@ -146,13 +146,18 @@ class SanctionedAddressController extends Controller
      */
     public function logsIndex(Request $request)
     {
+        $latestCases = AmlScreeningLog::query()
+            ->with('screenable')
+            ->whereIn('id', $this->latestCaseIdsQuery())
+            ->get();
+
         $stats = [
-            'total' => AmlScreeningLog::count(),
-            'flagged' => AmlScreeningLog::query()->whereIn('result', ['match', 'partial_match'])->count(),
-            'wallet_reviews' => AmlScreeningLog::query()
+            'total' => $latestCases->count(),
+            'flagged' => $latestCases->whereIn('result', ['match', 'partial_match', 'error'])->count(),
+            'resolved' => $latestCases->filter(fn (AmlScreeningLog $log) => $this->reviewState($log) !== 'needs_review')->count(),
+            'wallet_reviews' => $latestCases
                 ->whereIn('provider', ['wallet_screening', 'manual_wallet_review'])
                 ->count(),
-            'errors' => AmlScreeningLog::query()->where('result', 'error')->count(),
         ];
 
         $screenableTypes = [
@@ -180,6 +185,10 @@ class SanctionedAddressController extends Controller
             ->with('screenable')
             ->orderByDesc('checked_at')
             ->orderByDesc('id');
+
+        if ($request->boolean('latest_only', true)) {
+            $query->whereIn('id', $this->latestCaseIdsQuery());
+        }
 
         if ($request->boolean('needs_review')) {
             $query->whereIn('result', ['match', 'partial_match', 'error']);
@@ -241,6 +250,9 @@ class SanctionedAddressController extends Controller
                     default         => '<span class="badge bg-soft-secondary text-body">' . $l->result . '</span>',
                 };
             })
+            ->addColumn('review_status_badge', function ($l) {
+                return $this->reviewStatusBadge($l);
+            })
             ->addColumn('risk_summary', function ($l) {
                 $details = $this->screeningDetails($l);
                 $parts = [];
@@ -286,6 +298,7 @@ class SanctionedAddressController extends Controller
                 'address_short',
                 'provider_badge',
                 'result_badge',
+                'review_status_badge',
                 'risk_summary',
                 'notes_preview',
                 'action',
@@ -376,6 +389,47 @@ class SanctionedAddressController extends Controller
     private function screeningDetails(AmlScreeningLog $log): array
     {
         return json_decode((string) $log->details, true) ?: [];
+    }
+
+    private function latestCaseIdsQuery()
+    {
+        return AmlScreeningLog::query()
+            ->selectRaw('MAX(id)')
+            ->groupBy('screenable_type', 'screenable_id', 'address');
+    }
+
+    private function reviewState(AmlScreeningLog $log): string
+    {
+        $screenable = $log->screenable;
+
+        if ($screenable instanceof CustodialDeposit) {
+            if ($screenable->isAmlRejected()) {
+                return 'rejected';
+            }
+
+            if ($screenable->isAmlApproved()) {
+                return 'approved';
+            }
+        }
+
+        if (in_array($log->provider, ['manual_wallet_review', 'manual_admin'], true)) {
+            return $log->result === 'clean' ? 'approved' : 'rejected';
+        }
+
+        if ($log->result === 'clean') {
+            return 'approved';
+        }
+
+        return 'needs_review';
+    }
+
+    private function reviewStatusBadge(AmlScreeningLog $log): string
+    {
+        return match ($this->reviewState($log)) {
+            'approved' => '<span class="badge bg-soft-success text-success">Resolved · Approved</span>',
+            'rejected' => '<span class="badge bg-soft-danger text-danger">Resolved · Rejected</span>',
+            default => '<span class="badge bg-soft-warning text-warning">Open Review</span>',
+        };
     }
 
     /**
