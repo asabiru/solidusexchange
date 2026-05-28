@@ -62,7 +62,7 @@ class CustodialWalletController extends Controller
                 };
             })
             ->addColumn('assignment', function ($w) {
-                if ($w->assigned_exchange_id) {
+                if ($w->status === 'frozen' || $w->assigned_exchange_id) {
                     return '<span class="badge bg-soft-info text-info">Assigned #' . $w->assigned_exchange_id . '</span>';
                 }
                 return '<span class="badge bg-soft-success text-success">Available</span>';
@@ -83,6 +83,7 @@ class CustodialWalletController extends Controller
                 $releaseUrl = route('admin.custodialWalletRelease', $w->id);
                 $checkUrl = route('admin.custodialWalletCheckBalance', $w->id);
                 $withdrawUrl = route('admin.custodialWithdrawalCreate', $w->id);
+                $releaseLabel = $w->status === 'frozen' ? 'Unfreeze' : 'Release';
                 $html = '';
 
                 $html .= $this->postButton($checkUrl, 'bi-wallet2', 'btn btn-sm btn-outline-primary') . ' ';
@@ -94,8 +95,8 @@ class CustodialWalletController extends Controller
                 if ($w->status === 'active') {
                     $html .= $this->postButton($freezeUrl, 'bi-snow', 'btn btn-sm btn-outline-warning', 'Freeze this wallet?') . ' ';
                 }
-                if ($w->assigned_exchange_id) {
-                    $html .= $this->postButton($releaseUrl, 'bi-unlock', 'btn btn-sm btn-outline-success', 'Release this wallet?');
+                if ($w->status === 'frozen' || $w->assigned_exchange_id) {
+                    $html .= $this->postButton($releaseUrl, 'bi-unlock', 'btn btn-sm btn-outline-success', 'Release this wallet?', $releaseLabel);
                 }
                 return $html;
             })
@@ -128,8 +129,8 @@ class CustodialWalletController extends Controller
     public function releaseWallet($id)
     {
         $wallet = CustodialWallet::findOrFail($id);
-        if ($wallet->status !== 'frozen') {
-            return back()->with('error', 'Only frozen wallets can be released.');
+        if ($wallet->status !== 'frozen' && blank($wallet->assigned_exchange_id)) {
+            return back()->with('error', 'Only frozen or assigned wallets can be released.');
         }
         app(CustodialWalletService::class)->release($wallet);
         return back()->with('success', 'Wallet released');

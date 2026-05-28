@@ -88,6 +88,7 @@ class CustodialWalletService
     public function release(CustodialWallet $wallet): void
     {
         $wallet->update([
+            'status' => 'active',
             'assigned_exchange_id' => null,
             'assigned_at' => null,
         ]);
