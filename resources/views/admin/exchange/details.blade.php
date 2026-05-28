@@ -20,21 +20,48 @@
                 </div>
             </div>
         </div>
+        @php
+            $amlBlocked = $exchange->status == 2 && !$exchange->isAmlApproved();
+            $amlBadgeClass = match($exchange->aml_status) {
+                'approved' => 'bg-soft-success text-success',
+                'pending' => 'bg-soft-warning text-warning',
+                'rejected' => 'bg-soft-danger text-danger',
+                default => 'bg-soft-secondary text-body',
+            };
+        @endphp
         @if(in_array($exchange->status, [1, 2]))
             <div class="row mx-4">
-                <div class="d-flex justify-content-end gap-2">
+                <div class="d-flex justify-content-end gap-2 flex-wrap">
                     @if($exchange->status == 1)
                         <button type="button" class="btn btn-soft-primary" id="confirmDeposit" data-bs-target="#confirmation"
                                 data-bs-toggle="modal"><i class="fas fa-coins"></i> @lang("Confirm Deposit")
                         </button>
                     @endif
-                    @if($exchange->status == 2 && !$hasPendingTreasuryPayout)
-                    <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
-                            data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
-                    </button>
-                    <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
-                            data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
-                    </button>
+                    @if($exchange->status == 2 && $amlBlocked)
+                        <form action="{{ route('admin.exchangeAmlApprove', $exchange->id) }}" method="post" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-soft-success" onclick="return confirm('{{ __('Approve AML and resume the exchange pipeline?') }}')">
+                                <i class="fas fa-check-circle"></i> @lang('Approve AML')
+                            </button>
+                        </form>
+                        @if($exchange->aml_status !== 'rejected')
+                            <form action="{{ route('admin.exchangeAmlReject', $exchange->id) }}" method="post" class="d-inline">
+                                @csrf
+                                <button type="submit" class="btn btn-soft-warning" onclick="return confirm('{{ __('Reject this exchange for AML reasons?') }}')">
+                                    <i class="fas fa-ban"></i> @lang('Reject AML')
+                                </button>
+                            </form>
+                        @endif
+                        <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
+                        </button>
+                    @elseif($exchange->status == 2 && !$hasPendingTreasuryPayout)
+                        <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
+                        </button>
+                        <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
+                        </button>
                     @endif
                 </div>
             </div>
@@ -115,6 +142,29 @@
                                         @if($exchange->deposit_confirmed_at)
                                             <li class="list-checked-item">@lang('Deposit Confirmed At') :
                                                 <strong class="text-dark font-weight-bold">{{ dateTime($exchange->deposit_confirmed_at, basicControl()->date_time_format) }}</strong>
+                                            </li>
+                                        @endif
+                                        <li class="list-checked-item">@lang('AML Status') :
+                                            <span class="badge {{ $amlBadgeClass }}">{{ ucfirst($exchange->aml_status ?? 'not checked') }}</span>
+                                        </li>
+                                        @if($exchange->aml_provider)
+                                            <li class="list-checked-item">@lang('AML Provider') :
+                                                <strong class="text-dark font-weight-bold">{{ $exchange->aml_provider }}</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->aml_risk_level)
+                                            <li class="list-checked-item">@lang('AML Risk') :
+                                                <strong class="text-dark font-weight-bold">{{ ucfirst($exchange->aml_risk_level) }}@if(!is_null($exchange->aml_risk_score)) ({{ $exchange->aml_risk_score }}) @endif</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->aml_checked_at)
+                                            <li class="list-checked-item">@lang('AML Checked At') :
+                                                <strong class="text-dark font-weight-bold">{{ dateTime($exchange->aml_checked_at, basicControl()->date_time_format) }}</strong>
+                                            </li>
+                                        @endif
+                                        @if($exchange->aml_notes)
+                                            <li class="list-checked-item">@lang('AML Notes') :
+                                                <strong class="text-dark font-weight-bold">{{ $exchange->aml_notes }}</strong>
                                             </li>
                                         @endif
                                         @if($exchange->execution_notes)
@@ -226,6 +276,15 @@
                                     <div class="alert alert-soft-warning mt-3" role="alert">
                                         @lang('A treasury payout job is queued for this exchange. Finish it from the Exchange Payouts panel before marking the trade complete.')
                                         <a href="{{ route('admin.exchangePayoutIndex') }}" class="ms-1">@lang('Open queue')</a>
+                                    </div>
+                                @endif
+                                @if($amlBlocked)
+                                    <div class="alert {{ $exchange->aml_status === 'rejected' ? 'alert-soft-danger' : 'alert-soft-warning' }} mt-3" role="alert">
+                                        @if($exchange->aml_status === 'rejected')
+                                            @lang('This exchange is blocked by AML review. It cannot be sent until AML is manually approved.')
+                                        @else
+                                            @lang('Automatic hedge and payout are paused until AML review is approved.')
+                                        @endif
                                     </div>
                                 @endif
                                 @if($exchange->matchedExchange)

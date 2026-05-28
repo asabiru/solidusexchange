@@ -11,6 +11,8 @@ return [
         'enabled' => env('EXCHANGE_AML_ENABLED', true),
         'provider' => env('EXCHANGE_AML_PROVIDER', 'local_db'),
         'auto_block_processing' => env('EXCHANGE_AML_AUTO_BLOCK_PROCESSING', true),
+        'api_key' => env('EXCHANGE_AML_API_KEY'),
+        'api_url' => env('EXCHANGE_AML_API_URL'),
     ],
     'routing' => [
         'internal_matching_enabled' => env('EXCHANGE_INTERNAL_MATCHING_ENABLED', false),

@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Admin\Module;
 use App\Http\Controllers\Controller;
 use App\Models\ExchangePayout;
 use App\Models\ExchangeRequest;
+use App\Services\ExchangeEngine\ExchangeAutomationService;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\ExchangePipeline\ExchangeAmlService;
 use App\Services\ExchangePipeline\ExchangePayoutService;
 use App\Services\ExchangePipeline\ExchangeReservationService;
 use App\Traits\CalculateFees;
@@ -22,6 +24,8 @@ class ExchangeController extends Controller
     use CalculateFees, SendNotification, CryptoWalletGenerate;
 
     public function __construct(
+        private readonly ExchangeAmlService $amlService,
+        private readonly ExchangeAutomationService $automationService,
         private readonly ExchangePayoutService $payoutService,
         private readonly ExchangeReservationService $reservationService,
     ) {
@@ -292,9 +296,69 @@ class ExchangeController extends Controller
         ]);
     }
 
+    public function approveAml(Request $request, $id)
+    {
+        $exchange = ExchangeRequest::findOrFail($id);
+
+        if ((int) $exchange->status !== 2 || !$exchange->deposit_confirmed_at) {
+            return back()->with('error', 'AML review is available only for confirmed exchanges in processing.');
+        }
+
+        if ($exchange->aml_status === 'approved') {
+            return back()->with('warning', 'AML has already been approved for this exchange.');
+        }
+
+        $this->amlService->approveExchange($exchange, (string) $request->input('notes', ''));
+
+        $isAutoProcessed = false;
+        try {
+            $isAutoProcessed = $this->automationService->handleConfirmedDeposit(
+                $exchange->fresh(['sendCurrency', 'getCurrency', 'cryptoMethod'])
+            );
+        } catch (Throwable $exception) {
+            report($exception);
+        }
+
+        if ($isAutoProcessed) {
+            return back()->with('success', 'AML approved and the exchange pipeline resumed automatically.');
+        }
+
+        return back()->with('success', 'AML approved. The exchange remains in processing for manual follow-up.');
+    }
+
+    public function rejectAml(Request $request, $id)
+    {
+        $exchange = ExchangeRequest::findOrFail($id);
+
+        if ((int) $exchange->status !== 2 || !$exchange->deposit_confirmed_at) {
+            return back()->with('error', 'AML review is available only for confirmed exchanges in processing.');
+        }
+
+        if ($exchange->aml_status === 'rejected') {
+            return back()->with('warning', 'AML has already been rejected for this exchange.');
+        }
+
+        $reason = trim((string) $request->input('reason', ''));
+        $this->amlService->rejectExchange($exchange, $reason);
+
+        $exchange->execution_route = 'manual_review';
+        $exchange->execution_notes = trim(implode(' ', array_filter([
+            'Exchange blocked by AML review.',
+            $reason,
+        ])));
+        $exchange->routed_at = now();
+        $exchange->save();
+
+        return back()->with('success', 'Exchange blocked by AML review.');
+    }
+
     public function exchangeSend(Request $request, $utr)
     {
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
+
+        if (!$exchange->isAmlApproved()) {
+            return back()->with('error', 'This exchange is blocked until AML review is approved.');
+        }
 
         $existingQueuedPayout = ExchangePayout::where('exchange_request_id', $exchange->id)
             ->where('type', 'payout')

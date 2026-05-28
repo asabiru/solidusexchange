@@ -10,7 +10,9 @@ class ExchangePayoutService
 {
     public function canAutoPayout(ExchangeRequest $exchange): bool
     {
-        return filled($exchange->destination_wallet) && (bool)optional($this->resolvePayoutMethod($exchange))->is_automatic;
+        return $exchange->isAmlApproved()
+            && filled($exchange->destination_wallet)
+            && (bool) optional($this->resolvePayoutMethod($exchange))->is_automatic;
     }
 
     public function isAsyncPayout(ExchangeRequest $exchange): bool
@@ -20,6 +22,10 @@ class ExchangePayoutService
 
     public function sendExchangePayout(ExchangeRequest $exchange): bool
     {
+        if (!$exchange->isAmlApproved()) {
+            throw new RuntimeException('Exchange payout is blocked until AML review is approved.');
+        }
+
         $method = $this->resolvePayoutMethod($exchange);
         $serviceClass = 'Facades\\App\\Services\\CryptoMethod\\' . $method->code . '\\Service';
 

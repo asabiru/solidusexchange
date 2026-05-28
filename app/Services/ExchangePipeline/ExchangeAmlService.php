@@ -45,6 +45,44 @@ class ExchangeAmlService
             ];
         }
 
+        $linkedDeposit = $this->findLinkedCustodialDeposit($exchange, $meta);
+
+        if ($linkedDeposit && $linkedDeposit->isAmlRejected()) {
+            $notes = 'Linked custodial deposit was rejected by AML review. Exchange is blocked until manually resolved.';
+            $this->applyDecision(
+                $exchange,
+                'rejected',
+                $linkedDeposit->aml_provider ?: 'custodial_deposit',
+                'high',
+                $linkedDeposit->aml_risk_score !== null ? (float) $linkedDeposit->aml_risk_score : 100.0,
+                $notes
+            );
+
+            return [
+                'status' => 'rejected',
+                'should_block_processing' => true,
+                'notes' => $notes,
+            ];
+        }
+
+        if ($linkedDeposit && ($linkedDeposit->isAmlApproved() || in_array($linkedDeposit->status, ['aml_approved', 'processed'], true))) {
+            $notes = $linkedDeposit->aml_notes ?: 'Approved via linked custodial deposit AML screening.';
+            $this->applyDecision(
+                $exchange,
+                'approved',
+                $linkedDeposit->aml_provider ?: 'custodial_deposit',
+                $linkedDeposit->aml_risk_level ?: 'low',
+                $linkedDeposit->aml_risk_score !== null ? (float) $linkedDeposit->aml_risk_score : null,
+                $notes
+            );
+
+            return [
+                'status' => 'approved',
+                'should_block_processing' => false,
+                'notes' => $notes,
+            ];
+        }
+
         $notes = 'Manual AML review is required before hedge and payout.';
         $this->applyDecision($exchange, 'pending', $provider, 'unknown', null, $notes);
 
@@ -53,6 +91,44 @@ class ExchangeAmlService
             'should_block_processing' => (bool)config('exchange_pipeline.aml.auto_block_processing', true),
             'notes' => $notes,
         ];
+    }
+
+    public function approveExchange(ExchangeRequest $exchange, string $notes = ''): void
+    {
+        $riskLevel = in_array($exchange->aml_risk_level, ['low', 'medium'], true)
+            ? $exchange->aml_risk_level
+            : 'medium';
+
+        $message = trim(implode(' ', array_filter([
+            'Manually approved by admin.',
+            trim($notes),
+        ])));
+
+        $this->applyDecision(
+            $exchange,
+            'approved',
+            'manual_admin',
+            $riskLevel,
+            $exchange->aml_risk_score !== null ? (float) $exchange->aml_risk_score : null,
+            $message
+        );
+    }
+
+    public function rejectExchange(ExchangeRequest $exchange, string $notes = ''): void
+    {
+        $message = trim(implode(' ', array_filter([
+            'Manually rejected by admin.',
+            trim($notes),
+        ])));
+
+        $this->applyDecision(
+            $exchange,
+            'rejected',
+            'manual_admin',
+            'high',
+            $exchange->aml_risk_score !== null ? max((float) $exchange->aml_risk_score, 80.0) : 100.0,
+            $message
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -190,7 +266,14 @@ class ExchangeAmlService
         $match = SanctionedAddress::active()
             ->where('address', $normalized)
             ->forCurrency($currencyCode)
-            ->orderByDesc('severity') // blocked > high_risk > monitor
+            ->orderByRaw("
+                CASE severity
+                    WHEN 'blocked' THEN 3
+                    WHEN 'high_risk' THEN 2
+                    WHEN 'monitor' THEN 1
+                    ELSE 0
+                END DESC
+            ")
             ->first();
 
         if ($match) {
@@ -435,6 +518,23 @@ class ExchangeAmlService
         }
 
         return null;
+    }
+
+    private function findLinkedCustodialDeposit(ExchangeRequest $exchange, array $meta = []): ?CustodialDeposit
+    {
+        $query = CustodialDeposit::query()
+            ->where('exchange_request_id', $exchange->id)
+            ->latest('id');
+
+        $depositTxId = $meta['deposit_tx_id'] ?? null;
+        if (filled($depositTxId)) {
+            $query->where(function ($depositQuery) use ($depositTxId) {
+                $depositQuery->where('tx_id', $depositTxId)
+                    ->orWhere('tx_hash', $depositTxId);
+            });
+        }
+
+        return $query->first();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
