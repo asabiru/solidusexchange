@@ -51,12 +51,17 @@
                             <span class="badge bg-soft-{{ $providerReadiness['enabled'] ? 'success' : 'secondary' }} text-{{ $providerReadiness['enabled'] ? 'success' : 'secondary' }}">
                                 AML {{ $providerReadiness['enabled'] ? 'Enabled' : 'Disabled' }}
                             </span>
-                            <span class="badge bg-soft-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }}">
-                                API Key {{ $providerReadiness['api_key_configured'] ? 'Set' : 'Missing' }}
-                            </span>
-                            <span class="badge bg-soft-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }}">
-                                API URL {{ $providerReadiness['api_url_configured'] ? 'Set' : 'Missing' }}
-                            </span>
+                            @if($providerReadiness['uses_external_provider'])
+                                <span class="badge bg-soft-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }}">
+                                    API Key {{ $providerReadiness['api_key_configured'] ? 'Set' : 'Missing' }}
+                                </span>
+                                <span class="badge bg-soft-{{ $providerReadiness['api_secret_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_secret_configured'] ? 'success' : 'warning' }}">
+                                    API Secret {{ $providerReadiness['api_secret_configured'] ? 'Set' : 'Missing' }}
+                                </span>
+                                <span class="badge bg-soft-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }}">
+                                    API URL {{ $providerReadiness['api_url_configured'] ? 'Set' : 'Missing' }}
+                                </span>
+                            @endif
                             <span class="badge bg-soft-{{ $providerReadiness['auto_block_processing'] ? 'warning' : 'secondary' }} text-{{ $providerReadiness['auto_block_processing'] ? 'warning' : 'secondary' }}">
                                 Auto-block {{ $providerReadiness['auto_block_processing'] ? 'On' : 'Off' }}
                             </span>

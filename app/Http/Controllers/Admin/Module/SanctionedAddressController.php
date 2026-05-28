@@ -328,6 +328,7 @@ class SanctionedAddressController extends Controller
     private function providerLabel(?string $provider): string
     {
         return match ($provider) {
+            'elliptic' => 'Elliptic',
             'internal_db' => 'Internal DB',
             'local_db' => 'Local DB',
             'ofac_api' => 'OFAC API',
@@ -342,6 +343,7 @@ class SanctionedAddressController extends Controller
     private function providerBadge(?string $provider): string
     {
         $color = match ($provider) {
+            'elliptic' => 'primary',
             'internal_db', 'local_db' => 'primary',
             'ofac_api' => 'warning',
             'wallet_screening' => 'info',

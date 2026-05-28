@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 
 class ExchangeAmlService
 {
+    private const ELLIPTIC_PROVIDER = 'elliptic';
     private const WALLET_SUMMARY_PROVIDER = 'wallet_screening';
     private const WALLET_OVERRIDE_PROVIDER = 'manual_wallet_review';
     private const LOCAL_ONLY_PROVIDERS = ['manual', 'local_db', 'internal_db', 'disabled', ''];
@@ -259,7 +260,9 @@ class ExchangeAmlService
         $provider = (string) config('exchange_pipeline.aml.provider', 'manual');
         $enabled = (bool) config('exchange_pipeline.aml.enabled');
         $apiKeyConfigured = filled(config('exchange_pipeline.aml.api_key'));
-        $apiUrlConfigured = filled(config('exchange_pipeline.aml.api_url'));
+        $apiSecretConfigured = !$this->providerRequiresSecret($provider)
+            || filled(config('exchange_pipeline.aml.api_secret'));
+        $apiUrlConfigured = filled($this->externalProviderBaseUrl($provider));
         $usesExternalProvider = $this->usesExternalProvider($provider);
 
         $status = 'local_only';
@@ -268,7 +271,7 @@ class ExchangeAmlService
         if (!$enabled) {
             $status = 'disabled';
             $message = 'AML screening is disabled.';
-        } elseif ($usesExternalProvider && $apiKeyConfigured && $apiUrlConfigured) {
+        } elseif ($usesExternalProvider && $apiKeyConfigured && $apiSecretConfigured && $apiUrlConfigured) {
             $status = 'ready';
             $message = "External AML provider {$provider} is configured.";
         } elseif ($usesExternalProvider) {
@@ -281,6 +284,7 @@ class ExchangeAmlService
             'provider' => $provider,
             'uses_external_provider' => $usesExternalProvider,
             'api_key_configured' => $apiKeyConfigured,
+            'api_secret_configured' => $apiSecretConfigured,
             'api_url_configured' => $apiUrlConfigured,
             'auto_block_processing' => (bool) config('exchange_pipeline.aml.auto_block_processing', true),
             'status' => $status,
@@ -642,6 +646,16 @@ class ExchangeAmlService
 
     private function callExternalAmlApi(CustodialDeposit $deposit, string $provider): ?array
     {
+        if ($provider === self::ELLIPTIC_PROVIDER) {
+            return $this->callEllipticWalletAmlApi(
+                (string) $deposit->source_address,
+                (string) $deposit->currency_code,
+                'custodial-deposit-' . $deposit->id,
+                $provider,
+                $deposit
+            );
+        }
+
         $apiKey = config('exchange_pipeline.aml.api_key');
         $apiUrl = config('exchange_pipeline.aml.api_url');
 
@@ -772,6 +786,17 @@ class ExchangeAmlService
         ?float $amount = null,
         $screenable = null
     ): ?array {
+        if ($provider === self::ELLIPTIC_PROVIDER) {
+            return $this->callEllipticWalletAmlApi(
+                $address,
+                $currencyCode,
+                $this->ellipticCustomerReference($screenable),
+                $provider,
+                $screenable,
+                $amount
+            );
+        }
+
         $apiKey = config('exchange_pipeline.aml.api_key');
         $apiUrl = config('exchange_pipeline.aml.api_url');
 
@@ -829,6 +854,165 @@ class ExchangeAmlService
         return null;
     }
 
+    private function callEllipticWalletAmlApi(
+        string $address,
+        string $currencyCode,
+        ?string $customerReference,
+        string $provider,
+        $screenable = null,
+        ?float $amount = null
+    ): ?array {
+        if (blank($address)) {
+            return null;
+        }
+
+        $payload = [
+            'subject' => $this->buildEllipticWalletSubject($address, $currencyCode),
+            'type' => 'wallet_exposure',
+        ];
+
+        if (filled($customerReference)) {
+            $payload['customer_reference'] = $customerReference;
+        }
+
+        $response = $this->sendEllipticRequest('POST', '/wallet/synchronous', $payload);
+
+        if (!$response || !$response->successful()) {
+            return null;
+        }
+
+        $data = $response->json();
+        $processStatus = (string) ($data['process_status'] ?? '');
+
+        if ($processStatus !== '' && $processStatus !== 'complete') {
+            $notes = trim(implode(' ', array_filter([
+                'Elliptic wallet screening did not complete successfully.',
+                "Process status: {$processStatus}.",
+                data_get($data, 'error.message'),
+            ])));
+
+            $this->logScreeningIfPossible($screenable, $address, $currencyCode, $provider, [
+                'result' => 'error',
+                'entity_name' => null,
+                'source' => $provider,
+                'risk_score' => 0,
+                'process_status' => $processStatus,
+                'notes' => $notes,
+            ]);
+
+            return [
+                'status' => 'pending',
+                'provider' => $provider,
+                'risk_level' => 'unknown',
+                'risk_score' => 0,
+                'notes' => $notes,
+            ];
+        }
+
+        $rawRiskScore = isset($data['risk_score']) ? (float) $data['risk_score'] : null;
+        $riskScore = $rawRiskScore !== null ? $this->normalizeEllipticRiskScore($rawRiskScore) : 0.0;
+        $riskLevel = $this->riskScoreToLevel($riskScore);
+        $primaryEntity = collect((array) ($data['cluster_entities'] ?? []))
+            ->firstWhere('is_primary_entity', true)
+            ?? collect((array) ($data['cluster_entities'] ?? []))->first();
+
+        $entityName = data_get($primaryEntity, 'name')
+            ?: data_get($primaryEntity, 'category')
+            ?: null;
+
+        $result = [
+            'result' => $riskLevel === 'high' ? 'match' : ($riskLevel === 'medium' ? 'partial_match' : 'clean'),
+            'entity_name' => $entityName,
+            'source' => $provider,
+            'risk_score' => $riskScore,
+            'provider_risk_score' => $rawRiskScore,
+            'risk_level' => $riskLevel,
+            'screening_id' => $data['screening_id'] ?? null,
+            'process_status' => $data['process_status'] ?? null,
+            'category' => data_get($primaryEntity, 'category'),
+            'is_vasp' => data_get($primaryEntity, 'is_vasp'),
+            'notes' => trim(implode(' ', array_filter([
+                'Elliptic wallet screening completed.',
+                $rawRiskScore !== null ? "Provider score: {$rawRiskScore}/10." : null,
+                filled($entityName) ? "Primary entity: {$entityName}." : null,
+                filled(data_get($primaryEntity, 'category')) ? 'Category: ' . data_get($primaryEntity, 'category') . '.' : null,
+                $amount !== null ? "Amount: {$amount}." : null,
+            ]))),
+        ];
+
+        $this->logScreeningIfPossible($screenable, $address, $currencyCode, $provider, $result);
+
+        return [
+            'status' => $riskLevel === 'high' ? 'rejected' : ($riskLevel === 'low' ? 'approved' : 'pending'),
+            'provider' => $provider,
+            'risk_level' => $riskLevel,
+            'risk_score' => $riskScore,
+            'notes' => $result['notes'],
+        ];
+    }
+
+    private function buildEllipticWalletSubject(string $address, string $currencyCode): array
+    {
+        return [
+            'asset' => 'holistic',
+            'blockchain' => 'holistic',
+            'type' => 'address',
+            'hash' => $address,
+        ];
+    }
+
+    private function sendEllipticRequest(string $method, string $path, array $payload = [])
+    {
+        $apiKey = (string) config('exchange_pipeline.aml.api_key');
+        $apiSecret = (string) config('exchange_pipeline.aml.api_secret');
+        $baseUrl = $this->externalProviderBaseUrl(self::ELLIPTIC_PROVIDER);
+
+        if (blank($apiKey) || blank($apiSecret) || blank($baseUrl)) {
+            return null;
+        }
+
+        $timestamp = (string) (int) round(microtime(true) * 1000);
+        $method = strtoupper($method);
+        $payloadJson = empty($payload) ? '{}' : json_encode($payload, JSON_UNESCAPED_SLASHES);
+        $signature = base64_encode(hash_hmac(
+            'sha256',
+            $timestamp . $method . strtolower($path) . $payloadJson,
+            base64_decode($apiSecret),
+            true
+        ));
+
+        try {
+            return Http::baseUrl($baseUrl)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                    'x-access-key' => $apiKey,
+                    'x-access-sign' => $signature,
+                    'x-access-timestamp' => $timestamp,
+                ])
+                ->withBody($payloadJson, 'application/json')
+                ->send($method, $path);
+        } catch (\Throwable $e) {
+            Log::warning('Elliptic AML request failed: ' . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    private function normalizeEllipticRiskScore(float $score): float
+    {
+        return max(0, min(100, round($score * 10, 2)));
+    }
+
+    private function ellipticCustomerReference($screenable): ?string
+    {
+        if (!$screenable || !isset($screenable->id)) {
+            return null;
+        }
+
+        return strtolower(class_basename(get_class($screenable))) . '-' . $screenable->id;
+    }
+
     private function usesExternalProvider(?string $provider = null): bool
     {
         $provider = (string) ($provider ?? config('exchange_pipeline.aml.provider', 'manual'));
@@ -840,7 +1024,26 @@ class ExchangeAmlService
     {
         return $this->usesExternalProvider($provider)
             && filled(config('exchange_pipeline.aml.api_key'))
-            && filled(config('exchange_pipeline.aml.api_url'));
+            && (!$this->providerRequiresSecret($provider) || filled(config('exchange_pipeline.aml.api_secret')))
+            && filled($this->externalProviderBaseUrl($provider));
+    }
+
+    private function providerRequiresSecret(?string $provider = null): bool
+    {
+        return (string) ($provider ?? config('exchange_pipeline.aml.provider', 'manual')) === self::ELLIPTIC_PROVIDER;
+    }
+
+    private function externalProviderBaseUrl(?string $provider = null): ?string
+    {
+        $provider = (string) ($provider ?? config('exchange_pipeline.aml.provider', 'manual'));
+
+        if ($provider === self::ELLIPTIC_PROVIDER) {
+            return rtrim((string) config('exchange_pipeline.aml.elliptic_base_url'), '/');
+        }
+
+        $apiUrl = trim((string) config('exchange_pipeline.aml.api_url'));
+
+        return $apiUrl !== '' ? rtrim($apiUrl, '/') : null;
     }
 
     private function findLinkedCustodialDeposit(ExchangeRequest $exchange, array $meta = []): ?CustodialDeposit
