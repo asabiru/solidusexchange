@@ -41,7 +41,19 @@
                     </div>
                 </div>
                 <div class="col-md-6 p-0 d-flex justify-content-center flex-column">
-                    <div class="login-signup-form">
+                    
+                        {{-- ── Логотип в форме (все экраны) ── --}}
+                        <div class="auth-form-logo text-center mb-4">
+                            <a href="{{ url('/') }}" class="d-inline-block">
+                                <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
+                                     alt="{{ basicControl()->site_title }}"
+                                     class="auth-logo-img"
+                                     width="80" height="80">
+                            </a>
+                            <div class="auth-logo-name mt-2">{{ basicControl()->site_title }}</div>
+                        </div>
+
+                        <div class="login-signup-form">
                         <form action="{{ route('user.change.password') }}" method="post">
                             @csrf
                             <div class="section-header">

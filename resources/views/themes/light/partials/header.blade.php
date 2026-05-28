@@ -28,6 +28,30 @@
         color: var(--color-text-primary);
     }
 
+    /* ── Logo images — dual theme support ───────────────────── */
+    .solidchange-navbar .site-logo-img {
+        height: 40px;
+        width: 40px;
+        object-fit: contain;
+        border-radius: 50%;
+        flex-shrink: 0;
+        transition: transform 0.2s;
+    }
+    .solidchange-navbar a:hover .site-logo-img { transform: scale(1.06); }
+    .solidchange-navbar .site-logo-name {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: -0.3px;
+        color: var(--color-text-primary);
+    }
+    /* theme switching */
+    .logo-for-dark  { display: none;  }
+    .logo-for-light { display: block; }
+    body.dark-theme .logo-for-light,
+    html[data-solidus-theme="dark"] .logo-for-light { display: none;  }
+    body.dark-theme .logo-for-dark,
+    html[data-solidus-theme="dark"] .logo-for-dark  { display: block; }
+
     .solidchange-navbar .logo-badge {
         display: flex;
         height: 28px;
@@ -122,9 +146,16 @@
     <div class="container" style="max-width: 1280px;">
         <div class="d-flex align-items-center justify-content-between" style="height: 64px; padding: 0 20px;">
             <!-- Logo -->
-            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
-                <div class="logo-badge">SC</div>
-                <span>SolidChange</span>
+            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none">
+                {{-- Light logo (shown on light theme) --}}
+                <img class="site-logo-img logo-for-light"
+                     src="{{ getFile(basicControl()->logo_driver, basicControl()->logo) }}"
+                     alt="SolidChange" width="40" height="40">
+                {{-- Dark logo (shown on dark theme) --}}
+                <img class="site-logo-img logo-for-dark"
+                     src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
+                     alt="SolidChange" width="40" height="40">
+                <span class="site-logo-name">SolidChange</span>
             </a>
 
             <!-- Desktop Navigation -->
@@ -242,9 +273,16 @@
 <!-- Mobile Menu (outside <header> to avoid fixed-in-sticky iOS Safari bug) -->
 <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu">
         <div class="offcanvas-header">
-            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none" style="font-size: 15px; font-weight: 600; color: var(--color-text-primary);">
-                <div class="logo-badge">SC</div>
-                <span>SolidChange</span>
+            <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none">
+                {{-- Light logo (shown on light theme) --}}
+                <img class="site-logo-img logo-for-light"
+                     src="{{ getFile(basicControl()->logo_driver, basicControl()->logo) }}"
+                     alt="SolidChange" width="40" height="40">
+                {{-- Dark logo (shown on dark theme) --}}
+                <img class="site-logo-img logo-for-dark"
+                     src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
+                     alt="SolidChange" width="40" height="40">
+                <span class="site-logo-name">SolidChange</span>
             </a>
             <button type="button" class="btn-close" data-bs-dismiss="offcanvas" style="filter: invert(1);"></button>
         </div>

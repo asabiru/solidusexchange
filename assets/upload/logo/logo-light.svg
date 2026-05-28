@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Outer glow ring (very subtle) -->
+  <circle cx="100" cy="100" r="96" fill="none" stroke="#C4A882" stroke-width="0.4" opacity="0.3"/>
+
+  <!-- Main circle - white fill, champagne border -->
+  <circle cx="100" cy="100" r="93" fill="#FFFFFF" stroke="#C4A882" stroke-width="1.6"/>
+
+  <!-- S letter — champagne/sand — upper-left -->
+  <text
+    x="40"
+    y="126"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="98"
+    font-weight="400"
+    fill="#C0A87A"
+    letter-spacing="-2"
+  >S</text>
+
+  <!-- D letter — deep burgundy — lower-right, overlapping S -->
+  <text
+    x="70"
+    y="164"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="98"
+    font-weight="400"
+    fill="#6B1E35"
+    letter-spacing="-2"
+  >D</text>
+</svg>

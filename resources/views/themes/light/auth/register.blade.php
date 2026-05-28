@@ -51,6 +51,17 @@
 
                 <div class="col-12 p-0 d-flex justify-content-center flex-column auth-redesign-form-column">
                     <div class="login-signup-form auth-redesign-card">
+                        {{-- ── Логотип в форме (все экраны) ── --}}
+                        <div class="auth-form-logo text-center mb-4">
+                            <a href="{{ url('/') }}" class="d-inline-block">
+                                <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
+                                     alt="{{ basicControl()->site_title }}"
+                                     class="auth-logo-img"
+                                     width="80" height="80">
+                            </a>
+                            <div class="auth-logo-name mt-2">{{ basicControl()->site_title }}</div>
+                        </div>
+
                         <form action="{{ route('register') }}" method="post" class="php-email-form">
                             @csrf
                             @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
@@ -213,7 +224,7 @@
         }
 
         .auth-redesign-visual::after {
-            content: 'SC';
+            content: 'SD';
             position: absolute;
             right: 8%;
             bottom: 10%;

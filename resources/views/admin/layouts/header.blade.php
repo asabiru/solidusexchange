@@ -213,14 +213,24 @@
 
 
                 <li class="nav-item">
+                    @php
+                        $adminUser      = Auth::guard('admin')->user();
+                        $adminImage     = $adminUser->image ?? null;
+                        $adminDriver    = $adminUser->image_driver ?? 'local';
+                        $adminInitial   = strtoupper(substr($adminUser->name ?? 'A', 0, 1));
+                        $adminAvatarUrl = $adminImage ? getFile($adminDriver, $adminImage) : null;
+                    @endphp
                     <div class="dropdown">
                         <a class="navbar-dropdown-account-wrapper" href="javascript:void(0)" id="accountNavbarDropdown"
                            data-bs-toggle="dropdown" aria-expanded="false" data-bs-auto-close="outside"
                            data-bs-dropdown-animation>
                             <div class="avatar avatar-sm avatar-circle">
-                                <img class="avatar-img"
-                                     src="{{getFile(Auth::guard('admin')->user()->image_driver, Auth::guard('admin')->user()->image)}}"
-                                     alt="@lang('Image Description')">
+                                @if($adminAvatarUrl)
+                                    <img class="avatar-img" src="{{ $adminAvatarUrl }}" alt="@lang('Image Description')">
+                                @else
+                                    <span class="avatar-initials"
+                                          style="background:#7B3F00;color:#E8C9A0;font-weight:700;font-size:14px;">{{ $adminInitial }}</span>
+                                @endif
                                 <span class="avatar-status avatar-sm-status avatar-status-success"></span>
                             </div>
                         </a>
@@ -231,9 +241,12 @@
                             <div class="dropdown-item-text">
                                 <div class="d-flex align-items-center">
                                     <div class="avatar avatar-sm avatar-circle">
-                                        <img class="avatar-img"
-                                             src="{{getFile(Auth::guard('admin')->user()->image_driver, Auth::guard('admin')->user()->image)}}"
-                                             alt="@lang('Image Description')">
+                                        @if($adminAvatarUrl)
+                                            <img class="avatar-img" src="{{ $adminAvatarUrl }}" alt="@lang('Image Description')">
+                                        @else
+                                            <span class="avatar-initials"
+                                                  style="background:#7B3F00;color:#E8C9A0;font-weight:700;font-size:14px;">{{ $adminInitial }}</span>
+                                        @endif
                                     </div>
                                     <div class="flex-grow-1 ms-3">
                                         <h5 class="mb-0">{{auth()->user()->name}}</h5>

@@ -9,7 +9,9 @@
     <title>@yield('page_title') - {{ __(basicControl()->site_title) }}</title>
 
     <!-- Favicon -->
-    <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
+    <link rel="icon" type="image/x-icon"  href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
+    <link rel="icon" type="image/svg+xml" href="{{ asset('assets/upload/logo/favicon.svg') }}">
+    <link rel="apple-touch-icon" sizes="64x64" href="{{ asset('assets/upload/logo/favicon-64.png') }}">
 
     <!-- Font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">

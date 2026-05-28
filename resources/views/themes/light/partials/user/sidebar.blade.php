@@ -2,7 +2,7 @@
     {{-- Brand --}}
     <div class="sidebar-brand">
         <a href="{{ url('/') }}" class="sidebar-brand-link" title="На главную">
-            <div class="sidebar-brand-badge">SC</div>
+            <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}" alt="{{ basicControl()->site_title }}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;">
             <span class="sidebar-brand-name">SolidChange</span>
         </a>
     </div>

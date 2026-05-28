@@ -74,10 +74,17 @@ class SanctionedAddress extends Model
     }
 
     /**
-     * Normalize address for comparison (lowercase, trim).
+     * Normalize address for comparison (lowercase, trim, strip invisible Unicode).
      */
     public static function normalizeAddress(string $address): string
     {
+        // Strip invisible/zero-width Unicode characters that can appear in copy-pasted
+        // or spreadsheet-exported addresses (zero-width space, BOM, soft hyphen, etc.)
+        $address = (string) preg_replace(
+            '/[\x{200B}-\x{200F}\x{FEFF}\x{00AD}\x{202A}-\x{202E}\x{2060}\x{00A0}]+/u',
+            '',
+            $address
+        );
         $address = trim($address);
         $lowercaseAddress = strtolower($address);
 

@@ -23,7 +23,6 @@
     <link rel="stylesheet" href="{{ asset('assets/admin/css/all.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/fontawesome.min.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css" />
-    <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
 
     @stack('css')
@@ -165,6 +164,9 @@
 <script src="{{ asset('assets/admin/js/js-switch-element.min.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.js"></script>
 <script src="{{ asset('assets/admin/js/main.js') }}"></script>
+
+{{-- SolidChange design overrides — loaded AFTER theme.min.js so they always win --}}
+<link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}?v=2">
 
 
 <script>

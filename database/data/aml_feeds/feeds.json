@@ -2,7 +2,8 @@
   "feeds": [
     {
       "name": "opensanctions_us_ofac_crypto_wallets",
-      "enabled": true,
+      "enabled": false,
+      "_disabled_reason": "data.opensanctions.org is blocked by hosting DNS (resolves to 127.0.0.1). Use core_sanctions_seed.json for OFAC addresses instead.",
       "url": "https://data.opensanctions.org/datasets/latest/us_ofac_sdn/targets.nested.json",
       "format": "ndjson",
       "entries_path": "properties.cryptoWallets",

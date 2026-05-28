@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Background circle - works on both dark and light tabs -->
+  <circle cx="32" cy="32" r="30" fill="#1a0d12" stroke="#C4A882" stroke-width="1.5"/>
+
+  <!-- S — champagne -->
+  <text
+    x="7"
+    y="38"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="32"
+    font-weight="400"
+    fill="#D4BA88"
+  >S</text>
+
+  <!-- D — burgundy -->
+  <text
+    x="22"
+    y="52"
+    font-family="'Cormorant Garamond', 'Playfair Display', Georgia, 'Times New Roman', serif"
+    font-size="32"
+    font-weight="400"
+    fill="#9B3050"
+  >D</text>
+</svg>

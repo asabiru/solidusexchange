@@ -9,7 +9,7 @@
     @endif
 
     <div class="admin-logo">
-        <div class="logo-badge">SC</div>
+        <img src="{{ getFile(basicControl()->admin_logo_driver, basicControl()->admin_logo, true) }}" alt="{{ basicControl()->site_title }}" style="width:64px;height:64px;object-fit:contain;border-radius:12px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
         <h3>SolidChange</h3>
         <p>Admin 2FA Verification</p>
     </div>

@@ -4,7 +4,7 @@
         <button class="preloader-close" onclick="document.querySelector('.loader-wrap').style.display='none'">&#x2715;</button>
         <div class="sc-preloader-inner">
             <div class="sc-preloader-logo">
-                <div class="sc-badge">SC</div>
+                <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}" alt="{{ basicControl()->site_title }}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;">
                 <span class="sc-wordmark">SolidChange</span>
             </div>
             <div class="sc-preloader-bar">

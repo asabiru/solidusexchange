@@ -6130,6 +6130,31 @@ Map section end
     left: 15px;
 }
 
+/* -- Auth form logo (mobile: shown; desktop: left panel shows logo) -- */
+.auth-form-logo {
+    display: none;
+}
+.auth-logo-img {
+    width: 80px;
+    height: 80px;
+    object-fit: contain;
+    border-radius: 16px;
+}
+.auth-logo-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--heading-color);
+    letter-spacing: 0.5px;
+}
+@media (max-width: 767px) {
+    .auth-form-logo {
+        display: block;
+    }
+    .auth-mobile-brand {
+        display: none !important;
+    }
+}
+
 /*----------------------------------------------
 Login Signup end
 ----------------------------------------------*/

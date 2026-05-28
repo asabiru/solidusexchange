@@ -380,52 +380,58 @@ class UsersController extends Controller
 
     public function userStore(Request $request)
     {
-
         $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'firstName' => 'required|string|min:2|max:255',
-            'lastName' => 'required|string|min:2|max:255',
-            'username' => 'required|string|unique:users,username|min:2|max:255',
-            'email' => 'required|email:rfc,dns|unique:users,email|min:2|max:255',
-            'phone' => 'required|string|unique:users,phone|min:2|max:20',
-            'country' => 'required|string|not_in:country|min:2|max:255',
-            'city' => 'required|string|min:2|max:255',
-            'state' => 'nullable|string|min:2|max:255',
-            'zipCode' => 'nullable|string|min:2|max:20',
-            'addressOne' => 'required|string|min:2',
-            'addressTwo' => 'nullable|string|min:2',
-            'status' => 'nullable|integer|in:0,1',
+            'firstName'  => 'required|string|min:2|max:255',
+            'lastName'   => 'required|string|min:2|max:255',
+            'username'   => 'required|string|unique:users,username|min:2|max:255',
+            'email'      => 'required|email|unique:users,email|min:2|max:255',
+            'password'   => 'required|string|min:6|confirmed',
+            'phone'      => 'nullable|string|max:20',
+            'country'    => 'nullable|string|max:255',
+            'city'       => 'nullable|string|max:255',
+            'state'      => 'nullable|string|max:255',
+            'zipCode'    => 'nullable|string|max:20',
+            'addressOne' => 'nullable|string',
+            'addressTwo' => 'nullable|string',
+            'status'     => 'nullable|integer|in:0,1',
         ]);
+
         if ($validator->fails()) {
             return back()->withErrors($validator)->withInput();
         }
 
         try {
             $response = User::create([
-                'firstname' => $request->firstName,
-                'lastname' => $request->lastName,
-                'username' => $request->username,
-                'email' => $request->email,
-                'phone' => $request->phone,
-                'language_id' => $request->language_id,
-                'address_one' => $request->addressOne,
-                'address_two' => $request->addressTwo,
-                'city' => $request->city,
-                'state' => $request->state,
-                'zip_code' => $request->zipCode,
-                'country' => $request->country,
-                'image' => null,
+                'firstname'    => $request->firstName,
+                'lastname'     => $request->lastName,
+                'username'     => $request->username,
+                'email'        => $request->email,
+                'password'     => $request->password,
+                'phone'        => $request->phone,
+                'address_one'  => $request->addressOne,
+                'address_two'  => $request->addressTwo,
+                'city'         => $request->city,
+                'state'        => $request->state,
+                'zip_code'     => $request->zipCode,
+                'country'      => $request->country,
+                'image'        => null,
                 'image_driver' => 'local',
-                'status' => $request->status
+                'status'       => $request->status ?? 1,
+                'email_verification' => 1,
+                'sms_verification'   => 1,
+                'two_fa'             => 0,
+                'two_fa_verify'      => 1,
             ]);
 
             if (!$response) {
                 throw new Exception('Something went wrong, Please try again.');
             }
 
-            return redirect()->route('admin.user.create.success.message', $response->id)->with('success', 'User created successfully');
+            return redirect()->route('admin.user.create.success.message', $response->id)
+                ->with('success', 'User created successfully');
 
         } catch (\Exception $exp) {
-            return back()->with('error', $exp->getMessage());
+            return back()->with('error', $exp->getMessage())->withInput();
         }
     }
 
