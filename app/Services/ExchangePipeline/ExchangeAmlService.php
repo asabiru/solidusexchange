@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Log;
 
 class ExchangeAmlService
 {
+    private const WALLET_SUMMARY_PROVIDER = 'wallet_screening';
+    private const WALLET_OVERRIDE_PROVIDER = 'manual_wallet_review';
+
     // ─── Sources of sanctions lists ────────────────────────────────────────
     public const SOURCE_OFAC       = 'ofac';        // US Treasury OFAC SDN
     public const SOURCE_EU         = 'eu';          // EU sanctions
@@ -138,21 +141,25 @@ class ExchangeAmlService
         $direction = $context['direction'] ?? 'wallet';
         $amount = isset($context['amount']) ? (float) $context['amount'] : null;
 
+        if ($override = $this->resolveWalletOverride($screenable, $address)) {
+            return $override;
+        }
+
         if (!config('exchange_pipeline.aml.enabled')) {
-            return [
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'approved',
                 'provider' => 'disabled',
                 'risk_level' => 'low',
                 'risk_score' => 0,
                 'notes' => ucfirst($direction) . ' screening is disabled. Auto-approved.',
-            ];
+            ]);
         }
 
         $localResult = $this->checkLocalSanctionsDb($address, $currencyCode);
         $this->logScreeningIfPossible($screenable, $address, $currencyCode, 'internal_db', $localResult);
 
         if ($localResult['result'] === 'match' && $localResult['severity'] === 'blocked') {
-            return [
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'rejected',
                 'provider' => 'internal_db',
                 'risk_level' => 'high',
@@ -160,48 +167,90 @@ class ExchangeAmlService
                 'notes' => ucfirst($direction) . ' address is listed in the sanctions database. '
                     . ($localResult['entity_name'] ?? 'Unknown entity') . '. '
                     . ($localResult['reason'] ?? ''),
-            ];
+            ]);
         }
 
         if ($localResult['result'] === 'partial_match' || $localResult['severity'] === 'high_risk') {
-            return [
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'pending',
                 'provider' => 'internal_db',
                 'risk_level' => 'high',
                 'risk_score' => 75,
                 'notes' => ucfirst($direction) . ' address is flagged for enhanced AML review. '
                     . ($localResult['reason'] ?? ''),
-            ];
+            ]);
         }
 
         $ofacResult = $this->checkOfacApi($address, $currencyCode);
         $this->logScreeningIfPossible($screenable, $address, $currencyCode, 'ofac_api', $ofacResult);
 
         if (($ofacResult['result'] ?? null) === 'match') {
-            return [
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'rejected',
                 'provider' => 'ofac_check',
                 'risk_level' => 'high',
                 'risk_score' => 100,
                 'notes' => ucfirst($direction) . ' address is listed in OFAC sanctions data. '
                     . ($ofacResult['reason'] ?? ''),
-            ];
+            ]);
         }
 
         if ($provider !== 'manual' && config('exchange_pipeline.aml.api_key')) {
             $apiResult = $this->callExternalAddressAmlApi($address, $currencyCode, $provider, $amount, $screenable);
             if ($apiResult) {
-                return $apiResult;
+                return $this->finalizeWalletDecision($screenable, $address, $currencyCode, $apiResult);
             }
         }
 
-        return [
+        return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
             'status' => 'approved',
             'provider' => $provider,
             'risk_level' => 'low',
             'risk_score' => 0,
             'notes' => ucfirst($direction) . ' address passed the available AML checks.',
-        ];
+        ]);
+    }
+
+    public function latestWalletDecision($screenable, ?string $address): ?AmlScreeningLog
+    {
+        if (!$screenable || !isset($screenable->id) || blank($address)) {
+            return null;
+        }
+
+        return AmlScreeningLog::query()
+            ->where('screenable_type', get_class($screenable))
+            ->where('screenable_id', $screenable->id)
+            ->where('address', $address)
+            ->whereIn('provider', [self::WALLET_SUMMARY_PROVIDER, self::WALLET_OVERRIDE_PROVIDER])
+            ->latest('id')
+            ->first();
+    }
+
+    public function approveWalletAddress($screenable, string $address, string $currencyCode, string $notes = ''): void
+    {
+        $this->recordWalletOverride($screenable, $address, $currencyCode, 'approved', $notes);
+    }
+
+    public function rejectWalletAddress($screenable, string $address, string $currencyCode, string $notes = ''): void
+    {
+        $this->recordWalletOverride($screenable, $address, $currencyCode, 'rejected', $notes);
+    }
+
+    public function walletDecisionState(?AmlScreeningLog $decision): string
+    {
+        if (!$decision) {
+            return 'not_checked';
+        }
+
+        if ($decision->result === 'clean') {
+            return 'approved';
+        }
+
+        if ($decision->result === 'match') {
+            return 'rejected';
+        }
+
+        return 'pending';
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -600,6 +649,85 @@ class ExchangeAmlService
         }
 
         return null;
+    }
+
+    private function finalizeWalletDecision($screenable, string $address, string $currencyCode, array $decision): array
+    {
+        $summaryResult = match ($decision['status'] ?? 'pending') {
+            'approved' => 'clean',
+            'rejected' => 'match',
+            default => 'partial_match',
+        };
+
+        $this->logScreeningIfPossible($screenable, $address, $currencyCode, self::WALLET_SUMMARY_PROVIDER, [
+            'result' => $summaryResult,
+            'entity_name' => $decision['provider'] ?? null,
+            'source' => $decision['provider'] ?? null,
+            'risk_score' => $decision['risk_score'] ?? null,
+            'status' => $decision['status'] ?? 'pending',
+            'notes' => $decision['notes'] ?? null,
+        ]);
+
+        return $decision;
+    }
+
+    private function resolveWalletOverride($screenable, string $address): ?array
+    {
+        if (!$screenable || !isset($screenable->id) || blank($address)) {
+            return null;
+        }
+
+        $override = AmlScreeningLog::query()
+            ->where('screenable_type', get_class($screenable))
+            ->where('screenable_id', $screenable->id)
+            ->where('address', $address)
+            ->where('provider', self::WALLET_OVERRIDE_PROVIDER)
+            ->latest('id')
+            ->first();
+
+        if (!$override) {
+            return null;
+        }
+
+        $details = json_decode((string) $override->details, true) ?: [];
+        $status = $details['status'] ?? ($override->result === 'clean' ? 'approved' : 'rejected');
+        $riskLevel = $status === 'approved' ? 'low' : 'high';
+
+        return [
+            'status' => $status,
+            'provider' => self::WALLET_OVERRIDE_PROVIDER,
+            'risk_level' => $riskLevel,
+            'risk_score' => $status === 'approved' ? 0 : 100,
+            'notes' => $details['notes'] ?? ($status === 'approved'
+                ? 'Destination wallet approved by admin review.'
+                : 'Destination wallet rejected by admin review.'),
+        ];
+    }
+
+    private function recordWalletOverride($screenable, string $address, string $currencyCode, string $status, string $notes = ''): void
+    {
+        if (!$screenable || !isset($screenable->id)) {
+            return;
+        }
+
+        $result = $status === 'approved' ? 'clean' : 'match';
+
+        $this->logScreening(
+            $screenable,
+            $address,
+            $currencyCode,
+            self::WALLET_OVERRIDE_PROVIDER,
+            [
+                'result' => $result,
+                'entity_name' => 'Admin review',
+                'source' => self::WALLET_OVERRIDE_PROVIDER,
+                'risk_score' => $status === 'approved' ? 0 : 100,
+                'status' => $status,
+                'notes' => trim($notes) ?: ($status === 'approved'
+                    ? 'Destination wallet approved by admin.'
+                    : 'Destination wallet rejected by admin.'),
+            ]
+        );
     }
 
     private function callExternalAddressAmlApi(

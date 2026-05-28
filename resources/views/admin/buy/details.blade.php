@@ -20,12 +20,37 @@
                 </div>
             </div>
         </div>
+        @php
+            $walletBlocked = $buy->status == 2 && in_array($walletDecisionState ?? 'not_checked', ['pending', 'rejected'], true);
+            $walletBadgeClass = match($walletDecisionState ?? 'not_checked') {
+                'approved' => 'bg-soft-success text-success',
+                'pending' => 'bg-soft-warning text-warning',
+                'rejected' => 'bg-soft-danger text-danger',
+                default => 'bg-soft-secondary text-body',
+            };
+            $walletDecisionDetails = $walletDecision ? (json_decode($walletDecision->details, true) ?: []) : [];
+        @endphp
         @if($buy->status == 2)
             <div class="row mx-4">
-                <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
-                            data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
-                    </button>
+                <div class="d-flex justify-content-end gap-2 flex-wrap">
+                    @if($walletBlocked)
+                        <form action="{{ route('admin.buyWalletAmlApprove', $buy->id) }}" method="post" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-soft-success" onclick="return confirm('{{ __('Approve this destination wallet for payout?') }}')">
+                                <i class="fas fa-check-circle"></i> @lang('Approve Wallet')
+                            </button>
+                        </form>
+                        <form action="{{ route('admin.buyWalletAmlReject', $buy->id) }}" method="post" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-soft-warning" onclick="return confirm('{{ __('Reject this destination wallet for payout?') }}')">
+                                <i class="fas fa-ban"></i> @lang('Reject Wallet')
+                            </button>
+                        </form>
+                    @else
+                        <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
+                        </button>
+                    @endif
                     <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
                             data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
                     </button>
@@ -145,10 +170,29 @@
                                                 class="text-dark font-weight-bold"
                                                 id="destinationId">{{$buy->destination_wallet}}</strong>
                                         </li>
+                                        <li class="list-checked-item">@lang('Destination Wallet AML') :
+                                            <span class="badge {{ $walletBadgeClass }}">{{ ucfirst(str_replace('_', ' ', $walletDecisionState ?? 'not_checked')) }}</span>
+                                        </li>
+                                        @if($walletDecision)
+                                            <li class="list-checked-item">@lang('Destination Wallet Check Provider') :
+                                                <strong class="text-dark font-weight-bold">{{ $walletDecision->provider }}</strong>
+                                            </li>
+                                            @if(!empty($walletDecisionDetails['notes']))
+                                                <li class="list-checked-item">@lang('Destination Wallet Notes') :
+                                                    <strong class="text-dark font-weight-bold">{{ $walletDecisionDetails['notes'] }}</strong>
+                                                </li>
+                                            @endif
+                                        @endif
                                     </ul>
                                 </div>
-                                <div class="alert alert-soft-secondary" role="alert">
-                                    @lang("You can initiate a cryptocurrency exchange by providing the designated destination address.")
+                                <div class="alert {{ $walletBlocked ? (($walletDecisionState ?? null) === 'rejected' ? 'alert-soft-danger' : 'alert-soft-warning') : 'alert-soft-secondary' }}" role="alert">
+                                    @if($walletBlocked && ($walletDecisionState ?? null) === 'rejected')
+                                        @lang("This destination wallet is blocked by AML review. Approve or replace it before sending funds.")
+                                    @elseif($walletBlocked)
+                                        @lang("This destination wallet requires manual AML review before the payout can be sent.")
+                                    @else
+                                        @lang("You can initiate a cryptocurrency exchange by providing the designated destination address.")
+                                    @endif
                                 </div>
                             </div>
                         </div>

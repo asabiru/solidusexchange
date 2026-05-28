@@ -61,6 +61,8 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('exchange/confirm-deposit/{utr}', 'exchangeConfirmDeposit')->name('exchangeConfirmDeposit');
             Route::post('exchange/aml/approve/{id}', 'approveAml')->name('exchangeAmlApprove');
             Route::post('exchange/aml/reject/{id}', 'rejectAml')->name('exchangeAmlReject');
+            Route::post('exchange/wallet-aml/approve/{id}', 'approveWalletAml')->name('exchangeWalletAmlApprove');
+            Route::post('exchange/wallet-aml/reject/{id}', 'rejectWalletAml')->name('exchangeWalletAmlReject');
             Route::post('exchange/send-confirm/{utr}', 'exchangeSend')->name('exchangeSend');
             Route::post('exchange/cancel-confirm/{utr}', 'exchangeCancel')->name('exchangeCancel');
         });
@@ -118,7 +120,10 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('buy/list', 'buyList')->name('buyList');
             Route::get('buy/list/search', 'buyListSearch')->name('buyListSearch');
             Route::get('buy/view', 'buyView')->name('buyView');
-            Route::post('buy/cancel/{id}', 'buyCancel')->name('buyCancel');
+            Route::post('buy/send-confirm/{utr}', 'buySend')->name('buySend');
+            Route::post('buy/wallet-aml/approve/{id}', 'approveWalletAml')->name('buyWalletAmlApprove');
+            Route::post('buy/wallet-aml/reject/{id}', 'rejectWalletAml')->name('buyWalletAmlReject');
+            Route::post('buy/cancel-confirm/{utr}', 'buyCancel')->name('buyCancel');
         });
 
         Route::controller(SellController::class)->group(function () {

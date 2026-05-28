@@ -121,7 +121,7 @@ class ExchangeController extends Controller
                 ]
             );
 
-            if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+            if (($walletScreening['status'] ?? 'pending') === 'rejected') {
                 return back()->withInput()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening. Please use another address or contact support.');
             }
 
@@ -129,6 +129,10 @@ class ExchangeController extends Controller
             $exchangeRequest->status = 1;
             $exchangeRequest->destination_wallet = $request->destination_wallet;
             $exchangeRequest->save();
+
+            if (($walletScreening['status'] ?? null) === 'pending') {
+                session()->flash('warning', $walletScreening['notes'] ?? 'Destination wallet requires manual AML review before payout.');
+            }
 
             return redirect()->route('exchangeProcessingOverview', $exchangeRequest->utr);
         }

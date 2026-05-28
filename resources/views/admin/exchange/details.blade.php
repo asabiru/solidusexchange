@@ -22,12 +22,20 @@
         </div>
         @php
             $amlBlocked = $exchange->status == 2 && !$exchange->isAmlApproved();
+            $walletBlocked = $exchange->status == 2 && in_array($walletDecisionState ?? 'not_checked', ['pending', 'rejected'], true);
             $amlBadgeClass = match($exchange->aml_status) {
                 'approved' => 'bg-soft-success text-success',
                 'pending' => 'bg-soft-warning text-warning',
                 'rejected' => 'bg-soft-danger text-danger',
                 default => 'bg-soft-secondary text-body',
             };
+            $walletBadgeClass = match($walletDecisionState ?? 'not_checked') {
+                'approved' => 'bg-soft-success text-success',
+                'pending' => 'bg-soft-warning text-warning',
+                'rejected' => 'bg-soft-danger text-danger',
+                default => 'bg-soft-secondary text-body',
+            };
+            $walletDecisionDetails = $walletDecision ? (json_decode($walletDecision->details, true) ?: []) : [];
         @endphp
         @if(in_array($exchange->status, [1, 2]))
             <div class="row mx-4">
@@ -52,6 +60,22 @@
                                 </button>
                             </form>
                         @endif
+                        <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
+                                data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
+                        </button>
+                    @elseif($exchange->status == 2 && $walletBlocked)
+                        <form action="{{ route('admin.exchangeWalletAmlApprove', $exchange->id) }}" method="post" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-soft-success" onclick="return confirm('{{ __('Approve this destination wallet for payout?') }}')">
+                                <i class="fas fa-check-circle"></i> @lang('Approve Wallet')
+                            </button>
+                        </form>
+                        <form action="{{ route('admin.exchangeWalletAmlReject', $exchange->id) }}" method="post" class="d-inline">
+                            @csrf
+                            <button type="submit" class="btn btn-soft-warning" onclick="return confirm('{{ __('Reject this destination wallet for payout?') }}')">
+                                <i class="fas fa-ban"></i> @lang('Reject Wallet')
+                            </button>
+                        </form>
                         <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
                                 data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
                         </button>
@@ -251,6 +275,19 @@
                                                 class="text-dark font-weight-bold"
                                                 id="destinationId">{{$exchange->destination_wallet}} </strong>
                                         </li>
+                                        <li class="list-checked-item">@lang('Destination Wallet AML') :
+                                            <span class="badge {{ $walletBadgeClass }}">{{ ucfirst(str_replace('_', ' ', $walletDecisionState ?? 'not_checked')) }}</span>
+                                        </li>
+                                        @if($walletDecision)
+                                            <li class="list-checked-item">@lang('Destination Wallet Check Provider') :
+                                                <strong class="text-dark font-weight-bold">{{ $walletDecision->provider }}</strong>
+                                            </li>
+                                            @if(!empty($walletDecisionDetails['notes']))
+                                                <li class="list-checked-item">@lang('Destination Wallet Notes') :
+                                                    <strong class="text-dark font-weight-bold">{{ $walletDecisionDetails['notes'] }}</strong>
+                                                </li>
+                                            @endif
+                                        @endif
                                         <li class="list-checked-item">@lang('Admin Receive address')
                                             ({{optional($exchange->sendCurrency)->code}}) :
                                             <a href="javascript:void(0)"
@@ -284,6 +321,15 @@
                                             @lang('This exchange is blocked by AML review. It cannot be sent until AML is manually approved.')
                                         @else
                                             @lang('Automatic hedge and payout are paused until AML review is approved.')
+                                        @endif
+                                    </div>
+                                @endif
+                                @if($walletBlocked)
+                                    <div class="alert {{ ($walletDecisionState ?? null) === 'rejected' ? 'alert-soft-danger' : 'alert-soft-warning' }} mt-3" role="alert">
+                                        @if(($walletDecisionState ?? null) === 'rejected')
+                                            @lang('The destination payout wallet is blocked by AML review. Approve or replace the wallet before sending funds.')
+                                        @else
+                                            @lang('The destination payout wallet requires manual AML review before funds can be sent.')
                                         @endif
                                     </div>
                                 @endif

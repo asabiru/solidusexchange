@@ -243,8 +243,18 @@ class ExchangeController extends Controller
 
         $latestExchangePayout = $exchange->payouts()->latest()->first();
         $hasPendingTreasuryPayout = $latestExchangePayout && in_array($latestExchangePayout->status, ['queued', 'processing'], true);
+        $walletDecision = $this->amlService->latestWalletDecision($exchange, $exchange->destination_wallet);
+        $walletDecisionState = $this->amlService->walletDecisionState($walletDecision);
 
-        return view('admin.exchange.details', compact('exchange', 'autoPayoutMethod', 'canAutoPayout', 'latestExchangePayout', 'hasPendingTreasuryPayout'));
+        return view('admin.exchange.details', compact(
+            'exchange',
+            'autoPayoutMethod',
+            'canAutoPayout',
+            'latestExchangePayout',
+            'hasPendingTreasuryPayout',
+            'walletDecision',
+            'walletDecisionState'
+        ));
     }
 
     public function exchangeConfirmDeposit(Request $request, $utr)
@@ -350,6 +360,22 @@ class ExchangeController extends Controller
         $exchange->save();
 
         return back()->with('success', 'Exchange blocked by AML review.');
+    }
+
+    public function approveWalletAml($id)
+    {
+        $exchange = ExchangeRequest::findOrFail($id);
+        $this->amlService->approveWalletAddress($exchange, (string) $exchange->destination_wallet, (string) optional($exchange->getCurrency)->code);
+
+        return back()->with('success', 'Destination wallet approved by admin review.');
+    }
+
+    public function rejectWalletAml($id)
+    {
+        $exchange = ExchangeRequest::findOrFail($id);
+        $this->amlService->rejectWalletAddress($exchange, (string) $exchange->destination_wallet, (string) optional($exchange->getCurrency)->code);
+
+        return back()->with('success', 'Destination wallet blocked by admin review.');
     }
 
     public function exchangeSend(Request $request, $utr)

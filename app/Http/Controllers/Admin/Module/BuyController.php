@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Module;
 
 use App\Http\Controllers\Controller;
 use App\Models\BuyRequest;
+use App\Services\ExchangePipeline\ExchangeAmlService;
 use App\Traits\SendNotification;
 use Carbon\Carbon;
 use Facades\App\Services\BasicService;
@@ -13,6 +14,11 @@ use Yajra\DataTables\Facades\DataTables;
 class BuyController extends Controller
 {
     use SendNotification;
+
+    public function __construct(
+        private readonly ExchangeAmlService $amlService,
+    ) {
+    }
 
     public function buyList(Request $request)
     {
@@ -192,7 +198,26 @@ class BuyController extends Controller
     public function buyView(Request $request)
     {
         $buy = BuyRequest::findOrFail($request->id);
-        return view('admin.buy.details', compact('buy'));
+        $walletDecision = $this->amlService->latestWalletDecision($buy, $buy->destination_wallet);
+        $walletDecisionState = $this->amlService->walletDecisionState($walletDecision);
+
+        return view('admin.buy.details', compact('buy', 'walletDecision', 'walletDecisionState'));
+    }
+
+    public function approveWalletAml($id)
+    {
+        $buy = BuyRequest::findOrFail($id);
+        $this->amlService->approveWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
+
+        return back()->with('success', 'Destination wallet approved by admin review.');
+    }
+
+    public function rejectWalletAml($id)
+    {
+        $buy = BuyRequest::findOrFail($id);
+        $this->amlService->rejectWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
+
+        return back()->with('success', 'Destination wallet blocked by admin review.');
     }
 
     public function buySend(Request $request, $utr)
