@@ -1,7 +1,27 @@
 <!-- Navbar Vertical -->
+<style>
+    .js-navbar-vertical-aside,
+    .js-navbar-vertical-aside .navbar-vertical-container,
+    .js-navbar-vertical-aside .navbar-vertical-content,
+    .js-navbar-vertical-aside .navbar-vertical-footer-offset,
+    .js-navbar-vertical-aside .nav-collapse {
+        max-width: 100%;
+        overflow-x: hidden;
+    }
+
+    .js-navbar-vertical-aside .nav-link,
+    .js-navbar-vertical-aside .nav-link-title {
+        min-width: 0;
+    }
+
+    .js-navbar-vertical-aside .nav-link-title {
+        white-space: normal;
+    }
+</style>
 <aside
     class="js-navbar-vertical-aside navbar navbar-vertical-aside navbar-vertical navbar-vertical-fixed navbar-expand-xl navbar-vertical-aside-initialized
-    {{in_array(session()->get('themeMode'), [null, 'auto'] )?  'navbar-dark bg-dark ' : 'navbar-light bg-white'}}">
+    {{in_array(session()->get('themeMode'), [null, 'auto'] )?  'navbar-dark bg-dark ' : 'navbar-light bg-white'}}"
+    style="overflow-x: hidden; max-width: 100vw;">
     <div class="navbar-vertical-container">
         <div class="navbar-vertical-footer-offset">
             <!-- Logo -->
@@ -62,7 +82,7 @@
 
                         <span class="dropdown-header mt-3">@lang('Manual Deals')</span>
                         <small class="bi-three-dots nav-subtitle-replacer"></small>
-                        <div class="nav-item" {{ menuActive(['admin.trader.sells.index','admin.trader.sells.show'], 3) }}>
+                        <div class="nav-item">
                             <a class="nav-link dropdown-toggle collapsed" href="#navbarTraderSellMenu"
                                role="button"
                                data-bs-toggle="collapse" data-bs-target="#navbarTraderSellMenu"
@@ -324,7 +344,7 @@
                         </a>
                     </div>
 
-                    <div class="nav-item" {{ menuActive(['admin.kyc.list'], 3) }}>
+                    <div class="nav-item">
                         <a class="nav-link dropdown-toggle collapsed" href="#navbarVerticalKycRequestMenu"
                            role="button"
                            data-bs-toggle="collapse" data-bs-target="#navbarVerticalKycRequestMenu"
@@ -335,7 +355,8 @@
                         </a>
                         <div id="navbarVerticalKycRequestMenu"
                              class="nav-collapse collapse {{ menuActive(['admin.kyc.list'], 2) }}"
-                             data-bs-parent="#navbarVerticalKycRequestMenu">
+                             data-bs-parent="#navbarVerticalKycRequestMenu"
+                             style="overflow-x: hidden;">
                             <a class="nav-link {{ Request::is('admin/kyc/pending') ? 'active' : '' }}"
                                href="{{ route('admin.kyc.list', 'pending') }}">
                                 @lang('Pending KYC')
