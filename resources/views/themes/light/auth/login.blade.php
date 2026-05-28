@@ -585,6 +585,55 @@
                 max-width: 100% !important;
             }
         }
+
+        /* ══════════════════════════════════════════════════
+           Beautiful logo block — always visible above form
+           ══════════════════════════════════════════════════ */
+        .auth-form-logo {
+            display: block !important;
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 28px 20px 28px;
+            background: radial-gradient(circle at 50% 0%, rgba(232, 201, 160, 0.11), transparent 64%);
+            border-bottom: 1px solid rgba(232, 201, 160, 0.13);
+            border-radius: 20px 20px 0 0;
+        }
+
+        .auth-form-logo a.d-inline-block {
+            display: inline-block !important;
+        }
+
+        .auth-logo-img {
+            width: 86px !important;
+            height: 86px !important;
+            border-radius: 22px !important;
+            border: 1.5px solid rgba(232, 201, 160, 0.42) !important;
+            box-shadow:
+                0 0 0 6px rgba(232, 201, 160, 0.09),
+                0 14px 42px rgba(0, 0, 0, 0.52) !important;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .auth-logo-img:hover {
+            transform: scale(1.04) translateY(-2px);
+            box-shadow:
+                0 0 0 9px rgba(232, 201, 160, 0.14),
+                0 20px 56px rgba(0, 0, 0, 0.58) !important;
+        }
+
+        .auth-logo-name {
+            display: block;
+            margin-top: 13px !important;
+            font-size: 20px !important;
+            font-weight: 800 !important;
+            letter-spacing: -0.05em !important;
+            color: #f7ead8 !important;
+            line-height: 1 !important;
+        }
+
+        /* Hide redundant brand text in top bar since logo is shown */
+        .auth-mobile-brand { display: none !important; }
+
     </style>
 
     <script>
