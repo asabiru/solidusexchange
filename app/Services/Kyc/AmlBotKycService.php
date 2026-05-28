@@ -135,23 +135,20 @@ class AmlBotKycService
         $userKyc->provider_payload       = $providerPayload;
 
         // AMLBot statuses: 'approved' | 'rejected' | 'pending' | 'retry'
-        match (strtolower($status)) {
-            'approved' => static function () use ($userKyc) {
-                $userKyc->status               = 1;
-                $userKyc->provider_review_answer = 'GREEN';
-                $userKyc->provider_completed_at = now();
-                $userKyc->reason               = null;
-            },
-            'rejected' => static function () use ($userKyc, $payload) {
-                $userKyc->status               = 2;
-                $userKyc->provider_review_answer = 'RED';
-                $userKyc->provider_completed_at = now();
-                $userKyc->reason               = (string) ($payload['rejection_reason'] ?? 'AMLBot verification was rejected.');
-            },
-            default => static function () use ($userKyc) {
-                $userKyc->status = 0;
-            },
-        }();
+        $normalizedStatus = strtolower($status);
+        if ($normalizedStatus === 'approved') {
+            $userKyc->status               = 1;
+            $userKyc->provider_review_answer = 'GREEN';
+            $userKyc->provider_completed_at = now();
+            $userKyc->reason               = null;
+        } elseif ($normalizedStatus === 'rejected') {
+            $userKyc->status               = 2;
+            $userKyc->provider_review_answer = 'RED';
+            $userKyc->provider_completed_at = now();
+            $userKyc->reason               = (string) ($payload['rejection_reason'] ?? 'AMLBot verification was rejected.');
+        } else {
+            $userKyc->status = 0;
+        }
 
         $userKyc->save();
 
