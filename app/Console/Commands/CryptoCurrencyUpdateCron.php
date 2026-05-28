@@ -52,11 +52,13 @@ class CryptoCurrencyUpdateCron extends Command
             }
 
             if (!empty($response['errors'])) {
-                CryptoCurrency::query()
-                    ->whereIn('code', array_keys($response['errors']))
-                    ->update([
-                        'last_rate_sync_error' => collect($response['errors'])->implode(', '),
-                    ]);
+                foreach ($response['errors'] as $errorCode => $errorMessage) {
+                    CryptoCurrency::query()
+                        ->where('code', $errorCode)
+                        ->update([
+                            'last_rate_sync_error' => $errorMessage,
+                        ]);
+                }
             }
 
             return;
