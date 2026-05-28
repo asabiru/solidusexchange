@@ -65,10 +65,15 @@
 
 html,
 body {
-    background: var(--color-bg) !important;
+    background: var(--color-bg);
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv11";
+}
+
+/* Admin area: let admin theme handle its own background */
+body.has-navbar-vertical-aside {
+    background: var(--admin-bg, var(--color-bg));
 }
 
 body {
@@ -130,13 +135,13 @@ body {
     border-radius: 4px;
 }
 
-/* Legacy styles for compatibility */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
+/* Legacy styles for compatibility — scoped to frontend only via :not() */
+:is(body:not(.has-navbar-vertical-aside)) h1,
+:is(body:not(.has-navbar-vertical-aside)) h2,
+:is(body:not(.has-navbar-vertical-aside)) h3,
+:is(body:not(.has-navbar-vertical-aside)) h4,
+:is(body:not(.has-navbar-vertical-aside)) h5,
+:is(body:not(.has-navbar-vertical-aside)) h6,
 .section-title,
 .widget-title,
 .pagetitle h3,
@@ -148,12 +153,13 @@ h6,
     font-weight: 600;
 }
 
-p,
-small,
-label,
-.text-muted,
-.text-body,
-.card-text {
+/* Scope text color overrides to frontend only */
+body:not(.has-navbar-vertical-aside) p,
+body:not(.has-navbar-vertical-aside) small,
+body:not(.has-navbar-vertical-aside) label,
+body:not(.has-navbar-vertical-aside) .text-muted,
+body:not(.has-navbar-vertical-aside) .text-body,
+body:not(.has-navbar-vertical-aside) .card-text {
     color: var(--color-text-secondary) !important;
 }
 
@@ -184,38 +190,30 @@ a:focus {
     border-color: var(--color-accent) !important;
 }
 
-.card,
+/* Card & surface styles — scoped to frontend only */
+body:not(.has-navbar-vertical-aside) .card,
+body:not(.has-navbar-vertical-aside) .cmn-box,
+body:not(.has-navbar-vertical-aside) .box-card,
 .cmn-box,
 .box-card,
-.dropdown-menu,
-.modal-content,
-.accordion-item,
-.table-responsive,
 .message-wrapper .messages-box,
 .footer-inner-section,
 .offer-banner-seciton,
-.mobile-offer-banner,
-#header,
-.header,
-.navbar,
-.sidebar,
-#sidebar,
-.navbar-vertical-aside,
-.navbar-container,
-.navbar-vertical-container,
-.bottom-nav {
-    background: var(--color-bg-elevated) !important;
-    border: 1px solid var(--color-border-subtle) !important;
+.mobile-offer-banner {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border-subtle);
     box-shadow: var(--solidus-shadow);
 }
 
-.card,
+body:not(.has-navbar-vertical-aside) .card,
+body:not(.has-navbar-vertical-aside) .cmn-box,
+body:not(.has-navbar-vertical-aside) .box-card,
+body:not(.has-navbar-vertical-aside) .dropdown-menu,
+body:not(.has-navbar-vertical-aside) .modal-content,
+body:not(.has-navbar-vertical-aside) .accordion-item,
+body:not(.has-navbar-vertical-aside) .table-responsive,
 .cmn-box,
 .box-card,
-.dropdown-menu,
-.modal-content,
-.accordion-item,
-.table-responsive,
 .message-wrapper .messages-box,
 .footer-inner-section,
 .offer-banner-seciton,
@@ -223,49 +221,49 @@ a:focus {
     border-radius: var(--radius-lg);
 }
 
-.navbar,
-#header,
-.header,
-.sidebar,
-#sidebar,
-.navbar-vertical-aside,
-.navbar-container,
-.navbar-vertical-container {
+/* Frontend navbar/sidebar only — NOT admin */
+body:not(.has-navbar-vertical-aside) .navbar,
+body:not(.has-navbar-vertical-aside) #header,
+body:not(.has-navbar-vertical-aside) .header,
+body:not(.has-navbar-vertical-aside) .sidebar,
+body:not(.has-navbar-vertical-aside) #sidebar,
+body:not(.has-navbar-vertical-aside) .bottom-nav {
     backdrop-filter: blur(8px);
     border-radius: 0;
 }
 
-.navbar-brand img,
-.logo img,
-.navbar-brand-logo,
-.navbar-brand-logo-mini,
-#logoSet,
-#logoSetMobile {
+body:not(.has-navbar-vertical-aside) .navbar-brand img,
+body:not(.has-navbar-vertical-aside) .logo img,
+body:not(.has-navbar-vertical-aside) .navbar-brand-logo,
+body:not(.has-navbar-vertical-aside) .navbar-brand-logo-mini,
+body:not(.has-navbar-vertical-aside) #logoSet,
+body:not(.has-navbar-vertical-aside) #logoSetMobile {
     filter: drop-shadow(0 0 12px rgba(232, 201, 160, 0.55));
 }
 
-.navbar .nav-link,
-.navbar-vertical .nav-link,
-.sidebar .nav-link,
-.navbar .dropdown-item,
-.header-nav .nav-link,
-.sidebar-nav .nav-link span,
-.sidebar-nav .nav-link i,
-.navbar .navbar-brand,
-.dropdown-item {
+/* Frontend nav links only */
+body:not(.has-navbar-vertical-aside) .navbar .nav-link,
+body:not(.has-navbar-vertical-aside) .navbar-vertical .nav-link,
+body:not(.has-navbar-vertical-aside) .sidebar .nav-link,
+body:not(.has-navbar-vertical-aside) .navbar .dropdown-item,
+body:not(.has-navbar-vertical-aside) .header-nav .nav-link,
+body:not(.has-navbar-vertical-aside) .sidebar-nav .nav-link span,
+body:not(.has-navbar-vertical-aside) .sidebar-nav .nav-link i,
+body:not(.has-navbar-vertical-aside) .navbar .navbar-brand,
+body:not(.has-navbar-vertical-aside) .dropdown-item {
     color: var(--color-text-primary) !important;
 }
 
-.navbar .nav-link:hover,
-.navbar .nav-link.active,
-.navbar-vertical .nav-link:hover,
-.navbar-vertical .nav-link.active,
-.sidebar .nav-link:hover,
-.sidebar .nav-link.active,
-.dropdown-item:hover,
-.dropdown-item:focus,
-.bottom-nav .nav-item .nav-link.active,
-.bottom-nav .nav-item .nav-link:hover {
+body:not(.has-navbar-vertical-aside) .navbar .nav-link:hover,
+body:not(.has-navbar-vertical-aside) .navbar .nav-link.active,
+body:not(.has-navbar-vertical-aside) .navbar-vertical .nav-link:hover,
+body:not(.has-navbar-vertical-aside) .navbar-vertical .nav-link.active,
+body:not(.has-navbar-vertical-aside) .sidebar .nav-link:hover,
+body:not(.has-navbar-vertical-aside) .sidebar .nav-link.active,
+body:not(.has-navbar-vertical-aside) .dropdown-item:hover,
+body:not(.has-navbar-vertical-aside) .dropdown-item:focus,
+body:not(.has-navbar-vertical-aside) .bottom-nav .nav-item .nav-link.active,
+body:not(.has-navbar-vertical-aside) .bottom-nav .nav-item .nav-link:hover {
     color: var(--color-bg) !important;
     background: var(--color-accent) !important;
     border-color: var(--color-border-strong) !important;
@@ -277,7 +275,7 @@ a:focus {
 .navbar-vertical-aside .sidebar .nav-link.active,
 .navbar-vertical-aside .sidebar .nav-link.dropdown-toggle.active,
 .navbar-vertical-aside .sidebar .nav-link[aria-expanded="true"] {
-    color: var(--color-text-primary) !important;
+    color: var(--admin-text-primary, var(--color-text-primary)) !important;
     background: rgba(232, 201, 160, 0.10) !important;
     border-color: rgba(232, 201, 160, 0.18) !important;
     box-shadow: none !important;
@@ -288,18 +286,18 @@ a:focus {
 .navbar-vertical-aside .sidebar .nav-link.active:hover,
 .navbar-vertical-aside .sidebar .nav-link.dropdown-toggle.active:hover,
 .navbar-vertical-aside .sidebar .nav-link[aria-expanded="true"]:hover {
-    color: var(--color-text-primary) !important;
+    color: var(--admin-text-primary, var(--color-text-primary)) !important;
     background: rgba(232, 201, 160, 0.14) !important;
     box-shadow: none !important;
 }
 
-.btn,
-.cmn-btn,
-.cmn-btn2,
-.cmn-btn3,
-.login-btn,
-.offer-btn,
-.btn-primary {
+/* Buttons — frontend only overrides */
+body:not(.has-navbar-vertical-aside) .btn,
+body:not(.has-navbar-vertical-aside) .cmn-btn,
+body:not(.has-navbar-vertical-aside) .cmn-btn2,
+body:not(.has-navbar-vertical-aside) .cmn-btn3,
+body:not(.has-navbar-vertical-aside) .login-btn,
+body:not(.has-navbar-vertical-aside) .offer-btn {
     background: var(--color-accent) !important;
     border: 1px solid var(--color-border-strong) !important;
     color: var(--color-bg) !important;
@@ -308,35 +306,35 @@ a:focus {
     font-weight: 500;
 }
 
-.btn:hover,
-.cmn-btn:hover,
-.cmn-btn2:hover,
-.cmn-btn3:hover,
-.login-btn:hover,
-.offer-btn:hover,
-.btn-primary:hover {
+body:not(.has-navbar-vertical-aside) .btn:hover,
+body:not(.has-navbar-vertical-aside) .cmn-btn:hover,
+body:not(.has-navbar-vertical-aside) .cmn-btn2:hover,
+body:not(.has-navbar-vertical-aside) .cmn-btn3:hover,
+body:not(.has-navbar-vertical-aside) .login-btn:hover,
+body:not(.has-navbar-vertical-aside) .offer-btn:hover {
     background: var(--color-accent-hover) !important;
     box-shadow: 0 10px 30px rgba(232, 201, 160, 0.5);
     transform: translateY(-2px);
 }
 
-.form-control,
-.form-select {
+/* Form controls — frontend only overrides */
+body:not(.has-navbar-vertical-aside) .form-control,
+body:not(.has-navbar-vertical-aside) .form-select {
     background-color: var(--color-bg-elevated);
     border: 1px solid var(--color-border-subtle);
     color: var(--color-text-primary);
     border-radius: var(--radius-md);
 }
 
-.form-control:focus,
-.form-select:focus {
+body:not(.has-navbar-vertical-aside) .form-control:focus,
+body:not(.has-navbar-vertical-aside) .form-select:focus {
     border-color: var(--color-accent);
     box-shadow: 0 0 0 3px rgba(232, 201, 160, 0.15);
     background-color: var(--color-bg);
     outline: none;
 }
 
-.form-control::placeholder {
+body:not(.has-navbar-vertical-aside) .form-control::placeholder {
     color: var(--color-text-muted);
 }
 
