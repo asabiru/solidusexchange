@@ -138,7 +138,8 @@ class UserKycManager
     {
         $kycInfo = $this->normalizeKycInfo($userKyc->kyc_info);
 
-        if ($userKyc->provider === 'sumsub' && $kycInfo === []) {
+        // Legacy: try to extract profile from applicant payload (previously used for Sumsub)
+        if ($kycInfo === []) {
             $applicant = $this->asArray(data_get($userKyc->provider_payload, 'applicant', []));
             if ($applicant !== []) {
                 $kycInfo = $this->normalizeKycInfo($this->buildKycInfoFromSumsubApplicant($applicant));

@@ -21,7 +21,7 @@
                 </div>
                 <h4 class="security-title">AML-проверка</h4>
                 <p class="security-text">
-                    Каждая транзакция проходит проверку через Chainalysis и Elliptic — мы не работаем с засвеченными адресами.
+                    Каждая транзакция проходит проверку через AMLBot — мы не работаем с засвеченными адресами.
                 </p>
             </div>
 
@@ -71,8 +71,8 @@
             <h4 class="partners-title">Партнёры по AML / KYC</h4>
             <div class="partners-list">
                 <span class="partner-tag">Chainalysis</span>
-                <span class="partner-tag">Elliptic</span>
-                <span class="partner-tag">Sumsub</span>
+                <span class="partner-tag">AMLBot</span>
+                
                 <span class="partner-tag">Crystal</span>
             </div>
         </div>

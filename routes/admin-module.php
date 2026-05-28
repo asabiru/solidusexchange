@@ -98,17 +98,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('custodial/withdrawals/retry/{id}', 'retryWithdrawal')->name('custodialWithdrawalRetry');
         });
 
-        Route::controller(\App\Http\Controllers\Admin\Module\SanctionedAddressController::class)->group(function () {
-            Route::get('sanctions', 'index')->name('sanctionedIndex');
-            Route::get('sanctions/list', 'list')->name('sanctionedAddressList');
-            Route::post('sanctions/store', 'store')->name('sanctionedAddressStore');
-            Route::get('sanctions/revoke/{id}', 'revoke')->name('sanctionedAddressRevoke');
-            Route::get('sanctions/delete/{id}', 'delete')->name('sanctionedAddressDelete');
-            Route::post('sanctions/import', 'import')->name('sanctionedAddressImport');
-            Route::get('sanctions/logs', 'logsIndex')->name('sanctionedLogs');
-            Route::get('sanctions/logs/list', 'logsList')->name('sanctionedLogsList');
-        });
-
         Route::controller(\App\Http\Controllers\Admin\Module\SbpPaymentController::class)->group(function () {
             Route::get('sbp', 'index')->name('sbpIndex');
             Route::get('sbp/list', 'list')->name('sbpList');

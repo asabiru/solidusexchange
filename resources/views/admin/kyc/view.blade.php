@@ -113,7 +113,7 @@
                                         </li>
                                     @endif
                                 @endforeach
-                                    @if($userKyc->reason && $userKyc->provider !== 'sumsub')
+                                    @if($userKyc->reason && $userKyc->provider === 'manual')
                                         <li class="list-group-item">
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <h5>@lang("Rejected Reason")</h5>

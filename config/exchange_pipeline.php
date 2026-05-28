@@ -9,15 +9,11 @@ return [
     ],
     'aml' => [
         'enabled' => env('EXCHANGE_AML_ENABLED', true),
-        'provider' => env('EXCHANGE_AML_PROVIDER', 'local_db'),
+        // Supported providers: 'amlbot', 'manual', 'disabled'
+        'provider' => env('EXCHANGE_AML_PROVIDER', 'manual'),
         'auto_block_processing' => env('EXCHANGE_AML_AUTO_BLOCK_PROCESSING', true),
-        'local_sources_path' => env('EXCHANGE_AML_LOCAL_SOURCES_PATH', database_path('data/aml_sources')),
-        'local_feeds_manifest_path' => env('EXCHANGE_AML_LOCAL_FEEDS_MANIFEST_PATH', database_path('data/aml_feeds/feeds.json')),
-        'local_feed_timeout' => (int) env('EXCHANGE_AML_LOCAL_FEED_TIMEOUT', 20),
-        'api_key' => env('EXCHANGE_AML_API_KEY'),
-        'api_secret' => env('EXCHANGE_AML_API_SECRET'),
-        'api_url' => env('EXCHANGE_AML_API_URL'),
-        'elliptic_base_url' => env('ELLIPTIC_AML_BASE_URL', 'https://aml-api.elliptic.co/v2'),
+        // AMLBot API key (https://amlbot.com)
+        'api_key' => env('AMLBOT_API_KEY'),
     ],
     'routing' => [
         'internal_matching_enabled' => env('EXCHANGE_INTERNAL_MATCHING_ENABLED', false),

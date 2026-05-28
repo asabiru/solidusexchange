@@ -63,7 +63,7 @@ return [
         'kyc_provider' => [
             'route' => 'admin.kyc.provider.config',
             'icon' => 'fa-light fa-id-card',
-            'short_description' => 'KYC provider settings such as Sumsub API credentials, default level, SDK and webhook readiness.',
+            'short_description' => 'KYC / AML provider settings for AMLBot (KYC identity verification and KYT wallet screening).',
         ],
         'translate_api' => [
             'route' => 'admin.translate.api.setting',

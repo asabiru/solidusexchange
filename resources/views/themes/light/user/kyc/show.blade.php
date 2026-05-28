@@ -3,7 +3,7 @@
 
 @php
     $isVerified = $kyc->kycPosition() === 'verified';
-    $isSumsub = ($kyc->provider ?? 'manual') === 'sumsub';
+    $isAmlBot = ($kyc->provider ?? 'manual') === 'amlbot';
     $fieldCount = count((array) ($kyc->input_form ?? []));
     $statusCode = $isVerified ? 1 : $latestUserKyc?->status;
     $statusMap = [
@@ -29,8 +29,8 @@
                                     <span class="kyc-status-pill {{ $currentStatus['class'] }}">{{ $currentStatus['label'] }}</span>
                                     <h4 class="kyc-hero-title">{{ $kyc->name }}</h4>
                                     <p class="kyc-hero-text">
-                                        @if($isSumsub)
-                                            @lang('This verification is processed automatically through Sumsub.')
+                                        @if($isAmlBot)
+                                            @lang('This verification is processed automatically through AMLBot.')
                                         @else
                                             @lang('Verify your process instantly.')
                                         @endif
@@ -41,7 +41,7 @@
                                 <div class="kyc-hero-meta">
                                     <div class="kyc-meta-card">
                                         <span class="kyc-meta-label">@lang('Provider')</span>
-                                        <strong>{{ $isSumsub ? 'Sumsub' : __('Manual') }}</strong>
+                                        <strong>{{ $isAmlBot ? 'AMLBot' : __('Manual') }}</strong>
                                     </div>
                                     <div class="kyc-meta-card">
                                         <span class="kyc-meta-label">@lang('Current status')</span>
@@ -51,7 +51,7 @@
                                         <span class="kyc-meta-label">@lang('Submitted At')</span>
                                         <strong>{{ $latestUserKyc ? dateTime($latestUserKyc->created_at, basicControl()->date_time_format) : __('Not started') }}</strong>
                                     </div>
-                                    @if(!$isSumsub)
+                                    @if(!$isAmlBot)
                                         <div class="kyc-meta-card">
                                             <span class="kyc-meta-label">@lang('Required fields')</span>
                                             <strong>{{ $fieldCount }}</strong>
@@ -80,13 +80,13 @@
                                 </div>
                             </div>
                         </div>
-                    @elseif($isSumsub)
+                    @elseif($isAmlBot)
                         <div class="row g-4">
                             <div class="col-lg-4">
                                 <div class="card kyc-side-card">
                                     <div class="card-body">
                                         <h5 class="kyc-panel-title">@lang('Automatic verification')</h5>
-                                        <p class="kyc-panel-text">@lang('Your information is checked by Sumsub and the result appears here automatically. Start the session in the widget and complete all requested steps.')</p>
+                                        <p class="kyc-panel-text">@lang('Your identity is checked automatically through AMLBot. Click the button to open the verification form and complete all requested steps.')</p>
 
                                         <div class="kyc-step-list">
                                             <div class="kyc-step-item">
@@ -134,15 +134,15 @@
                                         <div class="kyc-main-header">
                                             <div>
                                                 <h5 class="kyc-panel-title">@lang('Verification widget')</h5>
-                                                <p class="kyc-panel-text">@lang('Start the check in the secure widget below. It will guide the user through the required steps.')</p>
+                                                <p class="kyc-panel-text">@lang('Complete identity verification in the secure AMLBot form below.')</p>
                                             </div>
-                                            <button type="button" class="cmn-btn" id="start-sumsub-kyc" data-url="{{ route('user.kyc.sumsub.token', $kyc->id) }}">
+                                            <button type="button" class="cmn-btn" id="start-amlbot-kyc" data-url="{{ route('user.kyc.amlbot.session', $kyc->id) }}">
                                                 @lang('Start verification')
                                             </button>
                                         </div>
 
-                                        <div class="kyc-sdk-stage">
-                                            <div id="sumsub-websdk-container"></div>
+                                        <div class="kyc-sdk-stage" id="amlbot-iframe-stage" style="display:none;">
+                                            <iframe id="amlbot-kyc-iframe" src="" frameborder="0" allow="camera; microphone" style="width:100%;min-height:600px;border:0;border-radius:8px;"></iframe>
                                         </div>
                                     </div>
                                 </div>
@@ -284,11 +284,7 @@
     </div>
 @endsection
 
-@if($isSumsub)
-    @push('js_libs')
-        <script src="{{ basicControl()->sumsub_websdk_url ?: 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js' }}"></script>
-    @endpush
-@endif
+
 
 @push('extra_styles')
     <style>
@@ -606,7 +602,7 @@
                 };
             });
 
-            $(document).on('click', '#start-sumsub-kyc', function () {
+            $(document).on('click', '#start-amlbot-kyc', function () {
                 let button = $(this);
                 let url = button.data('url');
 
@@ -615,39 +611,26 @@
                 axios.post(url)
                     .then(function (response) {
                         let data = response.data || {};
-                        if (typeof window.snsWebSdk === 'undefined') {
-                            throw new Error('Sumsub WebSDK is not loaded.');
+                        let iframeUrl = data.iframe_url || '';
+                        if (!iframeUrl) {
+                            throw new Error('AMLBot did not return a session URL.');
                         }
 
-                        let instance = window.snsWebSdk.init(
-                            data.token,
-                            function () {
-                                return axios.post(url).then(function (refreshResponse) {
-                                    return refreshResponse.data.token;
-                                });
-                            }
-                        ).withConf({
-                            lang: '{{ app()->getLocale() }}',
-                            email: '{{ auth()->user()->email }}'
-                        }).withOptions({
-                            addViewportTag: false,
-                            adaptIframeHeight: true
-                        }).on('idCheck.onApplicantSubmitted', function () {
-                            redirectToExchange(@json(__('KYC submitted successfully. Redirecting to the exchange page.')));
-                        }).on('idCheck.onApplicantStatusChanged', function (payload) {
-                            let reviewStatus = payload && payload.reviewStatus ? String(payload.reviewStatus).toLowerCase() : '';
-                            let applicantStatus = payload && payload.applicantStatus ? String(payload.applicantStatus).toLowerCase() : '';
+                        $('#amlbot-kyc-iframe').attr('src', iframeUrl);
+                        $('#amlbot-iframe-stage').show();
+                        button.text(@json(__('Restart verification')));
 
-                            if (reviewStatus === 'completed' || applicantStatus === 'completed') {
-                                redirectToExchange(@json(__('KYC completed successfully. Redirecting to the exchange page.')));
+                        // Listen for postMessage callbacks from AMLBot iFrame
+                        window.addEventListener('message', function (event) {
+                            if (!event.data || typeof event.data !== 'object') return;
+                            let status = String(event.data.status || '').toLowerCase();
+                            if (status === 'approved' || status === 'completed') {
+                                redirectToExchange(@json(__('KYC submitted successfully. Redirecting to the exchange page.')));
                             }
-                        }).build();
-
-                        $('#sumsub-websdk-container').html('');
-                        instance.launch('#sumsub-websdk-container');
+                        });
                     })
                     .catch(function (error) {
-                        let message = error?.response?.data?.message || error.message || 'Sumsub could not be started.';
+                        let message = error?.response?.data?.message || error.message || 'AMLBot verification could not be started.';
                         Notiflix.Notify.failure(message);
                     })
                     .finally(function () {

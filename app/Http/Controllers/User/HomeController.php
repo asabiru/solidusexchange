@@ -11,7 +11,7 @@ use App\Models\Kyc;
 use App\Models\SellRequest;
 use App\Models\Transaction;
 use App\Models\UserKyc;
-use App\Services\Kyc\SumsubKycService;
+use App\Services\Kyc\AmlBotKycService;
 use App\Services\Kyc\UserKycManager;
 use App\Traits\Upload;
 use Carbon\Carbon;
@@ -333,8 +333,8 @@ class HomeController extends Controller
     public function kycVerificationSubmit(Request $request, $id, UserKycManager $userKycManager)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
-        if (($kyc->provider ?? 'manual') === 'sumsub') {
-            return back()->with('error', 'This verification method is started through Sumsub widget.');
+        if (($kyc->provider ?? 'manual') === 'amlbot') {
+            return back()->with('error', 'This verification method is started through AMLBot widget.');
         }
         try {
             $params = $kyc->input_form;
@@ -416,22 +416,21 @@ class HomeController extends Controller
         return view($this->theme . 'user.kyc.verification-center', $data);
     }
 
-    public function kycSumsubAccessToken(Request $request, $id, SumsubKycService $sumsubKycService)
+    public function kycAmlBotSession(Request $request, $id, AmlBotKycService $amlBotKycService)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
 
         try {
-            $session = $sumsubKycService->startSession(auth()->user(), $kyc);
+            $session = $amlBotKycService->startSession(auth()->user(), $kyc);
 
             return response()->json([
-                'status' => 'ok',
-                'token' => $session['token'],
-                'websdk_url' => $session['websdk_url'],
-                'applicant_id' => $session['applicant_id'],
+                'status'      => 'ok',
+                'token'       => $session['token'],
+                'iframe_url'  => $session['iframe_url'],
             ]);
         } catch (\Throwable $exception) {
             return response()->json([
-                'status' => 'error',
+                'status'  => 'error',
                 'message' => $exception->getMessage(),
             ], 422);
         }

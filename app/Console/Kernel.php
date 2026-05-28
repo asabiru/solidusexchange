@@ -8,8 +8,6 @@ use App\Console\Commands\ExchangeReservationCleanup;
 use App\Console\Commands\SbpPaymentResolve;
 use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
-use App\Console\Commands\LocalAmlFeedsRefresh;
-use App\Console\Commands\LocalAmlSourcesSync;
 use App\Console\Commands\PopularCryptoBootstrap;
 use App\Console\Commands\SwitchProjectToRub;
 use App\Models\BuyRequest;
@@ -24,8 +22,6 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         CryptoCurrencyUpdateCron::class,
         FiatCurrencyUpdateCron::class,
-        LocalAmlFeedsRefresh::class,
-        LocalAmlSourcesSync::class,
         PopularCryptoBootstrap::class,
         SwitchProjectToRub::class,
         ExchangeReservationCleanup::class,

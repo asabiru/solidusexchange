@@ -34,7 +34,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,sumsub',
+            'provider' => 'required|in:manual,amlbot',
         ];
 
         if ($request->provider === 'manual') {
@@ -70,9 +70,6 @@ class KycController extends Controller
             }
 
             $providerSettings = [];
-            if ($request->provider === 'sumsub') {
-                $providerSettings['level_name'] = trim((string) $request->sumsub_level_name);
-            }
 
             $kyc = Kyc::create([
                 'name' => $request->name,
@@ -114,7 +111,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,sumsub',
+            'provider' => 'required|in:manual,amlbot',
         ];
 
         if ($request->provider === 'manual') {
@@ -151,9 +148,6 @@ class KycController extends Controller
             }
 
             $providerSettings = [];
-            if ($request->provider === 'sumsub') {
-                $providerSettings['level_name'] = trim((string) $request->sumsub_level_name);
-            }
 
             $kyc = Kyc::where('id', $id)->firstOr(function () {
                 throw new Exception('No KYC found.');

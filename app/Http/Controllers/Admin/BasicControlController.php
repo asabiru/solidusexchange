@@ -327,57 +327,31 @@ class BasicControlController extends Controller
         }
 
         $request->validate([
-            'sumsub_enabled' => 'nullable|integer|in:0,1',
-            'sumsub_app_token' => 'nullable|string',
-            'sumsub_secret_key' => 'nullable|string',
-            'sumsub_base_url' => 'nullable|url',
-            'sumsub_level_name' => 'nullable|string|max:191',
-            'sumsub_websdk_url' => 'nullable|url',
+            'amlbot_enabled'  => 'nullable|integer|in:0,1',
+            'amlbot_api_key'  => 'nullable|string|max:191',
         ]);
 
-        if ((int) $request->input('sumsub_enabled', 0) === 1) {
+        if ((int) $request->input('amlbot_enabled', 0) === 1) {
             $request->validate([
-                'sumsub_app_token' => 'required|string',
-                'sumsub_secret_key' => 'required|string',
-                'sumsub_base_url' => 'required|url',
+                'amlbot_api_key' => 'required|string',
             ]);
         }
 
         try {
             $basicControl->update([
-                'sumsub_enabled' => $request->input('sumsub_enabled', 0),
-                'sumsub_app_token' => trim((string) $request->sumsub_app_token),
-                'sumsub_secret_key' => trim((string) $request->sumsub_secret_key),
-                'sumsub_base_url' => $this->normalizeSumsubBaseUrl((string) ($request->sumsub_base_url ?: 'https://api.sumsub.com')),
-                'sumsub_level_name' => trim((string) $request->sumsub_level_name),
-                'sumsub_websdk_url' => trim((string) ($request->sumsub_websdk_url ?: 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js')),
+                'amlbot_enabled' => (int) $request->input('amlbot_enabled', 0),
+                'amlbot_api_key' => trim((string) $request->amlbot_api_key),
             ]);
+
+            // Sync API key to config cache so AmlBotService picks it up immediately
+            config(['exchange_pipeline.aml.api_key' => trim((string) $request->amlbot_api_key)]);
 
             Artisan::call('optimize:clear');
 
-            return back()->with('success', 'KYC provider settings updated successfully');
+            return back()->with('success', 'KYC / AML provider settings updated successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
-    }
-
-    private function normalizeSumsubBaseUrl(string $baseUrl): string
-    {
-        $baseUrl = trim($baseUrl);
-        if ($baseUrl === '') {
-            return 'https://api.sumsub.com';
-        }
-
-        $parts = parse_url($baseUrl);
-        if (!is_array($parts) || empty($parts['host'])) {
-            return 'https://api.sumsub.com';
-        }
-
-        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
-        $host = $parts['host'];
-        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
-
-        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
     }
 
     public function announcement(Request $request)

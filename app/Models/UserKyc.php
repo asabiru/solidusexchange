@@ -57,10 +57,10 @@ class UserKyc extends Model
             }
         }
 
-        if (count($kycInfo) === 0 && $this->provider === 'sumsub') {
+        if (count($kycInfo) === 0 && in_array($this->provider, ['amlbot', 'sumsub'], true)) {
             $kycInfo[] = [
                 'name' => 'Provider',
-                'value' => 'Sumsub',
+                'value' => strtoupper((string) $this->provider),
                 'type' => 'text',
             ];
             if (!empty($this->provider_applicant_id)) {

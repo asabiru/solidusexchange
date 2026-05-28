@@ -140,7 +140,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
             Route::get('kyc/{slug}/{id}', 'kycShow')->name('kyc');
             Route::post('kyc/submit/{id}', 'kycVerificationSubmit')->name('kyc.verification.submit');
-            Route::post('kyc/sumsub/token/{id}', 'kycSumsubAccessToken')->name('kyc.sumsub.token');
+            Route::post('kyc/amlbot/session/{id}', 'kycAmlBotSession')->name('kyc.amlbot.session');
             Route::get('verification/center', 'verificationCenter')->name('verification.center');
         });
 

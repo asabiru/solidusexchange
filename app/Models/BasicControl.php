@@ -20,7 +20,7 @@ class BasicControl extends Model
         'reCaptcha_status_login', 'reCaptcha_status_registration', 'measurement_id', 'analytic_status', 'error_log', 'is_active_cron_notification',
         'logo', 'logo_driver', 'favicon', 'favicon_driver', 'admin_logo', 'admin_logo_driver', 'admin_dark_mode_logo', 'admin_dark_mode_logo_driver',
         'currency_layer_access_key', 'currency_layer_auto_update_at', 'currency_layer_auto_update', 'coin_market_cap_app_key', 'coin_market_cap_auto_update_at',
-        'coin_market_cap_auto_update', 'sumsub_enabled', 'sumsub_app_token', 'sumsub_secret_key', 'sumsub_base_url', 'sumsub_level_name', 'sumsub_websdk_url',
+        'coin_market_cap_auto_update', 'amlbot_enabled', 'amlbot_api_key',
         'automatic_payout_permission', 'date_time_format', 'google_reCapture_admin_login', 'google_reCaptcha_status_login',
         'google_reCaptcha_status_registration', 'exchange_rate', 'floating_rate_update_time', 'floating_rate_update_status',
         'crypto_send_time', 'fiat_send_time', 'default_mode','changeable_mode'

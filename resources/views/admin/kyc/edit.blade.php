@@ -45,7 +45,7 @@
                                         <label for="providerLabel" class="form-label">@lang('Provider')</label>
                                         <select class="form-select @error('provider') is-invalid @enderror" name="provider" id="providerLabel">
                                             <option value="manual" {{ old('provider', $kyc->provider ?? 'manual') === 'manual' ? 'selected' : '' }}>@lang('Manual')</option>
-                                            <option value="sumsub" {{ old('provider', $kyc->provider ?? 'manual') === 'sumsub' ? 'selected' : '' }}>@lang('Sumsub')</option>
+                                            <option value="amlbot" {{ old('provider', $kyc->provider ?? 'manual') === 'amlbot' ? 'selected' : '' }}>@lang('AMLBot')</option>
                                         </select>
                                         @error('provider')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -54,10 +54,10 @@
                                 </div>
 
                                 <div class="row mb-4">
-                                    <div class="col-md-6 sumsub-settings {{ old('provider', $kyc->provider ?? 'manual') === 'sumsub' ? '' : 'd-none' }}">
-                                        <label for="sumsubLevelName" class="form-label">@lang('Sumsub Level Name')</label>
-                                        <input type="text" class="form-control" name="sumsub_level_name" id="sumsubLevelName" value="{{ old('sumsub_level_name', data_get($kyc->provider_settings, 'level_name')) }}" autocomplete="off">
-                                        <small class="text-muted">@lang('Leave empty to use default Sumsub level from global provider settings.')</small>
+                                    <div class="col-md-6 amlbot-settings {{ old('provider', $kyc->provider ?? 'manual') === 'amlbot' ? '' : 'd-none' }}">
+                                        <label for="amlbotLevelName" class="form-label">@lang('AMLBot Level Name')</label>
+                                        <input type="text" class="form-control" name="amlbot_level_name" id="amlbotLevelName" value="{{ old('amlbot_level_name', data_get($kyc->provider_settings, 'level_name')) }}" autocomplete="off">
+                                        <small class="text-muted">@lang('Leave empty to use default AMLBot level from global provider settings.')</small>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="row form-check form-switch mt-3" for="push_notification">
@@ -80,8 +80,8 @@
                                     </div>
                                 </div>
 
-                                <div class="sumsub-settings alert alert-soft-primary {{ old('provider', $kyc->provider ?? 'manual') === 'sumsub' ? '' : 'd-none' }}">
-                                    @lang('Sumsub forms do not use local field builder. Users will start verification inside Sumsub WebSDK and statuses will come back through webhook.')
+                                <div class="amlbot-settings alert alert-soft-primary {{ old('provider', $kyc->provider ?? 'manual') === 'amlbot' ? '' : 'd-none' }}">
+                                    @lang('AMLBot forms do not use local field builder. Users will start verification inside AMLBot WebSDK and statuses will come back through webhook.')
                                 </div>
 
                                 <div class="js-add-field card mb-3 mb-lg-5 manual-kyc-builder {{ old('provider', $kyc->provider ?? 'manual') === 'manual' ? '' : 'd-none' }}">
@@ -220,7 +220,7 @@
             function toggleKycProviderFields() {
                 let provider = $('#providerLabel').val();
                 $('.manual-kyc-builder').toggleClass('d-none', provider !== 'manual');
-                $('.sumsub-settings').toggleClass('d-none', provider !== 'sumsub');
+                $('.amlbot-settings').toggleClass('d-none', provider !== 'amlbot');
             }
 
             toggleKycProviderFields();
