@@ -151,6 +151,7 @@ class LocalAmlFeedRefreshService
 
         return match ($format) {
             'json' => $this->parseJsonEntries($feed, json_decode($this->stripUtf8Bom((string) $response->body()), true)),
+            'jsonl', 'ndjson' => $this->parseJsonLinesEntries($feed, (string) $response->body()),
             'csv' => $this->parseCsvEntries((string) $response->body()),
             'text', 'txt' => $this->parseTextEntries((string) $response->body()),
             default => throw new \InvalidArgumentException("Unsupported feed format: {$format}"),
@@ -163,18 +164,81 @@ class LocalAmlFeedRefreshService
             return [];
         }
 
-        $entries = $payload;
-        $entriesPath = trim((string) ($feed['entries_path'] ?? ''));
+        return $this->extractEntries($feed, $payload);
+    }
 
-        if ($entriesPath !== '') {
-            $entries = data_get($payload, $entriesPath, []);
-        }
-
-        if (!is_array($entries)) {
+    private function parseJsonLinesEntries(array $feed, string $body): array
+    {
+        $lines = preg_split('/\r\n|\r|\n/', $this->stripUtf8Bom($body));
+        if (!is_array($lines)) {
             return [];
         }
 
-        return array_is_list($entries) ? $entries : [$entries];
+        $entries = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if ($line === '') {
+                continue;
+            }
+
+            $decoded = json_decode($line, true);
+            if (is_array($decoded)) {
+                $entries[] = $decoded;
+            }
+        }
+
+        return $this->extractEntries($feed, $entries);
+    }
+
+    private function extractEntries(array $feed, array $payload): array
+    {
+        $entriesPath = trim((string) ($feed['entries_path'] ?? ''));
+        if ($entriesPath === '') {
+            return array_is_list($payload) ? $payload : [$payload];
+        }
+
+        if (!array_is_list($payload)) {
+            $entries = data_get($payload, $entriesPath, []);
+
+            if (!is_array($entries)) {
+                return [];
+            }
+
+            return array_is_list($entries) ? $entries : [$entries];
+        }
+
+        $entries = [];
+
+        foreach ($payload as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+
+            $nestedEntries = data_get($item, $entriesPath, []);
+            if (!is_array($nestedEntries)) {
+                continue;
+            }
+
+            $nestedEntries = array_is_list($nestedEntries) ? $nestedEntries : [$nestedEntries];
+
+            foreach ($nestedEntries as $nestedEntry) {
+                if (is_array($nestedEntry)) {
+                    $nestedEntry['__parent'] = $item;
+                    $entries[] = $nestedEntry;
+                    continue;
+                }
+
+                if ($nestedEntry !== null && $nestedEntry !== '') {
+                    $entries[] = [
+                        'value' => $nestedEntry,
+                        '__parent' => $item,
+                    ];
+                }
+            }
+        }
+
+        return $entries;
     }
 
     private function parseCsvEntries(string $body): array
@@ -236,7 +300,7 @@ class LocalAmlFeedRefreshService
                     continue;
                 }
 
-                $mapped[$target] = data_get($entry, $sourcePath);
+                data_set($mapped, $target, data_get($entry, $sourcePath));
             }
 
             $record = array_merge($entry, $mapped);
@@ -256,7 +320,7 @@ class LocalAmlFeedRefreshService
                 'status' => $this->stringOrDefault($record['status'] ?? null, $feed['status'] ?? 'active'),
                 'external_id' => $this->stringOrDefault($record['external_id'] ?? null, $feed['external_id'] ?? null),
                 'tags' => $record['tags'] ?? ($feed['tags'] ?? null),
-                'meta' => is_array($record['meta'] ?? null) ? $record['meta'] : null,
+                'meta' => is_array($record['meta'] ?? null) ? $record['meta'] : (is_array($feed['meta'] ?? null) ? $feed['meta'] : null),
             ], fn ($value) => $value !== null && $value !== '');
         }
 

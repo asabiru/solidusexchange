@@ -9,7 +9,7 @@ This repository now supports a fully local AML mode without paid providers.
 - local JSON/CSV watchlist sync command: `aml:sync-local-sources`
 - automatic public feed refresh command: `aml:refresh-local-feeds`
 - starter local datasets in `database/data/aml_sources`
-- starter feed manifest in `database/data/aml_feeds/feeds.json`
+- starter feed manifest in `database/data/aml_feeds/feeds.json` with live OpenSanctions-based wallet feeds
 - no external OFAC/API calls when `EXCHANGE_AML_PROVIDER=local_db` or `manual`
 
 ## Local source files
@@ -88,8 +88,16 @@ database/data/aml_feeds/feeds.json
 Supported feed formats:
 
 - `json`
+- `ndjson` / `jsonl`
 - `csv`
 - `text`
+
+The default manifest now points at two public wallet feeds:
+
+- OpenSanctions `us_ofac_sdn` nested JSON, extracting structured `cryptoWallets` from sanctioned entities
+- Israel NBCTF crypto wallet seizure orders, published via OpenSanctions as CSV
+
+`field_map` targets may also use dotted keys such as `meta.source_url` when you want to keep extra feed metadata alongside each imported address.
 
 ## Suggested routine
 
@@ -98,6 +106,12 @@ Supported feed formats:
 3. Configure public feed URLs in `database/data/aml_feeds/feeds.json`
 4. Run `php artisan aml:refresh-local-feeds`
 5. Let the scheduler refresh local AML automatically twice a day
+
+## Scope
+
+- local AML in this repository covers wallet/address screening only
+- KYC identity review and applicant verification remain in Sumsub or the existing manual KYC flow
+- broader entity/PEP screening is intentionally not part of `aml:refresh-local-feeds`
 
 ## Current local heuristics
 
