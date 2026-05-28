@@ -29,7 +29,7 @@ class CryptoCurrencyUpdateCron extends Command
      */
     public function handle()
     {
-        $currencies = CryptoCurrency::select(['id', 'code', 'rate', 'usd_rate'])->where('status', 1)->get();
+        $currencies = CryptoCurrency::select(['id', 'code', 'rate', 'usd_rate'])->get();
         $currencyCodes = implode(',', $currencies->pluck('code')->toArray());
 
         $response = $this->cryptoRateUpdate(basicControl()->base_currency, $currencyCodes);
@@ -53,10 +53,9 @@ class CryptoCurrencyUpdateCron extends Command
 
             if (!empty($response['errors'])) {
                 CryptoCurrency::query()
-                    ->where('status', 1)
                     ->whereIn('code', array_keys($response['errors']))
                     ->update([
-                        'last_rate_sync_error' => 'Bybit spot pair not found for this currency',
+                        'last_rate_sync_error' => collect($response['errors'])->implode(', '),
                     ]);
             }
 
@@ -64,7 +63,6 @@ class CryptoCurrencyUpdateCron extends Command
         }
 
         CryptoCurrency::query()
-            ->where('status', 1)
             ->update([
                 'last_rate_sync_error' => $response['res'],
             ]);

@@ -1,7 +1,7 @@
 <script>
     (function () {
-        let defaultTheme = "{{basicControl()->default_mode}}";
-        let changeable = "{{basicControl()->changeable_mode}}";
+        let defaultTheme = "{{ basicControl()->default_mode ?? 'dark' }}";
+        let changeable = "{{ basicControl()->changeable_mode ?? 0 }}";
         let storedTheme = localStorage.getItem('dark-theme');
 
         const isDarkValue = function (value) {
@@ -9,26 +9,62 @@
             return normalized === '1' || normalized === 'dark';
         };
 
-        if (changeable != 1) {
-            localStorage.setItem('dark-theme', defaultTheme);
-            storedTheme = defaultTheme;
-        }
+        const resolveTheme = function () {
+            if (changeable != 1) {
+                localStorage.setItem('dark-theme', defaultTheme);
+                storedTheme = defaultTheme;
+            }
 
-        if (storedTheme === null || storedTheme === '') {
-            storedTheme = defaultTheme;
-        }
+            if (storedTheme === null || storedTheme === '') {
+                storedTheme = defaultTheme;
+            }
 
-        document.documentElement.setAttribute('data-solidus-site-theme', isDarkValue(storedTheme) ? 'dark' : 'light');
+            return isDarkValue(storedTheme) ? 'dark' : 'light';
+        };
+
+        const applyThemeClass = function (theme) {
+            if (!document.body) {
+                return;
+            }
+
+            document.body.classList.toggle('dark-theme', theme === 'dark');
+        };
+
+        document.documentElement.setAttribute('data-solidus-site-theme', resolveTheme());
+
+        document.addEventListener('DOMContentLoaded', function () {
+            if (typeof setTheme === 'function') {
+                setTheme();
+            } else {
+                applyThemeClass(resolveTheme());
+            }
+        });
+
+        const hideLoader = function () {
+            const loader = document.querySelector('.loader-wrap');
+            if (!loader || loader.dataset.hidden === '1') {
+                return;
+            }
+
+            loader.dataset.hidden = '1';
+            loader.classList.add('loaded');
+
+            window.setTimeout(function () {
+                loader.style.display = 'none';
+            }, 400);
+        };
+
+        window.addEventListener('load', hideLoader, { once: true });
+        document.addEventListener('DOMContentLoaded', function () {
+            window.setTimeout(hideLoader, 1200);
+        }, { once: true });
+        window.setTimeout(hideLoader, 3000);
     })();
-
-    document.addEventListener('DOMContentLoaded', function () {
-        if (typeof setTheme === 'function') {
-            setTheme();
-        }
-
-        const darkFromBody = document.body && document.body.classList.contains('dark-theme');
-        const rawTheme = String(localStorage.getItem('dark-theme')).toLowerCase();
-        const darkFromStorage = rawTheme === '1' || rawTheme === 'dark';
-        document.documentElement.setAttribute('data-solidus-site-theme', (darkFromBody || darkFromStorage) ? 'dark' : 'light');
-    });
 </script>
+<noscript>
+    <style>
+        .loader-wrap {
+            display: none !important;
+        }
+    </style>
+</noscript>

@@ -180,6 +180,11 @@ $(document).ready(function () {
 const toggleBtn = document.getElementById("toggle-btn");
 const toggleBtnMobile = document.getElementById("toggle-btn-mobile");
 
+function isDarkThemeValue(value) {
+    const normalized = String(value).toLowerCase();
+    return normalized === "1" || normalized === "dark" || normalized === "true";
+}
+
 function toggleThemeMode() {
     document.body.classList.toggle("dark-theme");
     localStorage.setItem("dark-theme", document.body.classList.contains("dark-theme") ? 1 : 0);
@@ -199,10 +204,13 @@ var loaderColorDark = "rgba(45, 24, 78, 0.94)";
 var loaderColorLight = "rgba(250, 244, 255, 0.92)";
 
 function setTheme() {
-    const isDarkTheme = localStorage.getItem("dark-theme");
+    const storedTheme = localStorage.getItem("dark-theme");
     const head = document.querySelector("head");
+    if (!head || !document.body) {
+        return;
+    }
+
     const defaultTheme = head.getAttribute("data-theme");
-    const changeable_mode = head.getAttribute("data-changeable_mode");
     const setThemeIcons = (isDark) => {
         const moon = document.getElementById("moon");
         const sun = document.getElementById("sun");
@@ -215,38 +223,28 @@ function setTheme() {
         if (sunMobile) sunMobile.style.display = isDark ? "block" : "none";
     };
 
-    if (isDarkTheme == 1) {
+    const resolvedDarkTheme = storedTheme === null || storedTheme === ""
+        ? isDarkThemeValue(defaultTheme)
+        : isDarkThemeValue(storedTheme);
+
+    if (resolvedDarkTheme) {
         $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
         document.querySelector('body').classList.add('dark-theme');
         setThemeIcons(true);
         loaderColor = loaderColorDark;
-    } else if (isDarkTheme == 0) {
+    } else {
         $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
         $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
         document.querySelector('body').classList.remove('dark-theme');
         setThemeIcons(false);
         loaderColor = loaderColorLight;
-    } else {
-        if (defaultTheme == 1) {
-            $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
-            $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
-            document.querySelector('body').classList.add('dark-theme');
-            setThemeIcons(true);
-            loaderColor = loaderColorDark;
-        } else {
-            $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
-            $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
-            document.querySelector('body').classList.remove('dark-theme');
-            setThemeIcons(false);
-            loaderColor = loaderColorLight;
-        }
     }
 
     document.documentElement.setAttribute('data-solidus-site-theme', document.querySelector('body').classList.contains('dark-theme') ? 'dark' : 'light');
 }
 
-if (toggleBtn || toggleBtnMobile) {
+if (document.body) {
     setTheme();
 }
 // Dark theme end
@@ -281,6 +279,10 @@ function copyTextFunc() {
 // Copy text end
 // Highlight editor start
 document.addEventListener('DOMContentLoaded', (event) => {
+    if (typeof hljs === 'undefined') {
+        return;
+    }
+
     document.querySelectorAll('pre code').forEach((el) => {
         hljs.highlightElement(el);
     });

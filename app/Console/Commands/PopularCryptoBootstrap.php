@@ -69,7 +69,7 @@ class PopularCryptoBootstrap extends Command
                 ->whereIn('code', $failedCodes)
                 ->update([
                     'status' => 0,
-                    'last_rate_sync_error' => 'Popular coin bootstrap sync failed: Bybit spot pair not found for this currency',
+                    'last_rate_sync_error' => 'Popular coin bootstrap sync failed: ' . collect($response['errors'])->only($failedCodes)->implode(', '),
                 ]);
         }
 

@@ -119,6 +119,7 @@ class RegisterController extends Controller
     {
         $basic = basicControl();
         return User::create([
+            'name' => $data['username'],
             'firstname' => null,
             'lastname' => null,
             'username' => $data['username'],

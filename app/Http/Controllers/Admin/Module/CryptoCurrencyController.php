@@ -382,7 +382,7 @@ class CryptoCurrencyController extends Controller
                         ->whereIn('id', $request->strIds)
                         ->whereIn('code', array_keys($response['errors']))
                         ->update([
-                            'last_rate_sync_error' => 'Bybit spot pair not found for this currency',
+                            'last_rate_sync_error' => collect($response['errors'])->implode(', '),
                         ]);
                 }
             } else {

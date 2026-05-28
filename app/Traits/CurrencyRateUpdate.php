@@ -36,8 +36,9 @@ trait CurrencyRateUpdate
         $usdtRubRate = $rapiraRates->get('USDT/RUB');
         $baseRateFactor = $this->resolveRapiraBaseRateFactor((string) $convert, $usdtRubRate);
 
-        // Step 2: Fetch Bybit sparkline data (Rapira has no kline API)
+        // Step 2: Fetch Bybit tickers as fallback (for currencies not on Rapira, e.g. BTC)
         $bybitBaseUrl = rtrim((string) config('exchange_engine.bybit.base_url', 'https://api.bybit.com'), '/');
+        $bybitTickers = $this->fetchBybitSpotTickers($bybitBaseUrl);
 
         $results = [];
         $errors = [];
@@ -45,16 +46,23 @@ trait CurrencyRateUpdate
         foreach ($codes as $code) {
             $normalizedCode = $this->normalizeBybitCurrencyCode($code);
 
-            // Resolve USD rate from Rapira
+            // Resolve USD rate: try Rapira first, fall back to Bybit
             $usdRate = $this->resolveRapiraUsdRate($normalizedCode, $rapiraRates);
 
+            if ($usdRate === null && $bybitTickers !== null) {
+                $usdRate = $this->resolveBybitUsdRate($normalizedCode, $bybitTickers);
+            }
+
             if ($usdRate === null) {
-                $errors[$code] = "Rapira rate for {$code} not found";
+                $errors[$code] = "Rate for {$code} not found on Rapira or Bybit";
                 continue;
             }
 
-            // Resolve 24h change from Rapira
+            // Resolve 24h change: try Rapira first, fall back to Bybit
             $change24h = $this->resolveRapira24hChange($normalizedCode, $rapiraRates);
+            if ($change24h === null && $bybitTickers !== null) {
+                $change24h = $this->resolveBybit24hChange($normalizedCode, $bybitTickers);
+            }
 
             // Resolve sparkline from Bybit (only for non-stablecoins)
             $sparkline7d = null;
@@ -83,6 +91,24 @@ trait CurrencyRateUpdate
             'res' => $results,
             'errors' => $errors,
         ];
+    }
+
+    protected function fetchBybitSpotTickers(string $baseUrl): ?\Illuminate\Support\Collection
+    {
+        try {
+            $url = "{$baseUrl}/v5/market/tickers?category=spot";
+            $response = json_decode(BasicCurl::curlGetRequest($url));
+
+            if (($response->retCode ?? 1) !== 0 || !isset($response->result->list) || !is_array($response->result->list)) {
+                return null;
+            }
+
+            return collect($response->result->list)->mapWithKeys(function ($ticker) {
+                return [strtoupper((string) ($ticker->symbol ?? '')) => $ticker];
+            })->filter(fn($_, $key) => $key !== '');
+        } catch (\Exception $e) {
+            return null;
+        }
     }
 
     protected function fetchRapiraCryptoRates(): ?\Illuminate\Support\Collection
