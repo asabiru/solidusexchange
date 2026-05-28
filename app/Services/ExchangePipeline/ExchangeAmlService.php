@@ -13,6 +13,7 @@ class ExchangeAmlService
 {
     private const WALLET_SUMMARY_PROVIDER = 'wallet_screening';
     private const WALLET_OVERRIDE_PROVIDER = 'manual_wallet_review';
+    private const LOCAL_ONLY_PROVIDERS = ['manual', 'local_db', 'internal_db', 'disabled', ''];
 
     // ─── Sources of sanctions lists ────────────────────────────────────────
     public const SOURCE_OFAC       = 'ofac';        // US Treasury OFAC SDN
@@ -195,7 +196,7 @@ class ExchangeAmlService
             ]);
         }
 
-        if ($provider !== 'manual' && config('exchange_pipeline.aml.api_key')) {
+        if ($this->isExternalProviderReady($provider)) {
             $apiResult = $this->callExternalAddressAmlApi($address, $currencyCode, $provider, $amount, $screenable);
             if ($apiResult) {
                 return $this->finalizeWalletDecision($screenable, $address, $currencyCode, $apiResult);
@@ -251,6 +252,40 @@ class ExchangeAmlService
         }
 
         return 'pending';
+    }
+
+    public function providerReadiness(): array
+    {
+        $provider = (string) config('exchange_pipeline.aml.provider', 'manual');
+        $enabled = (bool) config('exchange_pipeline.aml.enabled');
+        $apiKeyConfigured = filled(config('exchange_pipeline.aml.api_key'));
+        $apiUrlConfigured = filled(config('exchange_pipeline.aml.api_url'));
+        $usesExternalProvider = $this->usesExternalProvider($provider);
+
+        $status = 'local_only';
+        $message = 'AML uses only local sanctions and built-in checks.';
+
+        if (!$enabled) {
+            $status = 'disabled';
+            $message = 'AML screening is disabled.';
+        } elseif ($usesExternalProvider && $apiKeyConfigured && $apiUrlConfigured) {
+            $status = 'ready';
+            $message = "External AML provider {$provider} is configured.";
+        } elseif ($usesExternalProvider) {
+            $status = 'misconfigured';
+            $message = "External AML provider {$provider} is selected, but credentials are incomplete.";
+        }
+
+        return [
+            'enabled' => $enabled,
+            'provider' => $provider,
+            'uses_external_provider' => $usesExternalProvider,
+            'api_key_configured' => $apiKeyConfigured,
+            'api_url_configured' => $apiUrlConfigured,
+            'auto_block_processing' => (bool) config('exchange_pipeline.aml.auto_block_processing', true),
+            'status' => $status,
+            'message' => $message,
+        ];
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -341,7 +376,7 @@ class ExchangeAmlService
         $riskLevel = $this->riskScoreToLevel($riskScore);
 
         // ─── Step 5: External AML API (Chainalysis, Elliptic, etc.) ─────────
-        if ($provider !== 'manual' && config('exchange_pipeline.aml.api_key')) {
+        if ($this->isExternalProviderReady($provider)) {
             $apiResult = $this->callExternalAmlApi($deposit, $provider);
             if ($apiResult) {
                 return $apiResult;
@@ -792,6 +827,20 @@ class ExchangeAmlService
         }
 
         return null;
+    }
+
+    private function usesExternalProvider(?string $provider = null): bool
+    {
+        $provider = (string) ($provider ?? config('exchange_pipeline.aml.provider', 'manual'));
+
+        return !in_array($provider, self::LOCAL_ONLY_PROVIDERS, true);
+    }
+
+    private function isExternalProviderReady(?string $provider = null): bool
+    {
+        return $this->usesExternalProvider($provider)
+            && filled(config('exchange_pipeline.aml.api_key'))
+            && filled(config('exchange_pipeline.aml.api_url'));
     }
 
     private function findLinkedCustodialDeposit(ExchangeRequest $exchange, array $meta = []): ?CustodialDeposit

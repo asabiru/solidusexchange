@@ -26,6 +26,51 @@
             </div>
         </div>
 
+        @php
+            $providerStatusColor = match($providerReadiness['status']) {
+                'ready' => 'success',
+                'misconfigured' => 'warning',
+                'disabled' => 'secondary',
+                default => 'info',
+            };
+        @endphp
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                    <div>
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <h4 class="card-title mb-0">AML Provider Status</h4>
+                            <span class="badge bg-soft-{{ $providerStatusColor }} text-{{ $providerStatusColor }}">
+                                {{ ucfirst(str_replace('_', ' ', $providerReadiness['status'])) }}
+                            </span>
+                        </div>
+                        <p class="text-muted mb-2">{{ $providerReadiness['message'] }}</p>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="badge bg-soft-primary text-primary">Provider: {{ $providerReadiness['provider'] }}</span>
+                            <span class="badge bg-soft-{{ $providerReadiness['enabled'] ? 'success' : 'secondary' }} text-{{ $providerReadiness['enabled'] ? 'success' : 'secondary' }}">
+                                AML {{ $providerReadiness['enabled'] ? 'Enabled' : 'Disabled' }}
+                            </span>
+                            <span class="badge bg-soft-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_key_configured'] ? 'success' : 'warning' }}">
+                                API Key {{ $providerReadiness['api_key_configured'] ? 'Set' : 'Missing' }}
+                            </span>
+                            <span class="badge bg-soft-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }} text-{{ $providerReadiness['api_url_configured'] ? 'success' : 'warning' }}">
+                                API URL {{ $providerReadiness['api_url_configured'] ? 'Set' : 'Missing' }}
+                            </span>
+                            <span class="badge bg-soft-{{ $providerReadiness['auto_block_processing'] ? 'warning' : 'secondary' }} text-{{ $providerReadiness['auto_block_processing'] ? 'warning' : 'secondary' }}">
+                                Auto-block {{ $providerReadiness['auto_block_processing'] ? 'On' : 'Off' }}
+                            </span>
+                        </div>
+                    </div>
+                    @if($providerReadiness['uses_external_provider'] && $providerReadiness['status'] !== 'ready')
+                        <div class="alert alert-warning mb-0 py-2 px-3">
+                            External AML provider is selected but not fully ready. Screening falls back to local checks until secrets are configured.
+                        </div>
+                    @endif
+                </div>
+            </div>
+        </div>
+
         <div class="row mb-4">
             <div class="col-sm-6 col-md-3 mb-3 mb-md-0">
                 <div class="card">

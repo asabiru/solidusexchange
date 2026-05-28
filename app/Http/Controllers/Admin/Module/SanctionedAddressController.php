@@ -9,6 +9,7 @@ use App\Models\CustodialDeposit;
 use App\Models\ExchangeRequest;
 use App\Models\SanctionedAddress;
 use App\Models\SellRequest;
+use App\Services\ExchangePipeline\ExchangeAmlService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Yajra\DataTables\Facades\DataTables;
@@ -176,7 +177,14 @@ class SanctionedAddressController extends Controller
             ->mapWithKeys(fn ($provider) => [$provider => $this->providerLabel($provider)])
             ->all();
 
-        return view('admin.custodial.sanctions.logs', compact('stats', 'screenableTypes', 'providerOptions'));
+        $providerReadiness = app(ExchangeAmlService::class)->providerReadiness();
+
+        return view('admin.custodial.sanctions.logs', compact(
+            'stats',
+            'screenableTypes',
+            'providerOptions',
+            'providerReadiness'
+        ));
     }
 
     public function logsList(Request $request)
