@@ -198,6 +198,21 @@ class BuyController extends Controller
     public function buySend(Request $request, $utr)
     {
         $buy = BuyRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
+
+        $walletScreening = app(\App\Services\ExchangePipeline\ExchangeAmlService::class)->screenWalletAddress(
+            (string) $buy->destination_wallet,
+            (string) optional($buy->getCurrency)->code,
+            [
+                'screenable' => $buy,
+                'direction' => 'destination',
+                'amount' => (float) $buy->final_amount,
+            ]
+        );
+
+        if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+            return back()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening.');
+        }
+
         if ($request->btnValue == 'automatic' && optional($buy->cryptoMethod)->is_automatic) {
             $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($buy->cryptoMethod)->code . '\\Service';
             $data = $methodObj::withdrawCrypto($buy, $buy->final_amount, optional($buy->getCurrency)->code, $buy->destination_wallet, 'exchange');

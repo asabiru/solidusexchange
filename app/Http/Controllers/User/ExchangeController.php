@@ -14,7 +14,6 @@ use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use App\Traits\SendNotification;
 use Carbon\Carbon;
-use Facades\App\Services\BasicService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -112,6 +111,20 @@ class ExchangeController extends Controller
                 return back()->withInput()->with('error', $exception->getMessage());
             }
 
+            $walletScreening = app(\App\Services\ExchangePipeline\ExchangeAmlService::class)->screenWalletAddress(
+                (string) $request->destination_wallet,
+                (string) $getCurrency->code,
+                [
+                    'screenable' => $exchangeRequest,
+                    'direction' => 'destination',
+                    'amount' => (float) ($quote['final_amount'] ?? 0),
+                ]
+            );
+
+            if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+                return back()->withInput()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening. Please use another address or contact support.');
+            }
+
             $quoteService->applyToExchange($exchangeRequest, $quote, $rateType);
             $exchangeRequest->status = 1;
             $exchangeRequest->destination_wallet = $request->destination_wallet;
@@ -160,17 +173,14 @@ class ExchangeController extends Controller
             $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual';
             return view($this->theme . 'user.exchange.init-payment', $data, compact('exchangeRequest'));
         } elseif ($request->method() == 'POST') {
-            $exchangeRequest->status = 2;
+            $exchangeRequest->execution_route = 'manual_review';
+            $exchangeRequest->execution_notes = 'User marked a manual deposit as sent. Awaiting admin confirmation and AML review.';
+            $exchangeRequest->routed_at = now();
             $exchangeRequest->save();
 
-            $amount = getBaseAmount($exchangeRequest->send_amount, optional($exchangeRequest->sendCurrency)->code, 'crypto');
-            $charge = getBaseAmount($exchangeRequest->service_fee + $exchangeRequest->network_fee, optional($exchangeRequest->getCurrency)->code, 'crypto');
-
-            BasicService::makeTransaction($amount, $charge, '-', 'Manual Crypto Deposit For Exchange',
-                $exchangeRequest->id, ExchangeRequest::class, $exchangeRequest->user_id, $exchangeRequest->send_amount, optional($exchangeRequest->sendCurrency)->code);
-
             $this->sendAdminNotification($exchangeRequest, 'exchange');
-            return redirect()->route('exchangeFinal', $exchangeRequest->utr);
+            return redirect()->route('tracking', ['trx_id' => $exchangeRequest->utr])
+                ->with('success', 'Payment notice received. We will confirm the deposit after manual review.');
         }
     }
 

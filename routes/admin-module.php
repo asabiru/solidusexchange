@@ -125,7 +125,9 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('sell/list', 'sellList')->name('sellList');
             Route::get('sell/list/search', 'sellListSearch')->name('sellListSearch');
             Route::get('sell/view', 'sellView')->name('sellView');
-            Route::post('sell/cancel/{id}', 'sellCancel')->name('sellCancel');
+            Route::post('sell/confirm-deposit/{utr}', 'sellConfirmDeposit')->name('sellConfirmDeposit');
+            Route::post('sell/send-confirm/{utr}', 'sellSend')->name('sellSend');
+            Route::post('sell/cancel-confirm/{utr}', 'sellCancel')->name('sellCancel');
         });
 
         Route::controller(FiatSendGatewayController::class)->group(function () {

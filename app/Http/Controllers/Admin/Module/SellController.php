@@ -192,7 +192,30 @@ class SellController extends Controller
     public function sellView(Request $request)
     {
         $sell = SellRequest::findOrFail($request->id);
-        return view('admin.sell.details', compact('sell'));
+        $hasCustodialTracking = \App\Models\CustodialDeposit::where('sell_request_id', $sell->id)->exists();
+
+        return view('admin.sell.details', compact('sell', 'hasCustodialTracking'));
+    }
+
+    public function sellConfirmDeposit($utr)
+    {
+        $sell = SellRequest::where(['status' => 1, 'utr' => $utr])->latest()->firstOrFail();
+        $sell->status = 2;
+        $sell->save();
+
+        try {
+            app(\App\Services\Sell\TraderAssignmentService::class)->assignForSell($sell->fresh(['fiatSendGateway']));
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
+
+        $amount = getBaseAmount($sell->send_amount, optional($sell->sendCurrency)->code, 'crypto');
+        $charge = getBaseAmount($sell->processing_fee, optional($sell->getCurrency)->code, 'fiat');
+
+        BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Sell',
+            $sell->id, SellRequest::class, $sell->user_id, $sell->send_amount, optional($sell->sendCurrency)->code);
+
+        return back()->with('success', 'Sell deposit confirmed successfully.');
     }
 
     public function sellSend($utr)
@@ -211,7 +234,10 @@ class SellController extends Controller
 
     public function sellCancel($utr)
     {
-        $sell = SellRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
+        $sell = SellRequest::where('utr', $utr)
+            ->whereIn('status', [1, 2])
+            ->latest()
+            ->firstOrFail();
         $sell->status = 5;
         $sell->save();
         $this->sendUserNotification($sell, 'userSell', 'SELL_CANCEL');

@@ -26,6 +26,25 @@ class ExchangePayoutService
             throw new RuntimeException('Exchange payout is blocked until AML review is approved.');
         }
 
+        $walletScreening = app(ExchangeAmlService::class)->screenWalletAddress(
+            (string) $exchange->destination_wallet,
+            (string) optional($exchange->getCurrency)->code,
+            [
+                'screenable' => $exchange,
+                'direction' => 'destination',
+                'amount' => (float) $exchange->final_amount,
+            ]
+        );
+
+        if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+            $exchange->execution_route = 'manual_review';
+            $exchange->execution_notes = $walletScreening['notes'] ?? 'Destination wallet failed AML screening.';
+            $exchange->routed_at = now();
+            $exchange->save();
+
+            throw new RuntimeException($walletScreening['notes'] ?? 'Destination wallet failed AML screening.');
+        }
+
         $method = $this->resolvePayoutMethod($exchange);
         $serviceClass = 'Facades\\App\\Services\\CryptoMethod\\' . $method->code . '\\Service';
 

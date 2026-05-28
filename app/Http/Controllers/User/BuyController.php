@@ -146,6 +146,20 @@ class BuyController extends Controller
                 return back()->withInput()->with('error', $exception->getMessage());
             }
 
+            $walletScreening = app(\App\Services\ExchangePipeline\ExchangeAmlService::class)->screenWalletAddress(
+                (string) $request->destination_wallet,
+                (string) $getCurrency->code,
+                [
+                    'screenable' => $buyRequest,
+                    'direction' => 'destination',
+                    'amount' => (float) ($quote['final_amount'] ?? 0),
+                ]
+            );
+
+            if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+                return back()->withInput()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening. Please use another address or contact support.');
+            }
+
             $buyRequest->send_currency_id = $quote['send_currency_id'];
             $buyRequest->get_currency_id = $quote['get_currency_id'];
             $buyRequest->send_amount = $quote['send_amount'];

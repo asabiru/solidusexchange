@@ -15,7 +15,6 @@ use App\Services\TradeQuote\SellQuoteService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use Carbon\Carbon;
-use Facades\App\Services\BasicService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
@@ -260,26 +259,18 @@ class SellController extends Controller
                 $sellRequest->save();
             }
 
-            $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual';
+            $hasCustodialTracking = \App\Models\CustodialDeposit::where('sell_request_id', $sellRequest->id)->exists();
+            $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual' && !$hasCustodialTracking;
             return view($this->theme . 'user.sell.init-payment', $data, compact('sellRequest'));
         } elseif ($request->method() == 'POST') {
-            $sellRequest->status = 2;
-            $sellRequest->save();
-
-            try {
-                app(TraderAssignmentService::class)->assignForSell($sellRequest->fresh(['fiatSendGateway']));
-            } catch (\Throwable $exception) {
-                report($exception);
+            if (\App\Models\CustodialDeposit::where('sell_request_id', $sellRequest->id)->exists()) {
+                return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
+                    ->with('success', 'Your deposit address is monitored automatically. We will update the trade after blockchain confirmation.');
             }
 
-            $amount = getBaseAmount($sellRequest->send_amount, optional($sellRequest->sendCurrency)->code, 'crypto');
-            $charge = getBaseAmount($sellRequest->processing_fee, optional($sellRequest->getCurrency)->code, 'fiat');
-
-            BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Sell',
-                $sellRequest->id, SellRequest::class, $sellRequest->user_id, $sellRequest->send_amount, optional($sellRequest->sendCurrency)->code);
-
             $this->sendAdminNotification($sellRequest, 'sell');
-            return redirect()->route('sellFinal', $sellRequest->utr);
+            return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
+                ->with('success', 'Payment notice received. We will confirm the deposit after manual review.');
         }
     }
 

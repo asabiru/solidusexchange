@@ -131,6 +131,79 @@ class ExchangeAmlService
         );
     }
 
+    public function screenWalletAddress(string $address, string $currencyCode, array $context = []): array
+    {
+        $provider = (string) config('exchange_pipeline.aml.provider', 'manual');
+        $screenable = $context['screenable'] ?? null;
+        $direction = $context['direction'] ?? 'wallet';
+        $amount = isset($context['amount']) ? (float) $context['amount'] : null;
+
+        if (!config('exchange_pipeline.aml.enabled')) {
+            return [
+                'status' => 'approved',
+                'provider' => 'disabled',
+                'risk_level' => 'low',
+                'risk_score' => 0,
+                'notes' => ucfirst($direction) . ' screening is disabled. Auto-approved.',
+            ];
+        }
+
+        $localResult = $this->checkLocalSanctionsDb($address, $currencyCode);
+        $this->logScreeningIfPossible($screenable, $address, $currencyCode, 'internal_db', $localResult);
+
+        if ($localResult['result'] === 'match' && $localResult['severity'] === 'blocked') {
+            return [
+                'status' => 'rejected',
+                'provider' => 'internal_db',
+                'risk_level' => 'high',
+                'risk_score' => 100,
+                'notes' => ucfirst($direction) . ' address is listed in the sanctions database. '
+                    . ($localResult['entity_name'] ?? 'Unknown entity') . '. '
+                    . ($localResult['reason'] ?? ''),
+            ];
+        }
+
+        if ($localResult['result'] === 'partial_match' || $localResult['severity'] === 'high_risk') {
+            return [
+                'status' => 'pending',
+                'provider' => 'internal_db',
+                'risk_level' => 'high',
+                'risk_score' => 75,
+                'notes' => ucfirst($direction) . ' address is flagged for enhanced AML review. '
+                    . ($localResult['reason'] ?? ''),
+            ];
+        }
+
+        $ofacResult = $this->checkOfacApi($address, $currencyCode);
+        $this->logScreeningIfPossible($screenable, $address, $currencyCode, 'ofac_api', $ofacResult);
+
+        if (($ofacResult['result'] ?? null) === 'match') {
+            return [
+                'status' => 'rejected',
+                'provider' => 'ofac_check',
+                'risk_level' => 'high',
+                'risk_score' => 100,
+                'notes' => ucfirst($direction) . ' address is listed in OFAC sanctions data. '
+                    . ($ofacResult['reason'] ?? ''),
+            ];
+        }
+
+        if ($provider !== 'manual' && config('exchange_pipeline.aml.api_key')) {
+            $apiResult = $this->callExternalAddressAmlApi($address, $currencyCode, $provider, $amount, $screenable);
+            if ($apiResult) {
+                return $apiResult;
+            }
+        }
+
+        return [
+            'status' => 'approved',
+            'provider' => $provider,
+            'risk_level' => 'low',
+            'risk_score' => 0,
+            'notes' => ucfirst($direction) . ' address passed the available AML checks.',
+        ];
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  CUSTODIAL DEPOSIT SCREENING
     // ═══════════════════════════════════════════════════════════════════════
@@ -470,6 +543,15 @@ class ExchangeAmlService
         ]);
     }
 
+    private function logScreeningIfPossible($screenable, string $address, string $currencyCode, string $provider, array $result): void
+    {
+        if (!$screenable || !isset($screenable->id)) {
+            return;
+        }
+
+        $this->logScreening($screenable, $address, $currencyCode, $provider, $result);
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  EXTERNAL AML API
     // ═══════════════════════════════════════════════════════════════════════
@@ -515,6 +597,70 @@ class ExchangeAmlService
             }
         } catch (\Throwable $e) {
             Log::warning("External AML API call failed: " . $e->getMessage());
+        }
+
+        return null;
+    }
+
+    private function callExternalAddressAmlApi(
+        string $address,
+        string $currencyCode,
+        string $provider,
+        ?float $amount = null,
+        $screenable = null
+    ): ?array {
+        $apiKey = config('exchange_pipeline.aml.api_key');
+        $apiUrl = config('exchange_pipeline.aml.api_url');
+
+        if (blank($apiKey) || blank($apiUrl)) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(10)->withHeaders([
+                'Authorization' => "Bearer {$apiKey}",
+                'Content-Type' => 'application/json',
+            ])->post($apiUrl, [
+                'address' => $address,
+                'currency' => strtolower($this->normalizeForOfac($currencyCode)),
+                'amount' => $amount,
+            ]);
+
+            if (!$response->successful()) {
+                return null;
+            }
+
+            $data = $response->json();
+            $riskScore = (float) ($data['risk_score'] ?? $data['risk'] ?? 0);
+            $riskLevel = $this->riskScoreToLevel($riskScore);
+            $result = [
+                'result' => $riskLevel === 'high' ? 'match' : ($riskLevel === 'medium' ? 'partial_match' : 'clean'),
+                'entity_name' => $data['entity'] ?? null,
+                'risk_score' => $riskScore,
+                'source' => $provider,
+            ];
+
+            $this->logScreeningIfPossible($screenable, $address, $currencyCode, $provider, $result);
+
+            if ($riskLevel === 'low') {
+                return [
+                    'status' => 'approved',
+                    'provider' => $provider,
+                    'risk_level' => 'low',
+                    'risk_score' => $riskScore,
+                    'notes' => "External AML screening via {$provider} marked the wallet as low risk.",
+                ];
+            }
+
+            return [
+                'status' => 'pending',
+                'provider' => $provider,
+                'risk_level' => $riskLevel,
+                'risk_score' => $riskScore,
+                'notes' => "External AML screening via {$provider} flagged the wallet for manual review.",
+            ];
+        } catch (\Throwable $e) {
+            Log::warning("External AML wallet screening failed: " . $e->getMessage());
         }
 
         return null;

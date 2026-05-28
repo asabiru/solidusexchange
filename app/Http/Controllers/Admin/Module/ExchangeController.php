@@ -360,6 +360,20 @@ class ExchangeController extends Controller
             return back()->with('error', 'This exchange is blocked until AML review is approved.');
         }
 
+        $walletScreening = $this->amlService->screenWalletAddress(
+            (string) $exchange->destination_wallet,
+            (string) optional($exchange->getCurrency)->code,
+            [
+                'screenable' => $exchange,
+                'direction' => 'destination',
+                'amount' => (float) $exchange->final_amount,
+            ]
+        );
+
+        if (($walletScreening['status'] ?? 'pending') !== 'approved') {
+            return back()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening.');
+        }
+
         $existingQueuedPayout = ExchangePayout::where('exchange_request_id', $exchange->id)
             ->where('type', 'payout')
             ->whereIn('status', ['queued', 'processing'])
