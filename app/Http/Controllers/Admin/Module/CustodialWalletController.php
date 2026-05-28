@@ -62,8 +62,11 @@ class CustodialWalletController extends Controller
                 };
             })
             ->addColumn('assignment', function ($w) {
-                if ($w->status === 'frozen' || $w->assigned_exchange_id) {
+                if ($w->assigned_exchange_id) {
                     return '<span class="badge bg-soft-info text-info">Assigned #' . $w->assigned_exchange_id . '</span>';
+                }
+                if ($w->status === 'frozen') {
+                    return '<span class="badge bg-soft-warning text-warning">Frozen</span>';
                 }
                 return '<span class="badge bg-soft-success text-success">Available</span>';
             })
@@ -211,6 +214,29 @@ class CustodialWalletController extends Controller
         $total = count($results);
         $errors = count(array_filter($results, fn($r) => isset($r['error'])));
         return back()->with('success', "Checked {$total} wallets, {$errors} errors");
+    }
+
+    public function refreshBalances(Request $request)
+    {
+        $hd = app(HdWalletService::class);
+        $wallets = CustodialWallet::query()
+            ->whereIn('status', ['active', 'frozen'])
+            ->get();
+
+        $results = [];
+        foreach ($wallets as $wallet) {
+            $results[] = array_merge(['wallet_id' => $wallet->id], $hd->getBalance($wallet));
+        }
+
+        $total = count($results);
+        $errors = count(array_filter($results, fn ($r) => isset($r['error'])));
+
+        return response()->json([
+            'ok' => true,
+            'checked' => $total,
+            'errors' => $errors,
+            'completed_at' => now()->toIso8601String(),
+        ]);
     }
 
     public function checkWalletBalance($id)

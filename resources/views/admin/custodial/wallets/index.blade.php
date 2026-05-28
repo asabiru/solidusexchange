@@ -14,6 +14,10 @@
                     <h1 class="page-header-title">@lang("Custodial Wallets")</h1>
                 </div>
                 <div class="col-sm-auto">
+                    <div class="d-inline-flex align-items-center me-3 mb-2 mb-sm-0">
+                        <span id="walletLiveStatusDot" class="badge bg-soft-success text-success me-2">Live</span>
+                        <small class="text-muted">Last sync: <span id="walletLiveLastSync">—</span></small>
+                    </div>
                     <form action="{{ route('admin.custodialCheckAllBalances') }}" method="POST" class="d-inline">
                         @csrf
                         <button type="submit" class="btn btn-outline-primary me-2">
@@ -110,7 +114,7 @@
 @push('script')
     <script>
         $(document).ready(function() {
-            $('#datatable').DataTable({
+            const table = $('#datatable').DataTable({
                 processing: true,
                 serverSide: true,
                 ajax: "{{ route('admin.custodialWalletList') }}",
@@ -126,6 +130,65 @@
                     {data: 'last_deposit', name: 'last_deposit'},
                     {data: 'action', name: 'action', orderable: false},
                 ],
+            });
+
+            const refreshUrl = "{{ route('admin.custodialWalletBalancesRefresh') }}";
+            const csrfToken = $('meta[name="csrf-token"]').attr('content');
+            let refreshInFlight = false;
+            let lastSyncLabel = null;
+
+            const setLiveBadge = (state, label) => {
+                const $badge = $('#walletLiveStatusDot');
+                $badge.removeClass('bg-soft-success text-success bg-soft-warning text-warning bg-soft-danger text-danger');
+
+                if (state === 'loading') {
+                    $badge.addClass('bg-soft-warning text-warning').text('Syncing');
+                } else if (state === 'error') {
+                    $badge.addClass('bg-soft-danger text-danger').text('Error');
+                } else {
+                    $badge.addClass('bg-soft-success text-success').text('Live');
+                }
+
+                if (label) {
+                    $('#walletLiveLastSync').text(label);
+                }
+            };
+
+            const refreshBalances = async () => {
+                if (refreshInFlight || document.hidden) {
+                    return;
+                }
+
+                refreshInFlight = true;
+                setLiveBadge('loading', lastSyncLabel || 'syncing...');
+
+                try {
+                    const response = await $.ajax({
+                        method: 'POST',
+                        url: refreshUrl,
+                        headers: {
+                            'X-CSRF-TOKEN': csrfToken,
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    lastSyncLabel = new Date(response.completed_at).toLocaleTimeString();
+                    setLiveBadge('live', lastSyncLabel);
+                    table.ajax.reload(null, false);
+                } catch (error) {
+                    setLiveBadge('error', 'sync failed');
+                } finally {
+                    refreshInFlight = false;
+                }
+            };
+
+            refreshBalances();
+            setInterval(refreshBalances, 30000);
+
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    refreshBalances();
+                }
             });
         });
     </script>

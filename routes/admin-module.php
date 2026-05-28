@@ -80,6 +80,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('custodial/wallets/freeze/{id}', 'freezeWallet')->name('custodialWalletFreeze');
             Route::post('custodial/wallets/release/{id}', 'releaseWallet')->name('custodialWalletRelease');
             Route::post('custodial/wallets/check-balance/{id}', 'checkWalletBalance')->name('custodialWalletCheckBalance');
+            Route::post('custodial/wallets/refresh-balances', 'refreshBalances')->name('custodialWalletBalancesRefresh');
             Route::post('custodial/check-balances', 'checkAllBalances')->name('custodialCheckAllBalances');
             Route::get('custodial/deposits', 'depositsIndex')->name('custodialDepositIndex');
             Route::get('custodial/deposits/list', 'depositsList')->name('custodialDepositList');
