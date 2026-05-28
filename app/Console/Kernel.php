@@ -53,7 +53,7 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('app:exchange-reservation-cleanup')->everyFiveMinutes();
 
-        $schedule->command('aml:refresh-local-feeds --prune')->twiceDaily(1, 13);
+        $schedule->command('aml:refresh-local-feeds')->twiceDaily(1, 13);
         $schedule->command('aml:sync-local-sources')->dailyAt('02:10');
 
         // Custodial deposit monitoring — scan wallets for new deposits
