@@ -78,15 +78,20 @@ class SanctionedAddress extends Model
      */
     public static function normalizeAddress(string $address): string
     {
+        $address = trim($address);
+        $lowercaseAddress = strtolower($address);
+
         // ETH/EVM addresses: lowercase for comparison (case-insensitive per EIP-55)
-        if (str_starts_with($address, '0x')) {
-            return strtolower(trim($address));
+        if (str_starts_with($lowercaseAddress, '0x')) {
+            return $lowercaseAddress;
         }
+
         // TRX addresses: Base58 is case-sensitive, but we store both cases
         // BTC bech32: lowercase per BIP 173
-        if (str_starts_with($address, 'bc1') || str_starts_with($address, 'ltc1')) {
-            return strtolower(trim($address));
+        if (str_starts_with($lowercaseAddress, 'bc1') || str_starts_with($lowercaseAddress, 'ltc1')) {
+            return $lowercaseAddress;
         }
-        return trim($address);
+
+        return $address;
     }
 }

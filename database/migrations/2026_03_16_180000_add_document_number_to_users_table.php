@@ -10,7 +10,11 @@ return new class extends Migration
     {
         if (Schema::hasTable('users') && !Schema::hasColumn('users', 'document_number')) {
             Schema::table('users', function (Blueprint $table) {
-                $table->string('document_number', 191)->nullable()->after('phone');
+                $column = $table->string('document_number', 191)->nullable();
+
+                if (Schema::hasColumn('users', 'phone')) {
+                    $column->after('phone');
+                }
             });
         }
     }

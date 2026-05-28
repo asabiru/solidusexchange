@@ -6,6 +6,7 @@ use App\Models\SanctionedAddress;
 use App\Services\ExchangePipeline\LocalAmlSourceSyncService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class LocalAmlSourceSyncServiceTest extends TestCase
@@ -80,5 +81,15 @@ class LocalAmlSourceSyncServiceTest extends TestCase
             'source' => 'local_osint',
             'status' => 'revoked',
         ]);
+    }
+
+    public function test_it_requires_aml_tables_before_syncing_sources(): void
+    {
+        Schema::drop('sanctioned_addresses');
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('AML tables are missing');
+
+        app(LocalAmlSourceSyncService::class)->sync($this->tempDirectory, false);
     }
 }

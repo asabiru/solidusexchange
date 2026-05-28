@@ -150,7 +150,7 @@ class LocalAmlFeedRefreshService
         $format = strtolower((string) ($feed['format'] ?? 'json'));
 
         return match ($format) {
-            'json' => $this->parseJsonEntries($feed, $response->json()),
+            'json' => $this->parseJsonEntries($feed, json_decode($this->stripUtf8Bom((string) $response->body()), true)),
             'csv' => $this->parseCsvEntries((string) $response->body()),
             'text', 'txt' => $this->parseTextEntries((string) $response->body()),
             default => throw new \InvalidArgumentException("Unsupported feed format: {$format}"),
@@ -179,6 +179,7 @@ class LocalAmlFeedRefreshService
 
     private function parseCsvEntries(string $body): array
     {
+        $body = $this->stripUtf8Bom($body);
         $lines = preg_split('/\r\n|\r|\n/', $body);
         if (!is_array($lines)) {
             return [];
@@ -196,7 +197,7 @@ class LocalAmlFeedRefreshService
             $row = str_getcsv($line);
 
             if ($header === null) {
-                $header = array_map(fn ($value) => trim((string) $value), $row);
+                $header = array_map(fn ($value) => trim($this->stripUtf8Bom((string) $value)), $row);
                 continue;
             }
 
@@ -208,12 +209,16 @@ class LocalAmlFeedRefreshService
 
     private function parseTextEntries(string $body): array
     {
+        $body = $this->stripUtf8Bom($body);
         $lines = preg_split('/\r\n|\r|\n/', $body);
         if (!is_array($lines)) {
             return [];
         }
 
-        return array_map(fn ($line) => ['address' => trim((string) $line)], array_filter($lines, fn ($line) => trim((string) $line) !== ''));
+        return array_map(
+            fn ($line) => ['address' => trim((string) $line)],
+            array_filter($lines, fn ($line) => trim((string) $line) !== '' && !str_starts_with(trim((string) $line), '#'))
+        );
     }
 
     private function normalizeEntries(array $feed, array $entries): array
@@ -275,5 +280,10 @@ class LocalAmlFeedRefreshService
         $default = trim((string) ($default ?? ''));
 
         return $default !== '' ? $default : null;
+    }
+
+    private function stripUtf8Bom(string $value): string
+    {
+        return preg_replace('/^\xEF\xBB\xBF/', '', $value) ?? $value;
     }
 }

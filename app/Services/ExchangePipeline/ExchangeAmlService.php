@@ -8,6 +8,7 @@ use App\Models\ExchangeRequest;
 use App\Models\SanctionedAddress;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class ExchangeAmlService
 {
@@ -160,6 +161,16 @@ class ExchangeAmlService
         $localResult = $this->checkLocalSanctionsDb($address, $currencyCode);
         $this->logScreeningIfPossible($screenable, $address, $currencyCode, 'internal_db', $localResult);
 
+        if (($localResult['result'] ?? null) === 'error') {
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
+                'status' => 'pending',
+                'provider' => 'internal_db',
+                'risk_level' => 'high',
+                'risk_score' => 80,
+                'notes' => ucfirst($direction) . ' screening is unavailable because the local AML database is not ready. Manual review is required.',
+            ]);
+        }
+
         if ($localResult['result'] === 'match' && $localResult['severity'] === 'blocked') {
             return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'rejected',
@@ -231,14 +242,14 @@ class ExchangeAmlService
 
     public function latestWalletDecision($screenable, ?string $address): ?AmlScreeningLog
     {
-        if (!$screenable || !isset($screenable->id) || blank($address)) {
+        if (!$screenable || !isset($screenable->id) || blank($address) || !$this->hasAmlScreeningLogTable()) {
             return null;
         }
 
         return AmlScreeningLog::query()
             ->where('screenable_type', get_class($screenable))
             ->where('screenable_id', $screenable->id)
-            ->where('address', $address)
+            ->whereIn('address', $this->addressLookupVariants($address))
             ->whereIn('provider', [self::WALLET_SUMMARY_PROVIDER, self::WALLET_OVERRIDE_PROVIDER])
             ->latest('id')
             ->first();
@@ -280,6 +291,8 @@ class ExchangeAmlService
             || filled(config('exchange_pipeline.aml.api_secret'));
         $apiUrlConfigured = filled($this->externalProviderBaseUrl($provider));
         $usesExternalProvider = $this->usesExternalProvider($provider);
+        $localDatabaseReady = $this->hasSanctionedAddressesTable();
+        $loggingTableReady = $this->hasAmlScreeningLogTable();
 
         $status = 'local_only';
         $message = 'AML uses only local sanctions and built-in checks.';
@@ -287,6 +300,12 @@ class ExchangeAmlService
         if (!$enabled) {
             $status = 'disabled';
             $message = 'AML screening is disabled.';
+        } elseif (!$localDatabaseReady) {
+            $status = 'misconfigured';
+            $message = 'Local AML is enabled, but sanctioned_addresses is missing. Run database migrations before processing deposits.';
+        } elseif (!$loggingTableReady) {
+            $status = 'misconfigured';
+            $message = 'AML screening logs table is missing. Screening falls back safely, but audit logging is unavailable until migrations are applied.';
         } elseif ($usesExternalProvider && $apiKeyConfigured && $apiSecretConfigured && $apiUrlConfigured) {
             $status = 'ready';
             $message = "External AML provider {$provider} is configured.";
@@ -303,6 +322,8 @@ class ExchangeAmlService
             'api_secret_configured' => $apiSecretConfigured,
             'api_url_configured' => $apiUrlConfigured,
             'auto_block_processing' => (bool) config('exchange_pipeline.aml.auto_block_processing', true),
+            'local_database_ready' => $localDatabaseReady,
+            'screening_log_ready' => $loggingTableReady,
             'status' => $status,
             'message' => $message,
         ];
@@ -336,6 +357,16 @@ class ExchangeAmlService
         // ─── Step 1: Check local sanctions database ────────────────────────
         $localResult = $this->checkLocalSanctionsDb($sourceAddress, $currencyCode);
         $this->logScreening($deposit, $sourceAddress, $currencyCode, 'internal_db', $localResult);
+
+        if (($localResult['result'] ?? null) === 'error') {
+            return [
+                'status' => 'pending',
+                'provider' => 'internal_db',
+                'risk_level' => 'high',
+                'risk_score' => 80,
+                'notes' => 'Local AML database is not ready. Deposit requires manual review until AML migrations are applied.',
+            ];
+        }
 
         if ($localResult['result'] === 'match' && $localResult['severity'] === 'blocked') {
             return [
@@ -444,6 +475,16 @@ class ExchangeAmlService
     {
         if (blank($address)) {
             return ['result' => 'clean', 'severity' => null, 'entity_name' => null, 'source' => null, 'reason' => null];
+        }
+
+        if (!$this->hasSanctionedAddressesTable()) {
+            return [
+                'result' => 'error',
+                'severity' => null,
+                'entity_name' => null,
+                'source' => 'internal_db',
+                'reason' => 'sanctioned_addresses table is missing',
+            ];
         }
 
         $normalized = SanctionedAddress::normalizeAddress($address);
@@ -612,12 +653,16 @@ class ExchangeAmlService
             }
 
             // Prior flagged AML decisions for the same address should materially raise risk.
-            $flaggedResult = AmlScreeningLog::query()
-                ->where('address', $normalizedSourceAddress)
-                ->whereIn('result', ['match', 'partial_match', 'error'])
-                ->where('checked_at', '>', now()->subDays(30))
-                ->latest('id')
-                ->value('result');
+            $flaggedResult = null;
+
+            if ($this->hasAmlScreeningLogTable()) {
+                $flaggedResult = AmlScreeningLog::query()
+                    ->whereIn('address', $this->addressLookupVariants($sourceAddress))
+                    ->whereIn('result', ['match', 'partial_match', 'error'])
+                    ->where('checked_at', '>', now()->subDays(30))
+                    ->latest('id')
+                    ->value('result');
+            }
 
             if ($flaggedResult === 'match') {
                 $score += 35;
@@ -671,10 +716,26 @@ class ExchangeAmlService
      */
     private function logScreening($screenable, string $address, string $currencyCode, string $provider, array $result): AmlScreeningLog
     {
+        if (!$this->hasAmlScreeningLogTable()) {
+            return new AmlScreeningLog([
+                'screenable_type' => get_class($screenable),
+                'screenable_id'   => $screenable->id ?? null,
+                'address'         => $this->normalizeLoggedAddress($address),
+                'currency_code'   => $currencyCode,
+                'provider'        => $provider,
+                'result'          => $result['result'] ?? 'error',
+                'matched_entity'  => $result['entity_name'] ?? null,
+                'matched_source'  => $result['source'] ?? null,
+                'risk_score'      => ($result['result'] ?? '') === 'match' ? 100 : ($result['risk_score'] ?? 0),
+                'details'         => json_encode($result),
+                'checked_at'      => now(),
+            ]);
+        }
+
         return AmlScreeningLog::create([
             'screenable_type' => get_class($screenable),
             'screenable_id'   => $screenable->id,
-            'address'         => $address,
+            'address'         => $this->normalizeLoggedAddress($address),
             'currency_code'   => $currencyCode,
             'provider'        => $provider,
             'result'          => $result['result'] ?? 'error',
@@ -777,14 +838,14 @@ class ExchangeAmlService
 
     private function resolveWalletOverride($screenable, string $address): ?array
     {
-        if (!$screenable || !isset($screenable->id) || blank($address)) {
+        if (!$screenable || !isset($screenable->id) || blank($address) || !$this->hasAmlScreeningLogTable()) {
             return null;
         }
 
         $override = AmlScreeningLog::query()
             ->where('screenable_type', get_class($screenable))
             ->where('screenable_id', $screenable->id)
-            ->where('address', $address)
+            ->whereIn('address', $this->addressLookupVariants($address))
             ->where('provider', self::WALLET_OVERRIDE_PROVIDER)
             ->latest('id')
             ->first();
@@ -1099,6 +1160,35 @@ class ExchangeAmlService
         $apiUrl = trim((string) config('exchange_pipeline.aml.api_url'));
 
         return $apiUrl !== '' ? rtrim($apiUrl, '/') : null;
+    }
+
+    private function hasSanctionedAddressesTable(): bool
+    {
+        return Schema::hasTable('sanctioned_addresses');
+    }
+
+    private function hasAmlScreeningLogTable(): bool
+    {
+        return Schema::hasTable('aml_screening_logs');
+    }
+
+    private function normalizeLoggedAddress(string $address): string
+    {
+        return SanctionedAddress::normalizeAddress($address);
+    }
+
+    private function addressLookupVariants(?string $address): array
+    {
+        if (blank($address)) {
+            return [];
+        }
+
+        $variants = array_filter([
+            trim((string) $address),
+            SanctionedAddress::normalizeAddress((string) $address),
+        ]);
+
+        return array_values(array_unique($variants));
     }
 
     private function findLinkedCustodialDeposit(ExchangeRequest $exchange, array $meta = []): ?CustodialDeposit

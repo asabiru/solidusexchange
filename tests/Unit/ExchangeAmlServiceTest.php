@@ -7,6 +7,7 @@ use App\Models\SanctionedAddress;
 use App\Services\ExchangePipeline\ExchangeAmlService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 class ExchangeAmlServiceTest extends TestCase
@@ -90,6 +91,20 @@ class ExchangeAmlServiceTest extends TestCase
         $this->assertSame('approved', $decision['status']);
         $this->assertSame('local_db', $decision['provider']);
         $this->assertSame('low', $decision['risk_level']);
+        Http::assertNothingSent();
+    }
+
+    public function test_local_wallet_screening_falls_back_to_manual_review_when_aml_tables_are_missing(): void
+    {
+        Http::fake();
+        Schema::drop('sanctioned_addresses');
+
+        $decision = app(ExchangeAmlService::class)->screenWalletAddress('0xAbC123', 'ETH');
+
+        $this->assertSame('pending', $decision['status']);
+        $this->assertSame('internal_db', $decision['provider']);
+        $this->assertSame('high', $decision['risk_level']);
+        $this->assertSame(80, $decision['risk_score']);
         Http::assertNothingSent();
     }
 }

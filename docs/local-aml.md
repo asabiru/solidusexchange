@@ -54,6 +54,7 @@ address,currency_code,source,entity_name,entity_type,severity,reason
 ## Sync command
 
 ```bash
+php artisan migrate
 php artisan aml:sync-local-sources
 php artisan aml:sync-local-sources --prune
 php artisan aml:sync-local-sources --path=/absolute/path/to/aml_sources
@@ -72,6 +73,7 @@ database/data/aml_feeds/feeds.json
 The refresh command downloads public feeds, converts them into local AML source files, and then syncs them into `sanctioned_addresses`.
 
 ```bash
+php artisan migrate
 php artisan aml:refresh-local-feeds
 php artisan aml:refresh-local-feeds --prune
 php artisan aml:refresh-local-feeds --manifest=/absolute/path/to/feeds.json --path=/absolute/path/to/aml_sources --prune
@@ -92,9 +94,10 @@ Supported feed formats:
 ## Suggested routine
 
 1. Keep local source files under version control or upload them to the server
-2. Configure public feed URLs in `database/data/aml_feeds/feeds.json`
-3. Run `php artisan aml:refresh-local-feeds`
-4. Let the scheduler refresh local AML automatically twice a day
+2. Apply DB migrations before enabling AML commands in a new environment
+3. Configure public feed URLs in `database/data/aml_feeds/feeds.json`
+4. Run `php artisan aml:refresh-local-feeds`
+5. Let the scheduler refresh local AML automatically twice a day
 
 ## Current local heuristics
 

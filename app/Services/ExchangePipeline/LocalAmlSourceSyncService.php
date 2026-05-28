@@ -4,6 +4,7 @@ namespace App\Services\ExchangePipeline;
 
 use App\Models\SanctionedAddress;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class LocalAmlSourceSyncService
@@ -25,6 +26,10 @@ class LocalAmlSourceSyncService
             return $summary;
         }
 
+        if (!Schema::hasTable('sanctioned_addresses')) {
+            throw new \RuntimeException('AML tables are missing. Run php artisan migrate before syncing local AML sources.');
+        }
+
         $processedAddressesBySource = [];
         $files = collect(File::files($directory))
             ->filter(fn ($file) => in_array(strtolower($file->getExtension()), ['json', 'csv'], true))
@@ -34,7 +39,17 @@ class LocalAmlSourceSyncService
         foreach ($files as $file) {
             $summary['files']++;
 
-            foreach ($this->parseFile($file->getPathname()) as $entry) {
+            $parsedFile = $this->parseFileData($file->getPathname());
+
+            foreach ($parsedFile['sources'] as $source) {
+                if (!is_string($source) || $source === '') {
+                    continue;
+                }
+
+                $processedAddressesBySource[$source] ??= [];
+            }
+
+            foreach ($parsedFile['entries'] as $entry) {
                 $payload = $this->normalizeEntry($entry, $file->getFilename());
                 if (!$payload) {
                     $summary['skipped']++;
@@ -93,53 +108,78 @@ class LocalAmlSourceSyncService
             : base_path($configured);
     }
 
-    private function parseFile(string $path): array
+    private function parseFileData(string $path): array
     {
         return match (strtolower(pathinfo($path, PATHINFO_EXTENSION))) {
-            'json' => $this->parseJsonFile($path),
-            'csv' => $this->parseCsvFile($path),
-            default => [],
+            'json' => $this->parseJsonFileData($path),
+            'csv' => $this->parseCsvFileData($path),
+            default => ['entries' => [], 'sources' => []],
         };
     }
 
-    private function parseJsonFile(string $path): array
+    private function parseJsonFileData(string $path): array
     {
-        $decoded = json_decode((string) File::get($path), true);
+        $decoded = json_decode($this->stripUtf8Bom((string) File::get($path)), true);
         if (!is_array($decoded)) {
-            return [];
+            return ['entries' => [], 'sources' => []];
         }
 
         if (array_is_list($decoded)) {
-            return $decoded;
+            $defaultSource = $this->normalizeSource(pathinfo($path, PATHINFO_FILENAME));
+            $sources = [];
+
+            foreach ($decoded as $entry) {
+                if (!is_array($entry)) {
+                    continue;
+                }
+
+                $source = trim((string) ($entry['source'] ?? ''));
+                $sources[$source !== '' ? $this->normalizeSource($source) : $defaultSource] = true;
+            }
+
+            if ($sources === []) {
+                $sources[$defaultSource] = true;
+            }
+
+            return ['entries' => $decoded, 'sources' => array_keys($sources)];
         }
 
         $defaults = $decoded;
         $entries = $defaults['entries'] ?? [];
+        $sources = [$this->normalizeSource((string) ($defaults['source'] ?? pathinfo($path, PATHINFO_FILENAME)))];
         unset($defaults['entries']);
 
         if (!is_array($entries)) {
-            return [];
+            return ['entries' => [], 'sources' => $sources];
         }
 
-        return array_map(function ($entry) use ($defaults) {
-            return is_array($entry) ? array_merge($defaults, $entry) : [];
-        }, $entries);
+        return [
+            'entries' => array_map(function ($entry) use ($defaults) {
+                return is_array($entry) ? array_merge($defaults, $entry) : [];
+            }, $entries),
+            'sources' => $sources,
+        ];
     }
 
-    private function parseCsvFile(string $path): array
+    private function parseCsvFileData(string $path): array
     {
         $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines === false || $lines === []) {
-            return [];
+            return [
+                'entries' => [],
+                'sources' => [$this->normalizeSource(pathinfo($path, PATHINFO_FILENAME))],
+            ];
         }
 
         $header = null;
         $entries = [];
+        $sources = [];
+        $defaultSource = $this->normalizeSource(pathinfo($path, PATHINFO_FILENAME));
 
         foreach ($lines as $line) {
             $row = str_getcsv($line);
             if ($header === null) {
-                $header = array_map(fn ($value) => trim((string) $value), $row);
+                $header = array_map(fn ($value) => $this->normalizeHeaderValue($value), $row);
                 continue;
             }
 
@@ -147,10 +187,21 @@ class LocalAmlSourceSyncService
                 continue;
             }
 
-            $entries[] = array_combine($header, array_pad($row, count($header), null)) ?: [];
+            $entry = array_combine($header, array_pad($row, count($header), null)) ?: [];
+            $entries[] = $entry;
+
+            $source = trim((string) ($entry['source'] ?? ''));
+            $sources[$source !== '' ? $this->normalizeSource($source) : $defaultSource] = true;
         }
 
-        return $entries;
+        if ($entries === []) {
+            $sources[$defaultSource] = true;
+        }
+
+        return [
+            'entries' => $entries,
+            'sources' => array_keys($sources),
+        ];
     }
 
     private function normalizeEntry(array $entry, string $filename): ?array
@@ -197,16 +248,20 @@ class LocalAmlSourceSyncService
 
     private function normalizeSeverity(string $severity): string
     {
-        return match (trim($severity)) {
-            'blocked', 'high_risk', 'monitor' => trim($severity),
+        return match (Str::lower(trim($severity))) {
+            'blocked' => 'blocked',
+            'high_risk' => 'high_risk',
+            'monitor' => 'monitor',
             default => 'high_risk',
         };
     }
 
     private function normalizeStatus(string $status): string
     {
-        return match (trim($status)) {
-            'active', 'expired', 'revoked' => trim($status),
+        return match (Str::lower(trim($status))) {
+            'active' => 'active',
+            'expired' => 'expired',
+            'revoked' => 'revoked',
             default => 'active',
         };
     }
@@ -233,5 +288,15 @@ class LocalAmlSourceSyncService
         $value = trim((string) $value);
 
         return $value !== '' ? $value : null;
+    }
+
+    private function normalizeHeaderValue($value): string
+    {
+        return trim($this->stripUtf8Bom((string) $value));
+    }
+
+    private function stripUtf8Bom(string $value): string
+    {
+        return preg_replace('/^\xEF\xBB\xBF/', '', $value) ?? $value;
     }
 }
