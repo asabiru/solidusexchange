@@ -15,6 +15,9 @@
                     <h1 class="page-header-title">@lang("Sanctions List")</h1>
                 </div>
                 <div class="col-sm-auto">
+                    <a class="btn btn-white me-2" href="{{ route('admin.sanctionedLogs', ['needs_review' => 1]) }}">
+                        <i class="bi-exclamation-triangle me-1"></i> Review Queue
+                    </a>
                     <a class="btn btn-outline-info me-2" href="{{ route('admin.sanctionedLogs') }}">
                         <i class="bi-journal me-1"></i> Screening Logs
                     </a>
