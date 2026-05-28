@@ -13,43 +13,83 @@ return new class extends Migration {
 
         Schema::table('exchange_requests', function (Blueprint $table) {
             if (!Schema::hasColumn('exchange_requests', 'deposit_provider')) {
-                $table->string('deposit_provider', 50)->nullable()->after('crypto_method_id');
+                $column = $table->string('deposit_provider', 50)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'crypto_method_id')) {
+                    $column->after('crypto_method_id');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'deposit_provider_ref')) {
-                $table->string('deposit_provider_ref', 191)->nullable()->after('deposit_provider');
+                $column = $table->string('deposit_provider_ref', 191)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'deposit_provider')) {
+                    $column->after('deposit_provider');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'deposit_network')) {
-                $table->string('deposit_network', 100)->nullable()->after('deposit_provider_ref');
+                $column = $table->string('deposit_network', 100)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'deposit_provider_ref')) {
+                    $column->after('deposit_provider_ref');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'payout_provider')) {
-                $table->string('payout_provider', 50)->nullable()->after('deposit_network');
+                $column = $table->string('payout_provider', 50)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'deposit_network')) {
+                    $column->after('deposit_network');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_status')) {
-                $table->string('aml_status', 50)->nullable()->after('payout_provider');
+                $column = $table->string('aml_status', 50)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'payout_provider')) {
+                    $column->after('payout_provider');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_provider')) {
-                $table->string('aml_provider', 50)->nullable()->after('aml_status');
+                $column = $table->string('aml_provider', 50)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'aml_status')) {
+                    $column->after('aml_status');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_risk_level')) {
-                $table->string('aml_risk_level', 50)->nullable()->after('aml_provider');
+                $column = $table->string('aml_risk_level', 50)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'aml_provider')) {
+                    $column->after('aml_provider');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_risk_score')) {
-                $table->decimal('aml_risk_score', 10, 4)->nullable()->after('aml_risk_level');
+                $column = $table->decimal('aml_risk_score', 10, 4)->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'aml_risk_level')) {
+                    $column->after('aml_risk_level');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_notes')) {
-                $table->text('aml_notes')->nullable()->after('aml_risk_score');
+                $column = $table->text('aml_notes')->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'aml_risk_score')) {
+                    $column->after('aml_risk_score');
+                }
             }
 
             if (!Schema::hasColumn('exchange_requests', 'aml_checked_at')) {
-                $table->timestamp('aml_checked_at')->nullable()->after('aml_notes');
+                $column = $table->timestamp('aml_checked_at')->nullable();
+
+                if (Schema::hasColumn('exchange_requests', 'aml_notes')) {
+                    $column->after('aml_notes');
+                }
             }
         });
     }
