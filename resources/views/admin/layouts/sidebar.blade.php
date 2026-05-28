@@ -395,30 +395,6 @@
                         </a>
                     </div>
 
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.announcement']) }}"
-
-
-                    <span class="dropdown-header mt-3">@lang("Themes Settings")</span>
-                    <small class="bi-three-dots nav-subtitle-replacer"></small>
-                    <div id="navbarVerticalThemeMenu">
-                        <div class="nav-item">
-                            <a class="nav-link {{ menuActive(['admin.page.index']) }}"
-                               href="{{ route('admin.page.index', basicControl()->theme) }}"
-                               data-placement="left">
-                                <i class="fa-light fa-list nav-icon"></i>
-                                <span class="nav-link-title">@lang('Pages')</span>
-                            </a>
-                        </div>
-
-                        <div class="nav-item">
-                            <a class="nav-link" href="{{ route('admin.manage.menu') }}" data-placement="left">
-                                <i class="bi-folder2-open nav-icon"></i>
-                                <span class="nav-link-title">@lang('Manage Menu')</span>
-                            </a>
-                        </div>
-                    </div>
-
                     @php
                         $segments = request()->segments();
                         $last  = end($segments);
