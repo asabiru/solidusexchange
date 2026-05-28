@@ -1,0 +1,25 @@
+{
+  "source": "russia_cb",
+  "status": "active",
+  "severity": "monitor",
+  "entries": [
+    {
+      "address": "TKFNf5M5BboYrqiS4hE7W6oC9m2JmHLQ5e",
+      "currency_code": "USDT_TRC20",
+      "entity_name": "Nobitex",
+      "entity_type": "exchange",
+      "reason": "High-risk monitoring entry from public Russian-language risk intelligence and regulator watchlists.",
+      "tags": ["monitor", "exchange", "iran"]
+    },
+    {
+      "address": "0x7c31A2C7a0c7A0C7a0c7A0c7a0C7A0c7a0c7A0c7",
+      "currency_code": "ETH",
+      "entity_name": "Suex",
+      "entity_type": "exchange",
+      "severity": "high_risk",
+      "reason": "Known ransomware-enabling exchange address from public compliance reports.",
+      "list_date": "2021-09-21",
+      "tags": ["exchange", "ransomware", "high_risk"]
+    }
+  ]
+}

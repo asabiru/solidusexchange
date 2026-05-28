@@ -1,0 +1,36 @@
+{
+  "feeds": [
+    {
+      "name": "sample_bitcoin_abuse_csv",
+      "enabled": false,
+      "url": "https://example.com/bitcoin-abuse.csv",
+      "format": "csv",
+      "source": "bitcoin_abuse",
+      "severity": "high_risk",
+      "entity_type": "scam",
+      "reason": "Imported automatically from a Bitcoin abuse intelligence feed.",
+      "field_map": {
+        "address": "address",
+        "reason": "reason"
+      },
+      "tags": ["scam", "osint", "community_report"]
+    },
+    {
+      "name": "sample_mixer_json",
+      "enabled": false,
+      "url": "https://example.com/mixers.json",
+      "format": "json",
+      "entries_path": "entries",
+      "source": "mixer_osint",
+      "severity": "blocked",
+      "entity_type": "mixer",
+      "field_map": {
+        "address": "address",
+        "currency_code": "network",
+        "entity_name": "name",
+        "reason": "description"
+      },
+      "tags": ["mixer", "osint"]
+    }
+  ]
+}

@@ -8,6 +8,8 @@ use App\Console\Commands\ExchangeReservationCleanup;
 use App\Console\Commands\SbpPaymentResolve;
 use App\Console\Commands\ExchangeWalletWatcherSync;
 use App\Console\Commands\FiatCurrencyUpdateCron;
+use App\Console\Commands\LocalAmlFeedsRefresh;
+use App\Console\Commands\LocalAmlSourcesSync;
 use App\Console\Commands\PopularCryptoBootstrap;
 use App\Console\Commands\SwitchProjectToRub;
 use App\Models\BuyRequest;
@@ -22,6 +24,8 @@ class Kernel extends ConsoleKernel
     protected $commands = [
         CryptoCurrencyUpdateCron::class,
         FiatCurrencyUpdateCron::class,
+        LocalAmlFeedsRefresh::class,
+        LocalAmlSourcesSync::class,
         PopularCryptoBootstrap::class,
         SwitchProjectToRub::class,
         ExchangeReservationCleanup::class,
@@ -48,6 +52,9 @@ class Kernel extends ConsoleKernel
         }
 
         $schedule->command('app:exchange-reservation-cleanup')->everyFiveMinutes();
+
+        $schedule->command('aml:refresh-local-feeds --prune')->twiceDaily(1, 13);
+        $schedule->command('aml:sync-local-sources')->dailyAt('02:10');
 
         // Custodial deposit monitoring — scan wallets for new deposits
         $schedule->command('custodial:monitor-deposits')->everyMinute();

@@ -172,14 +172,30 @@ class ExchangeAmlService
             ]);
         }
 
-        if ($localResult['result'] === 'partial_match' || $localResult['severity'] === 'high_risk') {
+        if (
+            $localResult['result'] === 'partial_match'
+            || ($localResult['result'] === 'match' && in_array($localResult['severity'], ['high_risk', 'monitor'], true))
+            || $localResult['severity'] === 'high_risk'
+        ) {
+            $requiresHighRiskReview = in_array($localResult['severity'], ['high_risk'], true);
+
             return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
                 'status' => 'pending',
                 'provider' => 'internal_db',
-                'risk_level' => 'high',
-                'risk_score' => 75,
+                'risk_level' => $requiresHighRiskReview ? 'high' : 'medium',
+                'risk_score' => $requiresHighRiskReview ? 75 : 45,
                 'notes' => ucfirst($direction) . ' address is flagged for enhanced AML review. '
                     . ($localResult['reason'] ?? ''),
+            ]);
+        }
+
+        if (!$this->usesExternalProvider($provider)) {
+            return $this->finalizeWalletDecision($screenable, $address, $currencyCode, [
+                'status' => 'approved',
+                'provider' => 'internal_db',
+                'risk_level' => 'low',
+                'risk_score' => 0,
+                'notes' => ucfirst($direction) . ' address passed local AML checks.',
             ]);
         }
 
@@ -334,39 +350,48 @@ class ExchangeAmlService
             ];
         }
 
-        // ─── Step 2: Check OFAC API (if available) ──────────────────────────
-        $ofacResult = $this->checkOfacApi($sourceAddress, $currencyCode);
-        $this->logScreening($deposit, $sourceAddress, $currencyCode, 'ofac_api', $ofacResult);
-
-        if ($ofacResult['result'] === 'match') {
-            // Auto-add to local DB for future fast checks
-            $this->autoAddSanctionedAddress($sourceAddress, $currencyCode, self::SOURCE_OFAC,
-                $ofacResult['entity_name'] ?? null, $ofacResult['reason'] ?? null);
-
-            return [
-                'status' => 'rejected',
-                'provider' => 'ofac_check',
-                'risk_level' => 'high',
-                'risk_score' => 100,
-                'notes' => 'BLOCKED: Address found in OFAC SDN list — '
-                    . ($ofacResult['entity_name'] ?? 'Unknown') . '. '
-                    . ($ofacResult['reason'] ?? ''),
-            ];
-        }
-
-        // If OFAC API was unreachable, bump risk score slightly
         $ofacApiPenalty = 0;
-        if (($ofacResult['result'] ?? '') === 'error') {
-            $ofacApiPenalty = 5; // Small penalty for inability to verify externally
+
+        if ($this->usesExternalProvider($provider)) {
+            // ─── Step 2: Check OFAC API (if available) ──────────────────────
+            $ofacResult = $this->checkOfacApi($sourceAddress, $currencyCode);
+            $this->logScreening($deposit, $sourceAddress, $currencyCode, 'ofac_api', $ofacResult);
+
+            if ($ofacResult['result'] === 'match') {
+                // Auto-add to local DB for future fast checks
+                $this->autoAddSanctionedAddress($sourceAddress, $currencyCode, self::SOURCE_OFAC,
+                    $ofacResult['entity_name'] ?? null, $ofacResult['reason'] ?? null);
+
+                return [
+                    'status' => 'rejected',
+                    'provider' => 'ofac_check',
+                    'risk_level' => 'high',
+                    'risk_score' => 100,
+                    'notes' => 'BLOCKED: Address found in OFAC SDN list — '
+                        . ($ofacResult['entity_name'] ?? 'Unknown') . '. '
+                        . ($ofacResult['reason'] ?? ''),
+                ];
+            }
+
+            // If OFAC API was unreachable, bump risk score slightly
+            if (($ofacResult['result'] ?? '') === 'error') {
+                $ofacApiPenalty = 5; // Small penalty for inability to verify externally
+            }
         }
 
         // ─── Step 3: Partial match from local DB → high risk ────────────────
-        if ($localResult['result'] === 'partial_match' || $localResult['severity'] === 'high_risk') {
+        if (
+            $localResult['result'] === 'partial_match'
+            || ($localResult['result'] === 'match' && in_array($localResult['severity'], ['high_risk', 'monitor'], true))
+            || $localResult['severity'] === 'high_risk'
+        ) {
+            $requiresHighRiskReview = in_array($localResult['severity'], ['high_risk'], true);
+
             return [
                 'status' => 'pending',
                 'provider' => 'internal_db',
-                'risk_level' => 'high',
-                'risk_score' => 75,
+                'risk_level' => $requiresHighRiskReview ? 'high' : 'medium',
+                'risk_score' => $requiresHighRiskReview ? 75 : 45,
                 'notes' => 'HIGH RISK: Address flagged — '
                     . ($localResult['entity_name'] ?? 'Unknown') . '. '
                     . ($localResult['reason'] ?? 'Requires manual review.'),
@@ -541,9 +566,11 @@ class ExchangeAmlService
     private function calculateRiskScore(float $amountUsd, float $rawAmount, string $currencyCode, ?string $sourceAddress): float
     {
         $score = 0;
+        $normalizedSourceAddress = $sourceAddress ? SanctionedAddress::normalizeAddress($sourceAddress) : null;
 
         // Amount-based risk
-        if ($amountUsd >= 10000) $score += 40;
+        if ($amountUsd >= 50000) $score += 55;
+        elseif ($amountUsd >= 10000) $score += 40;
         elseif ($amountUsd >= 5000) $score += 25;
         elseif ($amountUsd >= 1000) $score += 10;
 
@@ -551,6 +578,11 @@ class ExchangeAmlService
         $privacyCoins = ['XMR', 'ZEC', 'DASH'];
         if (in_array(strtoupper($currencyCode), $privacyCoins)) {
             $score += 30;
+        }
+
+        // Missing source address makes investigation harder.
+        if (!$normalizedSourceAddress) {
+            $score += 15;
         }
 
         // Structuring pattern: many small deposits from same address
@@ -568,6 +600,29 @@ class ExchangeAmlService
             $historyCount = CustodialDeposit::where('source_address', $sourceAddress)->count();
             if ($historyCount <= 1) {
                 $score += 5;
+            }
+
+            // One source address hitting multiple custodial wallets is suspicious fan-out.
+            $distinctWallets = CustodialDeposit::where('source_address', $sourceAddress)
+                ->where('created_at', '>', now()->subDays(7))
+                ->distinct('custodial_wallet_id')
+                ->count('custodial_wallet_id');
+            if ($distinctWallets >= 3) {
+                $score += 20;
+            }
+
+            // Prior flagged AML decisions for the same address should materially raise risk.
+            $flaggedResult = AmlScreeningLog::query()
+                ->where('address', $normalizedSourceAddress)
+                ->whereIn('result', ['match', 'partial_match', 'error'])
+                ->where('checked_at', '>', now()->subDays(30))
+                ->latest('id')
+                ->value('result');
+
+            if ($flaggedResult === 'match') {
+                $score += 35;
+            } elseif (in_array($flaggedResult, ['partial_match', 'error'], true)) {
+                $score += 15;
             }
         }
 

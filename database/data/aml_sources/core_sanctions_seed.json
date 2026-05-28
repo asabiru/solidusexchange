@@ -1,0 +1,52 @@
+{
+  "source": "ofac",
+  "status": "active",
+  "severity": "blocked",
+  "entries": [
+    {
+      "address": "0xd90e2f938d13cb0ae1a263793c0c03949c739d4e",
+      "currency_code": "ETH",
+      "entity_name": "Tornado Cash",
+      "entity_type": "mixer",
+      "reason": "Public sanctions and OSINT watchlists: Tornado Cash router contract.",
+      "list_date": "2022-08-08",
+      "tags": ["mixer", "sanctions", "lazarus"]
+    },
+    {
+      "address": "0x12d66f7a6fbb8f500b6ee5fb5a3fd8b0c0d91e99",
+      "currency_code": "ETH",
+      "entity_name": "Tornado Cash",
+      "entity_type": "mixer",
+      "reason": "Public sanctions and OSINT watchlists: Tornado Cash 0.1 ETH pool.",
+      "list_date": "2022-08-08",
+      "tags": ["mixer", "sanctions"]
+    },
+    {
+      "address": "0x5efda50f22d34f262c82601020023bf026e2bf56",
+      "currency_code": "ETH",
+      "entity_name": "Tornado Cash",
+      "entity_type": "mixer",
+      "reason": "Public sanctions and OSINT watchlists: Tornado Cash governance contract.",
+      "list_date": "2022-08-08",
+      "tags": ["mixer", "sanctions"]
+    },
+    {
+      "address": "bc1qm34lsc65zpw79lxes69zkqmk6ee3ewt0qll9l3",
+      "currency_code": "BTC",
+      "entity_name": "Blender.io",
+      "entity_type": "mixer",
+      "reason": "Public sanctions and OSINT watchlists: Blender.io mixer.",
+      "list_date": "2022-05-06",
+      "tags": ["mixer", "sanctions"]
+    },
+    {
+      "address": "TN2YqRhkJo8K6EvKqLzGqvS5EeF7dMxgqF",
+      "currency_code": "USDT_TRC20",
+      "entity_name": "Garantex",
+      "entity_type": "exchange",
+      "reason": "Public sanctions and OSINT watchlists: Garantex TRX/USDT hot wallet.",
+      "list_date": "2022-04-05",
+      "tags": ["sanctions", "exchange", "russia"]
+    }
+  ]
+}
