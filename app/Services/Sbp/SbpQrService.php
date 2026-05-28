@@ -293,6 +293,33 @@ class SbpQrService
                 'paid_at'        => in_array($mappedStatus, ['paid', 'confirmed']) ? now() : null,
                 'provider_response' => json_encode($payload),
             ]);
+
+            // Auto-confirm: when Tinkoff sends AUTHORIZED, automatically confirm
+            // the payment so funds are captured and SellRequest is completed.
+            if ($mappedStatus === 'paid' && $this->isConfigured() && $paymentId) {
+                $confirmed = $this->confirmPayment($paymentId);
+                if ($confirmed) {
+                    $sbpPayment->update([
+                        'status'        => 'confirmed',
+                        'confirmed_at'  => now(),
+                    ]);
+                    $mappedStatus = 'confirmed';
+                    Log::info('SBP: Auto-confirmed AUTHORIZED payment', [
+                        'order_id'   => $orderId,
+                        'payment_id' => $paymentId,
+                    ]);
+                } else {
+                    Log::warning('SBP: Auto-confirm failed for AUTHORIZED payment', [
+                        'order_id'   => $orderId,
+                        'payment_id' => $paymentId,
+                    ]);
+                }
+            }
+
+            // Auto-complete linked SellRequest when payment is confirmed
+            if ($mappedStatus === 'confirmed') {
+                $this->completeLinkedSellRequest($sbpPayment);
+            }
         }
 
         Log::info('SBP: Webhook processed', [
@@ -302,6 +329,39 @@ class SbpQrService
         ]);
 
         return ['success' => true, 'status' => $mappedStatus];
+    }
+
+    /**
+     * Auto-complete the linked SellRequest when SBP payment is confirmed.
+     */
+    public function completeLinkedSellRequest(SbpPayment $sbpPayment): bool
+    {
+        if ($sbpPayment->payable_type !== 'App\\Models\\SellRequest' || !$sbpPayment->payable_id) {
+            return false;
+        }
+
+        $sellRequest = \App\Models\SellRequest::find($sbpPayment->payable_id);
+        if (!$sellRequest || (int)$sellRequest->status !== 2) {
+            return false;
+        }
+
+        $sellRequest->update(['status' => 3]); // 3 = completed
+
+        $amount = getBaseAmount($sellRequest->final_amount, optional($sellRequest->getCurrency)->code, 'fiat');
+        \Facades\App\Services\BasicService::makeTransaction(
+            $amount, 0, '+', 'Crypto Sell Complete',
+            $sellRequest->id, \App\Models\SellRequest::class,
+            $sellRequest->user_id, $sellRequest->final_amount,
+            optional($sellRequest->getCurrency)->code
+        );
+
+        Log::info('SBP: Auto-completed SellRequest', [
+            'sell_request_id' => $sellRequest->id,
+            'utr'            => $sellRequest->utr,
+            'sbp_payment_id' => $sbpPayment->id,
+        ]);
+
+        return true;
     }
 
     /**
