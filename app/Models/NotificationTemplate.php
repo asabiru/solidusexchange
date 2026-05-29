@@ -9,6 +9,8 @@ class NotificationTemplate extends Model
 {
     use HasFactory;
 
+    protected $table = 'notify_templates';
+
     protected $fillable = [
         'language_id',
         'name',
