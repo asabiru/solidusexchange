@@ -136,8 +136,30 @@ aside.bg-dark, aside.bg-white, aside.navbar-bordered {
 }
 
 .navbar-vertical-aside .navbar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
   padding: 1.1rem 1.4rem;
   border-bottom: 1px solid var(--sc-border);
+}
+/* Logo: keep inside the header band, preserve aspect ratio, centered.
+   Overrides Front's min-width/width:100% that stretched the square logo. */
+.navbar-vertical-aside .navbar-brand-logo,
+.navbar-vertical-aside .navbar-brand-logo-auto {
+  min-width: 0 !important;
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: 40px !important;
+  object-fit: contain !important;
+}
+.navbar-vertical-aside .navbar-brand-logo-mini {
+  min-width: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  max-height: 32px !important;
+  object-fit: contain !important;
 }
 .navbar-vertical-aside .nav-subtitle {
   font-size: 10px !important;
