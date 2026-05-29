@@ -9,7 +9,7 @@
             <li class="notification-item" v-for="(item, index) in items"
                 @click.prevent="readAt(item.id, item.description.link)">
                 <a href="javascript:void(0)">
-                    <i class="fa-regular fa-circle-check text-success"></i>
+                    <i class="fa-light fa-bell" style="color: #e8c9a0;"></i>
                     <div>
                         <p>@{{item.description.text}}</p>
                         <p>@{{ item.formatted_date }}</p>
