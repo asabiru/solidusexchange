@@ -174,8 +174,28 @@ aside.bg-dark, aside.bg-white, aside.navbar-bordered {
 .navbar-vertical-aside .nav-link[aria-expanded="true"] .nav-icon         { color: var(--sc-accent) !important; }
 .navbar-vertical-aside .nav-link-title                                   { color: inherit !important; }
 .navbar-vertical-aside .navbar-vertical-aside-submenu .nav-link          { margin: 1px 10px 1px 32px !important; font-size: 13px !important; }
-.navbar-vertical-aside .navbar-aside-toggler                             { color: var(--sc-text-3) !important; }
-.navbar-vertical-aside .navbar-aside-toggler:hover                       { color: var(--sc-accent) !important; }
+/* Sidebar collapse toggle: themed circular button (overrides Front's navy
+   .navbar-dark .navbar-aside-toggler so it matches the Solidus theme) */
+.navbar-vertical-aside .navbar-aside-toggler {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  padding: 0 !important;
+  background: var(--sc-bg-elev) !important;
+  color: var(--sc-text-2) !important;
+  border: 1px solid var(--sc-border-md) !important;
+  border-radius: 50% !important;
+  box-shadow: var(--sc-shadow-card) !important;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.navbar-vertical-aside .navbar-aside-toggler:hover {
+  background: var(--sc-accent-bg) !important;
+  color: var(--sc-accent) !important;
+  border-color: var(--sc-accent) !important;
+}
+.navbar-vertical-aside .navbar-aside-toggler > i { color: inherit !important; }
 .navbar-vertical-aside .navbar-vertical-footer {
   border-top: 1px solid var(--sc-border) !important;
   background: var(--sc-bg-elev) !important;
