@@ -11,7 +11,12 @@
     <!-- Favicon -->
     <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
     <!-- Font -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    </noscript>
 
     <!-- CSS Implementing Plugins -->
     <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap-icons.css') }}">
@@ -33,7 +38,7 @@
         }
 
         body {
-            opacity: 0;
+            opacity: 1;
         }
     </style>
 
