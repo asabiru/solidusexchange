@@ -1,4 +1,4 @@
-<!-- Footer Section - eazy228/design style -->
+<!-- Footer Section -->
 <footer class="footer-section">
     <div class="container">
         <div class="footer-top">
@@ -8,115 +8,96 @@
                     <span class="logo-text">SolidChange</span>
                 </div>
                 <p class="footer-description">
-                    Обменник криптовалют с открытыми резервами, прозрачными комиссиями и AML-проверкой каждой сделки.
+                    Надежная криптовалютная биржа для обмена цифровых активов с лучшими курсами и мгновенными транзакциями.
                 </p>
-            </div>
-
-            <div class="footer-newsletter">
-                <h4 class="newsletter-title">Подписаться</h4>
-                <p class="newsletter-text">Только обновления сервиса. Без спама.</p>
-                <form class="newsletter-form">
-                    <input type="email" placeholder="Введите email" class="newsletter-input">
-                    <button type="submit" class="newsletter-button">Подписаться</button>
-                </form>
+                @php
+                    $socialLinks = \App\Models\ContentDetails::with('content')
+                        ->whereHas('content', fn($q) => $q->where('name', 'social'))
+                        ->where('language_id', app()->getLocale() === 'ru' ? 20 : 1)
+                        ->get()
+                        ->map(fn($d) => is_string($d->description) ? json_decode($d->description) : $d->description)
+                        ->filter(fn($s) => $s && !empty($s->my_link));
+                    if ($socialLinks->isEmpty()) {
+                        $socialLinks = \App\Models\ContentDetails::with('content')
+                            ->whereHas('content', fn($q) => $q->where('name', 'social'))
+                            ->where('language_id', 1)
+                            ->get()
+                            ->map(fn($d) => is_string($d->description) ? json_decode($d->description) : $d->description)
+                            ->filter(fn($s) => $s && !empty($s->my_link));
+                    }
+                @endphp
+                <div class="footer-social">
+                    @foreach($socialLinks as $social)
+                        @php
+                            $href = trim((string) ($social->my_link ?? ''));
+                            $icon = trim((string) ($social->icon ?? ''));
+                            $icon = preg_replace('/\b(fa-light|fal)\b/', 'fa-solid', $icon);
+                            $isEmail = str_starts_with($href, 'mailto:');
+                        @endphp
+                        @continue($href === '')
+                        <a href="{{ $href }}"
+                           class="social-link"
+                           {{ $isEmail ? '' : 'target="_blank" rel="noopener"' }}>
+                            <i class="{{ $icon !== '' ? $icon : 'fa-solid fa-link' }}"></i>
+                        </a>
+                    @endforeach
+                </div>
             </div>
         </div>
 
         <div class="footer-links">
             <div class="footer-column">
-                <h5 class="footer-column-title">Сервис</h5>
+                <h4 class="footer-column-title">Навигация</h4>
                 <ul class="footer-column-list">
-                    <li><a href="{{ route('home') }}#exchange">Обмен</a></li>
-                    <li><a href="{{ route('home') }}#rates">Курсы</a></li>
-                    <li><a href="{{ route('home') }}#reserves">Резервы</a></li>
-                    <li><a href="#">Статус</a></li>
+                    <li><a href="{{ url('/#exchange') }}">Обмен</a></li>
+                    <li><a href="{{ url('/#rates') }}">Курсы</a></li>
+                    <li><a href="{{ url('/#reserves') }}">Резервы</a></li>
+                    <li><a href="{{ url('/#how') }}">Как работает</a></li>
+                    <li><a href="{{ url('/#faq') }}">FAQ</a></li>
                 </ul>
             </div>
-
             <div class="footer-column">
-                <h5 class="footer-column-title">Поддержка</h5>
+                <h4 class="footer-column-title">Поддержка</h4>
                 <ul class="footer-column-list">
-                    <li><a href="{{ route('home') }}#faq">FAQ</a></li>
+                    <li><a href="{{ url('tracking') }}">Отследить заявку</a></li>
                     <li><a href="{{ route('contact') }}">Контакты</a></li>
-                    <li><a href="#">Чат</a></li>
-                    <li><a href="#">Telegram-канал</a></li>
+                    <li><a href="{{ route('page', ['slug' => 'terms']) }}">Условия использования</a></li>
+                    <li><a href="{{ route('page', ['slug' => 'privacy']) }}">Политика конфиденциальности</a></li>
                 </ul>
             </div>
-
             <div class="footer-column">
-                <h5 class="footer-column-title">Юридическое</h5>
-                <ul class="footer-column-list">
-                    <li><a href="#">Условия использования</a></li>
-                    <li><a href="#">Политика конфиденциальности</a></li>
-                    <li><a href="#">AML-политика</a></li>
-                    <li><a href="#">KYC-политика</a></li>
-                    <li><a href="#">Cookies</a></li>
-                </ul>
+                <h4 class="footer-column-title">Контакты</h4>
+                <a href="mailto:support@solidchange.online" class="contact-item">
+                    <i class="fa-solid fa-envelope"></i>
+                    <span>support@solidchange.online</span>
+                </a>
+                <a href="https://t.me/solidchange" class="contact-item" target="_blank" rel="noopener">
+                    <i class="fa-brands fa-telegram"></i>
+                    <span>@solidchange</span>
+                </a>
             </div>
-
             <div class="footer-column">
-                <h5 class="footer-column-title">Контакты</h5>
-                @if(isset($extraInfo['contact'][0]->description))
-                <ul class="footer-column-list">
-                    <li class="contact-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                            <circle cx="12" cy="10" r="3"></circle>
-                        </svg>
-                        {{@$extraInfo['contact'][0]->description->address}}
-                    </li>
-                    <li class="contact-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                            <polyline points="22,6 12,13 2,6"></polyline>
-                        </svg>
-                        {{@$extraInfo['contact'][0]->description->email}}
-                    </li>
-                    <li class="contact-item">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                        </svg>
-                        {{@$extraInfo['contact'][0]->description->phone}}
-                    </li>
-                </ul>
-                @endif
-
-                @if(isset($extraInfo['social']) && count($extraInfo['social']) > 0)
-                <div class="footer-social">
-                    @foreach($extraInfo['social'] as $social)
-                        @php
-                            $socialHref = trim((string) (@$social->content->media->my_link ?? ''));
-                            $socialIcon = trim((string) (@$social->content->media->icon ?? ''));
-                            $socialIcon = preg_replace('/\b(fa-light|fal)\b/', 'fa-solid', $socialIcon);
-                            $socialIsEmail = str_starts_with($socialHref, 'mailto:');
-                        @endphp
-                        @continue($socialHref === '')
-                        <a href="{{ $socialHref }}" class="social-link" {!! $socialIsEmail ? '' : 'target="_blank" rel="noopener"' !!}>
-                            <i class="{{ $socialIcon !== '' ? $socialIcon : 'fa-solid fa-link' }}"></i>
-                        </a>
-                    @endforeach
-                </div>
-                @endif
+                <h4 class="footer-column-title">Подписка</h4>
+                <p class="newsletter-text">Получайте новости о курсах и акциях</p>
+                <form class="newsletter-form" action="{{ route('subscribe') }}" method="post">
+                    @csrf
+                    <input type="email" name="email" class="newsletter-input" placeholder="Ваш email" required>
+                    <button type="submit" class="newsletter-button">Подписаться</button>
+                </form>
             </div>
         </div>
 
         <div class="footer-bottom">
             <div class="footer-disclaimer">
-                <p><strong>Дисклеймер.</strong> Криптовалюты — высокорисковый актив. Курс может меняться значительно и быстро. Используя сервис, вы подтверждаете, что осознаёте риски и соглашаетесь с условиями использования и AML-политикой.</p>
+                <p><strong>Риск-уведомление:</strong> Криптовалюты являются высокорисковым активом. Инвестируйте ответственно.</p>
             </div>
-
             <div class="footer-copyright">
-                <p>© {{ date('Y') }} SolidChange. Все права защищены.</p>
+                <p>&copy; {{ date('Y') }} SolidChange. Все права защищены.</p>
                 <div class="footer-meta">
-                    @if(isset($languages))
                     <div class="footer-language">
-                        @foreach($languages as $item)
-                        <a href="{{ route('language', ['locale' => $item->short_name, 'redirect' => request()->getRequestUri()]) }}" class="language-link">
-                            {{ strtoupper($item->short_name) }}
-                        </a>
-                        @endforeach
+                        <a href="{{ route('language', ['locale' => 'ru', 'redirect' => request()->getRequestUri()]) }}" class="language-link">RU</a>
+                        <a href="{{ route('language', ['locale' => 'en', 'redirect' => request()->getRequestUri()]) }}" class="language-link">EN</a>
                     </div>
-                    @endif
                 </div>
             </div>
         </div>
