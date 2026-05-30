@@ -81,10 +81,10 @@ class KycController extends Controller
             ]);
 
             if (!$kyc) {
-                throw new Exception('something went wrong, Please try again');
+                throw new Exception('что-то пошло не так, пожалуйста, попробуйте снова');
             }
 
-            return back()->with('success', 'KYC Store successfully');
+            return back()->with('success', 'KYC успешно сохранено');
 
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -95,7 +95,7 @@ class KycController extends Controller
     {
         try {
             $data['kyc'] = Kyc::where('id', $id)->firstOr(function () {
-                throw new Exception('No KYC found.');
+                throw new Exception('KYC не найдено.');
             });
 
             return view('admin.kyc.edit', $data);
@@ -150,7 +150,7 @@ class KycController extends Controller
             $providerSettings = [];
 
             $kyc = Kyc::where('id', $id)->firstOr(function () {
-                throw new Exception('No KYC found.');
+                throw new Exception('KYC не найдено.');
             });
 
             $kyc->update([
@@ -163,10 +163,10 @@ class KycController extends Controller
             ]);
 
             if (!$kyc) {
-                throw new Exception('Something went wrong');
+                throw new Exception('Что-то пошло не так');
             }
 
-            return back()->with('success', 'KYC updated successfully');
+            return back()->with('success', 'KYC успешно обновлено');
 
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -293,7 +293,7 @@ class KycController extends Controller
     {
         try {
             $data['userKyc'] = UserKyc::with('user')->where('id', $id)->firstOr(function () {
-                throw new Exception('No KYC found.');
+                throw new Exception('KYC не найдено.');
             });
             return view('admin.kyc.view', $data);
         } catch (Exception $exception) {

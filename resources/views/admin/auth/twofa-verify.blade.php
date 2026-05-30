@@ -11,7 +11,7 @@
     <div class="admin-logo">
         <img src="{{ getFile(basicControl()->admin_logo_driver, basicControl()->admin_logo, true) }}" alt="{{ basicControl()->site_title }}" style="width:64px;height:64px;object-fit:contain;border-radius:12px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
         <h3>SolidChange</h3>
-        <p>Admin 2FA Verification</p>
+        <p>Админ 2FA подтверждение</p>
     </div>
 
     <div class="admin-transition-note" style="margin-bottom: 24px; padding: 16px; border: 1px solid var(--solidus-border); border-radius: 14px; background: rgba(18, 9, 13, 0.72);">

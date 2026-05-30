@@ -36,7 +36,7 @@
                                             <div class="flex-shrink-0">
                                                 <img class="avatar avatar-xs avatar-4x3 list-group-icon"
                                                      src="{{ asset('assets/admin/plugin/tawk.png') }}"
-                                                     alt="Plugin Image">
+                                                     alt="Изображение плагина">
                                             </div>
 
                                             <div class="flex-grow-1 ms-3">
@@ -63,7 +63,7 @@
                                             <div class="flex-shrink-0">
                                                 <img class="avatar avatar-xs avatar-4x3 list-group-icon"
                                                      src="{{ asset('assets/admin/plugin/messenger.png') }}"
-                                                     alt="FB Image">
+                                                     alt="Изображение FB">
                                             </div>
                                             <div class="flex-grow-1 ms-3">
                                                 <div class="row align-items-center">
@@ -89,7 +89,7 @@
                                             <div class="flex-shrink-0">
                                                 <img class="avatar avatar-xs avatar-4x3 list-group-icon"
                                                      src="{{ asset('assets/admin/plugin/reCaptcha.png') }}"
-                                                     alt="Plugin Image">
+                                                     alt="Изображение плагина">
                                             </div>
                                             <div class="flex-grow-1 ms-3">
                                                 <div class="row align-items-center">
@@ -128,7 +128,7 @@
                                             <div class="flex-shrink-0">
                                                 <img class="avatar avatar-xs avatar-4x3 list-group-icon"
                                                      src="{{ asset('assets/admin/plugin/manual_recaptcha.svg') }}"
-                                                     alt="Google Analytics Image">
+                                                     alt="Изображение Google Analytics">
                                             </div>
                                             <div class="flex-grow-1 ms-3">
                                                 <div class="row align-items-center">
@@ -167,7 +167,7 @@
                                             <div class="flex-shrink-0">
                                                 <img class="avatar avatar-xs avatar-4x3 list-group-icon"
                                                      src="{{ asset('assets/admin/plugin/analytics.png') }}"
-                                                     alt="Google Analytics Image">
+                                                     alt="Изображение Google Analytics">
                                             </div>
                                             <div class="flex-grow-1 ms-3">
                                                 <div class="row align-items-center">

@@ -23,10 +23,10 @@
                 <div class="flex-shrink-0">
                     <img class="avatar avatar-xl"
                          src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                         alt="Image Description" data-hs-theme-appearance="default">
+                         alt="Описание изображения" data-hs-theme-appearance="default">
                     <img class="avatar avatar-xl"
                          src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                         alt="Image Description" data-hs-theme-appearance="dark">
+                         alt="Описание изображения" data-hs-theme-appearance="dark">
                 </div>
 
                 <div class="flex-grow-1 ms-3">
@@ -71,7 +71,7 @@
                                                         <div class="avatar avatar-circle">
                                                             <img class="avatar-img"
                                                                  src="{{ getFile($method->driver, $method->image) }}"
-                                                                 alt="Image Description">
+                                                                 alt="Описание изображения">
                                                         </div>
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">

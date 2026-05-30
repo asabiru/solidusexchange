@@ -188,7 +188,7 @@
                         $('#supported_currency').append(markup);
                     }
 
-                    let markup = '<option value="">Selected Currency</option>';
+                    let markup = '<option value="">Выбранная валюта</option>';
                     $('#supported_currency').append(markup);
 
                     $(data).each(function (index, value) {

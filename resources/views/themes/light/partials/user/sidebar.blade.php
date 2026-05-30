@@ -97,7 +97,7 @@
             </div>
             <a href="{{ route('logout') }}"
                onclick="event.preventDefault(); document.getElementById('sb-logout').submit();"
-               class="sidebar-logout-btn" title="Sign out">
+               class="sidebar-logout-btn" title="Выйти">
                 <i class="fa-light fa-right-from-bracket"></i>
             </a>
             <form id="sb-logout" action="{{ route('logout') }}" method="POST" class="d-none">@csrf</form>

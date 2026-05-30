@@ -334,7 +334,7 @@ class HomeController extends Controller
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
         if (($kyc->provider ?? 'manual') === 'amlbot') {
-            return back()->with('error', 'This verification method is started through AMLBot widget.');
+            return back()->with('error', 'Этот метод верификации запускается через виджет AMLBot.');
         }
         try {
             $params = $kyc->input_form;
@@ -403,7 +403,7 @@ class HomeController extends Controller
                 $userKycManager->refreshUserVerificationStatus(auth()->user()->fresh());
             }
 
-            return back()->with('success', 'KYC Sent Successfully');
+            return back()->with('success', 'KYC успешно отправлено');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

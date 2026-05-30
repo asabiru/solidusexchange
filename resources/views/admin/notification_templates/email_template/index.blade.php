@@ -94,9 +94,9 @@
                                 @empty
                                 <tr>
                                     <div class="text-center p-4">
-                                        <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
-                                        <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
-                                        <p class="mb-0">@lang("No data to show")</p>
+                                        <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
+                                        <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
+                                        <p class="mb-0">@lang("Нет данных для отображения")</p>
                                     </div>
                                 </tr>
                                 @endforelse
@@ -178,9 +178,9 @@
             HSCore.components.HSDatatables.init($('#datatable'), {
                 language: {
                     zeroRecords: `<div class="text-center p-4">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
-                    <p class="mb-0">No data to show</p>
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
+                    <p class="mb-0">Нет данных для отображения</p>
                     </div>`,
                 },
             })

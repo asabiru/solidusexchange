@@ -147,10 +147,10 @@
                         <div class="card-body card-body-height text-center">
                             <img class="avatar avatar-xxl mb-3"
                                  src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                 alt="Image Description" data-hs-theme-appearance="default"/>
+                                 alt="Описание изображения" data-hs-theme-appearance="default"/>
                             <img class="avatar avatar-xxl mb-3"
                                  src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                 alt="Image Description" data-hs-theme-appearance="dark"/>
+                                 alt="Описание изображения" data-hs-theme-appearance="dark"/>
                             <p class="card-text">@lang('No data to show')</p>
                         </div>
                     @endif

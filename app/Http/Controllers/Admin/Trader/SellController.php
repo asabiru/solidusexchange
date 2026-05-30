@@ -80,7 +80,7 @@ class SellController extends Controller
 
         $this->sendUserNotification($sell, 'userSell', 'SELL_COMPLETE');
 
-        return back()->with('success', 'Sell completed successfully.');
+        return back()->with('success', 'Продажа успешно завершена.');
     }
 
     public function cancel($utr)
@@ -95,7 +95,7 @@ class SellController extends Controller
 
         $this->sendUserNotification($sell, 'userSell', 'SELL_CANCEL');
 
-        return back()->with('success', 'Sell cancelled successfully.');
+        return back()->with('success', 'Продажа успешно отменена.');
     }
 
     private function getAssignedSell(string $utr, ?int $status = null): SellRequest

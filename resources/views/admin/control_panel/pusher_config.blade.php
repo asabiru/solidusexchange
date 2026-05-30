@@ -33,15 +33,15 @@
                                 @csrf
                                 <div class="row mb-4">
                                     <div class="col-sm-6">
-                                        <label for="pusherAppIdLabel" class="form-label">@lang('Pusher App Id')</label>
+                                        <label for="pusherAppIdLabel" class="form-label">@lang('Pusher App ID')</label>
                                         <input
                                             type="text"
                                             class="form-control @error('pusher_app_id') is-invalid @enderror"
                                             name="pusher_app_id"
                                             id="pusherAppIdLabel"
                                             autocomplete="off"
-                                            placeholder="Pusher App Id"
-                                            aria-label="Pusher App Id"
+                                            placeholder="Pusher App ID"
+                                            aria-label="Pusher App ID"
                                             value="{{ old('pusher_app_id', $pusherAppId) }}"
                                         />
                                         @error('pusher_app_id')

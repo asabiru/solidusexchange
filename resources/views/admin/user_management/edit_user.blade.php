@@ -110,7 +110,7 @@
                             <div class="profile-cover-img-wrapper">
                                 <img id="profileCoverImg" class="profile-cover-img"
                                      src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                     alt="Image Description">
+                                     alt="Описание изображения">
                             </div>
                         </div>
 
@@ -125,10 +125,10 @@
                                     <div class="col-sm-9">
                                         <div class="input-group input-group-sm-vertical">
                                             <input type="text" class="form-control" name="firstName" id="firstNameLabel"
-                                                   placeholder="First name" aria-label="First name"
+                                                   placeholder="Имя" aria-label="Имя"
                                                    value="{{ old('firstName', $user->firstname) }}" autocomplete="off">
                                             <input type="text" class="form-control" name="lastName" id="lastNameLabel"
-                                                   placeholder="Last name" aria-label="Last name"
+                                                   placeholder="Фамилия" aria-label="Фамилия"
                                                    value="{{ old('lastName', $user->lastname) }}" autocomplete="off">
                                         </div>
                                         @error('firstName')
@@ -164,7 +164,7 @@
                                                 @forelse($allCountry as $country)
                                                     <option value="{{ $country['name'] }}"
                                                             {{ $country['name'] == $user->country ? 'selected' : '' }}
-                                                            data-option-template='<span class="d-flex align-items-center"><img class="avatar avatar-xss avatar-circle me-2" src="{{ asset($country['flag']) }}" alt="Afghanistan Flag" /><span class="text-truncate">{{ $country['name'] }}</span></span>'>
+                                                            data-option-template='<span class="d-flex align-items-center"><img class="avatar avatar-xss avatar-circle me-2" src="{{ asset($country['flag']) }}" alt="Флаг Афганистана" /><span class="text-truncate">{{ $country['name'] }}</span></span>'>
                                                         @lang($country['name'])
                                                     </option>
                                                 @empty
@@ -185,7 +185,7 @@
                                                        value="{{ old('state', $user->state) }}">
 
                                                 <input type="text" class="js-input-mask form-control" name="zipCode"
-                                                       id="zipCodeLabel" placeholder="Zip code" aria-label="Zip code"
+                                                       id="zipCodeLabel" placeholder="Индекс" aria-label="Индекс"
                                                        value="{{ old('zipCode', $user->zip_code) }}" autocomplete="off">
                                             </div>
                                             @error('city')
@@ -207,7 +207,7 @@
                                         @lang('Address line 1')</label>
                                     <div class="col-sm-9">
                                         <input type="text" class="form-control" name="address"
-                                               id="addressLine1Label" placeholder="Address One"
+                                               id="addressLine1Label" placeholder="Адрес 1"
                                                aria-label="Your address"
                                                value="{{ old('address', $user->address) }}" autocomplete="off">
                                         @error('address')
@@ -224,8 +224,8 @@
                                         <span class="form-label-secondary">(@lang("Optional"))</span></label>
                                     <div class="col-sm-9">
                                         <input type="text" class="form-control" name="addressTwo"
-                                               id="addressLine2Label" placeholder="Address Two"
-                                               aria-label="Address Two"
+                                               id="addressLine2Label" placeholder="Адрес 2"
+                                               aria-label="Адрес 2"
                                                value="{{ old('addressTwo', $user->address_two) }}" autocomplete="off">
                                         @error('addressTwo')
                                         <span class="invalid-feedback d-block">{{ $message }}</span>

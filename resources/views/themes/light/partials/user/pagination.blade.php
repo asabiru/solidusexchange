@@ -30,7 +30,7 @@
                         @foreach ($element as $page => $url)
                             @if ($page == $paginator->currentPage())
                                 <li class="page-item active">
-                                    <a href="#" class="page-link">{{ $page }}<span class="sr-only">(current)</span></a>
+                                    <a href="#" class="page-link">{{ $page }}<span class="sr-only">(текущий)</span></a>
                                 </li>
                             @else
                                 <li class="page-item">

@@ -171,7 +171,7 @@ class SellController extends Controller
     public function sellDelete($id)
     {
         SellRequest::findOrFail($id)->delete($id);
-        return back()->with('success', 'Sell Crypto Deleted Successfully');
+        return back()->with('success', 'Продажа крипты успешно удалена');
     }
 
     public function sellMultipleDelete(Request $request)
@@ -215,7 +215,7 @@ class SellController extends Controller
         BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Sell',
             $sell->id, SellRequest::class, $sell->user_id, $sell->send_amount, optional($sell->sendCurrency)->code);
 
-        return back()->with('success', 'Sell deposit confirmed successfully.');
+        return back()->with('success', 'Депозит продажи успешно подтверждён.');
     }
 
     public function sellSend($utr)
@@ -229,7 +229,7 @@ class SellController extends Controller
             $sell->id, SellRequest::class, $sell->user_id, $sell->final_amount, optional($sell->getCurrency)->code);
 
         $this->sendUserNotification($sell, 'userSell', 'SELL_COMPLETE');
-        return back()->with('success', 'Sell Complete Successfully');
+        return back()->with('success', 'Продажа успешно завершена');
     }
 
     public function sellCancel($utr)
@@ -241,7 +241,7 @@ class SellController extends Controller
         $sell->status = 5;
         $sell->save();
         $this->sendUserNotification($sell, 'userSell', 'SELL_CANCEL');
-        return back()->with('success', 'Sell Cancel Successfully');
+        return back()->with('success', 'Продажа успешно отменена');
     }
 
 }

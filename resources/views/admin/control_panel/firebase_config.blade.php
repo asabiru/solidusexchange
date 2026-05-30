@@ -123,11 +123,11 @@
                                     </div>
                                     <div class="col-sm-6">
                                         <label for="projectIdLabel"
-                                               class="form-label">@lang('Project Id')</label>
+                                               class="form-label">@lang('ID проекта')</label>
                                         <input type="text"
                                                class="form-control  @error('project_id') is-invalid @enderror"
                                                name="project_id" id="projectIdLabel"
-                                               placeholder="Project Id" aria-label="Project Id"
+                                               placeholder="ID проекта" aria-label="ID проекта"
                                                value="{{ old('project_id', $firebaseNotify['projectId']) }}">
                                         @error('project_id')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -138,11 +138,11 @@
                                 <div class="row mb-3">
                                     <div class="col-sm-6">
                                         <label for="storageBucketLabel"
-                                               class="form-label">@lang('Storage Bucket')</label>
+                                               class="form-label">@lang('Корзина хранения')</label>
                                         <input type="text"
                                                class="form-control  @error('storage_bucket') is-invalid @enderror"
                                                name="storage_bucket" id="storageBucketLabel"
-                                               placeholder="Storage Bucket" aria-label="Storage Bucket"
+                                               placeholder="Корзина хранения" aria-label="Корзина хранения"
                                                value="{{ old('storage_bucket', $firebaseNotify['storageBucket']) }}">
                                         @error('storage_bucket')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -151,11 +151,11 @@
 
                                     <div class="col-sm-6">
                                         <label for="messagingSenderIdLabel"
-                                               class="form-label">@lang('Messaging Sender Id')</label>
+                                               class="form-label">@lang('ID отправителя сообщений')</label>
                                         <input type="text"
                                                class="form-control  @error('messaging_sender_id') is-invalid @enderror"
                                                name="messaging_sender_id" id="messagingSenderIdLabel"
-                                               placeholder="Messaging Sender Id" aria-label="Messaging Sender Id"
+                                               placeholder="ID отправителя сообщений" aria-label="ID отправителя сообщений"
                                                value="{{ old('messaging_sender_id', $firebaseNotify['messagingSenderId']) }}">
                                         @error('messaging_sender_id')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -166,11 +166,11 @@
                                 <div class="row mb-3">
                                     <div class="col-sm-6">
                                         <label for="appIdLabel"
-                                               class="form-label">@lang('App Id')</label>
+                                               class="form-label">@lang('App ID')</label>
                                         <input type="text"
                                                class="form-control  @error('app_id') is-invalid @enderror"
                                                name="app_id" id="appIdLabel"
-                                               placeholder="App Id" aria-label="App Id"
+                                               placeholder="App ID" aria-label="App ID"
                                                value="{{ old('app_id', $firebaseNotify['appId']) }}">
                                         @error('app_id')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -179,11 +179,11 @@
 
                                     <div class="col-sm-6">
                                         <label for="MeasurementId"
-                                               class="form-label">@lang('Measurement Id')</label>
+                                               class="form-label">@lang('ID измерения')</label>
                                         <input type="text"
                                                class="form-control  @error('measurement_id') is-invalid @enderror"
                                                name="measurement_id" id="MeasurementId"
-                                               placeholder="Measurement Id" aria-label="Measurement Id"
+                                               placeholder="ID измерения" aria-label="ID измерения"
                                                value="{{ old('measurement_id', $firebaseNotify['measurementId']) }}">
                                         @error('measurement_id')
                                         <span class="invalid-feedback">{{ $message }}</span>

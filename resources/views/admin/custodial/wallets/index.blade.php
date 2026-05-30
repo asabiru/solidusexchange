@@ -16,7 +16,7 @@
                 <div class="col-sm-auto">
                     <div class="d-inline-flex align-items-center me-3 mb-2 mb-sm-0">
                         <span id="walletLiveStatusDot" class="badge bg-soft-success text-success me-2">Live</span>
-                        <small class="text-muted">Last sync: <span id="walletLiveLastSync">—</span></small>
+                        <small class="text-muted">Последняя синхронизация: <span id="walletLiveLastSync">—</span></small>
                     </div>
                     <form action="{{ route('admin.custodialCheckAllBalances') }}" method="POST" class="d-inline">
                         @csrf
@@ -56,7 +56,7 @@
                             <th>Status</th>
                             <th>Assignment</th>
                             <th>Balance</th>
-                            <th>Last Deposit</th>
+                            <th>Последний депозит</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -73,12 +73,12 @@
                 @csrf
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title">Generate HD Wallet</h5>
+                        <h5 class="modal-title">Сгенерировать HD-кошелёк</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label">Currency Code</label>
+                            <label class="form-label">Код валюты</label>
                             <select name="currency_code" class="form-select" required>
                                 <option value="USDT_TRC20">USDT (TRC20)</option>
                                 <option value="USDT">USDT (ERC20)</option>

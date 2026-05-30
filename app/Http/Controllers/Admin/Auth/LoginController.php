@@ -78,7 +78,7 @@ class LoginController extends Controller
             return $this->sendLoginResponse($request);
         } else {
             return redirect()->route('admin.login')
-                ->with('error', 'Email-Address And Password Are Wrong.');
+                ->with('error', 'Email и пароль неверны.');
         }
 
     }
@@ -150,7 +150,7 @@ class LoginController extends Controller
     {
         if ($user->status == 0) {
             $this->guard()->logout();
-            return redirect()->route('admin.login')->with('error', 'You are banned from this application. Please contact with system Administrator.');
+            return redirect()->route('admin.login')->with('error', 'Вы заблокированы в этом приложении. Пожалуйста, свяжитесь с администратором.');
         }
 
         $user->last_login = Carbon::now();

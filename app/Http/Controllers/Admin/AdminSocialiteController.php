@@ -59,7 +59,7 @@ class AdminSocialiteController extends Controller
 			fclose($fp);
 
 			Artisan::call('optimize:clear');
-			return back()->with('success', 'Successfully Updated');
+			return back()->with('success', 'Успешно обновлено');
 		}
 	}
 

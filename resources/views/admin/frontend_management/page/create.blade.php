@@ -24,10 +24,10 @@
                 <div class="flex-shrink-0">
                     <img class="avatar avatar-xl alert_image"
                          src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                         alt="Image Description" data-hs-theme-appearance="default">
+                         alt="Описание изображения" data-hs-theme-appearance="default">
                     <img class="avatar avatar-xl alert_image"
                          src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                         alt="Image Description" data-hs-theme-appearance="dark">
+                         alt="Описание изображения" data-hs-theme-appearance="dark">
                 </div>
 
                 <div class="flex-grow-1 ms-3">

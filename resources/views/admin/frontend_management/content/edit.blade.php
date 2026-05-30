@@ -82,7 +82,7 @@
                                                                    class="js-flatpickr form-control flatpickr-custom @error($name.'.'.$language->id) is-invalid @enderror"
                                                                    name="{{ $name }}[{{ $language->id }}]"
                                                                    value="{{ old($name.'.'.$language->id, isset($multipleContentData[$language->id]) ? @$multipleContentData[$language->id][0]->content->media->{$name} : '') }}"
-                                                                   placeholder="Select dates"
+                                                                   placeholder="Выберите даты"
                                                                    data-hs-flatpickr-options='{
                                                                      "dateFormat": "d/m/Y",
                                                                      "enableTime": false
@@ -160,12 +160,12 @@
                                                                 <img id="contentImg"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ getFile(@$multipleContentData[$language->id][0]->content->media->{$name}->driver, @$multipleContentData[$language->id][0]->content->media->{$name}->path, true) }}"
-                                                                     alt="Image Description"
+                                                                     alt="Описание изображения"
                                                                      data-hs-theme-appearance="default">
                                                                 <img id="contentImg"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ getFile(@$multipleContentData[$language->id][0]->content->media->{$name}->driver, @$multipleContentData[$language->id][0]->content->media->{$name}->path, true) }}"
-                                                                     alt="Image Description"
+                                                                     alt="Описание изображения"
                                                                      data-hs-theme-appearance="dark">
                                                                 <span
                                                                     class="d-block">@lang("Browse your file here")</span>

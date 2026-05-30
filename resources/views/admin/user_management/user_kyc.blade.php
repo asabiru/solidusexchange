@@ -62,8 +62,8 @@
                                                                           "dropdownWidth": "10rem"
                                                                         }'>
                                                                         <option value="all"
-                                                                                data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-secondary"></span>All Status</span>'>
-                                                                            @lang('All Status')
+                                                                                data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-secondary"></span>Все статусы</span>'>
+                                                                            @lang('Все статусы')
                                                                         </option>
                                                                         <option value="0"
                                                                                 data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-warning"></span>Pending</span>'>
@@ -88,7 +88,7 @@
                                                                 <div class="input-group mb-3 custom">
                                                                     <input type="text" id="filter_date_range"
                                                                            class="js-flatpickr form-control"
-                                                                           placeholder="Select dates"
+                                                                           placeholder="Выберите даты"
                                                                            data-hs-flatpickr-options='{
                                                                  "dateFormat": "d/m/Y",
                                                                  "mode": "range"
@@ -247,9 +247,9 @@
 
                 language: {
                     zeroRecords: `<div class="text-center p-4">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
-                    <p class="mb-0">No data to show</p>
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
+                    <p class="mb-0">Нет данных для отображения</p>
                     </div>`,
                     processing: `<div><div></div><div></div><div></div><div></div></div>`
                 },

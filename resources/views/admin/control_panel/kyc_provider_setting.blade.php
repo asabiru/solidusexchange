@@ -46,7 +46,7 @@
                             <div class="row mb-4">
                                 <label class="col-sm-4 col-form-label form-label" for="amlbot_api_key">@lang('API Key')</label>
                                 <div class="col-sm-8">
-                                    <input type="text" class="form-control @error('amlbot_api_key') is-invalid @enderror" name="amlbot_api_key" id="amlbot_api_key" value="{{ old('amlbot_api_key', $basicControl->amlbot_api_key ?? '') }}" autocomplete="off" placeholder="Paste your AMLBot API key here">
+                                    <input type="text" class="form-control @error('amlbot_api_key') is-invalid @enderror" name="amlbot_api_key" id="amlbot_api_key" value="{{ old('amlbot_api_key', $basicControl->amlbot_api_key ?? '') }}" autocomplete="off" placeholder="Вставьте ваш AMLBot API ключ здесь">
                                     <small class="text-muted">@lang('Obtain your API key from your AMLBot dashboard at amlbot.com.')</small>
                                     @error('amlbot_api_key')
                                     <span class="invalid-feedback">{{ $message }}</span>

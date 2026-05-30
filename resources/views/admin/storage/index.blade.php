@@ -48,7 +48,7 @@
                                             <div class="d-flex align-items-center">
                                                 <div class="flex-shrink-0">
                                                     <div class="avatar avatar-sm avatar-circle">
-                                                        <img class="avatar-img" src="{{ getFile($item->driver,$item->logo) }}" alt="Image Description">
+                                                        <img class="avatar-img" src="{{ getFile($item->driver,$item->logo) }}" alt="Описание изображения">
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">
@@ -103,10 +103,10 @@
                                             <div class="text-center p-4">
                                                 <img class="mb-3 dataTables-image"
                                                      src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                                     alt="Image Description" data-hs-theme-appearance="default">
+                                                     alt="Описание изображения" data-hs-theme-appearance="default">
                                                 <img class="mb-3 dataTables-image"
                                                      src="{{ asset('assets/admin/img/oc-error-light.svg') }}"
-                                                     alt="Image Description" data-hs-theme-appearance="dark">
+                                                     alt="Описание изображения" data-hs-theme-appearance="dark">
                                                 <p class="mb-0">@lang("No data to show")</p>
                                             </div>
                                         </td>

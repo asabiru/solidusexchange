@@ -110,7 +110,7 @@ class LoginController extends Controller
             if (Auth::attempt([$this->username() => $request->username, 'password' => $request->password])) {
                 return $this->sendLoginResponse($request);
             } else {
-                return back()->with('error', 'You are banned from this application. Please contact with system Administrator.');
+                return back()->with('error', 'Вы заблокированы в этом приложении. Пожалуйста, свяжитесь с администратором.');
             }
         }
         $this->incrementLoginAttempts($request);

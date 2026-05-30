@@ -113,8 +113,8 @@
                         <div class="input-group-prepend input-group-text">
                             <i class="bi-search"></i>
                         </div>
-                        <input id="datatableSearch" type="search" class="form-control" placeholder="Search users"
-                               aria-label="Search users" autocomplete="off">
+                        <input id="datatableSearch" type="search" class="form-control" placeholder="Поиск пользователей"
+                               aria-label="Поиск пользователей" autocomplete="off">
                     </div>
                 </div>
 
@@ -368,9 +368,9 @@
                 },
                 language: {
                     zeroRecords: `<div class="text-center p-4">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
-                    <p class="mb-0">No data to show</p>
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
+                    <p class="mb-0">Нет данных для отображения</p>
                     </div>`,
                     processing: `<div><div></div><div></div><div></div><div></div></div>`
                 },

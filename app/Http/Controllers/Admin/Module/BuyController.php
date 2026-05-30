@@ -177,7 +177,7 @@ class BuyController extends Controller
     public function buyDelete($id)
     {
         BuyRequest::findOrFail($id)->delete($id);
-        return back()->with('success', 'Buy Crypto Deleted Successfully');
+        return back()->with('success', 'Покупка крипты успешно удалена');
     }
 
     public function buyMultipleDelete(Request $request)
@@ -209,7 +209,7 @@ class BuyController extends Controller
         $buy = BuyRequest::findOrFail($id);
         $this->amlService->approveWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
 
-        return back()->with('success', 'Destination wallet approved by admin review.');
+        return back()->with('success', 'Кошелёк назначения одобрен после админской проверки.');
     }
 
     public function rejectWalletAml($id)
@@ -217,7 +217,7 @@ class BuyController extends Controller
         $buy = BuyRequest::findOrFail($id);
         $this->amlService->rejectWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
 
-        return back()->with('success', 'Destination wallet blocked by admin review.');
+        return back()->with('success', 'Кошелёк назначения заблокирован после админской проверки.');
     }
 
     public function buySend(Request $request, $utr)
@@ -242,7 +242,7 @@ class BuyController extends Controller
             $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($buy->cryptoMethod)->code . '\\Service';
             $data = $methodObj::withdrawCrypto($buy, $buy->final_amount, optional($buy->getCurrency)->code, $buy->destination_wallet, 'exchange');
             if (!$data) {
-                return back()->with('error', 'The automatic cryptocurrency send could not be executed.');
+                return back()->with('error', 'Автоматическая отправка криптовалюты не удалось выполнить.');
             }
         }
         $buy->status = 3;
@@ -253,7 +253,7 @@ class BuyController extends Controller
             $buy->id, BuyRequest::class, $buy->user_id, $buy->final_amount, optional($buy->getCurrency)->code);
 
         $this->sendUserNotification($buy, 'userBuy', 'BUY_COMPLETE');
-        return back()->with('success', 'Exchange Complete Successfully');
+        return back()->with('success', 'Обмен успешно завершён');
     }
 
     public function buyCancel($utr)
@@ -262,7 +262,7 @@ class BuyController extends Controller
         $buy->status = 5;
         $buy->save();
         $this->sendUserNotification($buy, 'userBuy', 'BUY_CANCEL');
-        return back()->with('success', 'Exchange Cancel Successfully');
+        return back()->with('success', 'Обмен успешно отменён');
     }
 
 }

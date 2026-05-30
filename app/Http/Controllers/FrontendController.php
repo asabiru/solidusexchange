@@ -236,7 +236,7 @@ class FrontendController extends Controller
         $subscribe->email = $purifiedData->email;
         $subscribe->save();
 
-        return back()->with('success', 'Subscribed successfully');
+        return back()->with('success', 'Подписка оформлена успешно');
     }
 
     public function contactSend(Request $request)
@@ -256,7 +256,7 @@ class FrontendController extends Controller
         $from = $email_from;
 
         Mail::to(basicControl()->sender_email)->send(new SendMail($from, $subject, $message));
-        return back()->with('success', 'Mail has been sent');
+        return back()->with('success', 'Письмо отправлено');
     }
 
     public function tracking(Request $request)

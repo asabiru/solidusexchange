@@ -42,7 +42,7 @@ class PusherConfigController extends Controller
            'in_app_notification' => $request->in_app_notification
         ]);
 
-        return back()->with('success', 'Pusher Configuration Successfully');
+        return back()->with('success', 'Pusher успешно настроен');
 
     }
 }

@@ -14,7 +14,7 @@ class GoogleAuthenticator
 
         // Valid secret lengths are 80 to 640 bits
         if ($secretLength < 16 || $secretLength > 128) {
-            throw new \Exception('Bad secret length');
+            throw new \Exception('Неверная длина секрета');
         }
         $secret = '';
         $rnd = false;
@@ -33,7 +33,7 @@ class GoogleAuthenticator
                 $secret .= $validChars[ord($rnd[$i]) & 31];
             }
         } else {
-            throw new \Exception('No source of secure random');
+            throw new \Exception('Нет источника безопасной случайности');
         }
 
         return $secret;

@@ -104,7 +104,7 @@ class UserProfileController extends Controller
                 $userProfile->email = $purifiedData->email;
 
                 $userProfile->save();
-                return back()->with('success', 'Profile Update Successfully');
+                return back()->with('success', 'Профиль успешно обновлён');
 
             } catch (\Exception $e) {
                 return back()->with('error', $e->getMessage());
@@ -151,7 +151,7 @@ class UserProfileController extends Controller
                 $user->in_app_key = $request->in_app_key;
             }
             $user->save();
-            return back()->with('success', 'Notification settings updated successfully');
+            return back()->with('success', 'Настройки уведомлений успешно обновлены');
         }
     }
 }

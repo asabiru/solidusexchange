@@ -37,12 +37,12 @@
 
                                 <div class="row mb-4">
                                     <label for="MEASUREMENT_ID"
-                                           class="col-sm-3 col-form-label form-label">@lang("MEASUREMENT ID")</label>
+                                           class="col-sm-3 col-form-label form-label">@lang("ID ИЗМЕРЕНИЯ")</label>
                                     <div class="col-sm-9">
                                         <input type="text"
                                                class="form-control @error('MEASUREMENT_ID') is-invalid @enderror"
                                                name="MEASUREMENT_ID" id="MEASUREMENT_ID"
-                                               placeholder="MEASUREMENT ID"
+                                               placeholder="ID ИЗМЕРЕНИЯ"
                                                value="{{ old('MEASUREMENT_ID',$basicControl->measurement_id) }}" autocomplete="off">
                                         @error('MEASUREMENT_ID')
                                         <span class="invalid-feedback">{{ $message }}</span>

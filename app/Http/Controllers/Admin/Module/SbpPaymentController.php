@@ -75,7 +75,7 @@ class SbpPaymentController extends Controller
     {
         $payment = SbpPayment::findOrFail($id);
         if ($payment->status !== 'paid') {
-            return back()->with('error', 'Payment is not in paid status');
+            return back()->with('error', 'Платёж не находится в статусе оплачен');
         }
 
         $payment->update([
@@ -91,14 +91,14 @@ class SbpPaymentController extends Controller
             }
         }
 
-        return back()->with('success', 'Payment confirmed');
+        return back()->with('success', 'Платёж подтверждён');
     }
 
     public function reject($id)
     {
         $payment = SbpPayment::findOrFail($id);
         $payment->update(['status' => 'rejected']);
-        return back()->with('success', 'Payment rejected');
+        return back()->with('success', 'Платёж отклонён');
     }
 
     /**

@@ -8,7 +8,7 @@
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb breadcrumb-no-gutter">
                             <li class="breadcrumb-item"><a class="breadcrumb-link" href="javascript:void(0)">@lang("Dashboard")</a></li>
-                            <li class="breadcrumb-item"><a class="breadcrumb-link" href="{{ route('admin.custodialWalletIndex') }}">Custodial Wallets</a></li>
+                            <li class="breadcrumb-item"><a class="breadcrumb-link" href="{{ route('admin.custodialWalletIndex') }}">Кастодиальные кошельки</a></li>
                             <li class="breadcrumb-item active" aria-current="page">@lang("Withdrawals")</li>
                         </ol>
                     </nav>

@@ -23,7 +23,7 @@
         <div class="modal-content">
             <div class="modal-header flex-column">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h3 class="modal-title" id="staticBackdropLabel">@lang('Select a currency')</h3>
+                    <h3 class="modal-title" id="staticBackdropLabel">@lang('Выберите валюту')</h3>
                     <button type="button" class="cmn-btn-close" data-bs-dismiss="modal" aria-label="Close">
                         <i class="fa-light fa-xmark"></i>
                     </button>
@@ -50,14 +50,14 @@
         <div class="modal-content">
             <div class="modal-header flex-column">
                 <div class="d-flex justify-content-between align-items-center">
-                    <h3 class="modal-title" id="staticBackdropLabel">Select a currency</h3>
+                    <h3 class="modal-title" id="staticBackdropLabel">Выберите валюту</h3>
                     <button type="button" class="cmn-btn-close" data-bs-dismiss="modal" aria-label="Close">
                         <i class="fa-light fa-xmark"></i>
                     </button>
                 </div>
                 <div class="search-box mt-10">
                     <input type="text" id="search-input2" onkeyup="filterItems2('search-input2')" class="form-control"
-                           placeholder="Search here...">
+                           placeholder="Поиск...">
                     <button type="submit" class="search-btn"><i class="far fa-search"></i></button>
                 </div>
             </div>

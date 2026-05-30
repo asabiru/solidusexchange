@@ -251,8 +251,8 @@
                     <div class="modal-body">
                         <div class="mb-4">
                             <input type="text" class="form-control" id="linkText" name="link_text"
-                                   placeholder="Button Name" autocomplete="off"
-                                   aria-label="Button Name">
+                                   placeholder="Название кнопки" autocomplete="off"
+                                   aria-label="Название кнопки">
                             @error("link_text")
                             <span class="invalid-feedback d-block">{{ $message }}</span>
                             @enderror
@@ -267,7 +267,7 @@
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-white" data-bs-dismiss="modal">Close</button>
-                        <button type="submit" class="btn btn-primary">Add Links</button>
+                        <button type="submit" class="btn btn-primary">Добавить ссылки</button>
                     </div>
                 </form>
             </div>

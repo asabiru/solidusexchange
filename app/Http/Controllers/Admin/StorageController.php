@@ -54,7 +54,7 @@ class StorageController extends Controller
                     $storageDriver = $image['driver'];
                 }
             } catch (\Exception $e) {
-                return back()->with('error', 'Image could not be uploaded');
+                return back()->with('error', 'Изображение не удалось загрузить');
             }
         }
 
@@ -67,7 +67,7 @@ class StorageController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception("Something went wrong, Please try again.");
+                throw new \Exception("Что-то пошло не так, пожалуйста, попробуйте снова.");
             }
 
             $this->envWrite($storage->code, $storage->parameters);
@@ -75,7 +75,7 @@ class StorageController extends Controller
             return back()->with("error", $e->getMessage());
         }
 
-        return back()->with('success', 'File Storage System Updated Successfully');
+        return back()->with('success', 'Система хранения файлов успешно обновлена');
 
     }
 
@@ -94,7 +94,7 @@ class StorageController extends Controller
                 ]);
             }
 
-            return back()->with('success', 'File system Set As Default Updated Successfully');
+            return back()->with('success', 'Файловая система по умолчанию успешно обновлена');
 
         } catch (\Exception $e) {
             return back()->with("error", $e->getMessage());

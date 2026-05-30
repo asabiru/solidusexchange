@@ -130,11 +130,11 @@ class CoinAnnounceController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Image could not be uploaded');
+                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
                 }
             }
             $announce->fill($fillData)->save();
-            return back()->with('success', 'Coin Announce Created Successfully');
+            return back()->with('success', 'Уведомление о монете успешно создано');
         }
     }
 
@@ -153,11 +153,11 @@ class CoinAnnounceController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Image could not be uploaded');
+                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
                 }
             }
             $announce->fill($fillData)->save();
-            return back()->with('success', 'Coin Announce Updated Successfully');
+            return back()->with('success', 'Уведомление о монете успешно обновлено');
         }
     }
 
@@ -178,7 +178,7 @@ class CoinAnnounceController extends Controller
         try {
             $announce = CoinAnnounce::findOrFail($id)->delete();
             $this->fileDelete($announce->driver, $announce->image);
-            return back()->with('success', 'Deleted Successfully');
+            return back()->with('success', 'Успешно удалено');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

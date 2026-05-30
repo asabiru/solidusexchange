@@ -94,7 +94,7 @@
                                                     <div class="flex-shrink-0">
                                                         <img class="avatar avatar-xs"
                                                              src="{{ asset('assets/admin/img/user-login.svg') }}"
-                                                             alt="Image Description">
+                                                             alt="Описание изображения">
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">
                                                         <div class="row align-items-center">
@@ -130,7 +130,7 @@
                                                     <div class="flex-shrink-0">
                                                         <img class="avatar avatar-xs"
                                                              src="{{ asset('assets/admin/img/user-login.svg') }}"
-                                                             alt="Image Description">
+                                                             alt="Описание изображения">
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">
                                                         <div class="row align-items-center">
@@ -166,7 +166,7 @@
                                                     <div class="flex-shrink-0">
                                                         <img class="avatar avatar-xs"
                                                              src="{{ asset('assets/admin/img/user-login.svg') }}"
-                                                             alt="Image Description">
+                                                             alt="Описание изображения">
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">
                                                         <div class="row align-items-center">

@@ -29,11 +29,11 @@ class PaymentController extends Controller
         try {
             $deposit = Deposit::with('user', 'depositable')->where(['trx_id' => $trx_id, 'status' => 0])->latest()->first();
             if (!$deposit) {
-                throw new Exception('Invalid Payment Request.');
+                throw new Exception('Недопустимый платёжный запрос.');
             }
             $gateway = Gateway::findOrFail($deposit->payment_method_id);
             if (!$gateway) {
-                throw new Exception('Invalid Payment Gateway.');
+                throw new Exception('Недопустимый платёжный шлюз.');
             }
 
             if (999 < $gateway->id) {
@@ -91,11 +91,11 @@ class PaymentController extends Controller
         try {
             $gateway = Gateway::where('code', $code)->first();
             if (!$gateway) {
-                throw new Exception('Invalid Payment Gateway.');
+                throw new Exception('Недопустимый платёжный шлюз.');
             }
             if (isset($trx)) {
                 $deposit = Deposit::with('user')->where('trx_id', $trx)->first();
-                if (!$deposit) throw new Exception('Invalid Payment Request.');
+                if (!$deposit) throw new Exception('Недопустимый платёжный запрос.');
             }
 
             $gatewayObj = 'App\\Services\\Gateway\\' . $code . '\\Payment';
@@ -121,10 +121,10 @@ class PaymentController extends Controller
         $data = Deposit::where('trx_id', $trx_id)->orderBy('id', 'DESC')->with(['gateway', 'user'])->first();
 
         if (is_null($data)) {
-            return redirect()->route('pricing')->with('error', 'Invalid Request');
+            return redirect()->route('pricing')->with('error', 'Недопустимый запрос');
         }
         if ($data->status != 0) {
-            return redirect()->route('pricing')->with('error', 'Invalid Request');
+            return redirect()->route('pricing')->with('error', 'Недопустимый запрос');
         }
 
         $params = optional($data->gateway)->parameters;

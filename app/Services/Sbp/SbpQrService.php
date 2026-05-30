@@ -190,7 +190,7 @@ class SbpQrService
     public function checkPaymentStatus(string $paymentId): array
     {
         if (!$this->isConfigured()) {
-            return ['status' => 'unknown', 'message' => 'API not configured'];
+            return ['status' => 'unknown', 'message' => 'API не настроен'];
         }
 
         try {
@@ -203,7 +203,7 @@ class SbpQrService
             ]);
 
             if (!$response->successful()) {
-                return ['status' => 'error', 'message' => 'API request failed'];
+                return ['status' => 'error', 'message' => 'Запрос API не удался'];
             }
 
             $data = $response->json();

@@ -38,14 +38,14 @@ class DepositController extends Controller
 
         $selectGateway = Gateway::where('id', $selectGateway)->where('status', 1)->first();
         if (!$selectGateway) {
-            return ['status' => false, 'message' => "Payment method not available for this transaction"];
+            return ['status' => false, 'message' => "Способ оплаты недоступен для этой транзакции"];
         }
 
         $selectedCurrency = array_search($selectedCurrency, $selectGateway->supported_currency);
         if ($selectedCurrency !== false) {
             $selectedPayCurrency = $selectGateway->supported_currency[$selectedCurrency];
         } else {
-            return ['status' => false, 'message' => "Please choose the currency you'd like to use for payment"];
+            return ['status' => false, 'message' => "Пожалуйста, выберите валюту'd like to use for payment"];
         }
 
         if ($selectGateway) {

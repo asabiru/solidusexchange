@@ -40,11 +40,11 @@
                                 @csrf
                                 <div class="row mb-4">
                                     <div class="col-sm-6">
-                                        <label for="mailFromLabel" class="form-label">@lang('Sender Email')</label>
+                                        <label for="mailFromLabel" class="form-label">@lang('Email отправителя')</label>
                                         <input type="email"
                                                class="form-control  @error('sender_email') is-invalid @enderror"
                                                name="sender_email" id="mailFromLabel" autocomplete="off"
-                                               placeholder="Sender Email" aria-label="Sender Email"
+                                               placeholder="Email отправителя" aria-label="Email отправителя"
                                                value="{{ old('sender_email', env('MAIL_FROM_ADDRESS')) }}">
                                         @error('sender_email')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -52,11 +52,11 @@
                                     </div>
 
                                     <div class="col-sm-6">
-                                        <label for="mailFromLabel" class="form-label">@lang('Email Method')</label>
+                                        <label for="mailFromLabel" class="form-label">@lang('Способ email')</label>
                                         <input type="text"
                                                class="form-control  @error('email_method') is-invalid @enderror"
                                                name="email_method" id="mailFromLabel" autocomplete="off"
-                                               placeholder="Email Method" aria-label="Email Method"
+                                               placeholder="Способ email" aria-label="Способ email"
                                                value="{{ old('email_method', $method) }}" readonly>
                                         @error('email_method')
                                         <span class="invalid-feedback">{{ $message }}</span>

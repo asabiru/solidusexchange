@@ -59,7 +59,7 @@ class SupportController extends Controller
                     $file = $request->file('attachments.' . $i);
                     $supportFile = $this->fileUpload($file, config('filelocation.ticket.path'),null,null,'webp',60);
                     if (empty($supportFile['path'])) {
-                        throw new \Exception('File could not be uploaded.');
+                        throw new \Exception('Файл не удалось загрузить.');
                     }
                     $this->saveAttachment($message, $supportFile['path'], $supportFile['driver']);
                 }
@@ -83,7 +83,7 @@ class SupportController extends Controller
         $this->adminFirebasePushNotification('SUPPORT_TICKET_CREATE', $msg, $firebaseAction);
         $this->adminMail('SUPPORT_TICKET_CREATE', $msg);
 
-        return redirect()->route('user.ticket.list')->with('success', 'Your Ticket has been pending');
+        return redirect()->route('user.ticket.list')->with('success', 'Ваш тикет в ожидании');
     }
 
     public function view($ticketId)
@@ -139,7 +139,7 @@ class SupportController extends Controller
                         $file = $request->file('attachments.' . $i);
                         $supportFile = $this->fileUpload($file, config('filelocation.ticket.path'),null,null,'webp',60);
                         if (empty($supportFile['path'])) {
-                            throw new \Exception('File could not be uploaded.');
+                            throw new \Exception('Файл не удалось загрузить.');
                         }
                         $this->saveAttachment($message, $supportFile['path'], $supportFile['driver']);
                     }
@@ -158,13 +158,13 @@ class SupportController extends Controller
             ];
             $this->adminPushNotification('SUPPORT_TICKET_CREATE', $msg, $action);
 
-            return back()->with('success', 'Ticket has been replied');
+            return back()->with('success', 'На тикет дан ответ');
         } elseif ($request->replayTicket == 2) {
             $ticket->status = 3;
             $ticket->last_reply = Carbon::now();
             $ticket->save();
 
-            return back()->with('success', 'Ticket has been closed');
+            return back()->with('success', 'Тикет закрыт');
         }
         return back();
     }
@@ -242,7 +242,7 @@ class SupportController extends Controller
         ]);
 
         if (!$attachment) {
-            throw new \Exception('Something went wrong');
+            throw new \Exception('Что-то пошло не так');
         }
     }
 }

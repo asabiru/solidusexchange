@@ -69,7 +69,7 @@ class BasicControlController extends Controller
             ]);
 
             if (!$response)
-                throw new Exception('Something went wrong, when updating data');
+                throw new Exception('Ошибка при обновлении данных');
 
             $env = [
                 'APP_TIMEZONE' => $response->time_zone,
@@ -110,7 +110,7 @@ class BasicControlController extends Controller
                     'fiat_send_time' => $request->fiat_send_time,
                 ]);
 
-                if (!$response) throw new Exception('Something went wrong, when updating data');
+                if (!$response) throw new Exception('Ошибка при обновлении данных');
 
                 session()->flash('success', 'Exchange Configure Successfully');
                 Artisan::call('optimize:clear');
@@ -190,9 +190,9 @@ class BasicControlController extends Controller
                 'time' => date('d M, Y h:i:s A'),
             ]);
 
-            return back()->with('success', 'Google Authenticator Has Been Enabled.');
+            return back()->with('success', 'Google Authenticator включён.');
         } else {
-            return back()->with('error', 'Wrong Verification Code.');
+            return back()->with('error', 'Неверный код подтверждения.');
         }
     }
 
@@ -203,14 +203,14 @@ class BasicControlController extends Controller
         ]);
 
         if (!Hash::check($request->password, auth()->user()->password)) {
-            return back()->with('error', 'Incorrect password. Please try again.');
+            return back()->with('error', 'Неверный пароль. Пожалуйста, попробуйте снова.');
         }
 
         Auth::guard('admin')->user()->update([
             'two_fa' => 0,
             'two_fa_verify' => 1,
         ]);
-        return back()->with('success', 'Two-step authentication disabled successfully.');
+        return back()->with('success', 'Двухфакторная аутентификация успешно отключена.');
     }
 
     public function twoFaCheck(Request $request)
@@ -242,7 +242,7 @@ class BasicControlController extends Controller
                 $user->save();
                 return redirect()->intended(route('admin.dashboard'));
             }
-            return back()->with('error', 'Wrong Verification Code.');
+            return back()->with('error', 'Неверный код подтверждения.');
         }
     }
 
@@ -276,7 +276,7 @@ class BasicControlController extends Controller
                 'changeable_mode' => $request->changeable_mode,
             ]);
 
-            if (!$response) throw new Exception('Something went wrong, when updating data');
+            if (!$response) throw new Exception('Ошибка при обновлении данных');
 
             session()->flash('success', 'Basic Control Configure Successfully');
             Artisan::call('optimize:clear');
@@ -312,7 +312,7 @@ class BasicControlController extends Controller
                 'coin_market_cap_auto_update' => $request->coin_market_cap_auto_update,
                 'coin_market_cap_auto_update_at' => $request->coin_market_cap_auto_update_at
             ]);
-            return back()->with('success', 'Configuration changes successfully');
+            return back()->with('success', 'Настройки успешно изменены');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -348,7 +348,7 @@ class BasicControlController extends Controller
 
             Artisan::call('optimize:clear');
 
-            return back()->with('success', 'KYC / AML provider settings updated successfully');
+            return back()->with('success', 'Настройки провайдера KYC / AML успешно обновлены');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -369,7 +369,7 @@ class BasicControlController extends Controller
             ]);
             $fillData = $request->only($announcement->getFillable());
             $announcement->fill($fillData)->save();
-            return back()->with('success', 'Updated Successfully');
+            return back()->with('success', 'Успешно обновлено');
         }
     }
 }

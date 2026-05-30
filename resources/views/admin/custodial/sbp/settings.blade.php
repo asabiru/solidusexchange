@@ -1,5 +1,5 @@
 @extends('admin.layouts.app')
-@section('page_title','SBP QR Settings')
+@section('page_title','SBP QR настройки')
 @section('content')
     <div class="content container-fluid">
         <div class="page-header">
@@ -8,11 +8,11 @@
                     <nav aria-label="breadcrumb">
                         <ol class="breadcrumb breadcrumb-no-gutter">
                             <li class="breadcrumb-item"><a class="breadcrumb-link" href="javascript:void(0)">Dashboard</a></li>
-                            <li class="breadcrumb-item"><a class="breadcrumb-link" href="{{ route('admin.sbpIndex') }}">SBP Payments</a></li>
+                            <li class="breadcrumb-item"><a class="breadcrumb-link" href="{{ route('admin.sbpIndex') }}">SBP платежи</a></li>
                             <li class="breadcrumb-item active" aria-current="page">Settings</li>
                         </ol>
                     </nav>
-                    <h1 class="page-header-title">SBP QR Settings</h1>
+                    <h1 class="page-header-title">SBP QR настройки</h1>
                 </div>
             </div>
         </div>
@@ -27,7 +27,7 @@
                             @if($tinkoff['configured'])
                                 <span class="badge bg-soft-success text-success ms-2">Configured</span>
                             @else
-                                <span class="badge bg-soft-danger text-danger ms-2">Not Configured</span>
+                                <span class="badge bg-soft-danger text-danger ms-2">Не настроено</span>
                             @endif
                         </h5>
                     </div>
@@ -37,9 +37,9 @@
                             Configure these values in <code>.env</code> file.
                         </p>
                         <table class="table table-sm">
-                            <tr><td class="text-muted">Terminal Key</td><td><code>{{ $tinkoff['terminal_key'] ? str_repeat('*', 8) . substr($tinkoff['terminal_key'], -4) : 'Not set' }}</code></td></tr>
+                            <tr><td class="text-muted">Терминальный ключ</td><td><code>{{ $tinkoff['terminal_key'] ? str_repeat('*', 8) . substr($tinkoff['terminal_key'], -4) : 'Not set' }}</code></td></tr>
                             <tr><td class="text-muted">INN</td><td><code>{{ $tinkoff['inn'] ?: 'Not set' }}</code></td></tr>
-                            <tr><td class="text-muted">Base URL</td><td><code>{{ $tinkoff['base_url'] }}</code></td></tr>
+                            <tr><td class="text-muted">Базовый URL</td><td><code>{{ $tinkoff['base_url'] }}</code></td></tr>
                             <tr><td class="text-muted">Webhook URL</td><td><code>{{ url('/sbp/webhook/tinkoff') }}</code></td></tr>
                         </table>
                         <div class="alert alert-soft-info small mt-3">
@@ -60,7 +60,7 @@
                             @if($sbp['account_number'])
                                 <span class="badge bg-soft-success text-success ms-2">Configured</span>
                             @else
-                                <span class="badge bg-soft-warning text-warning ms-2">Not Configured</span>
+                                <span class="badge bg-soft-warning text-warning ms-2">Не настроено</span>
                             @endif
                         </h5>
                     </div>
@@ -70,9 +70,9 @@
                             with your bank account details. Payments must be confirmed manually.
                         </p>
                         <table class="table table-sm">
-                            <tr><td class="text-muted">Bank ID</td><td><code>{{ $sbp['bank_id'] }}</code></td></tr>
-                            <tr><td class="text-muted">Account Number</td><td><code>{{ $sbp['account_number'] ? str_repeat('*', 8) . substr($sbp['account_number'], -4) : 'Not set' }}</code></td></tr>
-                            <tr><td class="text-muted">Recipient Name</td><td><code>{{ $sbp['recipient_name'] ?: 'Not set' }}</code></td></tr>
+                            <tr><td class="text-muted">ID банка</td><td><code>{{ $sbp['bank_id'] }}</code></td></tr>
+                            <tr><td class="text-muted">Номер счёта</td><td><code>{{ $sbp['account_number'] ? str_repeat('*', 8) . substr($sbp['account_number'], -4) : 'Not set' }}</code></td></tr>
+                            <tr><td class="text-muted">Имя получателя</td><td><code>{{ $sbp['recipient_name'] ?: 'Not set' }}</code></td></tr>
                             <tr><td class="text-muted">INN</td><td><code>{{ $sbp['inn'] ?: 'Not set' }}</code></td></tr>
                             <tr><td class="text-muted">QR TTL</td><td><code>{{ $sbp['qr_ttl_minutes'] }} minutes</code></td></tr>
                         </table>

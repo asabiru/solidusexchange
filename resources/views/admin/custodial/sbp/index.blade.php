@@ -1,5 +1,5 @@
 @extends('admin.layouts.app')
-@section('page_title',__('SBP QR Payments'))
+@section('page_title',__('SBP QR платежи'))
 @section('content')
     <div class="content container-fluid">
         <div class="page-header">
@@ -9,10 +9,10 @@
                         <ol class="breadcrumb breadcrumb-no-gutter">
                             <li class="breadcrumb-item"><a class="breadcrumb-link" href="javascript:void(0)">@lang("Dashboard")</a></li>
                             <li class="breadcrumb-item"><a class="breadcrumb-link" href="{{ route('admin.custodialWalletIndex') }}">Custodial</a></li>
-                            <li class="breadcrumb-item active" aria-current="page">SBP QR Payments</li>
+                            <li class="breadcrumb-item active" aria-current="page">SBP QR платежи</li>
                         </ol>
                     </nav>
-                    <h1 class="page-header-title">SBP QR Payments</h1>
+                    <h1 class="page-header-title">SBP QR платежи</h1>
                 </div>
                 <div class="col-sm-auto">
                     <a class="btn btn-outline-secondary me-2" href="{{ route('admin.sbpSettings') }}">
@@ -44,7 +44,7 @@
                 <div class="card">
                     <div class="card-body text-center">
                         <h5 class="card-title text-success">{{ $stats['paid'] }}</h5>
-                        <p class="card-text small text-muted">Paid / Confirmed</p>
+                        <p class="card-text small text-muted">Оплачено / Подтверждено</p>
                     </div>
                 </div>
             </div>
@@ -70,9 +70,9 @@
                             <th>Amount</th>
                             <th>Provider</th>
                             <th>Status</th>
-                            <th>Linked To</th>
+                            <th>Привязан к</th>
                             <th>Created</th>
-                            <th>Paid At</th>
+                            <th>Оплачено</th>
                             <th>Action</th>
                         </tr>
                     </thead>

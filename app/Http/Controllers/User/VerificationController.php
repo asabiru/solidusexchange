@@ -53,7 +53,7 @@ class VerificationController extends Controller
                 $this->verifyToMail($user, 'VERIFICATION_CODE', [
                     'code' => $user->verify_code
                 ]);
-                session()->flash('success', 'Email verification code has been sent');
+                session()->flash('success', 'Код подтверждения email отправлен');
             }
             $page_title = 'Email Verification';
             $template = ContentDetails::whereHas('content', function ($query) {
@@ -69,7 +69,7 @@ class VerificationController extends Controller
                 $this->verifyToSms($user, 'VERIFICATION_CODE', [
                     'code' => $user->verify_code
                 ]);
-                session()->flash('success', 'SMS verification code has been sent');
+                session()->flash('success', 'Код подтверждения SMS отправлен');
             }
             $page_title = 'SMS Verification';
             $template = ContentDetails::whereHas('content', function ($query) {
@@ -112,12 +112,12 @@ class VerificationController extends Controller
                 'code' => $user->verify_code
             ]);
 
-            return back()->with('success', 'Email verification code has been sent');
+            return back()->with('success', 'Код подтверждения email отправлен');
         } elseif ($type === 'mobile') {
             $this->verifyToSms($user, 'VERIFICATION_CODE', [
                 'code' => $user->verify_code
             ]);
-            return back()->with('success', 'SMS verification code has been sent');
+            return back()->with('success', 'Код подтверждения SMS отправлен');
         } else {
             throw ValidationException::withMessages(['error' => 'Sending Failed']);
         }

@@ -18,7 +18,7 @@ class Demo
         $routeName = \Route::currentRouteName();
         $methods = ['POST','PUT','PATCH','DELETE'];
         if(config('demo.IS_DEMO') == true && in_array(request()->method(), $methods) && $routeName != 'admin.logout'){
-            return back()->with('error', 'This is DEMO version. You can just explore all the features but can\'t take any action.');
+            return back()->with('error', 'Это DEMO-версия. Вы можете изучить все функции, но't take any action.');
         }
         return $next($request);
     }

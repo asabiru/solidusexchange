@@ -1,7 +1,7 @@
 <div class="profile-cover">
     <div class="profile-cover-img-wrapper">
         <img id="profileCoverImg" class="profile-cover-img" src="{{ asset('assets/admin/img/img1.jpg') }}"
-             alt="Image Description"/>
+             alt="Описание изображения"/>
     </div>
 </div>
 
@@ -18,7 +18,7 @@
         @if($user->identity_verify)
             <i class="bi-patch-check-fill fs-2 text-primary" data-bs-toggle="tooltip"
                data-bs-placement="top"
-               title="Verified Profile"></i>
+               title="Верифицированный профиль"></i>
         @endif
     </h1>
 

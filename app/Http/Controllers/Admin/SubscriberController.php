@@ -30,7 +30,7 @@ class SubscriberController extends Controller
             $subscriber = new Subscribe();
             $subscriber->email = $request->input('email');
             $subscriber->save();
-            return back()->with('success', 'You Have Subscribed Successfully');
+            return back()->with('success', 'Вы успешно подписались');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -69,7 +69,7 @@ class SubscriberController extends Controller
         $requestMessage = $request->message;
         $subject = $request->subject;
         $email_body = $basic->email_description;
-        if (!Subscribe::first()) return back()->withInput()->with('error', 'No subscribers to send email.');
+        if (!Subscribe::first()) return back()->withInput()->with('error', 'Нет подписчиков для отправки email.');
         $subscribers = Subscribe::all();
         foreach ($subscribers as $subscriber) {
             $name = explode('@', $subscriber->email)[0];
@@ -77,7 +77,7 @@ class SubscriberController extends Controller
             $message = str_replace("[[message]]", $requestMessage, $message);
             @Mail::to($subscriber->email)->queue(new SendMail($email_from, $subject, $message));
         }
-        return back()->with('success', 'Email has been sent to subscribers.');
+        return back()->with('success', 'Email отправлен подписчикам.');
     }
 
 }

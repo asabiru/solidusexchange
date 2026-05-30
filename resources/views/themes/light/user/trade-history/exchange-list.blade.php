@@ -85,7 +85,7 @@
                                                     <div class="avatar avatar-sm avatar-circle">
                                                         <img class="avatar-img"
                                                             src="{{ getFile(optional($value->sendCurrency)->driver, optional($value->sendCurrency)->image) }}"
-                                                            alt="Image Description">
+                                                            alt="Описание изображения">
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">
@@ -103,7 +103,7 @@
                                                     <div class="avatar avatar-sm avatar-circle">
                                                         <img class="avatar-img"
                                                             src="{{ getFile(optional($value->getCurrency)->driver, optional($value->getCurrency)->image) }}"
-                                                            alt="Image Description">
+                                                            alt="Описание изображения">
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">

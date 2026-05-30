@@ -49,11 +49,11 @@
                             <div class="card-body text-center">
                                 <div class="mb-4">
                                     <img class="avatar avatar-xl avatar-4x3"
-                                         src="{{ asset('assets/admin/img/oc-unlock.svg') }}" alt="Image Description"
+                                         src="{{ asset('assets/admin/img/oc-unlock.svg') }}" alt="Описание изображения"
                                          data-hs-theme-appearance="default"/>
                                     <img class="avatar avatar-xl avatar-4x3"
                                          src="{{ asset('assets/admin/img/oc-unlock-light.svg') }}"
-                                         alt="Image Description"
+                                         alt="Описание изображения"
                                          data-hs-theme-appearance="dark"/>
                                 </div>
                                 <div class="mb-3">
@@ -83,10 +83,10 @@
                                 <div class="card-body card-body-height">
                                     <img class="avatar avatar-xxl mb-3"
                                          src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                         alt="Image Description" data-hs-theme-appearance="default"/>
+                                         alt="Описание изображения" data-hs-theme-appearance="default"/>
                                     <img class="avatar avatar-xxl mb-3"
                                          src="{{ asset('assets/admin/img/oc-error-light.svg') }}"
-                                         alt="Image Description" data-hs-theme-appearance="dark"/>
+                                         alt="Описание изображения" data-hs-theme-appearance="dark"/>
                                     <p class="card-text">@lang('No data to show')</p>
                                 </div>
                             @endif
@@ -144,10 +144,10 @@
                                 <div class="card-body card-body-height card-body-centered">
                                     <img class="avatar avatar-xxl mb-3"
                                          src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                         alt="Image Description" data-hs-theme-appearance="default"/>
+                                         alt="Описание изображения" data-hs-theme-appearance="default"/>
                                     <img class="avatar avatar-xxl mb-3"
                                          src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                         alt="Image Description" data-hs-theme-appearance="dark"/>
+                                         alt="Описание изображения" data-hs-theme-appearance="dark"/>
                                     <p class="card-text">@lang('No data to show')</p>
                                 </div>
                             @endif
@@ -180,7 +180,7 @@
                                                         <div class="avatar avatar-circle">
                                                             <img class="avatar-img"
                                                                  src="{{ getFile(optional($payment->gateway)->driver, optional($payment->gateway)->image) }}"
-                                                                 alt="Image Description">
+                                                                 alt="Описание изображения">
                                                         </div>
                                                         <div class="ms-3">
                                                             <span

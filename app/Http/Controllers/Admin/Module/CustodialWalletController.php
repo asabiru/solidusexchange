@@ -113,9 +113,9 @@ class CustodialWalletController extends Controller
         try {
             $service = app(CustodialWalletService::class);
             $wallet = $service->generateWallet($request->currency_code);
-            return back()->with('success', "Wallet generated: {$wallet->address}");
+            return back()->with('success', "Кошелёк сгенерирован: {$wallet->address}");
         } catch (\Throwable $e) {
-            return back()->with('error', 'Failed: ' . $e->getMessage());
+            return back()->with('error', 'Ошибка: ' . $e->getMessage());
         }
     }
 
@@ -123,20 +123,20 @@ class CustodialWalletController extends Controller
     {
         $wallet = CustodialWallet::findOrFail($id);
         if ($wallet->status === 'frozen') {
-            return back()->with('error', 'Wallet is already frozen.');
+            return back()->with('error', 'Кошелёк уже заморожен.');
         }
         $wallet->update(['status' => 'frozen']);
-        return back()->with('success', 'Wallet frozen');
+        return back()->with('success', 'Кошелёк заморожен');
     }
 
     public function releaseWallet($id)
     {
         $wallet = CustodialWallet::findOrFail($id);
         if ($wallet->status !== 'frozen' && blank($wallet->assigned_exchange_id)) {
-            return back()->with('error', 'Only frozen or assigned wallets can be released.');
+            return back()->with('error', 'Только замороженные или назначенные кошельки могут быть разморожены.');
         }
         app(CustodialWalletService::class)->release($wallet);
-        return back()->with('success', 'Wallet released');
+        return back()->with('success', 'Кошелёк разморожен');
     }
 
     public function depositsIndex()
@@ -184,26 +184,26 @@ class CustodialWalletController extends Controller
     {
         $deposit = CustodialDeposit::findOrFail($id);
         if (!in_array($deposit->status, ['pending', 'aml_check', 'aml_approved'], true)) {
-            return back()->with('error', 'Deposit is not in an approvable state.');
+            return back()->with('error', 'Депозит не находится в состоянии, допускающем одобрение.');
         }
         app(CustodialDepositService::class)->manualApprove($deposit);
-        return back()->with('success', 'Deposit approved');
+        return back()->with('success', 'Депозит одобрен');
     }
 
     public function rejectDeposit($id, Request $request)
     {
         $deposit = CustodialDeposit::findOrFail($id);
         if (!in_array($deposit->status, ['pending', 'aml_check', 'aml_approved'], true)) {
-            return back()->with('error', 'Deposit is not in a rejectable state.');
+            return back()->with('error', 'Депозит не находится в состоянии, допускающем отклонение.');
         }
         app(CustodialDepositService::class)->manualReject($deposit, $request->reason ?? '');
-        return back()->with('success', 'Deposit rejected');
+        return back()->with('success', 'Депозит отклонён');
     }
 
     public function scanNow()
     {
         $results = app(CustodialDepositService::class)->scanAllWallets();
-        return back()->with('success', "Scanned: {$results['scanned']}, New: {$results['new_deposits']}, Errors: {$results['errors']}");
+        return back()->with('success', "Отсканировано: {$results['scanned']}, New: {$results['new_deposits']}, Errors: {$results['errors']}");
     }
 
     // ─── Balance Check ────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ class CustodialWalletController extends Controller
         $results = app(HdWalletService::class)->checkAllBalances();
         $total = count($results);
         $errors = count(array_filter($results, fn($r) => isset($r['error'])));
-        return back()->with('success', "Checked {$total} wallets, {$errors} errors");
+        return back()->with('success', "Проверено {$total} кошельков, {$errors} ошибок");
     }
 
     public function refreshBalances(Request $request)
@@ -245,10 +245,10 @@ class CustodialWalletController extends Controller
         $result = app(HdWalletService::class)->getBalance($wallet);
 
         if (isset($result['error'])) {
-            return back()->with('error', "Balance check failed: {$result['error']}");
+            return back()->with('error', "Проверка баланса не удалась: {$result['error']}");
         }
 
-        return back()->with('success', "Balance: {$result['balance']} {$result['currency_code']}");
+        return back()->with('success', "Баланс: {$result['balance']} {$result['currency_code']}");
     }
 
     // ─── Withdrawals ─────────────────────────────────────────────────────
@@ -306,7 +306,7 @@ class CustodialWalletController extends Controller
     {
         $wallet = CustodialWallet::findOrFail($walletId);
         if ($wallet->status !== 'active') {
-            return back()->with('error', 'Withdrawals are allowed only for active wallets.');
+            return back()->with('error', 'Выводы разрешены только для активных кошельков.');
         }
         return view('admin.custodial.withdrawals.create', compact('wallet'));
     }
@@ -326,9 +326,9 @@ class CustodialWalletController extends Controller
 
             return redirect()
                 ->route('admin.custodialWithdrawals')
-                ->with('success', "Withdrawal #{$withdrawal->id} created ({$request->amount} {$withdrawal->currency_code})");
+                ->with('success', "Вывод #{$withdrawal->id} создан ({$request->amount} {$withdrawal->currency_code})");
         } catch (\Throwable $e) {
-            return back()->withInput()->with('error', 'Failed: ' . $e->getMessage());
+            return back()->withInput()->with('error', 'Ошибка: ' . $e->getMessage());
         }
     }
 
@@ -336,7 +336,7 @@ class CustodialWalletController extends Controller
     {
         try {
             $w = app(CustodialWithdrawalService::class)->approve($id);
-            return back()->with('success', "Withdrawal #{$id} approved");
+            return back()->with('success', "Вывод #{$id} одобрен");
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -346,7 +346,7 @@ class CustodialWalletController extends Controller
     {
         try {
             $w = app(CustodialWithdrawalService::class)->reject($id);
-            return back()->with('success', "Withdrawal #{$id} rejected");
+            return back()->with('success', "Вывод #{$id} отклонён");
         } catch (\Throwable $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -356,9 +356,9 @@ class CustodialWalletController extends Controller
     {
         try {
             $w = app(CustodialWithdrawalService::class)->execute($id);
-            return back()->with('success', "Withdrawal #{$id} completed! TXID: {$w->txid}");
+            return back()->with('success', "Вывод #{$id} завершён! TXID: {$w->txid}");
         } catch (\Throwable $e) {
-            return back()->with('error', "Withdrawal failed: " . $e->getMessage());
+            return back()->with('error', "Вывод не удался: " . $e->getMessage());
         }
     }
 
@@ -366,11 +366,11 @@ class CustodialWalletController extends Controller
     {
         $withdrawal = CustodialWithdrawal::findOrFail($id);
         if ($withdrawal->status !== 'failed') {
-            return back()->with('error', 'Can only retry failed withdrawals');
+            return back()->with('error', 'Можно повторить только неудачные выводы');
         }
 
         // Reset to approved so it can be re-executed
         $withdrawal->update(['status' => 'approved', 'error' => null]);
-        return back()->with('success', "Withdrawal #{$id} reset to approved — click Send to retry");
+        return back()->with('success', "Вывод #{$id} сброшен в одобрено — нажмите Отправить для повтора");
     }
 }

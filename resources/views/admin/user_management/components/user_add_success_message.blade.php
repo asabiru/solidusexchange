@@ -9,10 +9,10 @@
                     <div class="text-center">
                         <img class="img-fluid mb-3 customImageStyle"
                              src="{{ asset('assets/admin/img/oc-hi-five.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="default">
+                             alt="Описание изображения" data-hs-theme-appearance="default">
                         <img class="img-fluid mb-3 customImageStyle"
                              src="{{ asset('assets/admin/img/oc-hi-five-light.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="dark">
+                             alt="Описание изображения" data-hs-theme-appearance="dark">
                         <div class="mb-4">
                             <h2>@lang("Successful")</h2>
                             <p>@lang("New") <span

@@ -52,11 +52,11 @@ class ExchangeController extends Controller
         $sendAmount = (float)$request->exchangeSendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -90,15 +90,15 @@ class ExchangeController extends Controller
             $rateType = in_array($request->rate_type, ['floating', 'fixed'], true) ? $request->rate_type : 'floating';
 
             if ($sendCurrency->min_send > $sendAmount) {
-                return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
             }
 
             if ($sendCurrency->max_send < $sendAmount) {
-                return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
             if (!$request->destination_wallet) {
-                return back()->withInput()->with('error', 'Destination wallet address is required');
+                return back()->withInput()->with('error', 'Требуется адрес кошелька назначения');
             }
 
             $quoteService = app(ExchangeQuoteService::class);
@@ -154,7 +154,7 @@ class ExchangeController extends Controller
                     app(ExchangeSettlementService::class)->prepareIncomingDeposit($exchangeRequest);
                     $exchangeRequest = $exchangeRequest->fresh();
                 } catch (RuntimeException $exception) {
-                    return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
+                    return back()->with('error', 'Не удалось сгенерировать адрес. Пожалуйста, свяжитесь с администрацией.');
                 }
             }
 
@@ -184,7 +184,7 @@ class ExchangeController extends Controller
 
             $this->sendAdminNotification($exchangeRequest, 'exchange');
             return redirect()->route('tracking', ['trx_id' => $exchangeRequest->utr])
-                ->with('success', 'Payment notice received. We will confirm the deposit after manual review.');
+                ->with('success', 'Уведомление об оплате получено. Мы подтвердим депозит после ручной проверки.');
         }
     }
 
@@ -213,11 +213,11 @@ class ExchangeController extends Controller
         $sendAmount = (float)$request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
         }
 
         try {

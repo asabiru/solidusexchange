@@ -62,7 +62,7 @@ class RegisterController extends Controller
     {
         $basic = basicControl();
         if ($basic->registration == 0) {
-            return redirect('/')->with('warning', 'Registration Has Been Disabled.');
+            return redirect('/')->with('warning', 'Регистрация отключена.');
         }
 
         $template = ContentDetails::with(['content'])->whereHas('content', function ($query) {

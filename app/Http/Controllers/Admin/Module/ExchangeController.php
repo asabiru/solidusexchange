@@ -205,7 +205,7 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::findOrFail($id);
         $this->reservationService->releaseForExchange($exchange);
         $exchange->delete($id);
-        return back()->with('success', 'Exchange Deleted Successfully');
+        return back()->with('success', 'Обмен успешно удалён');
     }
 
     public function exchangeMultipleDelete(Request $request)
@@ -275,7 +275,7 @@ class ExchangeController extends Controller
             'deposit_tx_id' => $validated['deposit_tx_id'],
         ]);
 
-        return back()->with('success', 'Deposit confirmed and the exchange moved to processing.');
+        return back()->with('success', 'Депозит подтверждён, обмен переведён в обработку.');
     }
 
     public function rateUpdate($exchange)
@@ -311,11 +311,11 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::findOrFail($id);
 
         if ((int) $exchange->status !== 2 || !$exchange->deposit_confirmed_at) {
-            return back()->with('error', 'AML review is available only for confirmed exchanges in processing.');
+            return back()->with('error', 'AML-проверка доступна только для подтверждённых обменов в обработке.');
         }
 
         if ($exchange->aml_status === 'approved') {
-            return back()->with('warning', 'AML has already been approved for this exchange.');
+            return back()->with('warning', 'AML уже одобрена для этого обмена.');
         }
 
         $this->amlService->approveExchange($exchange, (string) $request->input('notes', ''));
@@ -330,10 +330,10 @@ class ExchangeController extends Controller
         }
 
         if ($isAutoProcessed) {
-            return back()->with('success', 'AML approved and the exchange pipeline resumed automatically.');
+            return back()->with('success', 'AML одобрена, процесс обмена автоматически возобновлён.');
         }
 
-        return back()->with('success', 'AML approved. The exchange remains in processing for manual follow-up.');
+        return back()->with('success', 'AML одобрена. Обмен остаётся в обработке для ручного продолжения.');
     }
 
     public function rejectAml(Request $request, $id)
@@ -341,11 +341,11 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::findOrFail($id);
 
         if ((int) $exchange->status !== 2 || !$exchange->deposit_confirmed_at) {
-            return back()->with('error', 'AML review is available only for confirmed exchanges in processing.');
+            return back()->with('error', 'AML-проверка доступна только для подтверждённых обменов в обработке.');
         }
 
         if ($exchange->aml_status === 'rejected') {
-            return back()->with('warning', 'AML has already been rejected for this exchange.');
+            return back()->with('warning', 'AML уже отклонена для этого обмена.');
         }
 
         $reason = trim((string) $request->input('reason', ''));
@@ -353,13 +353,13 @@ class ExchangeController extends Controller
 
         $exchange->execution_route = 'manual_review';
         $exchange->execution_notes = trim(implode(' ', array_filter([
-            'Exchange blocked by AML review.',
+            'Обмен заблокирован по результатам AML-проверки.',
             $reason,
         ])));
         $exchange->routed_at = now();
         $exchange->save();
 
-        return back()->with('success', 'Exchange blocked by AML review.');
+        return back()->with('success', 'Обмен заблокирован по результатам AML-проверки.');
     }
 
     public function approveWalletAml($id)
@@ -367,7 +367,7 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::findOrFail($id);
         $this->amlService->approveWalletAddress($exchange, (string) $exchange->destination_wallet, (string) optional($exchange->getCurrency)->code);
 
-        return back()->with('success', 'Destination wallet approved by admin review.');
+        return back()->with('success', 'Кошелёк назначения одобрен после админской проверки.');
     }
 
     public function rejectWalletAml($id)
@@ -375,7 +375,7 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::findOrFail($id);
         $this->amlService->rejectWalletAddress($exchange, (string) $exchange->destination_wallet, (string) optional($exchange->getCurrency)->code);
 
-        return back()->with('success', 'Destination wallet blocked by admin review.');
+        return back()->with('success', 'Кошелёк назначения заблокирован после админской проверки.');
     }
 
     public function exchangeSend(Request $request, $utr)
@@ -383,7 +383,7 @@ class ExchangeController extends Controller
         $exchange = ExchangeRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
 
         if (!$exchange->isAmlApproved()) {
-            return back()->with('error', 'This exchange is blocked until AML review is approved.');
+            return back()->with('error', 'Этот обмен заблокирован до одобрения AML-проверки.');
         }
 
         $walletScreening = $this->amlService->screenWalletAddress(
@@ -407,20 +407,20 @@ class ExchangeController extends Controller
             ->first();
 
         if ($existingQueuedPayout) {
-            return back()->with('warning', 'A treasury payout is already queued for this exchange.');
+            return back()->with('warning', 'Выплата из казначейства уже поставлена в очередь для этого обмена.');
         }
 
         if ($request->btnValue == 'automatic' && $this->payoutService->canAutoPayout($exchange)) {
             $data = $this->payoutService->sendExchangePayout($exchange);
             if (!$data) {
-                return back()->with('error', 'The automatic cryptocurrency exchange could not be executed.');
+                return back()->with('error', 'Автоматический обмен криптовалютой не удалось выполнить.');
             }
 
             if ($this->payoutService->isAsyncPayout($exchange)) {
                 $exchange->hedge_status = 'payout_queued';
                 $exchange->save();
 
-                return back()->with('success', 'Treasury payout queued successfully. Mark it as sent after the on-chain transfer is broadcast.');
+                return back()->with('success', 'Выплата из казначейства успешно поставлена в очередь. Пометьте как отправленную после трансляции в сети.');
             }
         }
         $exchange->status = 3;
@@ -433,7 +433,7 @@ class ExchangeController extends Controller
             $exchange->id, ExchangeRequest::class, $exchange->user_id, $exchange->final_amount, optional($exchange->getCurrency)->code);
 
         $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_COMPLETE');
-        return back()->with('success', 'Exchange Complete Successfully');
+        return back()->with('success', 'Обмен успешно завершён');
     }
 
     public function exchangeCancel($utr)
@@ -443,7 +443,7 @@ class ExchangeController extends Controller
         $exchange->save();
         $this->reservationService->releaseForExchange($exchange);
         $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_CANCEL');
-        return back()->with('success', 'Exchange Cancel Successfully');
+        return back()->with('success', 'Обмен успешно отменён');
     }
 
 }

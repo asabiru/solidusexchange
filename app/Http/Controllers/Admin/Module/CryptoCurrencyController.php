@@ -257,11 +257,11 @@ class CryptoCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Image could not be uploaded');
+                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Crypto Currency Created Successfully');
+            return back()->with('success', 'Криптовалюта успешно создана');
         }
     }
 
@@ -281,11 +281,11 @@ class CryptoCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Image could not be uploaded');
+                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Crypto Currency Updated Successfully');
+            return back()->with('success', 'Криптовалюта успешно обновлена');
         }
     }
 
@@ -306,7 +306,7 @@ class CryptoCurrencyController extends Controller
         try {
             $currency = CryptoCurrency::findOrFail($id)->delete();
             $this->fileDelete($currency->driver, $currency->image);
-            return back()->with('success', 'Deleted Successfully');
+            return back()->with('success', 'Успешно удалено');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

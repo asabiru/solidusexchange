@@ -52,11 +52,11 @@ class BuyController extends Controller
         $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -89,11 +89,11 @@ class BuyController extends Controller
         $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -129,15 +129,15 @@ class BuyController extends Controller
             $getCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeGetCurrency);
 
             if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
             }
 
             if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
             if (!$request->destination_wallet) {
-                return back()->withInput()->with('error', 'Destination wallet address is required');
+                return back()->withInput()->with('error', 'Требуется адрес кошелька назначения');
             }
 
             try {
@@ -203,7 +203,7 @@ class BuyController extends Controller
             return view($this->theme . 'user.buy.init-payment', $data, compact('buyRequest'));
         } elseif ($request->method() == 'POST') {
             if ($buyRequest->expire_time < Carbon::now()) {
-                return redirect('/')->with('error', 'Payment time expired');
+                return redirect('/')->with('error', 'Время оплаты истекло');
             }
             $purifiedData = $request->all();
             $validator = Validator::make($purifiedData, [
@@ -261,11 +261,11 @@ class BuyController extends Controller
         $sendAmount = (float) $request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
         }
 
         try {

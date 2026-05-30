@@ -13,7 +13,7 @@
              alt="{{ basicControl()->site_title }}"
              style="width:64px;height:64px;object-fit:contain;border-radius:12px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
         <h3>{{ basicControl()->site_title }}</h3>
-        <p>Admin Panel</p>
+        <p>Админ-панель</p>
     </div>
 
     <form method="post"

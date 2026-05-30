@@ -14,10 +14,10 @@
                     <div class="flex-shrink-0">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="default">
+                             alt="Описание изображения" data-hs-theme-appearance="default">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="dark">
+                             alt="Описание изображения" data-hs-theme-appearance="dark">
                     </div>
 
                     <div class="flex-grow-1 ms-3">
@@ -40,10 +40,10 @@
                     <div class="flex-shrink-0">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="default">
+                             alt="Описание изображения" data-hs-theme-appearance="default">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Image Description" data-hs-theme-appearance="dark">
+                             alt="Описание изображения" data-hs-theme-appearance="dark">
                     </div>
 
                     <div class="flex-grow-1 ms-3">
@@ -154,9 +154,9 @@
                         <tr>
                             <div class="text-center p-4">
                                 <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                     alt="Image Description" data-hs-theme-appearance="default">
+                                     alt="Описание изображения" data-hs-theme-appearance="default">
                                 <img class="dataTables-image mb-3"
-                                     src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description"
+                                     src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения"
                                      data-hs-theme-appearance="dark">
                                 <p class="mb-0">@lang("No data to show")</p>
                             </div>

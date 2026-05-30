@@ -39,7 +39,7 @@
         <ul class="d-flex align-items-center">
             {{-- Theme toggle — always visible in dashboard --}}
             <li class="nav-item pe-3">
-                <a id="toggle-btn" class="nav-link d-flex toggle-btn" title="Toggle theme" style="cursor:pointer;">
+                <a id="toggle-btn" class="nav-link d-flex toggle-btn" title="Переключить тему" style="cursor:pointer;">
                     <i class="fa-light fa-moon" id="moon"></i>
                     <i class="fa-light fa-sun-bright" id="sun"></i>
                 </a>

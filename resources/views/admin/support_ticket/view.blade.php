@@ -93,7 +93,7 @@
                                             <div class="img">
                                                 <img class="img-fluid"
                                                      src="{{ auth()->user()->profilePicture() }}"
-                                                     alt="Admin Image"/>
+                                                     alt="Изображение админа"/>
                                             </div>
                                             <div class="text-wrapper">
                                                 <div class="text">

@@ -11,8 +11,8 @@
                        class="col-sm-3 col-form-label form-label">
                     @lang('Language')
                     <i class="bi bi-info-circle text-body ms-1" data-bs-toggle="tooltip" data-bs-placement="top"
-                       aria-label="Select the language for email template and others services."
-                       data-bs-original-title="Select the language for email template and others services."></i>
+                       aria-label="Выберите язык для email-шаблонов и других сервисов."
+                       data-bs-original-title="Выберите язык для email-шаблонов и других сервисов."></i>
                 </label>
                 <div class="col-sm-9">
                     <div class="tom-select-custom">

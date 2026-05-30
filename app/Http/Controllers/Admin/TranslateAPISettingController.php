@@ -58,7 +58,7 @@ class TranslateAPISettingController extends Controller
 
             BasicService::setEnv($env);
 
-            return back()->with('success', 'Translate Configuration has been updated successfully.');
+            return back()->with('success', 'Настройки перевода успешно обновлены.');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -74,7 +74,7 @@ class TranslateAPISettingController extends Controller
 
         BasicService::setEnv($env);
 
-        return back()->with('success', 'Translate method set as default successfully.');
+        return back()->with('success', 'Способ перевода по умолчанию успешно установлен.');
     }
 
 

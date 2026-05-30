@@ -56,11 +56,11 @@ class SellController extends Controller
         $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -92,11 +92,11 @@ class SellController extends Controller
         $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -130,11 +130,11 @@ class SellController extends Controller
             $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
             if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
             }
 
             if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
             $fiatSendGateway = $this->resolveSellGateway($getCurrency, (int) $request->payment_method);
@@ -240,7 +240,7 @@ class SellController extends Controller
                     // Fallback to legacy crypto method
                     $response = $this->getCryptoWallet($sellRequest->sendCurrency->code, 'sell', ['identifier' => $sellRequest->utr]);
                     if (!$response['status']) {
-                        return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
+                        return back()->with('error', 'Не удалось сгенерировать адрес. Пожалуйста, свяжитесь с администрацией.');
                     }
                     $sellRequest->admin_wallet = $response['message'];
                 }
@@ -265,12 +265,12 @@ class SellController extends Controller
         } elseif ($request->method() == 'POST') {
             if (\App\Models\CustodialDeposit::where('sell_request_id', $sellRequest->id)->exists()) {
                 return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
-                    ->with('success', 'Your deposit address is monitored automatically. We will update the trade after blockchain confirmation.');
+                    ->with('success', 'Ваш адрес депозита отслеживается автоматически. Мы обновим сделку после подтверждения блокчейном.');
             }
 
             $this->sendAdminNotification($sellRequest, 'sell');
             return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
-                ->with('success', 'Payment notice received. We will confirm the deposit after manual review.');
+                ->with('success', 'Уведомление об оплате получено. Мы подтвердим депозит после ручной проверки.');
         }
     }
 
@@ -328,11 +328,11 @@ class SellController extends Controller
         $sendAmount = (float) $request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
         }
 
         try {
