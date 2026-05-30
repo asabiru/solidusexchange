@@ -46,11 +46,14 @@ trait CurrencyRateUpdate
         foreach ($codes as $code) {
             $normalizedCode = $this->normalizeBybitCurrencyCode($code);
 
-            // Resolve USD rate: try Rapira first, fall back to Bybit
-            $usdRate = $this->resolveRapiraUsdRate($normalizedCode, $rapiraRates);
-
-            if ($usdRate === null && $bybitTickers !== null) {
+            // Resolve USD rate: try Bybit first (more accurate spot price), fall back to Rapira
+            $usdRate = null;
+            if ($bybitTickers !== null) {
                 $usdRate = $this->resolveBybitUsdRate($normalizedCode, $bybitTickers);
+            }
+
+            if ($usdRate === null) {
+                $usdRate = $this->resolveRapiraUsdRate($normalizedCode, $rapiraRates);
             }
 
             if ($usdRate === null) {
@@ -58,10 +61,14 @@ trait CurrencyRateUpdate
                 continue;
             }
 
-            // Resolve 24h change: try Rapira first, fall back to Bybit
-            $change24h = $this->resolveRapira24hChange($normalizedCode, $rapiraRates);
-            if ($change24h === null && $bybitTickers !== null) {
+            // Resolve 24h change: try Bybit first (live data), fall back to Rapira
+            $change24h = null;
+            if ($bybitTickers !== null) {
                 $change24h = $this->resolveBybit24hChange($normalizedCode, $bybitTickers);
+            }
+
+            if ($change24h === null) {
+                $change24h = $this->resolveRapira24hChange($normalizedCode, $rapiraRates);
             }
 
             // Resolve sparkline from Bybit (only for non-stablecoins)
