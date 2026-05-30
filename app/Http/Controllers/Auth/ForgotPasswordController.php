@@ -58,12 +58,12 @@ class ForgotPasswordController extends Controller
             $user = User::where('email', $userEmail)->first();
 
             $params = [
-                'message' => '<a href="' . url('password/reset', $token) . '?email=' . $userEmail . '" target="_blank">Click To Reset Password</a>'
+                'message' => '<a href="' . url('password/reset', $token) . '?email=' . $userEmail . '" target="_blank" style="display:inline-block;padding:14px 36px;background:linear-gradient(135deg,#e8c9a0 0%,#c9a227 100%);color:#0b0608;font-size:15px;font-weight:700;text-decoration:none;border-radius:12px;text-transform:uppercase;letter-spacing:0.05em;">Сбросить пароль</a>'
             ];
 
             $this->mail($user, 'PASSWORD_RESET', $params);
 
-            return back()->with('success', 'We have e-mailed your password reset link!');
+            return back()->with('success', 'Ссылка для сброса пароля отправлена на ваш email!');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());

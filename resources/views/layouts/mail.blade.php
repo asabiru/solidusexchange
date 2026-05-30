@@ -148,7 +148,11 @@
                     <!-- BODY -->
                     <tr>
                         <td class="body">
-                            {!! $msg !!}
+                            @hasSection('content')
+                                @yield('content')
+                            @else
+                                {!! $msg !!}
+                            @endif
                         </td>
                     </tr>
                     
