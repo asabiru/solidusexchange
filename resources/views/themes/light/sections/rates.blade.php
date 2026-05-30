@@ -28,8 +28,8 @@
         <!-- Ticker -->
         <div class="rates-ticker ticker-pause">
             <div class="ticker-track">
-                @foreach($cryptoCurrencies as $currency)
                 @foreach([1,2] as $duplicate)
+                @foreach($cryptoCurrencies as $currency)
                 <div class="ticker-item">
                     @php
                         $isStablecoin = $currency->is_stablecoin;

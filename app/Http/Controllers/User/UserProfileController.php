@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Mail\SendMail;
 use App\Models\Kyc;
 use App\Models\Language;
 use App\Models\NotificationTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Stevebauman\Purify\Facades\Purify;
 use Illuminate\Support\Facades\Validator;
 
@@ -50,7 +52,20 @@ class UserProfileController extends Controller
                 $user->password = bcrypt($purifiedData->password);
                 $user->save();
 
-                return back()->with('success', 'Password changed successfully');
+                // Send email notification about password change
+                $basic = basicControl();
+                if ($basic->email_notification == 1) {
+                    $emailBody = '<p style="margin-bottom: 16px; color: rgba(255,255,255,0.85);">Ваш пароль был успешно изменён.</p>
+<p style="margin-bottom: 16px; color: rgba(255,255,255,0.85);">Если это действие совершили не вы, пожалуйста, немедленно свяжитесь с поддержкой через <a href="https://t.me/solidchange_support_bot" style="color: #e8c9a0;">Telegram</a> или напишите на <a href="mailto:support@solidchange.online" style="color: #e8c9a0;">support@solidchange.online</a>.</p>';
+                    Mail::to($user)->send(new SendMail(
+                        $basic->sender_email,
+                        'Пароль изменён — SolidChange',
+                        $emailBody,
+                        $basic->sender_email_name ?? 'SolidChange'
+                    ));
+                }
+
+                return back()->with('success', 'Пароль успешно изменён');
             } catch (\Exception $e) {
                 return back()->with('error', $e->getMessage());
             }

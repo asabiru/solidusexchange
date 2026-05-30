@@ -221,7 +221,15 @@ body.dark-theme .alert-warning {
     border-radius: 14px;
 }
 
-.sidebar-nav .nav-link.active {
+body .sidebar-nav .nav-link {
+    color: var(--dash-text-2) !important;
+}
+
+body .sidebar-nav .nav-link i {
+    color: var(--dash-muted) !important;
+}
+
+body .sidebar-nav .nav-link.active {
     background: linear-gradient(135deg, rgba(201, 162, 39, .18), rgba(232, 201, 160, .12)) !important;
     color: var(--dash-accent) !important;
     border: 1px solid rgba(201, 162, 39, .20) !important;
@@ -229,11 +237,20 @@ body.dark-theme .alert-warning {
 
 body:not(.dark-theme) .sidebar-nav .nav-link.active {
     background: linear-gradient(135deg, rgba(201, 162, 39, .18), rgba(232, 201, 160, .24)) !important;
+    color: var(--dash-accent) !important;
 }
 
-.sidebar-nav .nav-link:hover {
+body .sidebar-nav .nav-link.active i {
+    color: var(--dash-accent) !important;
+}
+
+body .sidebar-nav .nav-link:hover {
     background: rgba(232, 201, 160, 0.10) !important;
     color: var(--dash-text) !important;
+}
+
+body .sidebar-nav .nav-link:hover i {
+    color: var(--dash-accent) !important;
 }
 
 #toggle-btn {
@@ -271,25 +288,53 @@ footer#footer,
 
 
 /* ── Profile dropdown (user menu) ───────────────────────────────────── */
-.dropdown-menu.profile {
+body .dropdown-menu.profile {
+    background: var(--dash-surface) !important;
+    border: 1px solid var(--dash-border-subtle) !important;
+    box-shadow: var(--dash-shadow) !important;
     padding: 10px !important;
     min-width: 260px;
 }
 
-.header-nav .dropdown-menu.profile .dropdown-header {
+body .dropdown-menu.profile .dropdown-item {
+    color: var(--dash-text-2) !important;
+}
+
+body .dropdown-menu.profile .dropdown-item i {
+    color: var(--dash-muted) !important;
+}
+
+body .dropdown-menu.profile .dropdown-item:hover {
+    background: rgba(232, 201, 160, 0.10) !important;
+    color: var(--dash-text) !important;
+}
+
+body .dropdown-menu.profile .dropdown-item:hover i {
+    color: var(--dash-accent) !important;
+}
+
+body .header-nav .dropdown-menu.profile .dropdown-header {
     display: flex !important;
     align-items: center !important;
     text-align: left !important;
     margin: 2px 2px 10px;
     padding: 10px 10px 8px !important;
     border-radius: 12px;
-    background: rgba(232, 201, 160, 0.10);
-    border: 1px solid var(--dash-border-subtle);
+    background: rgba(232, 201, 160, 0.10) !important;
+    border: 1px solid var(--dash-border-subtle) !important;
     gap: 12px;
 }
 
 body:not(.dark-theme) .header-nav .dropdown-menu.profile .dropdown-header {
-    background: rgba(201, 162, 39, 0.10);
+    background: rgba(201, 162, 39, 0.08) !important;
+}
+
+body .header-nav .dropdown-menu.profile .dropdown-header h6 {
+    color: var(--dash-text) !important;
+}
+
+body .header-nav .dropdown-menu.profile .dropdown-header span {
+    color: var(--dash-text-2) !important;
 }
 
 .header-nav .dropdown-menu.profile .dropdown-header .profile-thum {
@@ -364,6 +409,39 @@ body:not(.dark-theme) .header-nav .dropdown-menu.profile .dropdown-header {
     margin: 8px 6px !important;
 }
 
+
+/* ApexCharts background and text styling overrides */
+.apexcharts-canvas,
+.apexcharts-canvas svg,
+.apexcharts-canvas foreignObject {
+    background: transparent !important;
+}
+
+.apexcharts-text,
+.apexcharts-title-text {
+    fill: var(--dash-text) !important;
+}
+
+.apexcharts-legend-text {
+    color: var(--dash-text) !important;
+}
+
+/* Sidebar Brand Name and Section labels */
+body .sidebar-brand-name {
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    color: var(--dash-text) !important;
+    letter-spacing: -0.01em !important;
+}
+
+body .sidebar-section-label {
+    color: var(--dash-muted) !important;
+}
+
+/* Page Title h3 */
+body .pagetitle h3 {
+    color: var(--dash-text) !important;
+}
 </style>
 
 @stack('extra_styles')
