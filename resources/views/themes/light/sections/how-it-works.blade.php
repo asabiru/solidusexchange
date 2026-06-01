@@ -30,7 +30,6 @@
 <section class="how-it-works-section" id="how">
     <div class="container">
         <div class="how-header">
-            <span class="section-number">05 /</span>
             <h2 class="section-title">Как работает сервис</h2>
         </div>
 

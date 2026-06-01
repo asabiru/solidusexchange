@@ -11,48 +11,30 @@
 @include($theme . 'sections.hero')
 
 <!-- Rates Section -->
-<section class="rates-section" id="rates">
-    @include($theme . 'sections.rates')
-</section>
+@include($theme . 'sections.rates')
 
 <!-- Popular Cryptos Section -->
-<section class="popular-cryptos-section">
-    @include($theme . 'sections.popular-cryptos')
-</section>
+@include($theme . 'sections.popular-cryptos')
 
 <!-- Security & AML Section -->
-<section class="security-aml-section">
-    @include($theme . 'sections.security-aml')
-</section>
+@include($theme . 'sections.security-aml')
 
 <!-- How It Works Section -->
-<section class="how-it-works-section" id="how">
-    @include($theme . 'sections.how-it-works')
-</section>
+@include($theme . 'sections.how-it-works')
 
 <!-- Advantages Section -->
-<section class="advantages-section">
-    @include($theme . 'sections.advantages')
-</section>
+@include($theme . 'sections.advantages')
 
 <!-- Reserves Section -->
-<section class="reserves-section" id="reserves">
-    @include($theme . 'sections.reserves')
-</section>
+@include($theme . 'sections.reserves')
 
 <!-- Reviews Section -->
-<section class="reviews-section">
-    @include($theme . 'sections.reviews')
-</section>
+@include($theme . 'sections.reviews')
 
 <!-- FAQ Section -->
-<section class="faq-section" id="faq">
-    @include($theme . 'sections.faq')
-</section>
+@include($theme . 'sections.faq')
 
 <!-- Footer -->
-<section class="footer-section">
-    @include($theme . 'sections.footer')
-</section>
+@include($theme . 'sections.footer')
 
 @endsection

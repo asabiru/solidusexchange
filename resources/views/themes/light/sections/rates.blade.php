@@ -16,7 +16,6 @@
 <section class="rates-section" id="rates">
     <div class="container">
         <div class="rates-header">
-            <span class="section-number">02 /</span>
             <h2 class="section-title">Онлайн курсы</h2>
         </div>
 

@@ -1191,3 +1191,32 @@
 
 }
 
+
+/* Tighten vertical spacing between homepage sections on mobile */
+@media (max-width: 991px) {
+    .rates-section,
+    .popular-cryptos-section,
+    .security-aml-section,
+    .how-it-works-section,
+    .advantages-section,
+    .reserves-section,
+    .reviews-section,
+    .faq-section {
+        padding-top: 36px;
+        padding-bottom: 36px;
+    }
+}
+
+@media (max-width: 575px) {
+    .rates-section,
+    .popular-cryptos-section,
+    .security-aml-section,
+    .how-it-works-section,
+    .advantages-section,
+    .reserves-section,
+    .reviews-section,
+    .faq-section {
+        padding-top: 28px;
+        padding-bottom: 28px;
+    }
+}

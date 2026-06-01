@@ -2,7 +2,6 @@
 <section class="security-aml-section" id="security">
     <div class="container">
         <div class="security-header">
-            <span class="section-number">04 /</span>
             <h2 class="section-title">Безопасность и AML / KYC</h2>
         </div>
 

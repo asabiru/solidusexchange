@@ -13,7 +13,6 @@
 <section class="reserves-section" id="reserves">
     <div class="container">
         <div class="reserves-header">
-            <span class="section-number">07 /</span>
             <h2 class="section-title">Резервы</h2>
         </div>
 
