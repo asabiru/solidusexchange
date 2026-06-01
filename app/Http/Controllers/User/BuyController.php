@@ -28,7 +28,38 @@ class BuyController extends Controller
 
     public function getBuyCurrency()
     {
-        $sendCurrencies = FiatCurrency::query()->active()->visibleInBuy()->sorted()->get();
+        $fiatCurrencies = FiatCurrency::query()->active()->visibleInBuy()->sorted()->get()
+            ->load(['buyGateways.gateway']);
+
+        $sendCurrencies = [];
+        foreach ($fiatCurrencies as $currency) {
+            $gateways = $currency->buyGateways;
+            if ($gateways->isEmpty()) {
+                $sendCurrencies[] = [
+                    'id' => $currency->id,
+                    'code' => $currency->code,
+                    'name' => $currency->name,
+                    'image' => $currency->image,
+                    'image_path' => $currency->image_path,
+                    'min_send' => $currency->min_send,
+                    'max_send' => $currency->max_send,
+                ];
+            } else {
+                foreach ($gateways as $gw) {
+                    $gateway = $gw->gateway;
+                    $sendCurrencies[] = [
+                        'id' => $currency->id,
+                        'gateway_id' => $gateway?->id ?? $gw->gateway_id,
+                        'code' => $currency->code,
+                        'name' => ($gateway?->name ?? 'Unknown') . ' — ' . $currency->name,
+                        'image' => $gateway?->image ?? $currency->image,
+                        'image_path' => $gateway?->image_path ?? $currency->image_path,
+                        'min_send' => $currency->min_send,
+                        'max_send' => $currency->max_send,
+                    ];
+                }
+            }
+        }
         $getCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
 
         return response()->json([
@@ -36,7 +67,7 @@ class BuyController extends Controller
             'getCurrencies' => $getCurrencies,
             'selectedSendCurrency' => $sendCurrencies[0]??null,
             'selectedGetCurrency' => $getCurrencies[0]??null,
-            'initialSendAmount' => isset($sendCurrencies[0]) ? (($sendCurrencies[0]->min_send + $sendCurrencies[0]->max_send) / 2) : 1,
+            'initialSendAmount' => isset($sendCurrencies[0]) ? (($sendCurrencies[0]['min_send'] + $sendCurrencies[0]['max_send']) / 2) : 1,
         ]);
     }
 
@@ -76,6 +107,7 @@ class BuyController extends Controller
             'network_fee' => $quote['network_fee'],
             'final_amount' => $quote['final_amount'],
             'utr' => uniqid('B'),
+            'gateway_id' => $request->payment_method ?? null,
         ]);
 
         // Store request data in session and redirect to login
@@ -113,6 +145,7 @@ class BuyController extends Controller
             'network_fee' => $quote['network_fee'],
             'final_amount' => $quote['final_amount'],
             'utr' => uniqid('B'),
+            'gateway_id' => $request->payment_method ?? null,
         ]);
 
         return redirect()->route('buyProcessing', $buyRequest->utr);

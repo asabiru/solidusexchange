@@ -97,6 +97,7 @@
             return;
         }
         setSendCurrency(activeSendCurrency);
+        $('input[name="payment_method"]').val(activeSendCurrency.gateway_id || '');
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal').modal('hide');
 
@@ -110,6 +111,7 @@
             return;
         }
         setGetCurrency(activeGetCurrency);
+        $('input[name="payment_method"]').val(activeGetCurrency.gateway_id || '');
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal2').modal('hide');
 
@@ -218,11 +220,18 @@
             sell: "{{ route('sellAutoRate', [], false) }}",
         };
 
-        axios.post(routeMap[activeTab], {
+        const payload = {
             sendAmount: sendAmount,
             sendCurrency: activeSendCurrency.id,
             getCurrency: activeGetCurrency.id,
-        })
+        };
+        if (activeSendCurrency && activeSendCurrency.gateway_id) {
+            payload.sendGatewayId = activeSendCurrency.gateway_id;
+        }
+        if (activeGetCurrency && activeGetCurrency.gateway_id) {
+            payload.getGatewayId = activeGetCurrency.gateway_id;
+        }
+        axios.post(routeMap[activeTab], payload)
             .then(function (response) {
                 applyQuote(response.data.quote);
             })
@@ -325,11 +334,17 @@
         }
 
         if (side === 'send' && activeGetCurrency) {
-            return Number(currency.id) !== Number(activeGetCurrency.id);
+            if (Number(currency.id) !== Number(activeGetCurrency.id)) {
+                return true;
+            }
+            return Number(currency.gateway_id || 0) !== Number(activeGetCurrency.gateway_id || 0);
         }
 
         if (side === 'get' && activeSendCurrency) {
-            return Number(currency.id) !== Number(activeSendCurrency.id);
+            if (Number(currency.id) !== Number(activeSendCurrency.id)) {
+                return true;
+            }
+            return Number(currency.gateway_id || 0) !== Number(activeSendCurrency.gateway_id || 0);
         }
 
         return true;

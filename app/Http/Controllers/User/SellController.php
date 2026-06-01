@@ -33,7 +33,38 @@ class SellController extends Controller
     public function getSellCurrency()
     {
         $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = FiatCurrency::query()->active()->visibleInSell()->sorted()->get();
+        $fiatCurrencies = FiatCurrency::query()->active()->visibleInSell()->sorted()->get()
+            ->load(['sellGateways.fiatSendGateway']);
+
+        $getCurrencies = [];
+        foreach ($fiatCurrencies as $currency) {
+            $gateways = $currency->sellGateways;
+            if ($gateways->isEmpty()) {
+                $getCurrencies[] = [
+                    'id' => $currency->id,
+                    'code' => $currency->code,
+                    'name' => $currency->name,
+                    'image' => $currency->image,
+                    'image_path' => $currency->image_path,
+                    'min_send' => $currency->min_send,
+                    'max_send' => $currency->max_send,
+                ];
+            } else {
+                foreach ($gateways as $gw) {
+                    $gateway = $gw->fiatSendGateway;
+                    $getCurrencies[] = [
+                        'id' => $currency->id,
+                        'gateway_id' => $gateway?->id ?? $gw->fiat_send_gateway_id,
+                        'code' => $currency->code,
+                        'name' => ($gateway?->name ?? 'Unknown') . ' — ' . $currency->name,
+                        'image' => $gateway?->image ?? $currency->image,
+                        'image_path' => $gateway?->image_path ?? $currency->image_path,
+                        'min_send' => $currency->min_send,
+                        'max_send' => $currency->max_send,
+                    ];
+                }
+            }
+        }
 
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
@@ -79,6 +110,7 @@ class SellController extends Controller
             'processing_fee' => $quote['processing_fee'],
             'final_amount' => $quote['final_amount'],
             'utr' => uniqid('S'),
+            'fiat_send_gateway_id' => $request->payment_method ?? null,
         ]);
 
         // Store request data in session and redirect to login
@@ -115,6 +147,7 @@ class SellController extends Controller
             'processing_fee' => $quote['processing_fee'],
             'final_amount' => $quote['final_amount'],
             'utr' => uniqid('S'),
+            'fiat_send_gateway_id' => $request->payment_method ?? null,
         ]);
 
         return redirect()->route('sellProcessing', $sellRequest->utr);

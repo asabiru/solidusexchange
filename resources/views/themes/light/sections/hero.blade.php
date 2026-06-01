@@ -109,6 +109,7 @@
                     <form class="swap-form" action="{{ route('exchangeRequest', [], false) }}" method="POST" id="submitFormId">
                         @csrf
                         <input type="hidden" name="exchangeType" id="exchangeType" value="exchange">
+                        <input type="hidden" name="payment_method" value="">
 
                         <!-- Card Header -->
                         <div class="swap-card-header">
