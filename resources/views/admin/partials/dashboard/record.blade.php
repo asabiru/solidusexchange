@@ -169,7 +169,7 @@
                     $('.userRecord-totalUsers').text(res.data.userRecord.totalUsers);
                     $('.userRecord-followupGrapClass').addClass(res.data.userRecord.followupGrapClass);
                     $('.userRecord-followupGrap').text(res.data.userRecord.followupGrap);
-                    $('.userRecord-chartPercentageIncDec').text(`from ${res.data.userRecord.chartPercentageIncDec}`);
+                    $('.userRecord-chartPercentageIncDec').text(`от ${res.data.userRecord.chartPercentageIncDec}`);
 
                     chartUserRecordsGraph.data.labels = res.data.current_month_data_dates
                     chartUserRecordsGraph.data.datasets[0].data = res.data.current_month_datas
@@ -233,7 +233,7 @@
                     $('.ticketRecord-totalTickets').text(res.data.ticketRecord.pending);
                     $('.ticketRecord-followupGrapClass').addClass(res.data.ticketRecord.followupGrapClass);
                     $('.ticketRecord-followupGrap').text(res.data.ticketRecord.followupGrap);
-                    $('.ticketRecord-chartPercentageIncDec').text(`from ${res.data.ticketRecord.chartPercentageIncDec}`);
+                    $('.ticketRecord-chartPercentageIncDec').text(`от ${res.data.ticketRecord.chartPercentageIncDec}`);
 
                     chartTicketRecordsGraph.data.labels = res.data.current_month_data_dates
                     chartTicketRecordsGraph.data.datasets[0].data = res.data.current_month_datas
@@ -297,7 +297,7 @@
                     $('.kycRecord-pendingKycs').text(res.data.kycRecord.pendingKYC);
                     $('.kycRecord-followupGrapClass').addClass(res.data.kycRecord.followupGrapClass);
                     $('.kycRecord-followupGrap').text(res.data.kycRecord.followupGrap);
-                    $('.kycRecord-chartPercentageIncDec').text(`from ${res.data.kycRecord.chartPercentageIncDec}`);
+                    $('.kycRecord-chartPercentageIncDec').text(`от ${res.data.kycRecord.chartPercentageIncDec}`);
 
                     chartKycRecordsGraph.data.labels = res.data.current_month_data_dates
                     chartKycRecordsGraph.data.datasets[0].data = res.data.current_month_datas
@@ -361,7 +361,7 @@
                     $('.transactionRecord-totalTransaction').text(res.data.transactionRecord.totalTransaction);
                     $('.transactionRecord-followupGrapClass').addClass(res.data.transactionRecord.followupGrapClass);
                     $('.transactionRecord-followupGrap').text(res.data.transactionRecord.followupGrap);
-                    $('.transactionRecord-chartPercentageIncDec').text(`from ${res.data.transactionRecord.chartPercentageIncDec}`);
+                    $('.transactionRecord-chartPercentageIncDec').text(`от ${res.data.transactionRecord.chartPercentageIncDec}`);
 
                     chartTransactionRecordsGraph.data.labels = res.data.current_month_data_dates
                     chartTransactionRecordsGraph.data.datasets[0].data = res.data.current_month_datas

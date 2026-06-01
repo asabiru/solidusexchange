@@ -10,7 +10,7 @@ class CryptoCurrency extends Model
 {
     use HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'change_24h', 'sparkline_7d', 'service_fee', 'service_fee_type', 'network_fee', 'network_fee_type', 'min_send', 'max_send', 'image', 'driver', 'status', 'show_on_homepage', 'show_in_reserves', 'reserve_amount', 'sort_by', 'is_stablecoin', 'last_rate_sync_at', 'last_rate_sync_error'];
+    protected $fillable = ['name', 'code', 'symbol', 'rate', 'usd_rate', 'change_24h', 'sparkline_7d', 'service_fee', 'service_fee_type', 'network_fee', 'network_fee_type', 'buy_margin_percent', 'sell_margin_percent', 'exchange_margin_percent', 'min_send', 'max_send', 'image', 'driver', 'status', 'show_on_homepage', 'show_in_reserves', 'reserve_amount', 'sort_by', 'is_stablecoin', 'last_rate_sync_at', 'last_rate_sync_error'];
     protected $casts = [
         'last_rate_sync_at' => 'datetime',
         'is_stablecoin' => 'boolean',

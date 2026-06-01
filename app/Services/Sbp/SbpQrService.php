@@ -282,10 +282,30 @@ class SbpQrService
             default      => 'pending',
         };
 
-        // Find the SBP payment by order_id or payment_id
-        $sbpPayment = SbpPayment::where('provider_payment_id', $paymentId)
-            ->orWhere('order_id', $orderId)
-            ->first();
+        // Find the SBP payment by order_id or payment_id (grouped to avoid matching empty ids)
+        $sbpPayment = SbpPayment::where(function ($q) use ($paymentId, $orderId) {
+            if (!empty($paymentId)) {
+                $q->where('provider_payment_id', $paymentId);
+            }
+            if (!empty($orderId)) {
+                $q->orWhere('order_id', $orderId);
+            }
+        })->first();
+
+        // Amount tampering guard: for money-bearing statuses, the paid amount
+        // must match the expected order amount (1 kopeck tolerance). Never
+        // credit/confirm an order whose paid amount differs from what we issued.
+        if ($sbpPayment && in_array($mappedStatus, ['paid', 'confirmed'], true)) {
+            $expected = (float) $sbpPayment->amount;
+            if ($expected > 0 && abs($expected - $amount) > 0.01) {
+                Log::warning('SBP: Webhook amount mismatch — refusing to confirm', [
+                    'order_id' => $orderId,
+                    'expected' => $expected,
+                    'received' => $amount,
+                ]);
+                return ['success' => false, 'error' => 'Amount mismatch'];
+            }
+        }
 
         if ($sbpPayment) {
             $sbpPayment->update([
@@ -413,16 +433,30 @@ class SbpQrService
             return false;
         }
 
-        // Tinkoff token algorithm: sort all fields alphabetically, concatenate values + password, SHA-256
-        $sorted = collect($payload)
-            ->except(['Token', 'DATA'])
-            ->filter(fn($v) => $v !== null && $v !== '')
-            ->sortKeys()
-            ->implode('');
+        // Tinkoff token algorithm (official):
+        //   1. Take ONLY root-level params; drop Token and nested objects (DATA, Receipt).
+        //   2. Add the terminal Password as a field.
+        //   3. Sort all key/value pairs by key (ascending).
+        //   4. Concatenate the values (booleans as "true"/"false").
+        //   5. SHA-256 of the concatenation; compare case-insensitively.
+        $fields = [];
+        foreach ($payload as $key => $value) {
+            if ($key === 'Token' || is_array($value) || is_object($value)) {
+                continue; // skip token itself and nested objects (DATA/Receipt)
+            }
+            if (is_bool($value)) {
+                $value = $value ? 'true' : 'false';
+            }
+            $fields[$key] = (string) $value;
+        }
+        $fields['Password'] = (string) $password;
 
-        $expectedToken = hash('sha256', $sorted . $password);
+        ksort($fields, SORT_STRING);
+        $concat = implode('', $fields);
 
-        return hash_equals($expectedToken, strtolower($token));
+        $expectedToken = hash('sha256', $concat);
+
+        return hash_equals($expectedToken, strtolower((string) $token));
     }
 
     /**

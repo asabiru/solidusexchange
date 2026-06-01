@@ -3092,7 +3092,7 @@ Offcanvas section end
 
     border-color: #f2d8b4;
 
-    border-left-color: #3ac279;
+    border-left-color: #a9854f;
 
 }
 
@@ -3198,7 +3198,7 @@ Offcanvas section end
 
 .rtl .alert-success {
 
-    border-right-color: #3ac279;
+    border-right-color: #a9854f;
 
     border-left-color: #f2d8b4;
 
@@ -3556,9 +3556,9 @@ section {
 
 .badge.text-bg-success {
 
-    color: rgba(39, 183, 100) !important;
+    color: rgba(169, 133, 79) !important;
 
-    background-color: rgba(39, 183, 100, var(--bs-bg-opacity, 0.1)) !important;
+    background-color: rgba(169, 133, 79, var(--bs-bg-opacity, 0.12)) !important;
 
 }
 
@@ -3566,7 +3566,7 @@ section {
 
 .badge.text-bg-success::before {
 
-    background-color: rgba(39, 183, 100) !important;
+    background-color: rgba(169, 133, 79) !important;
 
 }
 
@@ -7598,7 +7598,7 @@ main#main.main { background:var(--color-bg) !important; padding:24px 28px !impor
 
 .statistics { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; padding-top:12px; border-top:1px solid rgba(255,255,255,0.04); }
 
-.statistics .growth { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:#7fb28a !important; background:rgba(127,178,138,0.10); padding:3px 8px; border-radius:99px; margin:0 !important; }
+.statistics .growth { display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:600; color:#a9854f !important; background:rgba(169,133,79,0.12); padding:3px 8px; border-radius:99px; margin:0 !important; }
 
 .statistics .growth.down { color:#c9786a !important; background:rgba(201,120,106,0.10); }
 

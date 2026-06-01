@@ -103,7 +103,7 @@ PopularCryptos Section - eazy228/design style
 }
 
 .crypto-change.positive {
-    background: rgba(127, 178, 138, 0.1);
+    background: rgba(232, 201, 160, 0.1);
     color: var(--color-success);
 }
 

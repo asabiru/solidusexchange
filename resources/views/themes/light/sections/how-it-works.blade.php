@@ -30,11 +30,10 @@
 <section class="how-it-works-section" id="how">
     <div class="container">
         <div class="how-header">
-            <span class="section-number">05 /</span>
             <h2 class="section-title">Как работает сервис</h2>
         </div>
 
-        <h3 class="how-subtitle">{{ $howContentSingle ? __($howContentSingle->description->sub_title ?? "") : "Четыре шага. Без скрытых этапов." }}</h3>
+        <h3 class="how-subtitle">Безопасно и просто — всего несколько шагов.</h3>
 
         <div class="how-steps">
             <div class="how-step">

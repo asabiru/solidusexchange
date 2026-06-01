@@ -30,7 +30,6 @@
 <section class="advantages-section" id="advantages">
     <div class="container">
         <div class="advantages-header">
-            <span class="section-number">06 /</span>
             <h2 class="section-title">Преимущества</h2>
         </div>
 

@@ -106,6 +106,11 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('sbp/settings', 'settings')->name('sbpSettings');
         });
 
+        Route::controller(\App\Http\Controllers\Admin\Module\PricingSettingController::class)->group(function () {
+            Route::get('pricing/settings', 'index')->name('pricingSettings');
+            Route::post('pricing/settings', 'update')->name('pricingSettingsUpdate');
+        });
+
         Route::controller(BuyController::class)->group(function () {
             Route::get('buy/list', 'buyList')->name('buyList');
             Route::get('buy/list/search', 'buyListSearch')->name('buyListSearch');

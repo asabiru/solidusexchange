@@ -52,7 +52,6 @@
 <section class="faq-section" id="faq">
     <div class="container">
         <div class="faq-header">
-            <span class="section-number">09 /</span>
             <h2 class="section-title">{{ $sectionTitle }}</h2>
         </div>
 

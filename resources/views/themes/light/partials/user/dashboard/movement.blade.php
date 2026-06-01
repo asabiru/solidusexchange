@@ -48,7 +48,7 @@
                 curve: 'straight'
             },
             title: {
-                text: 'Exchange Request by Month',
+                text: '{{ trans('Exchange Request by Month') }}',
                 align: 'left',
                 style: {
                     color: labelColor, // Set your desired color here
@@ -116,7 +116,7 @@
                 curve: 'straight'
             },
             title: {
-                text: 'Buy Request by Month',
+                text: '{{ trans('Buy Request by Month') }}',
                 align: 'left',
                 style: {
                     color: labelColor , // Set your desired color here
@@ -184,7 +184,7 @@
                 curve: 'straight'
             },
             title: {
-                text: 'Sell Request by Month',
+                text: '{{ trans('Sell Request by Month') }}',
                 align: 'left',
                 style: {
                     color: labelColor // Title color

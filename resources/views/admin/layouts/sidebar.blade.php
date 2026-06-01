@@ -196,6 +196,14 @@
                         </a>
                     </div>
 
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.pricingSettings']) }}"
+                           href="{{ route('admin.pricingSettings') }}" data-placement="left">
+                            <i class="bi-calculator nav-icon"></i>
+                            <span class="nav-link-title">@lang("Ценообразование")</span>
+                        </a>
+                    </div>
+
 
                     <span class="dropdown-header mt-3">@lang('Transaction History')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>

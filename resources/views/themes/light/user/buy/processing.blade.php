@@ -49,6 +49,11 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        <div id="buyPaymentMethodBox" class="payment-method-selector mt-3" style="display:none;">
+                                            <label class="form-label mb-2">@lang("Payment method")</label>
+                                            <div class="payment-method-options" id="buyPaymentMethodOptions"></div>
+                                            <input type="hidden" name="payment_method" id="buyPaymentMethodInput" value="">
+                                        </div>
                                         <div class="swap-area">
                                             <div class="swap-icon" id="swapBtn">
                                                 <i class="fa-regular fa-arrow-up-arrow-down"></i>
@@ -270,7 +275,7 @@
             $('#show-send').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeSendCurrency.id && String(currencies[i].gateway_id || '') === String(activeSendCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -291,7 +296,7 @@
             $('#show-get').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeGetCurrency.id && String(currencies[i].gateway_id || '') === String(activeGetCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -313,6 +318,42 @@
             $('#showSendCode').text(currency.code);
             $('#showSendName').text(currency.name);
             $('input[name="exchangeSendCurrency"]').val(currency.id);
+            showBuyPaymentMethods(currency);
+        }
+
+        function showBuyPaymentMethods(currency) {
+            let box = $('#buyPaymentMethodBox');
+            let optsDiv = $('#buyPaymentMethodOptions');
+            let input = $('#buyPaymentMethodInput');
+            let gateways = currency.buy_gateways || [];
+
+            if (gateways.length > 1) {
+                box.show();
+                optsDiv.html('');
+                for (let i = 0; i < gateways.length; i++) {
+                    let gw = gateways[i];
+                    let isChecked = i === 0 ? 'checked' : '';
+                    optsDiv.append(`
+                        <div class="form-check payment-method-option mb-2">
+                            <input class="form-check-input" type="radio" name="buy_payment_method_radio" id="bpm_${gw.id}" value="${gw.gateway_id}" ${isChecked}>
+                            <label class="form-check-label" for="bpm_${gw.id}">
+                                <strong>${gw.name}</strong>
+                                ${gw.description ? '<small class="d-block text-muted">' + gw.description + '</small>' : ''}
+                            </label>
+                        </div>
+                    `);
+                }
+                input.val(gateways[0].gateway_id);
+                $(document).off('change', 'input[name="buy_payment_method_radio"]').on('change', 'input[name="buy_payment_method_radio"]', function() {
+                    input.val($(this).val());
+                });
+            } else if (gateways.length === 1) {
+                box.hide();
+                input.val(gateways[0].gateway_id);
+            } else {
+                box.hide();
+                input.val('');
+            }
         }
 
         function setGetCurrency(currency) {

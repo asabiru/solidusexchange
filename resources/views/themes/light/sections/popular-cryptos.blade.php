@@ -34,7 +34,6 @@
 <section class="popular-cryptos-section" id="popular">
     <div class="container">
         <div class="popular-header">
-            <span class="section-number">03 /</span>
             <h2 class="section-title">Популярные криптовалюты</h2>
         </div>
 

@@ -34,7 +34,6 @@
 <section class="reviews-section" id="reviews">
     <div class="container">
         <div class="reviews-header">
-            <span class="section-number">08 /</span>
             <h2 class="section-title">{{ $sectionTitle }}</h2>
         </div>
 

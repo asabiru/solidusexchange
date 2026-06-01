@@ -322,7 +322,7 @@
                 if (!isCurrencySelectable('send', currencies[i])) {
                     continue;
                 }
-                let isChecked = (currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeSendCurrency.id && String(currencies[i].gateway_id || '') === String(activeSendCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -346,7 +346,7 @@
                 if (!isCurrencySelectable('get', currencies[i])) {
                     continue;
                 }
-                let isChecked = (currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeGetCurrency.id && String(currencies[i].gateway_id || '') === String(activeGetCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">

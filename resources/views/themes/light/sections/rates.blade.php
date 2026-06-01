@@ -16,7 +16,6 @@
 <section class="rates-section" id="rates">
     <div class="container">
         <div class="rates-header">
-            <span class="section-number">02 /</span>
             <h2 class="section-title">Онлайн курсы</h2>
         </div>
 
@@ -73,13 +72,12 @@
                     <div class="table-cell">Пара</div>
                     <div class="table-cell">Цена</div>
                     <div class="table-cell">24ч</div>
-                    <div class="table-cell">7 дней</div>
                     <div class="table-cell">Обменять</div>
                 </div>
 
                 @if($cryptoCurrencies->isEmpty())
                     <div class="table-row">
-                        <div class="table-cell" colspan="5" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
+                        <div class="table-cell" colspan="4" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
                             Криптовалюты временно недоступны
                         </div>
                     </div>
@@ -122,44 +120,6 @@
                         @else
                         <span class="change-value" style="opacity:0.4">—</span>
                         @endif
-                    </div>
-                    <div class="table-cell" data-label="7 дней">
-                        <div class="mini-chart">
-                            @if($sparkline && count($sparkline) > 1)
-                                @php
-                                    $min = min($sparkline);
-                                    $max = max($sparkline);
-                                    $range = $max - $min ?: 1;
-                                    $points = [];
-                                    $w = 80;
-                                    $h = 30;
-                                    $pad = 2;
-                                    foreach ($sparkline as $i => $val) {
-                                        $x = $pad + ($i / (count($sparkline) - 1)) * ($w - 2 * $pad);
-                                        $y = $h - $pad - (($val - $min) / $range) * ($h - 2 * $pad);
-                                        $points[] = round($x, 1) . ',' . round($y, 1);
-                                    }
-                                    $pointStr = implode(' ', $points);
-                                    $lastVal = end($sparkline);
-                                    $firstVal = reset($sparkline);
-                                    $chartColor = $lastVal >= $firstVal ? '#e8c9a0' : '#c9786a';
-                                @endphp
-                                <svg width="{{ $w }}" height="{{ $h }}" viewBox="0 0 {{ $w }} {{ $h }}">
-                                    <polyline
-                                        fill="none"
-                                        stroke="{{ $chartColor }}"
-                                        stroke-width="1.5"
-                                        stroke-linecap="round"
-                                        stroke-linejoin="round"
-                                        points="{{ $pointStr }}"
-                                    />
-                                </svg>
-                            @else
-                                <svg width="80" height="30" viewBox="0 0 80 30">
-                                    <line x1="5" y1="15" x2="75" y2="15" stroke="var(--color-text-secondary)" stroke-width="1" stroke-dasharray="4,4" opacity="0.3"/>
-                                </svg>
-                            @endif
-                        </div>
                     </div>
                     <div class="table-cell" data-label="Обменять">
                         <a href="{{ route('home') }}#exchange"

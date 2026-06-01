@@ -39,6 +39,7 @@
 
         body {
             opacity: 1;
+            background-color: #0b0608;
         }
     </style>
 
@@ -60,11 +61,11 @@
                 "sidebarLayout": "default"
             },
             "themeAppearance": {
-                "layoutSkin": "default",
+                "layoutSkin": "dark",
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#8d3dff",
+                        "primary": "#e8c9a0",
                         "transparent": "transparent",
                         "white": "#fff",
                         "dark": "132144",
@@ -97,7 +98,7 @@
     <script>
         (function () {
             function resolveAdminTheme() {
-                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
+                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'dark';
                 var theme = localStorage.getItem('hs_theme') || fallback;
                 if (theme === 'auto') {
                     theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
@@ -171,7 +172,7 @@
 <script src="{{ asset('assets/admin/js/main.js') }}"></script>
 
 {{-- SolidChange design overrides — loaded AFTER theme.min.js so they always win --}}
-<link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}?v=2">
+<link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}?v=8">
 
 
 <script>

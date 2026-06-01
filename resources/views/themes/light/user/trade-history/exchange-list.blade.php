@@ -1,7 +1,26 @@
 @extends($theme . 'layouts.user')
 @section('page_title', __('Exchange'))
+
+@push('extra_styles')
+    <link rel="stylesheet" href="{{ asset($themeTrue.'css/hero-section.css') }}?v={{ (string) (config('app.asset_version') ?? env('APP_VERSION', '1')) }}">
+    <link rel="stylesheet" href="{{ asset($themeTrue.'css/exchange-widget.css') }}?v={{ (string) (config('app.asset_version') ?? env('APP_VERSION', '1')) }}">
+@endpush
+
 @section('content')
-    
+
+    <!-- New exchange widget (same flow as the homepage) -->
+    <div class="dash-exchange-heading">
+        <h4>@lang('New exchange')</h4>
+        <p>@lang('Exchange, buy or sell crypto — the rate updates automatically.')</p>
+    </div>
+    <div class="dash-exchange-widget">
+        @include($theme.'partials.exchange-module.swap-widget')
+    </div>
+
+    <!-- History -->
+    <div class="dash-exchange-heading">
+        <h4>@lang('Exchange history')</h4>
+    </div>
     <!-- main -->
     <div class="card">
         <div class="card-body">
@@ -85,7 +104,7 @@
                                                     <div class="avatar avatar-sm avatar-circle">
                                                         <img class="avatar-img"
                                                             src="{{ getFile(optional($value->sendCurrency)->driver, optional($value->sendCurrency)->image) }}"
-                                                            alt="Описание изображения">
+                                                            alt="Image Description">
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">
@@ -103,7 +122,7 @@
                                                     <div class="avatar avatar-sm avatar-circle">
                                                         <img class="avatar-img"
                                                             src="{{ getFile(optional($value->getCurrency)->driver, optional($value->getCurrency)->image) }}"
-                                                            alt="Описание изображения">
+                                                            alt="Image Description">
                                                     </div>
                                                 </div>
                                                 <div class="flex-grow-1 ms-3">
@@ -142,3 +161,36 @@
     </div>
     {{ $exchanges->appends($_GET)->links($theme . 'partials.user.pagination') }}
 @endsection
+
+@push('extra_scripts')
+    <script>
+        // Currency search inside the selection modals (provided by main.js on the
+        // front-end; redefined here because the dashboard layout does not load it).
+        function filterItems(inputId) {
+            var input = document.getElementById(inputId);
+            if (!input) return;
+            var filter = input.value.toUpperCase();
+            document.querySelectorAll('#currency-list .item').forEach(function (item) {
+                var title = item.querySelector('.title');
+                var subtitle = item.querySelector('.sub-title');
+                var txtValue = (title ? (title.textContent || title.innerText) : '') + ' '
+                    + (subtitle ? (subtitle.textContent || subtitle.innerText) : '');
+                item.style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
+            });
+        }
+
+        function filterItems2(inputId) {
+            var input = document.getElementById(inputId);
+            if (!input) return;
+            var filter = input.value.toUpperCase();
+            document.querySelectorAll('#currency-list2 .item').forEach(function (item) {
+                var title = item.querySelector('.title');
+                var subtitle = item.querySelector('.sub-title');
+                var txtValue = (title ? (title.textContent || title.innerText) : '') + ' '
+                    + (subtitle ? (subtitle.textContent || subtitle.innerText) : '');
+                item.style.display = txtValue.toUpperCase().indexOf(filter) > -1 ? '' : 'none';
+            });
+        }
+    </script>
+    @include($theme.'partials.exchange-module.exchange-js')
+@endpush

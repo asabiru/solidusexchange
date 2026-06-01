@@ -169,6 +169,34 @@
                                                 @enderror
                                             </div>
 
+                                            <div class="mb-3">
+                                                <label class="form-label">@lang('Маржа (чистая прибыль), % — зашивается в курс')</label>
+                                                <div class="row g-2">
+                                                    <div class="col-4">
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">@lang('Покупка')</span>
+                                                            <input type="number" step="0.0001" min="0" class="form-control" name="buy_margin_percent"
+                                                                   value="{{ old('buy_margin_percent') }}" placeholder="2" autocomplete="off">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">@lang('Продажа')</span>
+                                                            <input type="number" step="0.0001" min="0" class="form-control" name="sell_margin_percent"
+                                                                   value="{{ old('sell_margin_percent') }}" placeholder="2" autocomplete="off">
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-4">
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">@lang('Обмен')</span>
+                                                            <input type="number" step="0.0001" min="0" class="form-control" name="exchange_margin_percent"
+                                                                   value="{{ old('exchange_margin_percent') }}" placeholder="2" autocomplete="off">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <small class="text-muted">@lang('Ваша чистая прибыль по направлению. Прочие расходы (AML/KYC, НСПК, налог, сеть) учитываются автоматически и уже включены в курс.')</small>
+                                            </div>
+
                                         </div>
                                         <div class="col-md-6">
                                             <div class="mb-3">

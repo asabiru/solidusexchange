@@ -88,7 +88,7 @@ class SupportController extends Controller
 
     public function view($ticketId)
     {
-        $ticket = SupportTicket::where('ticket', $ticketId)->latest()->with('messages')->firstOrFail();
+        $ticket = SupportTicket::where('ticket', $ticketId)->where('user_id', auth()->id())->latest()->with('messages')->firstOrFail();
         $admin = Admin::first();
         $user = Auth::user();
         return view($this->theme . 'user.support.view', compact('ticket', 'user', 'admin'));
@@ -97,7 +97,7 @@ class SupportController extends Controller
     public function reply(Request $request, $id)
     {
 
-        $ticket = SupportTicket::findOrFail($id);
+        $ticket = SupportTicket::where('id', $id)->where('user_id', auth()->id())->firstOrFail();
         $message = new SupportTicketMessage();
 
         if ($request->replayTicket == 1) {
@@ -173,11 +173,17 @@ class SupportController extends Controller
     public function download($ticket_id)
     {
         $attachment = SupportTicketAttachment::with('supportMessage', 'supportMessage.ticket')->findOrFail(decrypt($ticket_id));
+
+        if (optional(optional($attachment->supportMessage)->ticket)->user_id !== auth()->id()) {
+            abort(403);
+        }
+
         $file = $attachment->file;
         $full_path = getFile($attachment->driver, $file);
-        $title = slug($attachment->supportMessage->ticket->subject) . '-' . $file;
-        header('Content-Disposition: attachment; filename="' . $title);
-        header("Content-Type: " . $full_path);
+        $mimeType = @mime_content_type($full_path) ?: 'application/octet-stream';
+        $title = slug($attachment->supportMessage->ticket->subject) . '-' . basename($file);
+        header('Content-Disposition: attachment; filename="' . $title . '"');
+        header("Content-Type: " . $mimeType);
         return readfile($full_path);
     }
 

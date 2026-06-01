@@ -853,7 +853,7 @@ Modern Tabs - eazy228/design style
     background: transparent;
     border: none;
     border-radius: var(--radius-md);
-    color: #3d3d3d !important;
+    color: var(--color-text-secondary) !important;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
@@ -872,8 +872,12 @@ Modern Tabs - eazy228/design style
 }
 
 .tab-button:hover {
-    color: #0b0608;
+    color: var(--color-text-primary) !important;
     background: var(--color-bg-elevated);
+}
+
+.tab-button.active:hover {
+    color: #0b0608 !important;
 }
 
 .tab-button.active {
@@ -897,6 +901,34 @@ Modern Tabs - eazy228/design style
 .tab-button span {
     position: relative;
     z-index: 1;
+}
+
+/* Ensure tab label/icon color follows the tab state (the inner <span> was
+   inheriting the light dark-theme text color, making the active tab text
+   unreadable on the cream background). */
+.modern-tabs .tab-button span,
+.modern-tabs .tab-button svg,
+body.dark-theme .modern-tabs .tab-button span,
+body.dark-theme .modern-tabs .tab-button svg {
+    color: var(--color-text-secondary) !important;
+}
+
+.modern-tabs .tab-button:hover span,
+.modern-tabs .tab-button:hover svg,
+body.dark-theme .modern-tabs .tab-button:hover span,
+body.dark-theme .modern-tabs .tab-button:hover svg {
+    color: var(--color-text-primary) !important;
+}
+
+.modern-tabs .tab-button.active span,
+.modern-tabs .tab-button.active svg,
+.modern-tabs .tab-button.active:hover span,
+.modern-tabs .tab-button.active:hover svg,
+body.dark-theme .modern-tabs .tab-button.active span,
+body.dark-theme .modern-tabs .tab-button.active svg,
+body.dark-theme .modern-tabs .tab-button.active:hover span,
+body.dark-theme .modern-tabs .tab-button.active:hover svg {
+    color: #0b0608 !important;
 }
 
 /* Tab button animation */

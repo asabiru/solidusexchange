@@ -1,5 +1,8 @@
 <link rel="shortcut icon" href="{{ getFile($basicControl->favicon_driver, $basicControl->favicon) }}"
       type="image/x-icon">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset($themeTrue . 'css/all.min.css') }}">
 <link rel="stylesheet" href="{{ asset($themeTrue . 'css/fontawesome.min.css') }}">
 <link rel="stylesheet" href="{{ asset($themeTrue . "css/bootstrap.min.css") }}">
@@ -275,7 +278,9 @@ body .sidebar-nav .nav-link:hover i {
 }
 
 #header .logo-container img#logoSet {
-    display: none !important;
+    display: block !important;
+    max-height: 44px;
+    width: auto;
 }
 
 footer#footer,
@@ -442,6 +447,53 @@ body .sidebar-section-label {
 body .pagetitle h3 {
     color: var(--dash-text) !important;
 }
+
+/* ============================================================
+   eazy228/design alignment — Geist typography + polish
+   ============================================================ */
+html, body,
+.sidebar, .sidebar-nav, #header, .header, #main, main.main,
+.card, .box-card, .cmn-box, .table, table,
+button, .btn, .cmn-btn,
+input, select, textarea, .form-control, .form-select,
+.dropdown-menu, .modal-content,
+h1, h2, h3, h4, h5, h6, .pagetitle h3, .dash-section-title {
+    font-family: "Geist", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif !important;
+}
+body { font-variant-numeric: tabular-nums; font-feature-settings: "ss01", "cv11"; }
+.dash-stat-value, .dash-stat-total, .dash-stat-trend,
+.table td, .table th, .num, .global-search,
+input[type="number"], input[type="search"] { font-variant-numeric: tabular-nums; }
+
+/* Accessible champagne-gold focus ring (reference spec) */
+a:focus-visible, button:focus-visible, .btn:focus-visible, .cmn-btn:focus-visible,
+.nav-link:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+.form-control:focus-visible, .form-select:focus-visible {
+    outline: 1.5px solid var(--dash-accent-2, #e8c9a0) !important;
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* Restrained, consistent transitions (color/border only — no glow) */
+.nav-link, .btn, .cmn-btn, .form-control, .form-select,
+.dropdown-item, .page-link, .card, .box-card {
+    transition: background-color .18s ease, border-color .18s ease,
+                color .18s ease, box-shadow .18s ease !important;
+}
+
+/* On-brand empty-state (replaces off-brand purple no-data illustration) */
+.table-not-found{ padding:0 !important; border:0 !important; }
+.table-not-found .sc-empty{ display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:14px; padding:56px 16px; }
+.table-not-found .sc-empty-icon{ color:var(--dash-accent-2,#e8c9a0); opacity:.45; }
+.table-not-found .sc-empty-text{ color:var(--dash-muted,#8a8278); font-size:14px;
+    font-weight:500; letter-spacing:.01em; }
+.no-data-img{ display:none !important; }
+
+/* Dashboard stat-card hover micro-interaction */
+.box-card { transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease !important; }
+.box-card:hover { border-color: rgba(232,201,160,.22) !important; transform: translateY(-2px);
+    box-shadow: 0 14px 34px rgba(0,0,0,.35) !important; }
 </style>
 
 @stack('extra_styles')

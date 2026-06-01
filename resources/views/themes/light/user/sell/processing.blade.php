@@ -280,7 +280,7 @@
             $('#show-send').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeSendCurrency.id && String(currencies[i].gateway_id || '') === String(activeSendCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -301,7 +301,7 @@
             $('#show-get').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                let isChecked = (currencies[i].id === activeGetCurrency.id && String(currencies[i].gateway_id || '') === String(activeGetCurrency.gateway_id || '')) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
                 options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -330,6 +330,32 @@
             $('#showGetCode').text(currency.code);
             $('#showGetName').text(currency.name);
             $('input[name="exchangeGetCurrency"]').val(currency.id);
+            showSellPaymentMethods(currency);
+        }
+
+        function showSellPaymentMethods(currency) {
+            let select = $('#paymentMethod');
+            let gateways = currency.sell_gateways || [];
+
+            select.html('');
+            if (gateways.length === 0) {
+                select.append(`<option value="">@lang('No payout method available')</option>`);
+                $('#submitBtn').attr('disabled', true);
+                $('#showInfoDiv').html(`<div class="item mb-2"><div class="alert alert-warning mb-0">@lang('No active sell method is linked to this fiat currency yet.')</div></div>`);
+                $('#telegramContactBox').html('');
+                return;
+            }
+
+            for (let i = 0; i < gateways.length; i++) {
+                let gw = gateways[i];
+                let fsg = gw.fiat_send_gateway || {};
+                select.append(`<option value="${fsg.id}" data-parameters='${JSON.stringify(fsg.parameters || {})}'
+                    data-img="${fsg.image_path || ''}" data-des="${fsg.description || ''}"
+                    data-mode="${fsg.processing_mode || 'manual'}">${gw.name}</option>`);
+            }
+
+            $('#submitBtn').attr('disabled', false);
+            showInfo();
         }
 
         function tradeDetails() {
@@ -366,15 +392,7 @@
         }
 
         function getSendCurrencyInfo(getCurrencyId, getCurrencyCode) {
-            axios.get("{{route('getSellCurrencyMethodInfo')}}", {
-                params: {
-                    getCurrencyId: getCurrencyId,
-                    getCurrencyCode: getCurrencyCode
-                }
-            })
-                .then(function (response) {
-                    showSendCurrencyInfo(response.data.getCurrencySendInfo);
-                });
+            // Payment methods now loaded directly with currency data
         }
 
         function showSendCurrencyInfo(getCurrencySendInfo) {

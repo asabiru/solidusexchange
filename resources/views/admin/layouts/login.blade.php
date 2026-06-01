@@ -111,6 +111,10 @@
 
         .form-control::placeholder {
             color: var(--solidus-muted);
+            font-size: 13.5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .btn-admin-login {

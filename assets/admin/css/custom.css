@@ -26,8 +26,8 @@
   --sc-accent-bg:     rgba(232,201,160,.10);
   --sc-accent-bg-md:  rgba(232,201,160,.16);
 
-  --sc-success:       #7fb28a;
-  --sc-success-bg:    rgba(127,178,138,.12);
+  --sc-success:       #a9854f;
+  --sc-success-bg:    rgba(169,133,79,.12);
   --sc-warning:       #d9a86a;
   --sc-warning-bg:    rgba(217,168,106,.12);
   --sc-danger:        #c9786a;
@@ -80,8 +80,8 @@ html[data-solidus-admin-theme="default"] {
   --sc-accent-hover:  #a87030;
   --sc-accent-bg:     rgba(139,94,31,.08);
   --sc-accent-bg-md:  rgba(139,94,31,.14);
-  --sc-success:       #2d7d44;
-  --sc-success-bg:    rgba(45,125,68,.10);
+  --sc-success:       #a9854f;
+  --sc-success-bg:    rgba(169,133,79,.10);
   --sc-warning:       #9a5a10;
   --sc-warning-bg:    rgba(154,90,16,.10);
   --sc-danger:        #9a2e22;
@@ -471,7 +471,7 @@ body.has-navbar-vertical-aside .filepond--drop-label { color: var(--sc-text-2) !
 
 /* ── 11. ALERTS ────────────────────────────────────────────── */
 body.has-navbar-vertical-aside .alert { border-radius: var(--sc-r-md) !important; }
-body.has-navbar-vertical-aside .alert-success  { background: var(--sc-success-bg) !important; color: var(--sc-success) !important; border: 1px solid rgba(127,178,138,.2) !important; }
+body.has-navbar-vertical-aside .alert-success  { background: var(--sc-success-bg) !important; color: var(--sc-success) !important; border: 1px solid rgba(169,133,79,.2) !important; }
 body.has-navbar-vertical-aside .alert-danger   { background: var(--sc-danger-bg)  !important; color: var(--sc-danger)  !important; border: 1px solid rgba(201,120,106,.2) !important; }
 body.has-navbar-vertical-aside .alert-warning  { background: var(--sc-warning-bg) !important; color: var(--sc-warning) !important; border: 1px solid rgba(217,168,106,.2) !important; }
 body.has-navbar-vertical-aside .alert-info     { background: var(--sc-info-bg)    !important; color: var(--sc-info)    !important; border: 1px solid rgba(138,180,201,.2) !important; }
@@ -608,3 +608,125 @@ body.has-navbar-vertical-aside .dataTables_empty { color: var(--sc-text-3) !impo
 main.main .card:not(.overflow-hidden) { overflow: hidden; }
 main.main::-webkit-scrollbar-track { background: var(--sc-bg); }
 main.main::-webkit-scrollbar-thumb { background: var(--sc-border-strong); border-radius: 3px; }
+
+/* ============================================================
+   SolidChange Admin — Form Toggle Switches (polzunki)
+   ONLY inside .card / .form — NEVER affects HS Theme Switcher
+   ============================================================ */
+
+/* Dark theme */
+.card .form-check.form-switch .form-check-input,
+.form .form-check.form-switch .form-check-input {
+    width: 44px !important;
+    height: 24px !important;
+    background-color: rgba(255,255,255,0.10) !important;
+    border: 1px solid rgba(255,255,255,0.20) !important;
+    border-radius: 24px !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba(255,255,255,0.50)'/%3e%3c/svg%3e") !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: left center !important;
+    transition: background-position 0.3s ease-in-out, background-color 0.3s ease, border-color 0.3s ease !important;
+    cursor: pointer !important;
+    margin-top: 0 !important;
+}
+
+.card .form-check.form-switch .form-check-input:checked,
+.form .form-check.form-switch .form-check-input:checked {
+    background-color: #e8c9a0 !important;
+    border-color: #e8c9a0 !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e") !important;
+    background-position: right center !important;
+}
+
+.card .form-check.form-switch .form-check-input:focus,
+.form .form-check.form-switch .form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(232,201,160,0.25) !important;
+    border-color: #f2d8b4 !important;
+}
+
+.card .form-check.form-switch .form-check-input:hover,
+.form .form-check.form-switch .form-check-input:hover {
+    border-color: rgba(255,255,255,0.35) !important;
+}
+
+.card .form-check.form-switch .form-check-input:checked:hover,
+.form .form-check.form-switch .form-check-input:checked:hover {
+    background-color: #f2d8b4 !important;
+    border-color: #f2d8b4 !important;
+}
+
+/* Labels */
+.card .form-check.form-switch .text-dark,
+.form .form-check.form-switch .text-dark {
+    color: #f5ede4 !important;
+}
+
+/* Light theme override */
+html[data-solidus-admin-theme="default"] .card .form-check.form-switch .form-check-input,
+html[data-solidus-admin-theme="default"] .form .form-check.form-switch .form-check-input {
+    background-color: rgba(0,0,0,0.08) !important;
+    border-color: rgba(0,0,0,0.18) !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba(0,0,0,0.40)'/%3e%3c/svg%3e") !important;
+}
+
+html[data-solidus-admin-theme="default"] .card .form-check.form-switch .form-check-input:checked,
+html[data-solidus-admin-theme="default"] .form .form-check.form-switch .form-check-input:checked {
+    background-color: #8b5e1f !important;
+    border-color: #8b5e1f !important;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23ffffff'/%3e%3c/svg%3e") !important;
+}
+
+html[data-solidus-admin-theme="default"] .card .form-check.form-switch .form-check-input:focus,
+html[data-solidus-admin-theme="default"] .form .form-check.form-switch .form-check-input:focus {
+    box-shadow: 0 0 0 3px rgba(139,94,31,0.25) !important;
+}
+
+html[data-solidus-admin-theme="default"] .card .form-check.form-switch .form-check-input:hover,
+html[data-solidus-admin-theme="default"] .form .form-check.form-switch .form-check-input:hover {
+    border-color: rgba(0,0,0,0.30) !important;
+}
+
+/* HS Theme Switcher dropdown — fix width for Russian text */
+.navbar-nav-wrap-content-end .dropdown-menu {
+    min-width: 200px !important;
+}
+
+/* ── MOBILE / LOGO FIXES (added 2026-06-01) ──────────────────── */
+/* Admin brand logo was overflowing the header (rendered 104px in a ~60px bar). Cap it. */
+body.has-navbar-vertical-aside .navbar-brand-logo,
+body.has-navbar-vertical-aside .navbar-brand-logo-auto {
+  height: 44px !important;
+  width: auto !important;
+  max-width: 150px !important;
+  object-fit: contain !important;
+}
+@media (max-width: 991.98px) {
+  body.has-navbar-vertical-aside .navbar-brand-logo,
+  body.has-navbar-vertical-aside .navbar-brand-logo-auto {
+    height: 34px !important;
+  }
+  body.has-navbar-vertical-aside .navbar-brand {
+    padding: 0.5rem 0.75rem !important;
+  }
+  /* keep tables scrollable instead of breaking layout on small screens */
+  body.has-navbar-vertical-aside .table-responsive,
+  body.has-navbar-vertical-aside .datatable-custom { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+}
+
+/* More specific override — theme keeps width via a higher-specificity rule. Logo is square. */
+body.has-navbar-vertical-aside a.navbar-brand img.navbar-brand-logo,
+body.has-navbar-vertical-aside .navbar-brand img.navbar-brand-logo {
+  width: 44px !important;
+  height: 44px !important;
+  max-width: 44px !important;
+  object-fit: contain !important;
+}
+@media (max-width: 991.98px) {
+  body.has-navbar-vertical-aside a.navbar-brand img.navbar-brand-logo,
+  body.has-navbar-vertical-aside .navbar-brand img.navbar-brand-logo {
+    width: 34px !important;
+    height: 34px !important;
+    max-width: 34px !important;
+  }
+}

@@ -249,8 +249,8 @@
 }
 
 .dash-stat-icon--success {
-    background: rgba(127,178,138,0.12);
-    color: #7fb28a;
+    background: rgba(169,133,79,0.12);
+    color: #a9854f;
 }
 
 .dash-stat-icon--danger {
@@ -258,8 +258,8 @@
     color: #c9786a;
 }
 
-.dash-card--success { border-color: rgba(127,178,138,0.12) !important; }
-.dash-card--success .dash-stat-value { color: #7fb28a !important; }
+.dash-card--success { border-color: rgba(169,133,79,0.12) !important; }
+.dash-card--success .dash-stat-value { color: #a9854f !important; }
 .dash-card--danger { border-color: rgba(201,120,106,0.12) !important; }
 
 .dash-stat-body {
@@ -319,8 +319,8 @@
 }
 
 .dash-trend--up {
-    color: #7fb28a;
-    background: rgba(127,178,138,0.08);
+    color: #a9854f;
+    background: rgba(169,133,79,0.08);
 }
 
 .dash-trend--down {

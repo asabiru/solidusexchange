@@ -59,7 +59,10 @@ class FrontendController extends Controller
 
             $pageDetails = $this->resolvePageDetail($slug, $selectedTheme, $preferredLanguageId, $fallbackLanguageId);
             if (!$pageDetails) {
-                return redirect()->route('instructionPage');
+                if (auth()->guard('admin')->check()) {
+                    return redirect()->route('instructionPage');
+                }
+                abort(404);
             }
 
             $pageSeo = [
@@ -111,7 +114,10 @@ class FrontendController extends Controller
                 throw $exception;
             }
 
-            return redirect()->route('instructionPage');
+            if (auth()->guard('admin')->check()) {
+                return redirect()->route('instructionPage');
+            }
+            abort(404);
         }
     }
 

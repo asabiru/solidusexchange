@@ -169,6 +169,27 @@ class LoginController extends Controller
 
         UserLogin::create($ul);
 
+
+        // Check for pending trade requests after login
+        $pendingBuyUtr = session()->pull('pending_buy_utr');
+        if ($pendingBuyUtr) {
+            $buyRequest = \App\Models\BuyRequest::where('utr', $pendingBuyUtr)->first();
+            if ($buyRequest) {
+                $buyRequest->user_id = $user->id;
+                $buyRequest->save();
+                return redirect()->route('buyProcessing', $pendingBuyUtr);
+            }
+        }
+
+        $pendingSellUtr = session()->pull('pending_sell_utr');
+        if ($pendingSellUtr) {
+            $sellRequest = \App\Models\SellRequest::where('utr', $pendingSellUtr)->first();
+            if ($sellRequest) {
+                $sellRequest->user_id = $user->id;
+                $sellRequest->save();
+                return redirect()->route('sellProcessing', $pendingSellUtr);
+            }
+        }
         if (!$user->email_verification || !$user->sms_verification || !$user->two_fa_verify) {
             return redirect()->route('check');
         }
