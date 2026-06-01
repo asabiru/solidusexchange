@@ -248,6 +248,16 @@
         $("input[name='exchangeSendAmount']").val(formatSendAmount(quote.sendAmount));
         $("input[name='exchangeGetAmount']").val(formatReceiveAmount(quote.finalAmount));
         $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange' && !!quote.receiveReadonly);
+
+        const finalReceive = document.getElementById('finalReceive');
+        const receiveCurrency = document.getElementById('receiveCurrency');
+        if (finalReceive) {
+            finalReceive.textContent = formatReceiveAmount(quote.finalAmount);
+        }
+        if (receiveCurrency) {
+            const code = activeGetCurrency ? (activeGetCurrency.code || '') : '';
+            receiveCurrency.textContent = code;
+        }
     }
 
     function showSend(currencies) {

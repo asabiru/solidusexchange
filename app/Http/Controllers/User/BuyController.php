@@ -352,6 +352,7 @@ class BuyController extends Controller
             'sendCurrencyCode' => $quote['send_currency_code'],
             'getCurrencyCode' => $quote['get_currency_code'],
             'rateSource' => $quote['rate_source'],
+            'receiveReadonly' => false,
         ];
     }
 
