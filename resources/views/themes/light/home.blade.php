@@ -56,3 +56,7 @@
 </section>
 
 @endsection
+
+@section('scripts')
+    @include($theme.'partials.exchange-module.exchange-js')
+@endsection

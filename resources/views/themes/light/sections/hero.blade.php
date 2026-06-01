@@ -52,7 +52,7 @@
 
             <!-- Right Content - SwapCard -->
             <div class="col-lg-6">
-                <div class="swap-card">
+                <div class="swap-card" id="showLoader">
                     <!-- Modern Tabs -->
                     <div class="modern-tabs">
                         <button class="tab-button active" data-tab="exchange">
