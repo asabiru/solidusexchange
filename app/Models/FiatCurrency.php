@@ -42,6 +42,24 @@ class FiatCurrency extends Model
         return $this->belongsTo(Gateway::class, 'buy_gateway_id');
     }
 
+    public function buyGateways()
+    {
+        return $this->hasMany(FiatCurrencyGateway::class, 'fiat_currency_id')
+            ->forBuy()
+            ->active()
+            ->sorted()
+            ->with('gateway');
+    }
+
+    public function sellGateways()
+    {
+        return $this->hasMany(FiatCurrencyGateway::class, 'fiat_currency_id')
+            ->forSell()
+            ->active()
+            ->sorted()
+            ->with('fiatSendGateway');
+    }
+
     public function scopeActive($query)
     {
         return $query->where('status', 1);

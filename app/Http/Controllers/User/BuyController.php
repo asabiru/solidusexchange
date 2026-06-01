@@ -331,8 +331,15 @@ class BuyController extends Controller
     {
         $query = Gateway::query()->where('status', 1);
 
-        if ($currency && $currency->buy_gateway_id) {
-            return $query->where('id', $currency->buy_gateway_id);
+        if ($currency) {
+            $buyGatewayIds = $currency->buyGateways()->pluck('gateway_id')->filter()->toArray();
+            if (!empty($buyGatewayIds)) {
+                return $query->whereIn('id', $buyGatewayIds);
+            }
+
+            if ($currency->buy_gateway_id) {
+                return $query->where('id', $currency->buy_gateway_id);
+            }
         }
 
         return $query;

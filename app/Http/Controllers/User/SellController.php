@@ -375,8 +375,15 @@ class SellController extends Controller
     {
         $query = FiatSendGateway::query()->where('status', 1);
 
-        if ($currency && $currency->fiat_send_gateway_id) {
-            return $query->where('id', $currency->fiat_send_gateway_id);
+        if ($currency) {
+            $sellGatewayIds = $currency->sellGateways()->pluck('fiat_send_gateway_id')->filter()->toArray();
+            if (!empty($sellGatewayIds)) {
+                return $query->whereIn('id', $sellGatewayIds);
+            }
+
+            if ($currency->fiat_send_gateway_id) {
+                return $query->where('id', $currency->fiat_send_gateway_id);
+            }
         }
 
         if ($currency) {
