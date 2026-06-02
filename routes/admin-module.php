@@ -136,7 +136,7 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('fiat-send-gateway/store', 'store')->name('fiatSendGatewayStore');
             Route::get('fiat-send-gateway/edit/{id}', 'edit')->name('fiatSendGatewayEdit');
             Route::put('fiat-send-gateway/update/{id}', 'update')->name('fiatSendGatewayUpdate');
-            Route::get('fiat-send-gateway/status/{id}', 'statusChange')->name('fiatSendGatewayStatus');
+            Route::post('fiat-send-gateway/status', 'statusChange')->name('fiatSendGatewayStatus');
         });
 
     });
