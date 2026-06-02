@@ -230,6 +230,13 @@ class SupportCabinetController extends Controller
                 'reply' => $request->message,
             ]);
 
+            try {
+                $tgService = app(\App\Services\Telegram\TelegramNotificationService::class);
+                $tgService->notifyTicketReply($ticketRes, $request->message);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Telegram notify error on reply: ' . $e->getMessage());
+            }
+
             \Cache::forget('ticketRecord');
 
             return back()->with('success', 'Ответ успешно отправлен.');
