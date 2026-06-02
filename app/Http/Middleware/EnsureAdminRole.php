@@ -21,9 +21,12 @@ class EnsureAdminRole
         $roles = $roles === [] ? ['admin'] : $roles;
 
         if (!in_array($currentRole, $roles, true)) {
-            return $currentRole === 'trader'
-                ? redirect()->route('admin.trader.dashboard')
-                : redirect()->route('admin.dashboard');
+            if ($currentRole === 'trader') {
+                return redirect()->route('admin.trader.dashboard');
+            } elseif ($currentRole === 'support') {
+                return redirect()->route('admin.support.dashboard');
+            }
+            return redirect()->route('admin.dashboard');
         }
 
         return $next($request);

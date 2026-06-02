@@ -34,6 +34,7 @@ use App\Http\Controllers\Admin\SubscriberController;
 use App\Http\Controllers\Admin\Trader\DashboardController as TraderDashboardController;
 use App\Http\Controllers\Admin\Trader\SellController as TraderSellController;
 use App\Http\Controllers\Admin\TraderManagementController;
+use App\Http\Controllers\Admin\SupportCabinetController;
 
 /*
 |--------------------------------------------------------------------------
@@ -390,6 +391,15 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
                 Route::post('{utr}/send', 'send')->name('send');
                 Route::post('{utr}/cancel', 'cancel')->name('cancel');
             });
+        });
+
+        Route::middleware('adminRole:support,admin')->prefix('support')->as('support.')->group(function () {
+            Route::get('dashboard', [SupportCabinetController::class, 'dashboard'])->name('dashboard');
+            Route::get('tickets/{status?}', [SupportCabinetController::class, 'tickets'])->name('tickets');
+            Route::post('tickets-search/{status}', [SupportCabinetController::class, 'ticketSearch'])->name('tickets.search');
+            Route::get('ticket/{id}', [SupportCabinetController::class, 'ticketView'])->name('ticket.view');
+            Route::put('ticket/{id}/reply', [SupportCabinetController::class, 'ticketReplySend'])->name('ticket.reply');
+            Route::put('ticket/{id}/close', [SupportCabinetController::class, 'ticketClose'])->name('ticket.close');
         });
     });
 

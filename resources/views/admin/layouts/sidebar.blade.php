@@ -71,6 +71,36 @@
                     @php
                         $adminUser = auth()->guard('admin')->user();
                     @endphp
+                    @if($adminUser && $adminUser->isSupport())
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.support.dashboard']) }}"
+                               href="{{ route('admin.support.dashboard') }}">
+                                <i class="bi-headset nav-icon"></i>
+                                <span class="nav-link-title">@lang("Support Dashboard")</span>
+                            </a>
+                        </div>
+
+                        <span class="dropdown-header mt-3">@lang('Tickets')</span>
+                        <small class="bi-three-dots nav-subtitle-replacer"></small>
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.support.tickets']) }}"
+                               href="{{ route('admin.support.tickets') }}">
+                                <i class="bi-ticket nav-icon"></i>
+                                <span class="nav-link-title">@lang("All Tickets")</span>
+                            </a>
+                        </div>
+
+                        <span class="dropdown-header mt-3">@lang('Account')</span>
+                        <small class="bi-three-dots nav-subtitle-replacer"></small>
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.profile']) }}"
+                               href="{{ route('admin.profile') }}">
+                                <i class="bi-person nav-icon"></i>
+                                <span class="nav-link-title">@lang("Profile")</span>
+                            </a>
+                        </div>
+                    @endif
+
                     @if($adminUser && $adminUser->isTrader())
                         <div class="nav-item">
                             <a class="nav-link {{ menuActive(['admin.trader.dashboard']) }}"
@@ -124,7 +154,7 @@
                         </div>
                     @endif
 
-                    @if(!$adminUser || !$adminUser->isTrader())
+                    @if($adminUser && $adminUser->isAdmin())
 
                     <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.dashboard']) }}"
