@@ -46,7 +46,7 @@
                                 <label class="form-check-label" for="is_active">@lang('Active')</label>
                             </div>
                             <div class="d-flex justify-content-end gap-2">
-                                <a href="{{ route('admin.telegram.bots') }}" class="btn btn-white">@lang('Cancel')</a>
+                                <a href="{{ route('admin.telegram.bots.index') }}" class="btn btn-white">@lang('Cancel')</a>
                                 <button type="submit" class="btn btn-primary">@lang('Save')</button>
                             </div>
                         </form>
