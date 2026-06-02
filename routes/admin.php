@@ -35,6 +35,7 @@ use App\Http\Controllers\Admin\Trader\DashboardController as TraderDashboardCont
 use App\Http\Controllers\Admin\Trader\SellController as TraderSellController;
 use App\Http\Controllers\Admin\TraderManagementController;
 use App\Http\Controllers\Admin\SupportCabinetController;
+use App\Http\Controllers\Admin\TelegramBotController;
 
 /*
 |--------------------------------------------------------------------------
@@ -400,6 +401,17 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::get('ticket/{id}', [SupportCabinetController::class, 'ticketView'])->name('ticket.view');
             Route::put('ticket/{id}/reply', [SupportCabinetController::class, 'ticketReplySend'])->name('ticket.reply');
             Route::put('ticket/{id}/close', [SupportCabinetController::class, 'ticketClose'])->name('ticket.close');
+        });
+
+        Route::middleware('adminRole:admin')->prefix('telegram-bots')->as('telegram.bots.')->group(function () {
+            Route::get('/', [TelegramBotController::class, 'index'])->name('index');
+            Route::get('create', [TelegramBotController::class, 'create'])->name('create');
+            Route::post('store', [TelegramBotController::class, 'store'])->name('store');
+            Route::get('edit/{id}', [TelegramBotController::class, 'edit'])->name('edit');
+            Route::put('update/{id}', [TelegramBotController::class, 'update'])->name('update');
+            Route::delete('destroy/{id}', [TelegramBotController::class, 'destroy'])->name('destroy');
+            Route::get('webhook/{id}', [TelegramBotController::class, 'setWebhook'])->name('webhook');
+            Route::get('info/{id}', [TelegramBotController::class, 'getInfo'])->name('info');
         });
     });
 

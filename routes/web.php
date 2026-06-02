@@ -20,6 +20,8 @@ use App\Http\Controllers\FaSecurityController;
 use App\Http\Controllers\User\UserProfileController;
 use App\Http\Controllers\SocialiteController;
 use App\Http\Controllers\SchedulerController;
+use App\Http\Controllers\Telegram\TelegramWebhookController;
+use App\Http\Controllers\Telegram\TelegramMiniAppController;
 
 $basicControl = basicControl();
 
@@ -76,6 +78,10 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         Route::get('/login', [UserLoginController::class, 'showLoginForm'])->name('login');
         Route::post('/login', [UserLoginController::class, 'login'])->middleware('throttle:login')->name('login.submit');
         Route::post('/auth/telegram-miniapp', [SocialiteController::class, 'telegramMiniAppLogin'])->middleware('throttle:login')->name('telegram.miniapp.login');
+    });
+
+    Route::post('/telegram/webhook/{token}', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
+    Route::get('/telegram/mini-app', [TelegramMiniAppController::class, 'index'])->name('telegram.miniapp.index');
     });
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {

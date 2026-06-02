@@ -495,6 +495,13 @@
                     <span class="dropdown-header mt-4"> @lang('Application Panel')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.telegram.bots.*']) }}"
+                           href="{{ route('admin.telegram.bots.index') }}" data-placement="left">
+                            <i class="fab fa-telegram nav-icon"></i>
+                            <span class="nav-link-title">@lang('Telegram Bots')</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
                         <a class="nav-link"
                            href="{{ route('clear') }}" data-placement="left">
                             <i class="fas fa-sync nav-icon"></i>
