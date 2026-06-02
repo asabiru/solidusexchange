@@ -7,7 +7,9 @@ use App\Models\Language;
 use App\Models\ManageMenu;
 use App\Models\Page;
 use App\Models\PageDetail;
+use App\Models\SupportTicket;
 use App\Models\UserKyc;
+use App\Observers\SupportTicketObserver;
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\ServiceProvider;
@@ -51,6 +53,8 @@ class AppServiceProvider extends ServiceProvider
         if ($configuredAppUrl !== '' && filter_var($configuredAppUrl, FILTER_VALIDATE_URL)) {
             URL::forceRootUrl($configuredAppUrl);
         }
+
+        SupportTicket::observe(SupportTicketObserver::class);
 
         try {
             DB::connection()->getPdo();
