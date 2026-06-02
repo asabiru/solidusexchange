@@ -36,6 +36,7 @@ use App\Http\Controllers\Admin\Trader\SellController as TraderSellController;
 use App\Http\Controllers\Admin\TraderManagementController;
 use App\Http\Controllers\Admin\SupportCabinetController;
 use App\Http\Controllers\Admin\TelegramBotController;
+use App\Http\Controllers\Admin\SupportAgentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -412,6 +413,15 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::delete('destroy/{id}', [TelegramBotController::class, 'destroy'])->name('destroy');
             Route::get('webhook/{id}', [TelegramBotController::class, 'setWebhook'])->name('webhook');
             Route::get('info/{id}', [TelegramBotController::class, 'getInfo'])->name('info');
+        });
+
+        Route::middleware('adminRole:admin')->prefix('support-agents')->as('support.agents.')->group(function () {
+            Route::get('/', [SupportAgentController::class, 'index'])->name('index');
+            Route::get('create', [SupportAgentController::class, 'create'])->name('create');
+            Route::post('store', [SupportAgentController::class, 'store'])->name('store');
+            Route::get('edit/{id}', [SupportAgentController::class, 'edit'])->name('edit');
+            Route::put('update/{id}', [SupportAgentController::class, 'update'])->name('update');
+            Route::delete('destroy/{id}', [SupportAgentController::class, 'destroy'])->name('destroy');
         });
     });
 
