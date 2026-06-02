@@ -82,7 +82,6 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
     Route::post('/telegram/webhook/{token}', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
     Route::get('/telegram/mini-app', [TelegramMiniAppController::class, 'index'])->name('telegram.miniapp.index');
-    });
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
         $candidateSlugs = collect(array_merge([$slug], $fallbackSlugs))
