@@ -155,7 +155,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
 
-                <form action="{{ route('admin.fiatSendGatewayStatusChange') }}" method="POST">
+                <form action="{{ route('admin.fiatSendGatewayStatus') }}" method="POST">
                     @csrf
                     <input type="hidden" name="id">
                     <div class="modal-body">
