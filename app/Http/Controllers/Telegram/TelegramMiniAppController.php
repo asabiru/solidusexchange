@@ -14,6 +14,7 @@ use App\Models\UserKyc;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
 use App\Services\Kyc\DiditKycService;
 use App\Services\Kyc\UserKycManager;
+use App\Services\MarketRateCardService;
 use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Services\TradeQuote\BuyQuoteService;
 use App\Services\TradeQuote\SellQuoteService;
@@ -22,7 +23,6 @@ use App\Traits\Upload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Validator;
 use RuntimeException;
 
@@ -73,7 +73,7 @@ class TelegramMiniAppController extends Controller
             'user' => Auth::user(),
             'cryptoCurrencies' => $this->cryptoCurrencies(),
             'fiatCurrencies' => $this->fiatCurrencies(),
-            'rateCards' => $this->rateCards(),
+            'rateCards' => app(MarketRateCardService::class)->cards(),
             'defaultFiatCode' => $this->defaultFiatCode(),
             'appLogo' => $this->appLogo(),
             'statsUrl' => route('telegram.mini-app.stats'),
@@ -468,49 +468,6 @@ class TelegramMiniAppController extends Controller
             ->get();
     }
 
-    private function rateCards()
-    {
-        $baseCurrency = strtoupper((string) (basicControl()->base_currency ?? 'RUB'));
-        $query = CryptoCurrency::where('status', 1);
-
-        if (Schema::hasColumn('crypto_currencies', 'show_on_homepage')) {
-            $query->where('show_on_homepage', 1);
-        }
-
-        return $query
-            ->orderBy('sort_by', 'ASC')
-            ->limit(10)
-            ->get()
-            ->map(function (CryptoCurrency $currency) use ($baseCurrency) {
-                $isStablecoin = (bool) $currency->is_stablecoin;
-                $rate = $isStablecoin
-                    ? (float) ($currency->rate ?? $currency->usd_rate)
-                    : (float) ($currency->usd_rate ?? $currency->rate);
-                $quoteCode = $isStablecoin ? $baseCurrency : 'USDT';
-                $change = $currency->change_24h;
-
-                return [
-                    'code' => strtoupper((string) $currency->normalized_code),
-                    'name' => $currency->name,
-                    'image_path' => $currency->image_path,
-                    'quote_code' => $quoteCode,
-                    'pair' => strtoupper((string) $currency->normalized_code) . '/' . $quoteCode,
-                    'display_rate' => $this->formatTmaRate($rate),
-                    'change_24h' => $change === null ? null : (float) $change,
-                ];
-            })
-            ->values();
-    }
-
-    private function formatTmaRate(float $rate): string
-    {
-        if ($rate >= 1) {
-            return number_format($rate, 2, '.', ' ');
-        }
-
-        return rtrim(rtrim(number_format($rate, 8, '.', ' '), '0'), '.');
-    }
-
     private function appLogo(): string
     {
         $darkLogo = getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo);
@@ -529,31 +486,6 @@ class TelegramMiniAppController extends Controller
             'send_currency_code' => (string) ($quote['send_currency_code'] ?? ''),
             'get_currency_code' => (string) ($quote['get_currency_code'] ?? ''),
         ];
-    }
-
-    private function effectiveFiatUsdRate(FiatCurrency $currency): float
-    {
-        $storedUsdRate = (float) $currency->usd_rate;
-        $baseCurrency = strtoupper((string) basicControl()->base_currency);
-
-        if (strtoupper((string) $currency->code) !== $baseCurrency) {
-            return $currency->applyRateMarkupToUsdRate($storedUsdRate);
-        }
-
-        $referenceUsdt = CryptoCurrency::where('status', 1)
-            ->orderBy('sort_by', 'ASC')
-            ->get()
-            ->first(function (CryptoCurrency $cryptoCurrency) {
-                return strtoupper((string) $cryptoCurrency->normalized_code) === 'USDT'
-                    && (float) $cryptoCurrency->rate > 0
-                    && (float) $cryptoCurrency->usd_rate > 0;
-            });
-
-        if (!$referenceUsdt) {
-            return $currency->applyRateMarkupToUsdRate($storedUsdRate);
-        }
-
-        return $currency->applyRateMarkupToUsdRate((float) $referenceUsdt->usd_rate / (float) $referenceUsdt->rate);
     }
 
     private function needsEmailBind($user): bool

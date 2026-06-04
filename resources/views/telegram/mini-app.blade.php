@@ -105,7 +105,14 @@
                     </div>
                 </div>
                 <div class="tma-rate-row__prices">
-                    <strong>{{ $rc['display_rate'] }} {{ $rc['quote_code'] }}</strong>
+                    <div>
+                        <span class="tma-label">Покупка</span>
+                        <span class="tma-value tma-value--buy">{{ $rc['display_buy_rate'] }} {{ $rc['quote_code'] }}</span>
+                    </div>
+                    <div>
+                        <span class="tma-label">Продажа</span>
+                        <span class="tma-value tma-value--sell">{{ $rc['display_sell_rate'] }} {{ $rc['quote_code'] }}</span>
+                    </div>
                     @if($rc['change_24h'] !== null)
                         <span class="tma-rate-change {{ $rc['change_24h'] >= 0 ? 'is-positive' : 'is-negative' }}">
                             {{ $rc['change_24h'] >= 0 ? '+' : '' }}{{ number_format($rc['change_24h'], 2) }}%

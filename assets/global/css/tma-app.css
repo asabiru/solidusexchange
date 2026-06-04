@@ -164,8 +164,8 @@ body.tma{
 .tma-rate-row__prices>div+div{margin-top:4px}
 .tma-label{font-size:11px;color:var(--text3);min-width:56px;text-align:left}
 .tma-value{font-size:13px;font-weight:700;color:var(--text)}
-.tma-value--buy{color:var(--green)}
-.tma-value--sell{color:var(--red)}
+.tma-value--buy{color:var(--accent)}
+.tma-value--sell{color:var(--accent2)}
 
 /* ===== EXCHANGE TAB ===== */
 .tma-exchange-header{

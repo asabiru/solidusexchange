@@ -1,15 +1,7 @@
 @php
-    $cryptoCurrencies = \App\Models\CryptoCurrency::where('status', 1)
-        ->where('show_on_homepage', 1)
-        ->orderBy('sort_by', 'asc')
-        ->limit(10)
-        ->get();
-    if($cryptoCurrencies->isEmpty()) {
-        $cryptoCurrencies = collect();
-    }
+    $rateCards = app(\App\Services\MarketRateCardService::class)->cards(10);
     $lastSync = \App\Models\CryptoCurrency::where('status', 1)->whereNotNull('last_rate_sync_at')->max('last_rate_sync_at');
     $syncAgo = $lastSync ? \Carbon\Carbon::parse($lastSync)->diffInSeconds(now()) : null;
-    $baseCurrency = strtoupper(basicControl()->base_currency ?? 'RUB');
 @endphp
 
 <!-- Rates Section - eazy228/design style -->
@@ -28,19 +20,15 @@
         <div class="rates-ticker ticker-pause">
             <div class="ticker-track">
                 @foreach([1,2] as $duplicate)
-                @foreach($cryptoCurrencies as $currency)
+                @foreach($rateCards as $rc)
                 <div class="ticker-item">
                     @php
-                        $isStablecoin = $currency->is_stablecoin;
-                        $tickerPrice = $isStablecoin
-                            ? number_format((float)($currency->rate ?? $currency->usd_rate), 2, '.', ' ')
-                            : formatCryptoRate((float)($currency->usd_rate ?? $currency->rate));
-                        $tickerCurrency = $isStablecoin ? $baseCurrency : 'USD';
-                        $change24h = $currency->change_24h;
+                        $change24h = $rc['change_24h'];
                         $isPositive = $change24h !== null && $change24h >= 0;
                     @endphp
-                    <span class="ticker-pair">{{ $currency->code }}/{{ $tickerCurrency }}</span>
-                    <span class="ticker-price">{{ $tickerPrice }}</span>
+                    <span class="ticker-pair">{{ $rc['pair'] }}</span>
+                    <span class="ticker-price">Покупка {{ $rc['display_buy_rate'] }}</span>
+                    <span class="ticker-price">Продажа {{ $rc['display_sell_rate'] }} {{ $rc['quote_code'] }}</span>
                     <span class="ticker-change {{ $change24h !== null ? ($isPositive ? 'positive' : 'negative') : '' }}">
                         @if($change24h !== null)
                             @if($isPositive)
@@ -70,47 +58,45 @@
             <div class="rates-table">
                 <div class="table-header">
                     <div class="table-cell">Пара</div>
-                    <div class="table-cell">Цена</div>
+                    <div class="table-cell">Покупка</div>
+                    <div class="table-cell">Продажа</div>
                     <div class="table-cell">24ч</div>
                     <div class="table-cell">Обменять</div>
                 </div>
 
-                @if($cryptoCurrencies->isEmpty())
+                @if($rateCards->isEmpty())
                     <div class="table-row">
-                        <div class="table-cell" colspan="4" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
+                        <div class="table-cell" colspan="5" style="text-align: center; padding: 40px; color: var(--color-text-secondary);">
                             Криптовалюты временно недоступны
                         </div>
                     </div>
                 @else
-                    @foreach($cryptoCurrencies as $currency)
+                    @foreach($rateCards as $rc)
                     @php
-                        $isStablecoin = $currency->is_stablecoin;
-                        $displayPrice = $isStablecoin
-                            ? number_format((float)($currency->rate ?? $currency->usd_rate), 2, '.', ' ')
-                            : formatCryptoRate((float)($currency->usd_rate ?? $currency->rate));
-                        $priceCurrency = $isStablecoin ? $baseCurrency : 'USD';
-                        $change24h = $currency->change_24h;
+                        $change24h = $rc['change_24h'];
                         $isPositive = $change24h !== null && $change24h >= 0;
-                        $sparkline = $currency->sparkline_7d;
                     @endphp
                 <div class="table-row">
                     <div class="table-cell" data-label="Пара">
                         <div class="currency-info">
                             <div class="currency-flag">
-                                @if($currency->image)
-                                    <img src="{{ getFile($currency->driver, $currency->image) }}" alt="{{ $currency->code }}" onerror="this.src='https://via.placeholder.com/32?text={{ substr($currency->code, 0, 2) }}'">
+                                @if(!empty($rc['image_path']))
+                                    <img src="{{ $rc['image_path'] }}" alt="{{ $rc['code'] }}" onerror="this.src='https://via.placeholder.com/32?text={{ substr($rc['code'], 0, 2) }}'">
                                 @else
-                                    <div class="currency-placeholder">{{ substr($currency->code, 0, 2) }}</div>
+                                    <div class="currency-placeholder">{{ substr($rc['code'], 0, 2) }}</div>
                                 @endif
                             </div>
                             <div class="currency-details">
-                                <span class="currency-code">{{ $currency->code }}</span>
-                                <span class="currency-name">{{ $currency->name }}</span>
+                                <span class="currency-code">{{ $rc['code'] }}</span>
+                                <span class="currency-name">{{ $rc['name'] }}</span>
                             </div>
                         </div>
                     </div>
-                    <div class="table-cell" data-label="Цена">
-                        <span class="price-value">{{ $displayPrice }} {{ $priceCurrency }}</span>
+                    <div class="table-cell" data-label="Покупка">
+                        <span class="price-value">{{ $rc['display_buy_rate'] }} {{ $rc['quote_code'] }}</span>
+                    </div>
+                    <div class="table-cell" data-label="Продажа">
+                        <span class="price-value">{{ $rc['display_sell_rate'] }} {{ $rc['quote_code'] }}</span>
                     </div>
                     <div class="table-cell" data-label="24ч">
                         @if($change24h !== null)
@@ -124,8 +110,8 @@
                     <div class="table-cell" data-label="Обменять">
                         <a href="{{ route('home') }}#exchange"
                            class="exchange-link"
-                           data-send-currency-id="{{ $currency->id }}"
-                           data-send-currency-code="{{ $currency->code }}">
+                           data-send-currency-id="{{ $rc['id'] }}"
+                           data-send-currency-code="{{ $rc['code'] }}">
                             Обменять
                         </a>
                     </div>
