@@ -1,8 +1,5 @@
-<div class="profile-cover">
-    <div class="profile-cover-img-wrapper">
-        <img id="profileCoverImg" class="profile-cover-img" src="{{ asset('assets/admin/img/img1.jpg') }}"
-             alt="Image Description"/>
-    </div>
+<div class="profile-cover sc-profile-cover">
+    <div class="profile-cover-img-wrapper"></div>
 </div>
 
 <div class="text-center mb-5">
