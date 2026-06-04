@@ -14,9 +14,9 @@
                             <input type="email" name="email" value="{{old('email')}}" class="form-control" placeholder="@lang('Your email')"/>
                             <button type="submit" class="subscribe-btn">@lang('Subscribe')</button>
                         </form>
-                        @error('email')
-                        <span class="text-danger">{{$message}}</span>
-                        @enderror
+                        @if(isset($errors) && $errors->has('email'))
+                        <span class="text-danger">{{ $errors->first('email') }}</span>
+                        @endif
                     </div>
                 </div>
             </div>
