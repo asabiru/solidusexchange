@@ -1,64 +1,55 @@
 @extends($theme.'layouts.login_register')
-@section('title',__('Recover Password'))
+@section('title', 'Восстановление пароля')
 @section('content')
-    @include($theme.'auth.verifyImage')
-    <section class="login-signup-page pt-0 pb-0 min-vh-100 h-100">
-        <div class="container-fluid h-100">
-            <div class="row min-vh-100">
-                <div class="col-md-6 p-0 d-none d-md-block">
-                    <div class="login-signup-thums h-100">
-                        <div class="content-area">
-                            <div class="logo-area mb-30">
-                                <a href="{{url('/')}}">
-                                    <img class="logo"
-                                         src="{{getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo)}}" alt="...">
-                                </a>
-                            </div>
-                            <div class="middle-content">
-                                <h3 class="section-title">@lang('Recover Password!')</h3>
-                                <p>@lang('Regain access with your seamless and secure account retrieval process in just a few clicks!')</p>
-                            </div>
+    @php
+        $authLogo = getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) ?: getFile(basicControl()->logo_driver, basicControl()->logo);
+    @endphp
 
-                            @include($theme.'auth.socialIcon')
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 p-0 d-flex justify-content-center flex-column">
+    <section class="auth-clean-page">
+        <div class="auth-clean-card">
+            <a class="auth-clean-back" href="{{ url('/') }}">
+                <i class="far fa-arrow-left"></i>
+                <span>На главную</span>
+            </a>
 
-                        {{-- ── Логотип в форме (все экраны) ── --}}
-                        <div class="auth-form-logo text-center mb-4">
-                            <a href="{{ url('/') }}" class="d-inline-block">
-                                <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
-                                     alt="{{ basicControl()->site_title }}"
-                                     class="auth-logo-img"
-                                     width="80" height="80">
-                            </a>
-                            <div class="auth-logo-name mt-2">{{ basicControl()->site_title }}</div>
-                        </div>
-
-                        <div class="login-signup-form">
-                        <form action="{{ route('password.email') }}" method="post">
-                            @csrf
-                            <div class="section-header">
-                                <h3>@lang('Recover Password!')</h3>
-                                <div
-                                    class="description">@lang('Regain access with your seamless and secure account retrieval process in just a few clicks!')</div>
-                            </div>
-                            <div class="row g-4">
-                                <div class="col-12">
-                                    <input type="text" name="email" value="{{ old('email') }}" class="form-control"
-                                           id="exampleInputEmail1"
-                                           placeholder="@lang('Email address')">
-                                    @error('email')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                            </div>
-                            <button type="submit" class="cmn-btn mt-30 w-100">@lang('Send Link')</button>
-                        </form>
-                    </div>
+            <div class="auth-clean-brand">
+                <a href="{{ url('/') }}" class="auth-clean-logo"><img src="{{ $authLogo }}" alt="SolidChange"></a>
+                <div>
+                    <strong>SolidChange</strong>
+                    <small>безопасный обмен криптовалют</small>
                 </div>
             </div>
+
+            <div class="auth-clean-header">
+                <span class="auth-clean-kicker">Доступ к аккаунту</span>
+                <h1>Восстановление пароля</h1>
+                <p>Введите e-mail, и мы отправим ссылку для сброса пароля.</p>
+            </div>
+
+            <form action="{{ route('password.email') }}" method="post" class="auth-clean-form">
+                @csrf
+
+                @if (session('status'))
+                    <div class="auth-clean-alert auth-clean-alert--success">{{ session('status') }}</div>
+                @endif
+
+                <div class="auth-field">
+                    <label for="resetEmail">E-mail</label>
+                    <input type="email" name="email" value="{{ old('email') }}" class="form-control" id="resetEmail" placeholder="Введите e-mail">
+                    @error('email')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <button type="submit" class="cmn-btn auth-primary-btn">Отправить ссылку</button>
+
+                <div class="auth-switch">
+                    <span>Вспомнили пароль?</span>
+                    <a href="{{ route('login') }}">Войти</a>
+                </div>
+            </form>
         </div>
     </section>
+
+    @include($theme.'auth.partials.clean-auth-style')
 @endsection

@@ -1,77 +1,78 @@
 @extends($theme.'layouts.login_register')
-@section('title',__('Reset Password'))
-
+@section('title', 'Новый пароль')
 @section('content')
-    @include($theme.'auth.verifyImage')
-    <section class="login-signup-page pt-0 pb-0 min-vh-100 h-100">
-        <div class="container-fluid h-100">
-            <div class="row min-vh-100">
-                <div class="col-md-6 p-0 d-none d-md-block">
-                    <div class="login-signup-thums h-100">
-                        <div class="content-area">
-                            <div class="logo-area mb-30">
-                                <a href="{{url('/')}}">
-                                    <img class="logo"
-                                         src="{{getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo)}}" alt="...">
-                                </a>
-                            </div>
-                            <div class="middle-content">
-                                <h3 class="section-title">@lang('Reset Password!')</h3>
-                                <p>@lang('Initiate the password reset process effortlessly and securely to regain control of your account with just a few simple steps.')</p>
-                            </div>
+    @php
+        $authLogo = getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) ?: getFile(basicControl()->logo_driver, basicControl()->logo);
+    @endphp
 
-                            @include($theme.'auth.socialIcon')
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6 p-0 d-flex justify-content-center flex-column">
+    <section class="auth-clean-page">
+        <div class="auth-clean-card">
+            <a class="auth-clean-back" href="{{ url('/') }}">
+                <i class="far fa-arrow-left"></i>
+                <span>На главную</span>
+            </a>
 
-                        {{-- ── Логотип в форме (все экраны) ── --}}
-                        <div class="auth-form-logo text-center mb-4">
-                            <a href="{{ url('/') }}" class="d-inline-block">
-                                <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
-                                     alt="{{ basicControl()->site_title }}"
-                                     class="auth-logo-img"
-                                     width="80" height="80">
-                            </a>
-                            <div class="auth-logo-name mt-2">{{ basicControl()->site_title }}</div>
-                        </div>
-
-                        <div class="login-signup-form">
-                        <form action="{{ route('password.update') }}" method="post">
-                            @csrf
-                            <div class="section-header">
-                                <h3>@lang('Reset Password!')</h3>
-                                <div
-                                    class="description">@lang('Initiate the password reset process effortlessly and securely to regain control of your account with just a few simple steps.')</div>
-                            </div>
-                            <div class="row g-4">
-                                <input type="hidden" name="token" value="{{ $token }}">
-                                <input type="hidden" name="email" value="{{ $email ?? old('email') }}">
-                                <div class="col-12">
-                                    <input type="password" name="password" value="{{ old('password') }}"
-                                           class="form-control"
-                                           id="exampleInputEmail1"
-                                           placeholder="@lang('New Password')">
-                                    @error('password')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="password" name="password_confirmation"
-                                           class="form-control"
-                                           id="exampleInputEmail1"
-                                           placeholder="@lang('Confirm New Password')">
-                                    @error('password_confirmation')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                            </div>
-                            <button type="submit" class="cmn-btn mt-30 w-100">@lang('Reset Password')</button>
-                        </form>
-                    </div>
+            <div class="auth-clean-brand">
+                <a href="{{ url('/') }}" class="auth-clean-logo"><img src="{{ $authLogo }}" alt="SolidChange"></a>
+                <div>
+                    <strong>SolidChange</strong>
+                    <small>безопасный обмен криптовалют</small>
                 </div>
             </div>
+
+            <div class="auth-clean-header">
+                <span class="auth-clean-kicker">Безопасность</span>
+                <h1>Создайте новый пароль</h1>
+                <p>Укажите новый пароль для входа в аккаунт.</p>
+            </div>
+
+            <form action="{{ route('password.update') }}" method="post" class="auth-clean-form">
+                @csrf
+                <input type="hidden" name="token" value="{{ $token }}">
+                <input type="hidden" name="email" value="{{ $email ?? old('email') }}">
+
+                <div class="auth-field">
+                    <label for="newPassword">Новый пароль</label>
+                    <div class="password-box auth-password-box">
+                        <input type="password" name="password" class="form-control password" id="newPassword" placeholder="Введите новый пароль">
+                        <i class="password-icon fa-regular fa-eye"></i>
+                    </div>
+                    @error('password')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="auth-field">
+                    <label for="confirmPassword">Повторите пароль</label>
+                    <div class="password-box auth-password-box">
+                        <input type="password" name="password_confirmation" class="form-control password" id="confirmPassword" placeholder="Повторите новый пароль">
+                        <i class="password-icon fa-regular fa-eye"></i>
+                    </div>
+                    @error('password_confirmation')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <button type="submit" class="cmn-btn auth-primary-btn">Сохранить пароль</button>
+
+                <div class="auth-switch">
+                    <span>Вернуться ко входу?</span>
+                    <a href="{{ route('login') }}">Войти</a>
+                </div>
+            </form>
         </div>
     </section>
+
+    @include($theme.'auth.partials.clean-auth-style')
+    <script>
+        document.querySelectorAll('.password-icon').forEach((icon) => {
+            icon.addEventListener('click', () => {
+                const input = icon.closest('.password-box')?.querySelector('.password');
+                if (!input) return;
+                input.type = input.type === 'password' ? 'text' : 'password';
+                icon.classList.toggle('fa-eye');
+                icon.classList.toggle('fa-eye-slash');
+            });
+        });
+    </script>
 @endsection

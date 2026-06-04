@@ -7,17 +7,26 @@ use App\Models\BuyRequest;
 use App\Models\CryptoCurrency;
 use App\Models\ExchangeRequest;
 use App\Models\FiatCurrency;
+use App\Models\Kyc;
+use App\Models\PageDetail;
 use App\Models\SellRequest;
+use App\Models\UserKyc;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\Kyc\UserKycManager;
 use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Services\TradeQuote\BuyQuoteService;
 use App\Services\TradeQuote\SellQuoteService;
+use App\Traits\Upload;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Validator;
 use RuntimeException;
 
 class TelegramMiniAppController extends Controller
 {
+    use Upload;
+
     public function index(Request $request, TelegramMiniAppAuthService $authService)
     {
         return $this->launch($request, $authService);
@@ -60,7 +69,163 @@ class TelegramMiniAppController extends Controller
             'fiatCurrencies' => $this->fiatCurrencies(),
             'rateCards' => $this->rateCards(),
             'defaultFiatCode' => $this->defaultFiatCode(),
+            'appLogo' => $this->appLogo(),
+            'statsUrl' => route('telegram.mini-app.stats'),
+            'kycUrl' => route('telegram.mini-app.kyc'),
+            'kycSubmitUrl' => route('telegram.mini-app.kyc.submit'),
+            'policyUrl' => route('telegram.mini-app.page', ['slug' => 'terms-and-conditions']),
+            'privacyUrl' => route('telegram.mini-app.page', ['slug' => 'privacy-policy']),
         ]);
+    }
+
+    public function stats(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        $this->authenticateTelegramRequest($request, $authService);
+
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Откройте Mini App из Telegram.'], 401);
+        }
+
+        $userId = Auth::id();
+        $buy = BuyRequest::where('user_id', $userId);
+        $sell = SellRequest::where('user_id', $userId);
+        $exchange = ExchangeRequest::where('user_id', $userId);
+
+        return response()->json([
+            'status' => true,
+            'stats' => [
+                'total' => (clone $buy)->count() + (clone $sell)->count() + (clone $exchange)->count(),
+                'completed' => (clone $buy)->where('status', 3)->count()
+                    + (clone $sell)->where('status', 3)->count()
+                    + (clone $exchange)->where('status', 3)->count(),
+                'active' => (clone $buy)->whereIn('status', [1, 2])->count()
+                    + (clone $sell)->whereIn('status', [1, 2])->count()
+                    + (clone $exchange)->whereIn('status', [1, 2])->count(),
+                'canceled' => (clone $buy)->where('status', 5)->count()
+                    + (clone $sell)->where('status', 5)->count()
+                    + (clone $exchange)->where('status', 5)->count(),
+                'buy' => (clone $buy)->count(),
+                'sell' => (clone $sell)->count(),
+                'exchange' => (clone $exchange)->count(),
+            ],
+        ]);
+    }
+
+    public function pageContent(string $slug)
+    {
+        $detail = PageDetail::query()
+            ->whereHas('page', fn ($query) => $query->where('slug', $slug))
+            ->with('page')
+            ->orderByDesc('id')
+            ->first();
+
+        return response()->json([
+            'status' => true,
+            'title' => $slug === 'privacy-policy' ? 'Политика конфиденциальности' : 'Условия использования',
+            'content' => trim(strip_tags((string) ($detail?->content ?? 'Документ обновляется.'))),
+            'url' => url($slug),
+        ]);
+    }
+
+    public function kyc(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        $this->authenticateTelegramRequest($request, $authService);
+
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Откройте Mini App из Telegram.'], 401);
+        }
+
+        $kyc = Kyc::where('status', 1)->first();
+        $latest = $kyc ? UserKyc::where('user_id', Auth::id())->where('kyc_id', $kyc->id)->latest()->first() : null;
+
+        return response()->json([
+            'status' => true,
+            'verified' => (int) Auth::user()->identity_verify === 2,
+            'kyc' => $kyc ? [
+                'id' => $kyc->id,
+                'name' => $kyc->name,
+                'provider' => $kyc->provider ?? 'manual',
+                'latest_status' => $latest?->status,
+                'fields' => collect((array) $kyc->input_form)->map(function ($field, $key) {
+                    return [
+                        'key' => (string) $key,
+                        'label' => (string) ($field->field_label ?? $field->field_name ?? $key),
+                        'type' => in_array($field->type ?? 'text', ['text', 'number', 'date', 'textarea', 'file'], true) ? $field->type : 'text',
+                        'required' => ($field->validation ?? null) === 'required',
+                    ];
+                })->values(),
+            ] : null,
+        ]);
+    }
+
+    public function submitKyc(Request $request, TelegramMiniAppAuthService $authService, UserKycManager $userKycManager)
+    {
+        $this->authenticateTelegramRequest($request, $authService);
+
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Откройте Mini App из Telegram.'], 401);
+        }
+
+        $kyc = Kyc::where('status', 1)->findOrFail((int) $request->input('kyc_id'));
+
+        if (($kyc->provider ?? 'manual') !== 'manual') {
+            return response()->json(['status' => false, 'message' => 'Этот KYC-провайдер пока открывается через кабинет.'], 422);
+        }
+
+        $params = $kyc->input_form;
+        $rules = [];
+        foreach ((array) $params as $key => $field) {
+            $rules[$key] = [($field->validation ?? null) === 'required' ? 'required' : 'nullable'];
+            if (($field->type ?? null) === 'file') {
+                $rules[$key][] = 'image';
+                $rules[$key][] = 'mimes:jpeg,jpg,png';
+                $rules[$key][] = 'max:2048';
+            } elseif (($field->type ?? null) === 'number') {
+                $rules[$key][] = 'integer';
+            } elseif (($field->type ?? null) === 'textarea') {
+                $rules[$key][] = 'min:3';
+                $rules[$key][] = 'max:300';
+            } else {
+                $rules[$key][] = 'max:191';
+            }
+        }
+
+        $validator = Validator::make($request->except('kyc_id', 'initData'), $rules);
+        if ($validator->fails()) {
+            return response()->json(['status' => false, 'message' => $validator->errors()->first()], 422);
+        }
+
+        $fields = [];
+        foreach ((array) $params as $key => $field) {
+            if (($field->type ?? null) === 'file' && $request->hasFile($key)) {
+                $file = $this->fileUpload($request->file($key), config('filelocation.kyc.path'), null, null, 'webp', 60);
+                $fields[$key] = [
+                    'field_name' => $field->field_name ?? $field->field_label ?? $key,
+                    'field_value' => $file['path'],
+                    'field_driver' => $file['driver'],
+                    'validation' => $field->validation ?? 'nullable',
+                    'type' => 'file',
+                ];
+            } elseif (($field->type ?? null) !== 'file') {
+                $fields[$key] = [
+                    'field_name' => $field->field_name ?? $field->field_label ?? $key,
+                    'validation' => $field->validation ?? 'nullable',
+                    'field_value' => $request->input($key),
+                    'type' => $field->type ?? 'text',
+                ];
+            }
+        }
+
+        UserKyc::create([
+            'user_id' => Auth::id(),
+            'kyc_id' => $kyc->id,
+            'kyc_type' => $kyc->name,
+            'kyc_info' => $fields,
+        ]);
+
+        $userKycManager->refreshUserVerificationStatus(Auth::user()->fresh());
+
+        return response()->json(['status' => true, 'message' => 'KYC отправлен на проверку.']);
     }
 
     public function quote(Request $request, BuyQuoteService $buyQuoteService, SellQuoteService $sellQuoteService, ExchangeQuoteService $exchangeQuoteService)
@@ -218,37 +383,51 @@ class TelegramMiniAppController extends Controller
 
     private function rateCards()
     {
-        $fiatCurrency = FiatCurrency::query()
-            ->active()
-            ->where('code', $this->defaultFiatCode())
-            ->first() ?: FiatCurrency::query()->active()->sorted()->first();
+        $baseCurrency = strtoupper((string) (basicControl()->base_currency ?? 'RUB'));
+        $query = CryptoCurrency::where('status', 1);
 
-        if (!$fiatCurrency) {
-            return collect();
+        if (Schema::hasColumn('crypto_currencies', 'show_on_homepage')) {
+            $query->where('show_on_homepage', 1);
         }
 
-        $fiatUsdRate = $this->effectiveFiatUsdRate($fiatCurrency);
-
-        if ($fiatUsdRate <= 0) {
-            return collect();
-        }
-
-        return CryptoCurrency::where('status', 1)
+        return $query
             ->orderBy('sort_by', 'ASC')
-            ->limit(6)
+            ->limit(10)
             ->get()
-            ->filter(fn (CryptoCurrency $currency) => (float) $currency->usd_rate > 0)
-            ->map(function (CryptoCurrency $currency) use ($fiatCurrency, $fiatUsdRate) {
+            ->map(function (CryptoCurrency $currency) use ($baseCurrency) {
+                $isStablecoin = (bool) $currency->is_stablecoin;
+                $rate = $isStablecoin
+                    ? (float) ($currency->rate ?? $currency->usd_rate)
+                    : (float) ($currency->usd_rate ?? $currency->rate);
+                $quoteCode = $isStablecoin ? $baseCurrency : 'USDT';
+                $change = $currency->change_24h;
+
                 return [
                     'code' => strtoupper((string) $currency->normalized_code),
                     'name' => $currency->name,
                     'image_path' => $currency->image_path,
-                    'fiat_code' => strtoupper((string) $fiatCurrency->code),
-                    'buy_rate' => (float) $currency->usd_rate / $fiatUsdRate,
-                    'sell_rate' => ((float) $currency->usd_rate / $fiatUsdRate) * 0.992,
+                    'quote_code' => $quoteCode,
+                    'pair' => strtoupper((string) $currency->normalized_code) . '/' . $quoteCode,
+                    'display_rate' => $this->formatTmaRate($rate),
+                    'change_24h' => $change === null ? null : (float) $change,
                 ];
             })
             ->values();
+    }
+
+    private function formatTmaRate(float $rate): string
+    {
+        if ($rate >= 1) {
+            return number_format($rate, 2, '.', ' ');
+        }
+
+        return rtrim(rtrim(number_format($rate, 8, '.', ' '), '0'), '.');
+    }
+
+    private function appLogo(): string
+    {
+        $darkLogo = getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo);
+        return $darkLogo ?: getFile(basicControl()->logo_driver, basicControl()->logo);
     }
 
     private function formatQuote(array $quote): array

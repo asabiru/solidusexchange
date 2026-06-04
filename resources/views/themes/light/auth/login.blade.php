@@ -10,6 +10,7 @@
         $telegramOAuthUrl = $telegramBotId !== ''
             ? 'https://oauth.telegram.org/auth?bot_id=' . $telegramBotId . '&origin=' . urlencode(config('app.url')) . '&embed=0&request_access=write&return_to=' . urlencode($telegramAuthUrl)
             : null;
+        $authLogo = getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) ?: getFile(basicControl()->logo_driver, basicControl()->logo);
     @endphp
 
     <section class="auth-clean-page">
@@ -20,7 +21,7 @@
             </a>
 
             <div class="auth-clean-brand">
-                <a href="{{ url('/') }}" class="auth-clean-logo"><span>SC</span></a>
+                <a href="{{ url('/') }}" class="auth-clean-logo"><img src="{{ $authLogo }}" alt="SolidChange"></a>
                 <div>
                     <strong>SolidChange</strong>
                     <small>безопасный обмен криптовалют</small>

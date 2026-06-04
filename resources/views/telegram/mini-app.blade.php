@@ -7,6 +7,12 @@
     $telegramAuthUrl = route('telegram.mini-app');
     $telegramQuoteUrl = route('telegram.mini-app.quote');
     $telegramRequestUrl = route('telegram.mini-app.request');
+    $telegramStatsUrl = $statsUrl ?? route('telegram.mini-app.stats');
+    $telegramKycUrl = $kycUrl ?? route('telegram.mini-app.kyc');
+    $telegramKycSubmitUrl = $kycSubmitUrl ?? route('telegram.mini-app.kyc.submit');
+    $telegramPolicyUrl = $policyUrl ?? route('telegram.mini-app.page', ['slug' => 'terms-and-conditions']);
+    $telegramPrivacyUrl = $privacyUrl ?? route('telegram.mini-app.page', ['slug' => 'privacy-policy']);
+    $logoUrl = $appLogo ?? getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo);
 
     // Pre-build JSON-safe arrays (arrow fns inside @json confuse Blade parser)
     $cryptosJson = $cryptos->map(function($c) {
@@ -57,7 +63,7 @@
     {{-- ===== HEADER ===== --}}
     <header class="tma-header">
         <div class="tma-header__brand">
-            <div class="tma-logo">S</div>
+            <div class="tma-logo"><img src="{{ $logoUrl }}" alt="SolidChange"></div>
             <div>
                 <strong>SolidChange</strong>
                 @if($user)
@@ -94,12 +100,18 @@
                     </div>
                     <div>
                         <strong>{{ $rc['code'] }}</strong>
-                        <small>{{ $rc['name'] }}</small>
+                        <small>{{ $rc['pair'] }}</small>
                     </div>
                 </div>
                 <div class="tma-rate-row__prices">
-                    <div><span class="tma-label">Покупка</span><span class="tma-value tma-value--buy">{{ number_format($rc['buy_rate'],2,'.',' ') }} ₽</span></div>
-                    <div><span class="tma-label">Продажа</span><span class="tma-value tma-value--sell">{{ number_format($rc['sell_rate'],2,'.',' ') }} ₽</span></div>
+                    <strong>{{ $rc['display_rate'] }} {{ $rc['quote_code'] }}</strong>
+                    @if($rc['change_24h'] !== null)
+                        <span class="tma-rate-change {{ $rc['change_24h'] >= 0 ? 'is-positive' : 'is-negative' }}">
+                            {{ $rc['change_24h'] >= 0 ? '+' : '' }}{{ number_format($rc['change_24h'], 2) }}%
+                        </span>
+                    @else
+                        <span class="tma-rate-change">—</span>
+                    @endif
                 </div>
             </div>
             @empty
@@ -196,7 +208,7 @@
         </div>
 
         <div class="tma-menu-group">
-            <a class="tma-menu-item" href="javascript:void(0)" id="statsBtn">
+            <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="stats">
                 <div class="tma-menu-item__icon tma-menu-item__icon--blue"><i class="fas fa-chart-bar"></i></div>
                 <div class="tma-menu-item__body">
                     <strong>Статистика</strong>
@@ -204,7 +216,7 @@
                 </div>
                 <i class="fas fa-chevron-right"></i>
             </a>
-            <a class="tma-menu-item" href="javascript:void(0)" id="kycBtn">
+            <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="kyc">
                 <div class="tma-menu-item__icon tma-menu-item__icon--green"><i class="fas fa-shield-alt"></i></div>
                 <div class="tma-menu-item__body">
                     <strong>Статус</strong>
@@ -226,12 +238,12 @@
         </div>
 
         <div class="tma-menu-group">
-            <a class="tma-menu-item" href="javascript:void(0)">
+            <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="policy">
                 <div class="tma-menu-item__icon"><i class="fas fa-file-alt"></i></div>
                 <div class="tma-menu-item__body"><strong>Условия использования</strong></div>
                 <i class="fas fa-chevron-right"></i>
             </a>
-            <a class="tma-menu-item" href="javascript:void(0)">
+            <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="privacy">
                 <div class="tma-menu-item__icon"><i class="fas fa-lock"></i></div>
                 <div class="tma-menu-item__body"><strong>Политика конфиденциальности</strong></div>
                 <i class="fas fa-chevron-right"></i>
@@ -255,6 +267,17 @@
         </div>
         <input class="tma-modal__search" id="currencySearch" placeholder="Поиск..." type="text">
         <div class="tma-modal__list" id="currencyList"></div>
+    </div>
+</div>
+
+{{-- ===== PROFILE ACTION MODAL ===== --}}
+<div class="tma-modal" id="profileModal" hidden>
+    <div class="tma-modal__content tma-modal__content--sheet">
+        <div class="tma-modal__head">
+            <h3 id="profileModalTitle">Профиль</h3>
+            <button class="tma-modal__close" id="profileModalClose"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="tma-modal__body" id="profileModalBody"></div>
     </div>
 </div>
 
@@ -285,6 +308,17 @@
     const tabs = document.querySelectorAll('[data-tab]');
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const overlay = document.getElementById('authOverlay');
+    const profileModal = document.getElementById('profileModal');
+    const profileModalTitle = document.getElementById('profileModalTitle');
+    const profileModalBody = document.getElementById('profileModalBody');
+    const profileModalClose = document.getElementById('profileModalClose');
+    const apiUrls = {
+        stats: @json($telegramStatsUrl),
+        kyc: @json($telegramKycUrl),
+        kycSubmit: @json($telegramKycSubmitUrl),
+        policy: @json($telegramPolicyUrl),
+        privacy: @json($telegramPrivacyUrl),
+    };
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -348,7 +382,7 @@
             </div>
 
             <div class="tma-menu-group">
-                <a class="tma-menu-item" href="javascript:void(0)">
+                <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="stats">
                     <div class="tma-menu-item__icon tma-menu-item__icon--blue"><i class="fas fa-chart-bar"></i></div>
                     <div class="tma-menu-item__body">
                         <strong>Статистика</strong>
@@ -356,7 +390,7 @@
                     </div>
                     <i class="fas fa-chevron-right"></i>
                 </a>
-                <a class="tma-menu-item" href="javascript:void(0)">
+                <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="kyc">
                     <div class="tma-menu-item__icon tma-menu-item__icon--green"><i class="fas fa-shield-alt"></i></div>
                     <div class="tma-menu-item__body">
                         <strong>Статус</strong>
@@ -378,12 +412,12 @@
             </div>
 
             <div class="tma-menu-group">
-                <a class="tma-menu-item" href="javascript:void(0)">
+                <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="policy">
                     <div class="tma-menu-item__icon"><i class="fas fa-file-alt"></i></div>
                     <div class="tma-menu-item__body"><strong>Условия использования</strong></div>
                     <i class="fas fa-chevron-right"></i>
                 </a>
-                <a class="tma-menu-item" href="javascript:void(0)">
+                <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="privacy">
                     <div class="tma-menu-item__icon"><i class="fas fa-lock"></i></div>
                     <div class="tma-menu-item__body"><strong>Политика конфиденциальности</strong></div>
                     <i class="fas fa-chevron-right"></i>
@@ -604,6 +638,167 @@
             if (calcNote) { calcNote.className = 'tma-calc__note tma-calc__note--error'; calcNote.textContent = e.message || 'Ошибка создания заявки'; }
             exchangeBtn.disabled = false;
             exchangeBtn.textContent = 'Обменять';
+            webApp?.HapticFeedback?.notificationOccurred('error');
+        }
+    });
+
+    // ---------- Profile actions ----------
+    function openProfileModal(title, html) {
+        if (!profileModal || !profileModalTitle || !profileModalBody) return;
+        profileModalTitle.textContent = title;
+        profileModalBody.innerHTML = html;
+        profileModal.hidden = false;
+    }
+
+    function loadingBlock(text = 'Загружаем...') {
+        return `<div class="tma-empty tma-empty--compact"><i class="fas fa-spinner fa-spin"></i><p>${escapeHtml(text)}</p></div>`;
+    }
+
+    async function tmaJson(url, options = {}) {
+        const headers = {
+            'Accept': 'application/json',
+            'X-Telegram-Init-Data': initData || '',
+            ...(options.headers || {}),
+        };
+
+        if (csrf) headers['X-CSRF-TOKEN'] = csrf;
+
+        const response = await fetch(url, {
+            ...options,
+            headers,
+            credentials: 'same-origin',
+        });
+
+        const data = await response.json();
+        if (!response.ok || data.status === false) throw new Error(data.message || 'Ошибка запроса');
+        return data;
+    }
+
+    async function showStats() {
+        openProfileModal('Статистика обменов', loadingBlock());
+        try {
+            const data = await tmaJson(apiUrls.stats, {method: 'POST', body: new URLSearchParams({initData})});
+            const s = data.stats || {};
+            openProfileModal('Статистика обменов', `
+                <div class="tma-stats-grid">
+                    <div><span>Всего заявок</span><strong>${Number(s.total || 0)}</strong></div>
+                    <div><span>Завершено</span><strong>${Number(s.completed || 0)}</strong></div>
+                    <div><span>В работе</span><strong>${Number(s.active || 0)}</strong></div>
+                    <div><span>Отменено</span><strong>${Number(s.canceled || 0)}</strong></div>
+                </div>
+                <div class="tma-stats-list">
+                    <p><span>Покупка криптовалюты</span><strong>${Number(s.buy || 0)}</strong></p>
+                    <p><span>Продажа криптовалюты</span><strong>${Number(s.sell || 0)}</strong></p>
+                    <p><span>Криптообмен</span><strong>${Number(s.exchange || 0)}</strong></p>
+                </div>
+            `);
+        } catch (e) {
+            openProfileModal('Статистика обменов', `<div class="tma-empty tma-empty--compact"><i class="fas fa-circle-exclamation"></i><p>${escapeHtml(e.message)}</p></div>`);
+        }
+    }
+
+    async function showPolicy(type) {
+        const title = type === 'privacy' ? 'Политика конфиденциальности' : 'Условия использования';
+        openProfileModal(title, loadingBlock());
+        try {
+            const data = await tmaJson(apiUrls[type]);
+            const text = String(data.content || '').slice(0, 5000);
+            openProfileModal(data.title || title, `
+                <div class="tma-doc-text">${escapeHtml(text).replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>')}</div>
+                <button class="tma-primary-btn tma-primary-btn--compact" type="button" data-close-profile>Понятно</button>
+            `);
+        } catch (e) {
+            openProfileModal(title, `<div class="tma-empty tma-empty--compact"><i class="fas fa-circle-exclamation"></i><p>${escapeHtml(e.message)}</p></div>`);
+        }
+    }
+
+    function renderKycForm(data) {
+        if (data.verified) {
+            return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-check"></i><p>KYC уже пройден.</p></div>';
+        }
+
+        if (!data.kyc) {
+            return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-alt"></i><p>KYC-форма пока не настроена.</p></div>';
+        }
+
+        if (data.kyc.provider !== 'manual') {
+            return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-alt"></i><p>Этот KYC-провайдер будет подключён в Mini App отдельным виджетом.</p></div>';
+        }
+
+        const fields = (data.kyc.fields || []).map(field => {
+            const required = field.required ? 'required' : '';
+            const label = `${escapeHtml(field.label)}${field.required ? ' *' : ''}`;
+            if (field.type === 'textarea') {
+                return `<label class="tma-form-field"><span>${label}</span><textarea name="${escapeHtml(field.key)}" rows="3" ${required}></textarea></label>`;
+            }
+            return `<label class="tma-form-field"><span>${label}</span><input name="${escapeHtml(field.key)}" type="${escapeHtml(field.type)}" ${required}></label>`;
+        }).join('');
+
+        return `
+            <form class="tma-kyc-form" id="tmaKycForm">
+                <input type="hidden" name="kyc_id" value="${Number(data.kyc.id)}">
+                ${fields || '<p class="tma-doc-text">Заполните форму и отправьте заявку на проверку.</p>'}
+                <button class="tma-primary-btn" type="submit">Отправить KYC</button>
+                <div class="tma-calc__note" id="kycSubmitNote"></div>
+            </form>
+        `;
+    }
+
+    async function showKyc() {
+        openProfileModal('KYC проверка', loadingBlock());
+        try {
+            const data = await tmaJson(apiUrls.kyc, {method: 'POST', body: new URLSearchParams({initData})});
+            openProfileModal('KYC проверка', renderKycForm(data));
+        } catch (e) {
+            openProfileModal('KYC проверка', `<div class="tma-empty tma-empty--compact"><i class="fas fa-circle-exclamation"></i><p>${escapeHtml(e.message)}</p></div>`);
+        }
+    }
+
+    document.addEventListener('click', (event) => {
+        const action = event.target.closest('[data-profile-action]')?.dataset.profileAction;
+        if (!action) return;
+        event.preventDefault();
+        webApp?.HapticFeedback?.impactOccurred('light');
+        if (action === 'stats') showStats();
+        if (action === 'policy' || action === 'privacy') showPolicy(action);
+        if (action === 'kyc') showKyc();
+    });
+
+    profileModalClose?.addEventListener('click', () => { if (profileModal) profileModal.hidden = true; });
+    profileModal?.addEventListener('click', (event) => {
+        if (event.target === profileModal || event.target.closest('[data-close-profile]')) {
+            profileModal.hidden = true;
+        }
+    });
+
+    profileModalBody?.addEventListener('submit', async (event) => {
+        if (event.target?.id !== 'tmaKycForm') return;
+        event.preventDefault();
+        const form = event.target;
+        const note = document.getElementById('kycSubmitNote');
+        const button = form.querySelector('button[type="submit"]');
+        const body = new FormData(form);
+        body.append('initData', initData || '');
+        if (button) {
+            button.disabled = true;
+            button.textContent = 'Отправляем...';
+        }
+        try {
+            const data = await tmaJson(apiUrls.kycSubmit, {method: 'POST', body});
+            if (note) {
+                note.className = 'tma-calc__note tma-calc__note--success';
+                note.textContent = data.message || 'KYC отправлен на проверку.';
+            }
+            webApp?.HapticFeedback?.notificationOccurred('success');
+        } catch (e) {
+            if (note) {
+                note.className = 'tma-calc__note tma-calc__note--error';
+                note.textContent = e.message;
+            }
+            if (button) {
+                button.disabled = false;
+                button.textContent = 'Отправить KYC';
+            }
             webApp?.HapticFeedback?.notificationOccurred('error');
         }
     });

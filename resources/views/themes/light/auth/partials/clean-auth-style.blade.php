@@ -60,12 +60,17 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        color: #1b0f0b;
-        background: linear-gradient(135deg, #f5d6a6, #b37a43);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(232, 201, 160, 0.24);
         box-shadow: 0 14px 34px rgba(232, 201, 160, 0.22);
-        font-weight: 800;
-        font-size: 22px;
-        letter-spacing: -0.04em;
+        overflow: hidden;
+    }
+
+    .auth-clean-logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
     }
 
     .auth-clean-brand strong {
