@@ -9,6 +9,27 @@
         : (\Illuminate\Support\Facades\Route::has('telegram.mini-app') ? route('telegram.mini-app') : url('/telegram/mini-app'));
     $telegramQuoteUrl = route('telegram.mini-app.quote');
     $telegramRequestUrl = route('telegram.mini-app.request');
+
+    // Pre-build JSON-safe arrays (arrow fns inside @json confuse Blade parser)
+    $cryptosJson = $cryptos->map(function($c) {
+        return [
+            'id' => $c->id,
+            'code' => strtoupper($c->code ?? $c->normalized_code ?? ''),
+            'display_code' => strtoupper($c->normalized_code ?? $c->code ?? ''),
+            'name' => $c->name,
+            'image_path' => $c->image_path,
+        ];
+    })->values()->toArray();
+
+    $fiatsJson = $fiats->map(function($f) {
+        return [
+            'id' => $f->id,
+            'code' => strtoupper($f->code ?? ''),
+            'display_code' => strtoupper($f->code ?? ''),
+            'name' => $f->name,
+            'image_path' => $f->image_path,
+        ];
+    })->values()->toArray();
 @endphp
 <!DOCTYPE html>
 <html lang="ru">
@@ -128,7 +149,7 @@
                 <div class="tma-calc__input-row">
                     <input type="number" id="getAmount" placeholder="0" readonly>
                     <button class="tma-currency-btn" id="getCurrencyBtn" data-type="get">
-                        <span id="getCurrencyLabel">{{ $cryptos->first() ? strtoupper($cryptos->first()->code ?? 'USDT') : 'USDT' }}</span>
+                        <span id="getCurrencyLabel">{{ $cryptos->first() ? strtoupper($cryptos->first()->normalized_code ?? $cryptos->first()->code ?? 'USDT') : 'USDT' }}</span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
@@ -268,8 +289,8 @@
     const overlay = document.getElementById('authOverlay');
 
     // ---------- Currency data from server ----------
-    const cryptos = @json($cryptos->map(fn($c) => ['id' => $c->id, 'code' => strtoupper($c->code ?? $c->normalized_code ?? ''), 'name' => $c->name, 'image_path' => $c->image_path])->values());
-    const fiats = @json($fiats->map(fn($f) => ['id' => $f->id, 'code' => strtoupper($f->code ?? ''), 'name' => $f->name, 'image_path' => $f->image_path])->values());
+    const cryptos = @json($cryptosJson);
+    const fiats = @json($fiatsJson);
     const defaultFiat = @json($defaultFiat);
 
     // ---------- Exchange state ----------
@@ -342,8 +363,8 @@
     const calcNote = document.getElementById('calcNote');
 
     function updateCurrencyLabels() {
-        if (sendCurrLabel) sendCurrLabel.textContent = sendCurrency.code;
-        if (getCurrLabel) getCurrLabel.textContent = getCurrency.code;
+        if (sendCurrLabel) sendCurrLabel.textContent = sendCurrency.display_code || sendCurrency.code;
+        if (getCurrLabel) getCurrLabel.textContent = getCurrency.display_code || getCurrency.code;
     }
     updateCurrencyLabels();
 
@@ -390,7 +411,7 @@
                 const getAmt = q.final_amount || q.get_amount || 0;
                 if (getAmountEl) getAmountEl.value = parseFloat(getAmt).toFixed(6);
                 const rate = q.exchange_rate || 0;
-                if (rateDisplay) rateDisplay.textContent = '1 ' + sendCurrency.code + ' = ' + parseFloat(rate).toFixed(6) + ' ' + getCurrency.code;
+                if (rateDisplay) rateDisplay.textContent = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(6) + ' ' + (getCurrency.display_code||getCurrency.code);
                 if (exchangeBtn) { exchangeBtn.disabled = false; exchangeBtn.textContent = 'Обменять'; }
                 if (calcNote) calcNote.textContent = '';
             } else {
@@ -448,9 +469,9 @@
 
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
-            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(c.name)}">
-                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.code).toLowerCase())}">${c.image_path ? `<img src="${escapeHtml(c.image_path)}" alt="${escapeHtml(c.code)}">` : escapeHtml(String(c.code).charAt(0))}</div>
-                <div><strong>${escapeHtml(c.code)}</strong><small>${escapeHtml(c.name)}</small></div>
+            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-display="${escapeHtml(c.display_code||c.code)}" data-name="${escapeHtml(c.name)}" data-img="${escapeHtml(c.image_path||'')}">
+                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${c.image_path ? `<img src="${escapeHtml(c.image_path)}" alt="${escapeHtml(c.display_code||c.code)}">` : escapeHtml(String(c.display_code||c.code).charAt(0))}</div>
+                <div><strong>${escapeHtml(c.display_code||c.code)}</strong><small>${escapeHtml(c.name)}</small></div>
             </button>`
         ).join('');
     }
@@ -470,7 +491,7 @@
     modalList?.addEventListener('click', (e) => {
         const btn = e.target.closest('.tma-modal__item');
         if (!btn) return;
-        const selected = {id: parseInt(btn.dataset.id), code: btn.dataset.code, name: btn.dataset.name};
+        const selected = {id: parseInt(btn.dataset.id), code: btn.dataset.code, display_code: btn.dataset.display || btn.dataset.code, name: btn.dataset.name, image_path: btn.dataset.img || ''};
         if (pickerTarget === 'send') sendCurrency = selected;
         else getCurrency = selected;
         updateCurrencyLabels();
