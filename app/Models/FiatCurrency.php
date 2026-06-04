@@ -34,7 +34,7 @@ class FiatCurrency extends Model
 
     public function getBuyMethodNameAttribute(): string
     {
-        return $this->formatRubMethodName($this->buyGateway?->name, 'Способ оплаты');
+        return $this->formatRubMethodName($this->buyGateway?->name, 'Банковская карта / СБП');
     }
 
     public function getBuyMethodImagePathAttribute(): string
@@ -48,7 +48,7 @@ class FiatCurrency extends Model
 
     public function getSellMethodNameAttribute(): string
     {
-        return $this->formatRubMethodName($this->fiatSendGateway?->name, 'Способ получения');
+        return $this->formatRubMethodName($this->fiatSendGateway?->name, 'СБП / Банковский перевод');
     }
 
     public function getSellMethodImagePathAttribute(): string
@@ -95,7 +95,7 @@ class FiatCurrency extends Model
 
         $normalized = preg_replace('/[\s_\-—]+/u', ' ', $name) ?: $name;
 
-        return (bool) preg_match('/^(rub|rur|russian r[ou]ble|рубл[ьиь]|российский рубл[ьиь]|оплата рублями|получение рубл[её]й)$/iu', trim($normalized));
+        return (bool) preg_match('/^(rub|rur|russian r[ou]ble|рубл[ьиь]|российский рубл[ьиь]|оплата рублями|получение рубл[её]й|способ оплаты|способ получения)$/iu', trim($normalized));
     }
 
     public function fiatSendGateway()
