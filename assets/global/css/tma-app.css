@@ -60,6 +60,9 @@ body.tma{
     overflow-x:hidden;
 }
 
+/* ===== HIDDEN OVERRIDE ===== */
+[hidden]{display:none!important}
+
 /* ===== AUTH OVERLAY ===== */
 .tma-auth-overlay{
     position:fixed;inset:0;z-index:100;
@@ -295,6 +298,7 @@ body.tma{
 .tma-empty p{font-size:13px;max-width:240px}
 
 /* ===== CURRENCY MODAL ===== */
+.tma-modal[hidden]{display:none!important}
 .tma-modal{
     position:fixed;inset:0;z-index:90;
     display:flex;align-items:flex-end;justify-content:center;
