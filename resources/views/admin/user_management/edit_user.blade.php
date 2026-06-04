@@ -109,7 +109,7 @@
                         <div class="profile-cover">
                             <div class="profile-cover-img-wrapper">
                                 <img id="profileCoverImg" class="profile-cover-img"
-                                     src="{{ asset('assets/admin/img/img1.jpg') }}"
+                                     src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo, true) }}"
                                      alt="Image Description">
                             </div>
                         </div>
@@ -222,7 +222,6 @@
 
     </script>
 @endpush
-
 
 
 

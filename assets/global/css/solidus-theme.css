@@ -546,3 +546,146 @@ body:not(.has-navbar-vertical-aside) .rate-btn-area .btn-check:checked + .btn.ra
     box-shadow: none !important;
 }
 body:not(.has-navbar-vertical-aside) .rate-btn-area .btn.rate-btn i{ color: var(--color-accent,#e8c9a0) !important; }
+
+/* SolidChange admin shell */
+.solidchange-admin-login {
+    min-height: 100vh;
+    background:
+        radial-gradient(circle at 18% 14%, rgba(232, 201, 160, 0.16), transparent 30%),
+        radial-gradient(circle at 86% 82%, rgba(150, 102, 50, 0.14), transparent 34%),
+        linear-gradient(135deg, #080405 0%, #14090d 52%, #050203 100%) !important;
+    color: #f5ede4;
+}
+.solidchange-admin-login::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+        linear-gradient(rgba(232, 201, 160, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232, 201, 160, 0.045) 1px, transparent 1px);
+    background-size: 58px 58px;
+    mask-image: radial-gradient(ellipse at center, #000 24%, transparent 76%);
+}
+.solidchange-admin-login-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: fit-content;
+    margin: 0 auto 22px;
+    padding: 12px 18px;
+    border: 1px solid rgba(232, 201, 160, 0.16);
+    border-radius: 18px;
+    background: rgba(18, 9, 13, 0.66);
+    box-shadow: 0 18px 54px rgba(0, 0, 0, 0.32);
+}
+.solidchange-admin-login-logo img {
+    max-width: 190px;
+    max-height: 54px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 18px rgba(232, 201, 160, 0.2));
+}
+.solidchange-admin-login .login-form { max-width: 430px; }
+.solidchange-admin-login .card {
+    border: 1px solid rgba(232, 201, 160, 0.18) !important;
+    border-radius: 24px !important;
+    background: rgba(18, 9, 13, 0.88) !important;
+    box-shadow: 0 28px 80px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(18px);
+}
+.solidchange-admin-login h1,
+.solidchange-admin-login label,
+.solidchange-admin-login .form-label { color: #f5ede4 !important; }
+.solidchange-admin-login .form-control,
+.solidchange-admin-login .input-group-text {
+    background: #0b0608 !important;
+    border-color: rgba(232, 201, 160, 0.18) !important;
+    color: #f5ede4 !important;
+}
+.solidchange-admin-login .form-control:focus {
+    border-color: #e8c9a0 !important;
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.11) !important;
+}
+.solidchange-admin-login .btn-primary,
+.solidchange-admin-login button[type="submit"] {
+    border: 0 !important;
+    border-radius: 14px !important;
+    background: linear-gradient(135deg, #f0d2a7, #c79a5c) !important;
+    color: #120709 !important;
+    font-weight: 800 !important;
+    box-shadow: 0 14px 36px rgba(201, 154, 92, 0.26) !important;
+}
+body.has-navbar-vertical-aside {
+    --admin-bg: #080405;
+    --admin-surface: #12090d;
+    --admin-border: rgba(232, 201, 160, 0.14);
+    --admin-text-primary: #f5ede4;
+    --admin-text-secondary: #c8b7a5;
+    background:
+        radial-gradient(circle at 18% 10%, rgba(232, 201, 160, 0.08), transparent 30%),
+        linear-gradient(135deg, #080405 0%, #10070a 58%, #060203 100%) !important;
+    color: var(--admin-text-primary);
+}
+body.has-navbar-vertical-aside .navbar-fixed,
+body.has-navbar-vertical-aside #header {
+    background: rgba(11, 6, 8, 0.88) !important;
+    border-color: var(--admin-border) !important;
+    backdrop-filter: blur(16px);
+}
+body.has-navbar-vertical-aside .navbar-vertical-aside {
+    background: linear-gradient(180deg, #0b0608 0%, #12090d 100%) !important;
+    border-right: 1px solid var(--admin-border) !important;
+}
+body.has-navbar-vertical-aside .navbar-vertical-container { background: transparent !important; }
+body.has-navbar-vertical-aside .navbar-brand-logo,
+body.has-navbar-vertical-aside .navbar-brand-logo-auto,
+body.has-navbar-vertical-aside .navbar-brand-logo-mini {
+    max-width: 190px;
+    object-fit: contain;
+    filter: drop-shadow(0 8px 18px rgba(232, 201, 160, 0.18));
+}
+body.has-navbar-vertical-aside .nav-link,
+body.has-navbar-vertical-aside .nav-link-title,
+body.has-navbar-vertical-aside .dropdown-header { color: var(--admin-text-secondary) !important; }
+body.has-navbar-vertical-aside .nav-link:hover,
+body.has-navbar-vertical-aside .nav-link.active,
+body.has-navbar-vertical-aside .nav-link[aria-expanded="true"] {
+    color: #f5ede4 !important;
+    background: rgba(232, 201, 160, 0.11) !important;
+    border-radius: 12px !important;
+}
+body.has-navbar-vertical-aside .nav-icon { color: #e8c9a0 !important; }
+body.has-navbar-vertical-aside .main { background: transparent !important; }
+body.has-navbar-vertical-aside .card,
+body.has-navbar-vertical-aside .modal-content,
+body.has-navbar-vertical-aside .dropdown-menu,
+body.has-navbar-vertical-aside .list-group-item {
+    background: rgba(18, 9, 13, 0.94) !important;
+    border-color: var(--admin-border) !important;
+    color: var(--admin-text-primary) !important;
+}
+body.has-navbar-vertical-aside .card-header,
+body.has-navbar-vertical-aside .card-footer {
+    background: rgba(232, 201, 160, 0.035) !important;
+    border-color: var(--admin-border) !important;
+}
+body.has-navbar-vertical-aside .form-control,
+body.has-navbar-vertical-aside .form-select,
+body.has-navbar-vertical-aside .input-group-text {
+    background: #0b0608 !important;
+    border-color: rgba(232, 201, 160, 0.16) !important;
+    color: #f5ede4 !important;
+}
+body.has-navbar-vertical-aside .form-control:focus,
+body.has-navbar-vertical-aside .form-select:focus {
+    border-color: #e8c9a0 !important;
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.10) !important;
+}
+body.has-navbar-vertical-aside .btn-primary,
+body.has-navbar-vertical-aside .btn-soft-primary,
+body.has-navbar-vertical-aside .btn-outline-primary {
+    border-color: rgba(232, 201, 160, 0.25) !important;
+    background: linear-gradient(135deg, #e8c9a0, #bd8f52) !important;
+    color: #120709 !important;
+    font-weight: 800;
+}
