@@ -1,9 +1,9 @@
 <header id="header" class="header fixed-top d-flex align-items-center">
     <div class="d-flex align-items-center justify-content-between">
         <div class="logo-container">
-            <a href="{{url('/')}}" class="logo d-flex align-items-center">
-                <img src="{{ getFile($basicControl->logo_driver, $basicControl->logo) }}"
-                     alt="@lang(basicControl()->site_title)" id="logoSet">
+            <a href="{{url('/')}}" class="logo d-flex align-items-center solidus-wordmark solidus-panel-wordmark" aria-label="Solidus">
+                <span class="solidus-wordmark__mark"></span>
+                <span class="solidus-wordmark__text">SOLIDUS</span>
             </a>
         </div>
         <button onclick="toggleSideMenu()" class="toggle-sidebar toggle-sidebar-btn d-none d-lg-block"><i

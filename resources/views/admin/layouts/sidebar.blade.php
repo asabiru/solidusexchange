@@ -5,24 +5,9 @@
     <div class="navbar-vertical-container">
         <div class="navbar-vertical-footer-offset">
             <!-- Logo -->
-            <a class="navbar-brand" href="{{ auth()->guard('admin')->check() && auth()->guard('admin')->user()->isTrader() ? route('admin.trader.dashboard') : route('admin.dashboard') }}" aria-label="{{ $basicControl->site_title }}">
-                <img class="navbar-brand-logo navbar-brand-logo-auto"
-                     src="{{ getFile(in_array(session()->get('themeMode'),['auto',null])?$basicControl->admin_dark_mode_logo_driver : $basicControl->admin_logo_driver, in_array(session()->get('themeMode'),['auto',null])?$basicControl->admin_dark_mode_logo:$basicControl->admin_logo, true) }}"
-                     alt="{{ $basicControl->site_title }} Logo"
-                     data-hs-theme-appearance="default">
-
-                <img class="navbar-brand-logo"
-                     src="{{ getFile($basicControl->admin_dark_mode_logo_driver, $basicControl->admin_dark_mode_logo, true) }}"
-                     alt="{{ $basicControl->site_title }} Logo"
-                     data-hs-theme-appearance="dark">
-                <img class="navbar-brand-logo-mini"
-                     src="{{ getFile($basicControl->favicon_driver, $basicControl->favicon, true) }}"
-                     alt="{{ $basicControl->site_title }} Logo"
-                     data-hs-theme-appearance="default">
-                <img class="navbar-brand-logo-mini"
-                     src="{{ getFile($basicControl->favicon_driver, $basicControl->favicon, true) }}"
-                     alt="Logo"
-                     data-hs-theme-appearance="dark">
+            <a class="navbar-brand solidus-wordmark solidus-panel-wordmark" href="{{ auth()->guard('admin')->check() && auth()->guard('admin')->user()->isTrader() ? route('admin.trader.dashboard') : route('admin.dashboard') }}" aria-label="Solidus">
+                <span class="solidus-wordmark__mark"></span>
+                <span class="solidus-wordmark__text">SOLIDUS</span>
             </a>
             <!-- End Logo -->
 

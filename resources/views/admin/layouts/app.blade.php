@@ -25,6 +25,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css" />
     <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/global/css/solidchange-redesign.css') }}">
 
     @stack('css')
 
@@ -60,7 +61,7 @@
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#8d3dff",
+                        "primary": "#c99b68",
                         "transparent": "transparent",
                         "white": "#fff",
                         "dark": "132144",
@@ -123,7 +124,7 @@
     </script>
 </head>
 
-<body class="has-navbar-vertical-aside navbar-vertical-aside-show-xl footer-offset {{ config('demo.IS_DEMO') == true ? 'demo' : '' }}">
+<body class="has-navbar-vertical-aside navbar-vertical-aside-show-xl footer-offset admin-layout {{ config('demo.IS_DEMO') == true ? 'demo' : '' }}">
 
 <script src="{{ asset('assets/admin/js/hs.theme-appearance.js') }}"></script>
 

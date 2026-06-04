@@ -5,22 +5,22 @@ Typography
 :root {
     --body-font: "IBM Plex Sans", sans-serif;
     --heading-font: "IBM Plex Sans", sans-serif;
-    --primary-color: #b76bff;
+    --primary-color: #c99b68;
     --heading-color: #000000;
     --black: #000000;
     --grayish-blue: #929cbf;
-    --btn-hover-bg: #9f63ff;
+    --btn-hover-bg: #a97b49;
     --white: #ffffff;
-    --magenta: #b125c0;
-    --blue: #8d3dff;
+    --magenta: #c9786a;
+    --blue: #c99b68;
     --orange: #FFC83E;
-    --soft-blue: #d9bbff;
+    --soft-blue: #ead8c2;
     --soft-green: #ccf888;
     --loader-color: #F3F4F6;
     --soft-red: #d82a68;
     --lime-green: #40b781;
     --vivid-orange: #fb6116;
-    --vivid-cyan: #b76bff;
+    --vivid-cyan: #e8c9a0;
     --vivid-yellow: #ffc107;
     --bg-color1: #F3F4F6;
     --bg-color2: #ffffff;
@@ -28,11 +28,11 @@ Typography
     --body-color: #707070;
     --border-color1: #e5e7eb;
     --border-color2: #e1e1e1;
-    --primary-color-opacity-low: rgb(183, 107, 255, 0.1);
+    --primary-color-opacity-low: rgb(201, 155, 104, 0.12);
     --primary-color-opacity-low2: rgba(255, 153, 51, 0.3);
     --shadow1: 0px 3px 5px 0px rgba(0, 0, 0, 0.10);
     --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.10);
-    --shadow3: 5px 5px 20px rgba(141, 61, 255, .16);
+    --shadow3: 5px 5px 20px rgba(201, 155, 104, .16);
     --transition: all .3s ease-in-out;
 }
 

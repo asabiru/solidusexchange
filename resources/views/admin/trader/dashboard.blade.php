@@ -8,8 +8,8 @@
             gap: 1rem;
             padding: 1rem 1.25rem;
             border-radius: 1rem;
-            background: linear-gradient(135deg, rgba(141, 61, 255, 0.12), rgba(141, 61, 255, 0.04));
-            border: 1px solid rgba(141, 61, 255, 0.16);
+            background: linear-gradient(135deg, rgba(232, 201, 160, 0.16), rgba(201, 155, 104, 0.06));
+            border: 1px solid rgba(232, 201, 160, 0.18);
         }
 
         .trade-availability-copy {
@@ -69,7 +69,7 @@
         }
 
         .trade-availability-switch input:checked + .trade-availability-slider {
-            background: linear-gradient(135deg, #8d3dff, #b16cff);
+            background: linear-gradient(135deg, #e8c9a0, #c99b68);
         }
 
         .trade-availability-switch input:checked + .trade-availability-slider::before {
@@ -77,7 +77,7 @@
         }
 
         .trade-availability-switch input:focus-visible + .trade-availability-slider {
-            outline: 3px solid rgba(141, 61, 255, 0.18);
+            outline: 3px solid rgba(232, 201, 160, 0.22);
             outline-offset: 3px;
         }
     </style>

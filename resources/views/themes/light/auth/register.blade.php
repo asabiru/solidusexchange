@@ -1,137 +1,94 @@
 @extends($theme.'layouts.login_register')
 @section('title',trans('Register'))
 @section('content')
-    @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-        <style>
-            .login-signup-page .login-signup-thums {
-                background-image: url({{getFile(@$loginRegister->content->media->register_page_image->driver,@$loginRegister->content->media->register_page_image->path)}});
-            }
-        </style>
-    @endif
-    <section class="login-signup-page pt-0 pb-0 min-vh-100 h-100">
-        <div class="container-fluid h-100">
-            <div class="row min-vh-100">
-                <div class="col-md-6 p-0 d-none d-md-block">
-                    <div class="login-signup-thums h-100">
-                        <div class="content-area">
-                            <div class="logo-area mb-30">
-                                <a href="{{url('/')}}">
-                                    <img class="logo"
-                                         src="{{getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo)}}" alt="...">
-                                </a>
-                            </div>
-                            @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-                                <div class="middle-content">
-                                    <h3 class="section-title">{{@$loginRegister->description->register_heading}}</h3>
-                                    <p>{{@$loginRegister->description->register_sub_heading}}</p>
-                                </div>
-                            @endif
-                            @if(isset($template['social']) && count($template['social']) > 0)
-                                <div class="bottom-content">
-                                    <div class="social-area mt-50">
-                                        <ul class="d-flex">
-                                            @foreach($template['social'] as $social)
-                                                <li><a href="{{@$social->content->media->my_link}}"><i
-                                                            class="{{@$social->content->media->icon}}"></i></a></li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
+    <section class="solidus-auth-page">
+        <div class="solidus-auth-shell">
+            <a class="solidus-auth-brand solidus-wordmark" href="{{ url('/') }}" aria-label="Solidus">
+                <span class="solidus-wordmark__mark"></span>
+                <span class="solidus-wordmark__text">SOLIDUS</span>
+            </a>
+
+            <div class="solidus-auth-card">
+                <div class="solidus-auth-kicker">@lang('Личный кабинет')</div>
+                <h1>@lang('Создать аккаунт')</h1>
+                <p>@lang('Зарегистрируйтесь, чтобы сохранять заявки, проходить KYC и быстрее повторять обмены.')</p>
+
+                <form action="{{ route('register') }}" method="post" class="php-email-form" novalidate>
+                    @csrf
+                    <div class="solidus-auth-field">
+                        <label for="registerEmail">@lang('E-mail')</label>
+                        <input type="email" name="email" value="{{ old('email') }}" class="form-control"
+                               id="registerEmail" autocomplete="email" placeholder="name@example.com">
+                        @error('email')
+                            <span class="text-danger">{{ $message }}</span>
+                        @enderror
                     </div>
-                </div>
-                <div class="col-md-6 p-0 d-flex align-items-center">
-                    <div class="login-signup-form">
-                        <form action="{{ route('register') }}" method="post" class="php-email-form">
-                            @csrf
-                            @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-                                <div class="section-header">
-                                    <h3>{{@$loginRegister->description->register_heading}}</h3>
-                                    <div
-                                        class="description">{{@$loginRegister->description->register_sub_heading}}</div>
-                                </div>
-                            @endif
-                            <div class="row g-4">
-                                <div class="col-12">
-                                    <input type="email" name="email" value="{{old('email')}}" class="form-control"
-                                           id="exampleInputEmail4"
-                                           placeholder="@lang('Email')">
-                                    @error('email')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="text" name="username" value="{{old('username')}}" class="form-control"
-                                           id="exampleInputEmail3"
-                                           placeholder="@lang('Username')">
-                                    @error('username')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <div class="password-box">
-                                        <input type="password" name="password" value="{{ old('password') }}"
-                                               class="form-control password" id="exampleInputPassword1"
-                                               placeholder="@lang('Password')">
-                                        <i class="password-icon fa-regular fa-eye"></i>
-                                    </div>
-                                    @error('password')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="password" name="password_confirmation"
-                                           value="{{ old('password_confirmation') }}" class="form-control password"
-                                           id="exampleInputPassword2"
-                                           placeholder="@lang('Confirm Password')">
-                                </div>
-                                @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration))
 
-                                    <div class="form-group">
-                                        {!! NoCaptcha::renderJs() !!}
-                                        {!! NoCaptcha::display() !!}
-                                        @error('g-recaptcha-response')
-                                        <div class="text-danger">@lang($message)</div>
-                                        @enderror
-                                    </div>
-                                @endif
-                                @if(basicControl()->manual_recaptcha &&  basicControl()->reCaptcha_status_registration)
-                                    <div class="input-box mb-4">
-                                        <input type="text" tabindex="2"
-                                               class="form-control @error('captcha') is-invalid @enderror"
-                                               name="captcha" id="captcha" autocomplete="off"
-                                               placeholder="@lang('Enter captcha code')">
-
-                                        @error('captcha')
-                                        <div class="text-danger">@lang($message)</div>
-                                        @enderror
-                                    </div>
-
-                                    <div class="mb-4">
-                                        <div
-                                            class="input-group input-group-merge d-flex justify-content-between"
-                                            data-hs-validation-validate-class>
-                                            <img src="{{route('captcha').'?rand='. rand()}}"
-                                                 id='captcha_image2'>
-                                            <a class="input-group-append input-group-text"
-                                               href='javascript: refreshCaptcha2();'>
-                                                <i class="fal fa-sync"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                @endif
-                            </div>
-                            <button type="submit" class="btn cmn-btn mt-30 w-100">@lang('signup')</button>
-                        </form>
-                        <div class="pt-20 text-center">
-                            @lang("Already have an account?")
-                            <p class="mb-0 highlight"><a
-                                    href="{{ route('login') }}">@lang('Login here')</a></p>
-                        </div>
+                    <div class="solidus-auth-field">
+                        <label for="registerUsername">@lang('Имя пользователя')</label>
+                        <input type="text" name="username" value="{{ old('username') }}" class="form-control"
+                               id="registerUsername" autocomplete="username" placeholder="@lang('Например: solidus_client')">
+                        @error('username')
+                            <span class="text-danger">{{ $message }}</span>
+                        @enderror
                     </div>
-                </div>
 
+                    <div class="solidus-auth-field">
+                        <label for="registerPassword">@lang('Пароль')</label>
+                        <div class="password-box">
+                            <input type="password" name="password" value="{{ old('password') }}"
+                                   class="form-control password" id="registerPassword"
+                                   autocomplete="new-password" placeholder="••••••••">
+                            <i class="password-icon fa-regular fa-eye"></i>
+                        </div>
+                        @error('password')
+                            <span class="text-danger">{{ $message }}</span>
+                        @enderror
+                    </div>
+
+                    <div class="solidus-auth-field">
+                        <label for="registerPasswordConfirm">@lang('Повторите пароль')</label>
+                        <input type="password" name="password_confirmation"
+                               value="{{ old('password_confirmation') }}" class="form-control"
+                               id="registerPasswordConfirm" autocomplete="new-password" placeholder="••••••••">
+                    </div>
+
+                    @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration))
+                        <div class="solidus-auth-field">
+                            {!! NoCaptcha::renderJs() !!}
+                            {!! NoCaptcha::display() !!}
+                            @error('g-recaptcha-response')
+                                <div class="text-danger">@lang($message)</div>
+                            @enderror
+                        </div>
+                    @endif
+
+                    @if(basicControl()->manual_recaptcha &&  basicControl()->reCaptcha_status_registration)
+                        <div class="solidus-auth-field">
+                            <label for="captcha">@lang('Код с картинки')</label>
+                            <input type="text" tabindex="2"
+                                   class="form-control @error('captcha') is-invalid @enderror"
+                                   name="captcha" id="captcha" autocomplete="off"
+                                   placeholder="@lang('Введите капчу')">
+
+                            @error('captcha')
+                                <div class="text-danger">@lang($message)</div>
+                            @enderror
+                        </div>
+
+                        <div class="solidus-auth-captcha">
+                            <img src="{{ route('captcha').'?rand='. rand() }}" id="captcha_image2" alt="captcha">
+                            <a class="solidus-auth-captcha__refresh" href="javascript: refreshCaptcha2();">
+                                <i class="fal fa-sync"></i>
+                            </a>
+                        </div>
+                    @endif
+                    <button type="submit" class="btn cmn-btn solidus-auth-submit w-100">@lang('Создать аккаунт')</button>
+                </form>
+                <div class="solidus-auth-register">
+                    <span>@lang('Уже есть аккаунт?')</span>
+                    <a href="{{ route('login') }}">@lang('Войти')</a>
+                </div>
             </div>
         </div>
     </section>
@@ -139,7 +96,7 @@
 @endsection
 
 @push('js-lib')
-    @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_login == 1))
+    @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration == 1))
         <script async src="https://www.google.com/recaptcha/api.js"></script>
     @endif
 @endpush
@@ -149,15 +106,17 @@
         const password = document.querySelector('.password');
         const passwordIcon = document.querySelector('.password-icon');
 
-        passwordIcon.addEventListener("click", function () {
-            if (password.type == 'password') {
-                password.type = 'text';
-                passwordIcon.classList.add('fa-eye-slash');
-            } else {
-                password.type = 'password';
-                passwordIcon.classList.remove('fa-eye-slash');
-            }
-        })
+        if (password && passwordIcon) {
+            passwordIcon.addEventListener("click", function () {
+                if (password.type == 'password') {
+                    password.type = 'text';
+                    passwordIcon.classList.add('fa-eye-slash');
+                } else {
+                    password.type = 'password';
+                    passwordIcon.classList.remove('fa-eye-slash');
+                }
+            })
+        }
 
         function refreshCaptcha() {
             let img = document.images['captcha_image'];

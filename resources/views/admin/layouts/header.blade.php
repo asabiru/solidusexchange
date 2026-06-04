@@ -2,23 +2,9 @@
 <header id="header"
         class="navbar navbar-expand-lg navbar-fixed navbar-height navbar-container navbar-bordered bg-white">
     <div class="navbar-nav-wrap">
-        <a class="navbar-brand" href="{{ route('admin.dashboard') }}" aria-label="{{ $basicControl->site_title }}">
-            <img class="navbar-brand-logo"
-                 src="{{ getFile($basicControl->admin_logo_driver, $basicControl->admin_logo, true) }}"
-                 alt="{{ $basicControl->site_title }} Logo"
-                 data-hs-theme-appearance="default">
-            <img class="navbar-brand-logo"
-                 src="{{ getFile($basicControl->admin_logo_driver, $basicControl->admin_logo, true) }}"
-                 alt="{{ $basicControl->site_title }} Logo"
-                 data-hs-theme-appearance="dark">
-            <img class="navbar-brand-logo-mini"
-                 src="{{ getFile($basicControl->admin_logo_driver, $basicControl->admin_logo, true) }}"
-                 alt="{{ $basicControl->site_title }} Logo"
-                 data-hs-theme-appearance="default">
-            <img class="navbar-brand-logo-mini"
-                 src="{{ getFile($basicControl->admin_logo_driver, $basicControl->admin_logo, true) }}"
-                 alt="Logo"
-                 data-hs-theme-appearance="dark">
+        <a class="navbar-brand solidus-wordmark solidus-panel-wordmark" href="{{ route('admin.dashboard') }}" aria-label="Solidus">
+            <span class="solidus-wordmark__mark"></span>
+            <span class="solidus-wordmark__text">SOLIDUS</span>
         </a>
 
         <div class="navbar-nav-wrap-content-start">
@@ -381,4 +367,3 @@
         });
     </script>
 @endpush
-

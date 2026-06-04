@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/global/css/solidchange-redesign.css') }}">
 
     <!-- CSS Front Template -->
     <link rel="preload" href="{{ asset('assets/admin/css/theme.min.css') }}" data-hs-appearance="default" as="style">
@@ -55,7 +56,7 @@
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#8d3dff",
+                        "primary": "#c99b68",
                         "transparent": "transparent",
                         "white": "#fff",
                         "dark": "132144",
@@ -121,7 +122,7 @@
     </script>
 </head>
 
-<body>
+<body class="solidus-admin-login">
 
 <script src="{{ asset('assets/admin/js/hs.theme-appearance.js') }}"></script>
 
