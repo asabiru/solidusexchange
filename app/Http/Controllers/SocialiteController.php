@@ -28,7 +28,7 @@ class SocialiteController extends Controller
                 $callbackUrl = route('socialiteCallback', ['socialite' => 'telegram']);
                 $oauthUrl = 'https://oauth.telegram.org/auth?bot_id=' . $botId
                     . '&origin=' . urlencode(config('app.url'))
-                    . '&embed=0&request_access=write&return_to=' . urlencode($callbackUrl);
+                    . '&embed=0&return_to=' . urlencode($callbackUrl);
                 return redirect()->away($oauthUrl);
             }
             return redirect()->route('login');
@@ -159,7 +159,8 @@ class SocialiteController extends Controller
 
     private function validateTelegramAuthData(array $telegramAuth): bool
     {
-        if (empty(config('services.telegram.bot_token'))) {
+        $botToken = trim((string) config('services.telegram.bot_token'));
+        if ($botToken === '') {
             return false;
         }
 
@@ -184,7 +185,7 @@ class SocialiteController extends Controller
         }
 
         $dataCheckString = implode("\n", $dataCheckArray);
-        $secretKey = hash('sha256', config('services.telegram.bot_token'), true);
+        $secretKey = hash('sha256', $botToken, true);
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
         return hash_equals($calculatedHash, $checkHash);
@@ -194,18 +195,19 @@ class SocialiteController extends Controller
     {
         parse_str((string) $request->server('QUERY_STRING'), $query);
 
-        $allowedKeys = [
-            'id',
-            'first_name',
-            'last_name',
-            'username',
-            'photo_url',
-            'auth_date',
-            'allows_write_to_pm',
-            'hash',
-        ];
+        if (isset($query['tgAuthResult'])) {
+            $encoded = strtr((string) $query['tgAuthResult'], '-_', '+/');
+            $encoded .= str_repeat('=', (4 - strlen($encoded) % 4) % 4);
+            $decoded = base64_decode($encoded, true);
+            if ($decoded !== false) {
+                $payload = json_decode($decoded, true);
+                if (is_array($payload)) {
+                    return $payload;
+                }
+            }
+        }
 
-        return array_intersect_key($query ?: $request->query(), array_flip($allowedKeys));
+        return $query ?: $request->query();
     }
 
     private function generateTelegramUsername(array $telegramAuth): string
