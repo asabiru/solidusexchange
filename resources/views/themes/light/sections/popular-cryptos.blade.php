@@ -50,7 +50,7 @@
                     $isStablecoin = $crypto->is_stablecoin;
                     $displayPrice = $isStablecoin
                         ? number_format((float)($crypto->rate ?? $crypto->usd_rate), 2, '.', ' ')
-                        : formatCryptoRate((float)($crypto->usd_rate ?? $crypto->rate));
+                        : number_format((float)($crypto->usd_rate ?? $crypto->rate), 2, '.', ' ');
                     $priceCurrency = $isStablecoin ? $baseCurrency : 'USD';
                     $change24h = $crypto->change_24h;
                     $isPositive = $change24h !== null && $change24h >= 0;
