@@ -1,46 +1,16 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Telegram;
 
+use App\Http\Controllers\Controller;
 use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
-use App\Services\Telegram\TelegramMiniAppAuthService;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class TelegramMiniAppController extends Controller
 {
-    public function launch(Request $request, TelegramMiniAppAuthService $authService)
+    public function index()
     {
-        $initData = (string) ($request->input('tgWebAppData') ?: $request->input('initData') ?: $request->header('X-Telegram-Init-Data'));
-
-        if ($initData !== '') {
-            try {
-                $payload = $authService->validateInitData($initData);
-                $user = $authService->syncUser($payload);
-                Auth::login($user);
-            } catch (\RuntimeException $exception) {
-                if ($request->expectsJson() || $request->ajax()) {
-                    return response()->json([
-                        'authenticated' => false,
-                        'message' => __('Не удалось подтвердить Telegram-вход. Откройте приложение из Telegram.'),
-                    ], 422);
-                }
-
-                throw $exception;
-            }
-
-            if ($request->expectsJson() || $request->ajax()) {
-                return response()->json([
-                    'authenticated' => true,
-                    'user' => [
-                        'id' => $user->id,
-                        'name' => $user->firstname ?: $user->username ?: $user->email,
-                    ],
-                ]);
-            }
-        }
-
         return view('telegram.mini-app', [
             'user' => Auth::user(),
             'cryptoCurrencies' => $this->cryptoCurrencies(),

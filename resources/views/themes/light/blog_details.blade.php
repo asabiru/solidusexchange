@@ -35,7 +35,7 @@
                             <input type="hidden" name="slug" value="{{slug($blogDetails->title)}}">
                             <div class="sidebar-widget-area">
                                 <div class="search-box">
-                                    <input type="text" class="form-control" name="title" value="{{@request()->title}}" placeholder="Search here...">
+                                    <input type="text" class="form-control" name="title" value="{{@request()->title}}" placeholder="@lang('Search here')...">
                                     <button type="submit" class="search-btn"><i class="far fa-search"></i></button>
                                 </div>
                             </div>

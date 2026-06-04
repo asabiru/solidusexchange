@@ -1,6 +1,6 @@
 <div class="col-lg-3 order-2 order-lg-1">
     <div class="progress-section">
-        <h6>@lang("Please provide the necessary account information to complete the trade")</h6>
+        <h6>@lang("Quick steps")</h6>
         <div class="progress" role="progressbar" aria-label="Example with label" aria-valuenow="{{$progress}}"
              aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar" style="width: {{$progress}}%"></div>
@@ -12,7 +12,7 @@
                 </div>
                 <div class="content-area">
                     <h6>@lang("Trading pair")</h6>
-                    <span>@lang("Please select the cryptocurrency you wish to sell and the fiat currency you would like to purchase.")</span>
+                    <span>@lang("Amount and currency")</span>
                 </div>
             </div>
             <div class="item">
@@ -31,7 +31,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Account details")</h6>
-                    <span>@lang("Provide the destination fiat currency account information, where your newly acquired digital assets will be transferred.")</span>
+                    <span>@lang("Where to receive fiat")</span>
                 </div>
             </div>
             <div class="item">
@@ -50,7 +50,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Initiate Payment")</h6>
-                    <span>@lang("Confirm the payment and receive your newly purchased fiat currency in a few minutes.")</span>
+                    <span>@lang("Send crypto")</span>
                 </div>
             </div>
             <div class="item">
@@ -69,7 +69,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Trade")</h6>
-                    <span>@lang("Await the completion of your transaction")</span>
+                    <span>@lang("Track status")</span>
                 </div>
             </div>
         </div>

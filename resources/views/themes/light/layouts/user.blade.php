@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" @if(session()->get('rtl') == 1) dir="rtl" @endif />
+<html lang="{{ app()->getLocale() }}" @if(session()->get('rtl') == 1) dir="rtl" @endif>
 <head data-base_url="{{url('/')}}" data-theme="{{basicControl()->default_mode??'dark'}}" data-changeable_mode="{{basicControl()->changeable_mode??0}}"
       data-light_logo="{{ getFile(basicControl()->logo_driver,basicControl()->logo) }}"
       data-dark_logo="{{ getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo) }}">
@@ -35,4 +35,3 @@
 @include('plugins')
 </body>
 </html>
-

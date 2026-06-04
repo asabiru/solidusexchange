@@ -70,6 +70,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::group(['middleware' => ['guest']], function () {
         Route::get('/login', [UserLoginController::class, 'showLoginForm'])->name('login');
         Route::post('/login', [UserLoginController::class, 'login'])->name('login.submit');
+        Route::post('/auth/telegram-miniapp', [SocialiteController::class, 'telegramMiniAppLogin'])->middleware('throttle:login')->name('telegram.miniapp.login');
     });
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
@@ -263,4 +264,3 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
-

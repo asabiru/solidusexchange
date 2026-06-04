@@ -10,7 +10,11 @@
                     <div class="col-lg-6 order-1 order-lg-2">
                         <div class="calculator-section">
                             <div class="calculator p25 mw-100">
-                                <h3>@lang("Buy Crypto")</h3>
+                                <div class="sc-flow-title">
+                                    <span>@lang('Step 2 of 3')</span>
+                                    <h3>@lang("Buy Crypto")</h3>
+                                    <p>@lang('Check the amount, add your wallet and continue.')</p>
+                                </div>
                                 <div class="row">
                                     <div class="col-12" id="calLoader">
                                         <div class="input-amount-box" id="inputAmountBox">
@@ -21,9 +25,7 @@
                                                      id="inputAmountBoxInner">
                                                     <a href="#" class="icon-area" data-bs-toggle="modal"
                                                        data-bs-target="#calculator-modal">
-                                                        <img class="img-flag" id="showSendImage"
-                                                             src=""
-                                                             alt="...">
+                                                        <span class="sc-currency-badge" id="showSendIcon">--</span>
                                                     </a>
                                                     <div class="text-area w-100">
                                                         <div
@@ -65,9 +67,7 @@
                                                          id="inputAmountBoxInner2">
                                                         <a href="#" class="icon-area" data-bs-toggle="modal"
                                                            data-bs-target="#calculator-modal2">
-                                                            <img class="img-flag" id="showGetImage"
-                                                                 src=""
-                                                                 alt="...">
+                                                            <span class="sc-currency-badge" id="showGetIcon">--</span>
                                                         </a>
                                                         <div class="text-area w-100">
                                                             <div
@@ -101,7 +101,7 @@
 
                         <div class="wallet-address-section">
                             <div class="item">
-                                <h4>@lang("Destination wallet address")</h4>
+                                <h4>@lang("Wallet address")</h4>
                                 <div class="form-floating">
                                     <input type="text" name="destination_wallet" class="form-control"
                                            id="floatingInputValue" value="{{old('destination_wallet')}}"
@@ -112,13 +112,13 @@
                             </div>
                             @include($theme.'partials.trade-agreement-card', ['id' => 'buyAgreement'])
                             <div class="btn-are">
-                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Next step")</button>
+                                <button type="submit" class="cmn-btn w-100" id="submitBtn">@lang("Continue")</button>
                             </div>
                         </div>
                     </div>
                     <div class="col-lg-3 order-3 order-lg-3">
                         <div class="transaction-summery" id="autoRate">
-                            <h4 class="title">@lang("Trade details")</h4>
+                            <h4 class="title">@lang("Details")</h4>
                             <div class="transaction-item-container">
                                 <div class="item">
                                     <span>@lang("You send")</span>
@@ -162,6 +162,8 @@
         var activeSendCurrency = @json($buyRequest->sendCurrency);
         var activeGetCurrency = @json($buyRequest->getCurrency);
         var currentQuote = null;
+        var availableSendCurrencies = [];
+        var availableGetCurrencies = [];
 
         getExchangeCurrency();
         setSendCurrency(activeSendCurrency);
@@ -182,7 +184,10 @@
         });
 
         $(document).on("click", ".sendModal", function () {
-            activeSendCurrency = $(this).data('res');
+            activeSendCurrency = findCurrencyById(availableSendCurrencies, $(this).data('currency-id'));
+            if (!activeSendCurrency) {
+                return;
+            }
             setSendCurrency(activeSendCurrency);
             requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal').modal('hide');
@@ -192,7 +197,10 @@
         });
 
         $(document).on("click", ".getModal", function () {
-            activeGetCurrency = $(this).data('res');
+            activeGetCurrency = findCurrencyById(availableGetCurrencies, $(this).data('currency-id'));
+            if (!activeGetCurrency) {
+                return;
+            }
             setGetCurrency(activeGetCurrency);
             requestQuote($("input[name='exchangeSendAmount']").val());
             $('#calculator-modal2').modal('hide');
@@ -205,8 +213,10 @@
             axios.get(route)
                 .then(function (response) {
                     Notiflix.Block.remove('#calLoader');
-                    showSend(response.data.sendCurrencies);
-                    showGet(response.data.getCurrencies);
+                    availableSendCurrencies = response.data.sendCurrencies;
+                    availableGetCurrencies = response.data.getCurrencies;
+                    showSend(availableSendCurrencies);
+                    showGet(availableGetCurrencies);
                     $("input[name='exchangeSendAmount']").val(parseFloat(initialSendAmount).toFixed(2));
                     requestQuote(parseFloat(initialSendAmount));
                 });
@@ -229,13 +239,13 @@
 
             if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
                 $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+                $("#exchangeMessage").text(`Минимум ${sendMinLimit} ${sendCode}`);
                 return;
             }
 
             if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
                 $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+                $("#exchangeMessage").text(`Максимум ${sendMaxLimit} ${sendCode}`);
                 return;
             }
 
@@ -258,7 +268,7 @@
                 .catch(function (error) {
                     Notiflix.Block.remove('#autoRate');
                     $("#submitBtn").attr('disabled', true);
-                    $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
+                    $("#exchangeMessage").text(error.response?.data?.message || 'Не удалось обновить курс');
                 });
         }
 
@@ -266,15 +276,15 @@
             $('#show-send').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-                options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
+                let isChecked = (Number(currencies[i].id) === Number(activeSendCurrency.id)) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                options += `<div class="item sendModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -287,15 +297,15 @@
             $('#show-get').html(``);
             let options = "";
             for (let i = 0; i < currencies.length; i++) {
-                let isChecked = (currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-                options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
+                let isChecked = (Number(currencies[i].id) === Number(activeGetCurrency.id)) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+                options += `<div class="item getModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -305,17 +315,30 @@
         }
 
         function setSendCurrency(currency) {
-            $('#showSendImage').attr('src', currency.image_path);
+            $('#showSendIcon').text(currencyBadge(currency));
             $('#showSendCode').text(currency.code);
             $('#showSendName').text(currency.name);
             $('input[name="exchangeSendCurrency"]').val(currency.id);
         }
 
         function setGetCurrency(currency) {
-            $('#showGetImage').attr('src', currency.image_path);
+            $('#showGetIcon').text(currencyBadge(currency));
             $('#showGetCode').text(currency.code);
             $('#showGetName').text(currency.name);
             $('input[name="exchangeGetCurrency"]').val(currency.id);
+        }
+
+        function escapeHtml(value) {
+            return $('<div>').text(value ?? '').html();
+        }
+
+        function currencyBadge(currency) {
+            const code = String(currency?.code || currency?.symbol || '--').replace(/[^A-Za-z0-9]/g, '');
+            return escapeHtml((code || '--').slice(0, 2).toUpperCase());
+        }
+
+        function findCurrencyById(currencies, currencyId) {
+            return currencies.find(c => Number(c.id) === Number(currencyId));
         }
 
         function tradeDetails() {
@@ -333,10 +356,10 @@
             $("#showSendAmount").text(`${sendAmount} ${sendCurrencyCode}`);
             $("#showExchangeRate").text(`1 ${getCurrencyCode} ~ ${(exchangeRate > 0 ? (1 / exchangeRate) : 0).toFixed(2)} ${sendCurrencyCode}`);
 
-            $("#showServiceType").text(`Service fee`);
+            $("#showServiceType").text(`Комиссия сервиса`);
             $("#showServiceFee").text(`${serviceFee} ${getCurrencyCode}`);
 
-            $("#showNetworkType").text(`Network fee`);
+            $("#showNetworkType").text(`Комиссия сети`);
             $("#showNetworkFee").text(`${networkFee} ${getCurrencyCode}`);
 
             finalAmount = parseFloat(quote.finalAmount || 0).toFixed(8);

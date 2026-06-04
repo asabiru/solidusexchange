@@ -1,6 +1,6 @@
 <div class="col-lg-3 order-2 order-lg-1">
     <div class="progress-section">
-        <h6>@lang("Please furnish the necessary address details for the transaction to proceed")</h6>
+        <h6>@lang("Quick steps")</h6>
         <div class="progress" role="progressbar" aria-label="Example with label" aria-valuenow="{{$progress}}"
              aria-valuemin="0" aria-valuemax="100">
             <div class="progress-bar" style="width: {{$progress}}%"></div>
@@ -12,7 +12,7 @@
                 </div>
                 <div class="content-area">
                     <h6>@lang("Trading pair")</h6>
-                    <span>@lang("Specify your preferred trading pair")</span>
+                    <span>@lang("Amount and pair")</span>
                 </div>
             </div>
             <div class="item">
@@ -31,7 +31,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Wallet address")</h6>
-                    <span>@lang("Please enter the details for the cryptocurrency wallet address")</span>
+                    <span>@lang("Where to receive")</span>
                 </div>
             </div>
             <div class="item">
@@ -50,7 +50,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Initiate Payment")</h6>
-                    <span>@lang("Complete the deposit for the exchange amount")</span>
+                    <span>@lang("Send deposit")</span>
                 </div>
             </div>
             <div class="item">
@@ -69,7 +69,7 @@
                 @endif
                 <div class="content-area">
                     <h6>@lang("Trade")</h6>
-                    <span>@lang("Await the completion of your transaction")</span>
+                    <span>@lang("Track status")</span>
                 </div>
             </div>
         </div>

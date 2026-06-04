@@ -1,7 +1,7 @@
 @php
     $announces = \App\Models\CoinAnnounce::where('status',1)->get();
-    $heroHeading = @$hero['single']['heading'] ?: __('Обмен криптовалют без скрытых комиссий');
-    $heroSubHeading = @$hero['single']['sub_heading'] ?: __('Прозрачные курсы, открытые резервы и понятные условия. Видите итог до того, как нажмёте «Обменять» — без сюрпризов.');
+    $heroHeading = @$hero['single']['heading'] ?: __('Быстрый обмен криптовалют');
+    $heroSubHeading = @$hero['single']['sub_heading'] ?: __('Выберите пару, укажите сумму и получите понятную инструкцию по оплате. Итоговый курс и комиссии видны сразу.');
 @endphp
     <!-- Hero section start -->
 <div class="hero-section">
@@ -11,22 +11,27 @@
             <div class="row g-4 g-sm-5 justify-content-between align-items-center">
                 <div class="col-xxl-6 col-lg-6">
                     <div class="hero-content">
-                        <span class="sc-eyebrow"><span></span>@lang('Среднее время обмена ~7 минут')</span>
+                        <span class="sc-eyebrow"><span></span>@lang('Заявка за 60 секунд')</span>
                         <h1 class="hero-title">@lang($heroHeading)</h1>
                         <p class="hero-description">@lang($heroSubHeading)</p>
                         <div class="sc-trust-list">
                             <div class="sc-trust-item">
                                 <i class="fa-regular fa-chart-line"></i>
-                                <span>@lang('Резервы on-chain')</span>
+                                <span>@lang('Курс виден до оплаты')</span>
                             </div>
                             <div class="sc-trust-item">
                                 <i class="fa-regular fa-shield-check"></i>
-                                <span>@lang('AML-проверка Chainalysis')</span>
+                                <span>@lang('AML-проверка')</span>
                             </div>
                             <div class="sc-trust-item">
                                 <i class="fa-regular fa-headset"></i>
-                                <span>@lang('Поддержка 24/7')</span>
+                                <span>@lang('Поддержка в Telegram')</span>
                             </div>
+                        </div>
+                        <div class="sc-fast-proof">
+                            <span>@lang('Без лишних экранов')</span>
+                            <span>@lang('Понятные реквизиты')</span>
+                            <span>@lang('История заявки')</span>
                         </div>
                     </div>
                 </div>
@@ -63,7 +68,7 @@
 
                             <div class="calculator-body">
                                 <div class="sc-calculator-meta">
-                                    <span>@lang('Обмен криптовалют')</span>
+                                    <span>@lang('Быстрый обмен')</span>
                                     <span><i></i>@lang('Курс обновляется онлайн')</span>
                                 </div>
                                 <div class="cmn-tabs">
@@ -110,4 +115,3 @@
     </div>
 </div>
 @include($theme.'partials.modal')
-

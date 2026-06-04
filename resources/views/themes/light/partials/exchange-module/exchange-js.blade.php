@@ -70,8 +70,8 @@
     });
 
     $(document).on("click", ".sendModal", function () {
-        activeSendCurrency = $(this).data('res');
-        if (!isCurrencySelectable('send', activeSendCurrency)) {
+        activeSendCurrency = findCurrencyById(availableSendCurrencies, $(this).data('currency-id'));
+        if (!activeSendCurrency || !isCurrencySelectable('send', activeSendCurrency)) {
             return;
         }
         setSendCurrency(activeSendCurrency);
@@ -83,8 +83,8 @@
     });
 
     $(document).on("click", ".getModal", function () {
-        activeGetCurrency = $(this).data('res');
-        if (!isCurrencySelectable('get', activeGetCurrency)) {
+        activeGetCurrency = findCurrencyById(availableGetCurrencies, $(this).data('currency-id'));
+        if (!activeGetCurrency || !isCurrencySelectable('get', activeGetCurrency)) {
             return;
         }
         setGetCurrency(activeGetCurrency);
@@ -127,7 +127,7 @@
             })
             .catch(function (error) {
                 Notiflix.Block.remove('#showLoader');
-                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to load exchange methods');
+                $("#exchangeMessage").text(error.response?.data?.message || 'Не удалось загрузить направления обмена');
                 $("#submitBtn").attr('disabled', true);
             });
     }
@@ -149,13 +149,13 @@
 
         if (parseFloat(sendAmount) < parseFloat(sendMinLimit)) {
             $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Min is ${sendMinLimit} ${sendCode}`);
+            $("#exchangeMessage").text(`Минимум ${sendMinLimit} ${sendCode}`);
             return;
         }
 
         if (parseFloat(sendAmount) > parseFloat(sendMaxLimit)) {
             $("#submitBtn").attr('disabled', true);
-            $("#exchangeMessage").text(`Max is ${sendMaxLimit} ${sendCode}`);
+            $("#exchangeMessage").text(`Максимум ${sendMaxLimit} ${sendCode}`);
             return;
         }
 
@@ -186,7 +186,7 @@
             })
             .catch(function (error) {
                 $("#submitBtn").attr('disabled', true);
-                $("#exchangeMessage").text(error.response?.data?.message || 'Unable to refresh exchange rate');
+                $("#exchangeMessage").text(error.response?.data?.message || 'Не удалось обновить курс');
             });
     }
 
@@ -200,21 +200,21 @@
     }
 
     function showSend(currencies) {
-        $('#show-send').html(``);
+        $('#show-send').empty();
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
             if (!isCurrencySelectable('send', currencies[i])) {
                 continue;
             }
             let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-            options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
+            options += `<div class="item sendModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -224,21 +224,21 @@
     }
 
     function showGet(currencies) {
-        $('#show-get').html(``);
+        $('#show-get').empty();
         let options = "";
         for (let i = 0; i < currencies.length; i++) {
             if (!isCurrencySelectable('get', currencies[i])) {
                 continue;
             }
             let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
-            options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
+            options += `<div class="item getModal" data-currency-id="${Number(currencies[i].id)}">
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <span class="sc-currency-badge">${currencyBadge(currencies[i])}</span>
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="title">${escapeHtml(currencies[i].code)}</div>
+                                <div class="sub-title">${escapeHtml(currencies[i].name)}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -248,14 +248,14 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path);
+        $('#showSendIcon').text(currencyBadge(currency));
         $('#showSendCode').text(currency.code);
         $('#showSendName').text(currency.name);
         $('input[name="exchangeSendCurrency"]').val(currency.id);
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path);
+        $('#showGetIcon').text(currencyBadge(currency));
         $('#showGetCode').text(currency.code);
         $('#showGetName').text(currency.name);
         $('input[name="exchangeGetCurrency"]').val(currency.id);
@@ -278,15 +278,15 @@
     }
 
     $(document).on("click", "#pills-exchange-tab", function () {
-        activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Exchange Now");
+        activateCalculatorTab('exchange', "{{ route('getExchangeCurrency', [], false) }}", "{{ route('exchangeRequest', [], false) }}", "Обменять");
     });
 
     $(document).on("click", "#pills-Buy-tab", function () {
-        activateCalculatorTab('buy', "{{ route('getBuyCurrency', [], false) }}", "{{ route('buyRequest', [], false) }}", "Buy Now");
+        activateCalculatorTab('buy', "{{ route('getBuyCurrency', [], false) }}", "{{ route('buyRequest', [], false) }}", "Купить");
     });
 
     $(document).on("click", "#pills-Sell-tab", function () {
-        activateCalculatorTab('sell', "{{ route('getSellCurrency', [], false) }}", "{{ route('sellRequest', [], false) }}", "Sell Now");
+        activateCalculatorTab('sell', "{{ route('getSellCurrency', [], false) }}", "{{ route('sellRequest', [], false) }}", "Продать");
     });
 
     function activateCalculatorTab(tabName, route, formSubmitRoute, buttonText) {
@@ -313,6 +313,23 @@
     function getPreferredCurrency(currencies, preferredId, fallbackCurrency = null) {
         let preferredCurrency = currencies.find(currency => Number(currency.id) === Number(preferredId));
         return preferredCurrency || fallbackCurrency || currencies[0] || null;
+    }
+
+    function findCurrencyById(currencies, id) {
+        return currencies.find(currency => Number(currency.id) === Number(id)) || null;
+    }
+
+    function escapeHtml(value) {
+        return $('<div>').text(value ?? '').html();
+    }
+
+    function currencyBadge(currency) {
+        const code = String(currency?.code || currency?.symbol || '--').replace(/[^A-Za-z0-9]/g, '');
+        return escapeHtml((code || '--').slice(0, 2).toUpperCase());
+    }
+
+    function plainText(value) {
+        return new DOMParser().parseFromString(String(value || ''), 'text/html').body.textContent || '';
     }
 
     function formatSendAmount(amount) {
@@ -346,10 +363,11 @@
 
     $(document).on("click", ".announceClass", function () {
         let announceBodyShow = $('#announceBodyShow');
-        announceBodyShow.html('');
+        announceBodyShow.empty();
         let heading = $(this).data('heading');
         let des = $(this).data('des');
-        announceBodyShow.html(`<h4>${heading}</h4> ${des}`)
+        $('<h4>').text(heading || '').appendTo(announceBodyShow);
+        $('<div>').text(plainText(des)).appendTo(announceBodyShow);
     });
 
 </script>

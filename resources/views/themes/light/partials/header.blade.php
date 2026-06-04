@@ -55,8 +55,10 @@
         $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
     @endphp
     <div class="container public-navbar__inner">
-        <a class="navbar-brand logo" href="{{url('/')}}"><img
-                src="{{getFile(basicControl()->logo_driver,basicControl()->logo)}}" alt="..." id="logoSet"></a>
+        <a class="navbar-brand solidus-wordmark" href="{{url('/')}}" aria-label="Solidus">
+            <span class="solidus-wordmark__mark"></span>
+            <span class="solidus-wordmark__text">SOLIDUS</span>
+        </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasNavbar"
                 aria-controls="offcanvasNavbar">
             <i class="fa-light fa-list"></i>
@@ -64,9 +66,10 @@
         <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasNavbar"
              aria-labelledby="offcanvasNavbar" data-bs-scroll="true" data-bs-backdrop="true">
             <div class="offcanvas-header">
-                <a class="navbar-brand" href="{{url('/')}}"><img class="logo"
-                                                                 src="{{getFile(basicControl()->logo_driver,basicControl()->logo)}}"
-                                                                 alt="..." id="logoSetMobile"></a>
+                <a class="navbar-brand solidus-wordmark" href="{{url('/')}}" aria-label="Solidus">
+                    <span class="solidus-wordmark__mark"></span>
+                    <span class="solidus-wordmark__text">SOLIDUS</span>
+                </a>
                 <button type="button" class="cmn-btn-close btn-close" data-bs-dismiss="offcanvas"
                         aria-label="Close"><i class="fa-light fa-arrow-right"></i></button>
             </div>
@@ -77,7 +80,7 @@
 
                 @if($activeLanguages->isNotEmpty())
                     <div class="d-lg-none mt-4 pt-4 border-top">
-                        <div class="fw-semibold mb-3">@lang('Language Settings')</div>
+                        <div class="fw-semibold mb-3">@lang('Язык')</div>
                         <div class="d-flex flex-column gap-2">
                             @foreach($activeLanguages as $language)
                                 <a class="nav-link d-flex align-items-center justify-content-between px-0"
@@ -105,7 +108,7 @@
                     <li class="nav-item header-action-item">
                         <a class="nav-link login-btn header-login-btn" href="{{ route('login') }}"><i
                                 class="login-icon fa-light fa-right-to-bracket"></i><span
-                                class="d-none d-md-block">@lang('Login')</span></a>
+                                class="d-none d-md-block">@lang('Войти')</span></a>
                     </li>
                 @endguest
                 @auth
@@ -179,9 +182,9 @@
 
                     <div class="dropdown-menu dropdown-menu-end mt-2 language-dropdown-menu">
                         <div class="dropdown-item-text border-bottom pb-2 mb-1">
-                            <span class="d-block fw-semibold">@lang('Language Settings')</span>
+                            <span class="d-block fw-semibold">@lang('Язык')</span>
                             @if($currentLanguage)
-                                <small class="text-body">@lang('Current'): {{ __($currentLanguage->name) }}</small>
+                                <small class="text-body">@lang('Текущий'): {{ __($currentLanguage->name) }}</small>
                             @endif
                         </div>
 
@@ -200,7 +203,7 @@
                                 @endif
                             </a>
                         @empty
-                            <span class="dropdown-item-text">@lang('No data to show')</span>
+                            <span class="dropdown-item-text">@lang('Нет данных')</span>
                         @endforelse
                     </div>
                 </li>

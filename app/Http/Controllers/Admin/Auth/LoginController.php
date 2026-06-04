@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Validator;
 use Facades\App\Services\Google\GoogleRecaptchaService;
+use Illuminate\Validation\ValidationException;
 
 
 class LoginController extends Controller
@@ -77,8 +78,9 @@ class LoginController extends Controller
         if (auth()->guard('admin')->attempt(array($fieldType => $input['username'], 'password' => $input['password']), $remember_me)) {
             return $this->sendLoginResponse($request);
         } else {
-            return redirect()->route('admin.login')
-                ->with('error', 'Email-Address And Password Are Wrong.');
+            throw ValidationException::withMessages([
+                'username' => [__('Неверный логин или пароль')],
+            ]);
         }
 
     }

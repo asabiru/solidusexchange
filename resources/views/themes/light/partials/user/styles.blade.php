@@ -11,6 +11,7 @@
 <link rel="stylesheet" href="{{ asset($themeTrue . "css/select2.min.css")}}">
 <link rel="stylesheet" href="{{ asset($themeTrue . "/css/dashboard.css")}}">
 <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/global/css/solidchange-redesign.css') }}">
 
 
 @stack('extra_styles')

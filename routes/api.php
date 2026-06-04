@@ -25,3 +25,4 @@ Route::any('withdraw/webhook/{code?}/{utr?}/{type?}', [WebhookController::class,
 Route::post('kyc/sumsub/webhook', SumsubWebhookController::class)->name('sumsub.webhook');
 
 
+Route::post('telegram/webhook/{token}', [\App\Http\Controllers\Telegram\TelegramWebhookController::class, 'handle'])->name('telegram.webhook');

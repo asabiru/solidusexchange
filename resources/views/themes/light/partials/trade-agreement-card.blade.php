@@ -8,8 +8,8 @@
                required
                {{ old('user_agreement') ? 'checked' : '' }}>
         <span>
-            @lang('I confirm that I have read and accept the Terms of Use, Privacy Policy, AML/KYC policy and risk disclosure.')
-            @lang('SolidChange acts as an intermediary platform; the assigned trader or partner executes the trade.')
+            @lang('I accept the Terms, Privacy Policy, AML/KYC rules and risk notice.')
+            <small>@lang('SolidChange is an intermediary platform; traders execute the trade.')</small>
             <a href="{{ route('terms-and-conditions') }}" target="_blank">@lang('Terms')</a>
             ·
             <a href="{{ route('privacy-policy') }}" target="_blank">@lang('Privacy')</a>

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<html lang="{{ app()->getLocale() }}">
 <head>
 	<meta charset="UTF-8"/>
 	<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
@@ -9,6 +10,7 @@
 	<link rel="stylesheet" href="{{ asset($themeTrue . 'css/bootstrap.min.css')}}"/>
 	<link rel="stylesheet" href="{{ asset($themeTrue . 'css/style.css')}}"/>
 	<link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}"/>
+	<link rel="stylesheet" href="{{ asset('assets/global/css/solidchange-redesign.css') }}"/>
 
 </head>
 
@@ -19,4 +21,5 @@
 <script src="{{ asset($themeTrue . 'js/bootstrap.bundle.min.js')}}"></script>
 
 </body>
+</html>
 </html>
