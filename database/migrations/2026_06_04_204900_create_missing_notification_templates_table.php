@@ -9,31 +9,33 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (Schema::hasTable('notification_templates')) {
-            return;
+        if (! Schema::hasTable('notification_templates')) {
+            Schema::create('notification_templates', function (Blueprint $table) {
+                $table->increments('id');
+                $table->unsignedInteger('language_id')->nullable();
+                $table->string('name')->nullable();
+                $table->string('template_key')->nullable();
+                $table->string('email_from')->nullable();
+                $table->text('subject')->nullable();
+                $table->text('short_keys')->nullable();
+                $table->text('email')->nullable();
+                $table->text('sms')->nullable();
+                $table->text('in_app')->nullable();
+                $table->text('push')->nullable();
+                $table->string('status')->nullable();
+                $table->boolean('notify_for')->default(false);
+                $table->string('lang_code', 50)->nullable();
+                $table->timestamps();
+
+                $table->index('language_id');
+                $table->index('notify_for');
+                $table->index('template_key');
+            });
         }
 
-        Schema::create('notification_templates', function (Blueprint $table) {
-            $table->increments('id');
-            $table->unsignedInteger('language_id')->nullable();
-            $table->string('name')->nullable();
-            $table->string('template_key')->nullable();
-            $table->string('email_from')->nullable();
-            $table->text('subject')->nullable();
-            $table->text('short_keys')->nullable();
-            $table->text('email')->nullable();
-            $table->text('sms')->nullable();
-            $table->text('in_app')->nullable();
-            $table->text('push')->nullable();
-            $table->string('status')->nullable();
-            $table->boolean('notify_for')->default(false);
-            $table->string('lang_code', 50)->nullable();
-            $table->timestamps();
-
-            $table->index('language_id');
-            $table->index('notify_for');
-            $table->index('template_key');
-        });
+        if (DB::table('notification_templates')->exists()) {
+            return;
+        }
 
         DB::table('notification_templates')->insert([
             [
@@ -114,6 +116,7 @@ return new class extends Migration
                 'name' => 'Two Step Disabled',
                 'template_key' => 'TWO_STEP_DISABLED',
                 'email_from' => 'support@you.com',
+                'subject' => null,
                 'short_keys' => '{"action":"Enabled Or Disable","ip":"Device Ip","browser":"browser and Operating System ","time":"Time"}',
                 'email' => 'Google two factor verification is disabled',
                 'sms' => 'Google two factor verification is disabled',
