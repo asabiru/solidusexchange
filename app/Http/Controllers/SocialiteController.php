@@ -85,15 +85,7 @@ class SocialiteController extends Controller
             return redirect()->route('login');
         }
 
-        $telegramAuth = $request->only([
-            'id',
-            'first_name',
-            'last_name',
-            'username',
-            'photo_url',
-            'auth_date',
-            'hash',
-        ]);
+        $telegramAuth = $this->telegramAuthPayload($request);
 
         if (!$this->validateTelegramAuthData($telegramAuth)) {
             return redirect()->route('login')->with('error', 'Telegram authorization failed.');
@@ -196,6 +188,24 @@ class SocialiteController extends Controller
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
         return hash_equals($calculatedHash, $checkHash);
+    }
+
+    private function telegramAuthPayload(Request $request): array
+    {
+        parse_str((string) $request->server('QUERY_STRING'), $query);
+
+        $allowedKeys = [
+            'id',
+            'first_name',
+            'last_name',
+            'username',
+            'photo_url',
+            'auth_date',
+            'allows_write_to_pm',
+            'hash',
+        ];
+
+        return array_intersect_key($query ?: $request->query(), array_flip($allowedKeys));
     }
 
     private function generateTelegramUsername(array $telegramAuth): string
