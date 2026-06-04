@@ -6,6 +6,7 @@ use App\Helpers\UserSystemInfo;
 use App\Models\Language;
 use App\Models\User;
 use App\Models\UserLogin;
+use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Traits\Upload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -117,6 +118,30 @@ class SocialiteController extends Controller
         Auth::login($newUser);
 
         return redirect()->to(url('/'));
+    }
+
+
+    public function telegramMiniAppLogin(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        if (!config('socialite.telegram_status')) {
+            return response()->json(['message' => __('Telegram authorization is disabled.')], 403);
+        }
+
+        $initData = (string) ($request->input('initData') ?: $request->header('X-Telegram-Init-Data'));
+
+        try {
+            $telegramAuth = $authService->validateInitData($initData);
+            $user = $authService->syncUser($telegramAuth, Auth::user());
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => __('Telegram Mini App authorization failed.')], 422);
+        }
+
+        Auth::login($user);
+
+        return response()->json([
+            'authenticated' => true,
+            'redirect' => route('telegram.mini-app'),
+        ]);
     }
 
     private function validateTelegramAuthData(array $telegramAuth): bool
