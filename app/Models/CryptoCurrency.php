@@ -46,7 +46,7 @@ class CryptoCurrency extends Model
     public function getImagePathAttribute()
     {
         if ($canonicalIcon = $this->canonicalIconPath()) {
-            return asset($canonicalIcon);
+            return asset($canonicalIcon) . '?v=' . $this->canonicalIconVersion($canonicalIcon);
         }
 
         return getFile($this->driver, $this->image);
@@ -68,5 +68,18 @@ class CryptoCurrency extends Model
         $file = self::CANONICAL_ICON_FILES[strtoupper((string) $this->code)] ?? null;
 
         return $file ? 'assets/upload/cryptoCurrency/' . $file : null;
+    }
+
+    private function canonicalIconVersion(string $path): string
+    {
+        $configuredVersion = (string) (config('app.asset_version') ?? env('APP_VERSION', ''));
+
+        if ($configuredVersion !== '') {
+            return $configuredVersion;
+        }
+
+        $absolutePath = public_path($path);
+
+        return file_exists($absolutePath) ? (string) filemtime($absolutePath) : '1';
     }
 }
