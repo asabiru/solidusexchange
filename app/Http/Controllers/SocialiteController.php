@@ -12,6 +12,7 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -86,6 +87,9 @@ class SocialiteController extends Controller
         }
 
         $telegramAuth = $this->telegramAuthPayload($request);
+        if ($telegramAuth === []) {
+            return $this->telegramOAuthBridge($request);
+        }
 
         if (!$this->validateTelegramAuthData($telegramAuth)) {
             return redirect()->route('login')->with('error', 'Telegram authorization failed.');
@@ -161,15 +165,20 @@ class SocialiteController extends Controller
     {
         $botToken = trim((string) config('services.telegram.bot_token'));
         if ($botToken === '') {
+            $this->logTelegramAuthFailure('missing_bot_token', $telegramAuth);
             return false;
         }
 
         if (empty($telegramAuth['hash']) || empty($telegramAuth['id']) || empty($telegramAuth['auth_date'])) {
+            $this->logTelegramAuthFailure('missing_required_fields', $telegramAuth);
             return false;
         }
 
         $authDate = (int)$telegramAuth['auth_date'];
         if ($authDate < (time() - 86400)) {
+            $this->logTelegramAuthFailure('expired_auth_date', $telegramAuth, [
+                'age_seconds' => time() - $authDate,
+            ]);
             return false;
         }
 
@@ -188,7 +197,16 @@ class SocialiteController extends Controller
         $secretKey = hash('sha256', $botToken, true);
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
-        return hash_equals($calculatedHash, $checkHash);
+        $isValid = hash_equals($calculatedHash, $checkHash);
+        if (!$isValid) {
+            $this->logTelegramAuthFailure('hash_mismatch', $telegramAuth, [
+                'data_keys' => array_keys($telegramAuth),
+                'received_hash_length' => strlen($checkHash),
+                'calculated_hash_length' => strlen($calculatedHash),
+            ]);
+        }
+
+        return $isValid;
     }
 
     private function telegramAuthPayload(Request $request): array
@@ -208,6 +226,46 @@ class SocialiteController extends Controller
         }
 
         return $query ?: $request->query();
+    }
+
+    private function telegramOAuthBridge(Request $request)
+    {
+        $callbackUrl = route('socialiteCallback', ['socialite' => 'telegram']);
+
+        return response(<<<HTML
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Telegram authorization</title>
+</head>
+<body style="margin:0;background:#0b0608;color:#e8c9a0;font-family:Arial,sans-serif;display:grid;min-height:100vh;place-items:center;">
+    <div>Завершаем вход через Telegram...</div>
+    <script>
+        (function () {
+            var hash = window.location.hash ? window.location.hash.substring(1) : '';
+            if (hash) {
+                window.location.replace('{$callbackUrl}?' + hash);
+                return;
+            }
+            window.location.replace('/login?telegram_auth=empty');
+        })();
+    </script>
+</body>
+</html>
+HTML);
+    }
+
+    private function logTelegramAuthFailure(string $reason, array $payload, array $extra = []): void
+    {
+        Log::warning('Telegram OAuth validation failed', array_merge([
+            'reason' => $reason,
+            'keys' => array_keys($payload),
+            'has_hash' => !empty($payload['hash']),
+            'has_id' => !empty($payload['id']),
+            'has_auth_date' => !empty($payload['auth_date']),
+        ], $extra));
     }
 
     private function generateTelegramUsername(array $telegramAuth): string
