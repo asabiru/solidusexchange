@@ -196,8 +196,9 @@
 
 
     function displayCurrencyCode(currency) {
-        const code = String(currency?.code || currency?.display_code || '').toUpperCase();
-        return code === 'RUB' ? 'Рубли' : code;
+        const raw = String(currency?.display_code || currency?.code || '').toUpperCase();
+        if (raw === 'RUB') return 'Рубли';
+        return raw.replace(/[_-](TRC20|ERC20|BEP20|SOL|POLYGON|AVAX|TON|ARBITRUM|OPTIMISM|BASE)$/i, '');
     }
 
     function isRubMethod(currency) {
