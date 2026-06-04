@@ -10,9 +10,12 @@
     $telegramStatsUrl = $statsUrl ?? route('telegram.mini-app.stats');
     $telegramKycUrl = $kycUrl ?? route('telegram.mini-app.kyc');
     $telegramKycSubmitUrl = $kycSubmitUrl ?? route('telegram.mini-app.kyc.submit');
+    $telegramEmailSendUrl = route('telegram.mini-app.email.send');
+    $telegramEmailVerifyUrl = route('telegram.mini-app.email.verify');
     $telegramPolicyUrl = $policyUrl ?? route('telegram.mini-app.page', ['slug' => 'terms-and-conditions']);
     $telegramPrivacyUrl = $privacyUrl ?? route('telegram.mini-app.page', ['slug' => 'privacy-policy']);
     $logoUrl = $appLogo ?? getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo);
+    $needsEmailBind = $user && (!$user->email || str_ends_with((string) $user->email, '@telegram.local'));
 
     // Pre-build JSON-safe arrays (arrow fns inside @json confuse Blade parser)
     $cryptosJson = $cryptos->map(function($c) {
@@ -32,6 +35,10 @@
             'display_code' => strtoupper($f->code ?? ''),
             'name' => $f->name,
             'image_path' => $f->image_path,
+            'buy_method_name' => $f->buy_method_name,
+            'buy_method_image_path' => $f->buy_method_image_path,
+            'sell_method_name' => $f->sell_method_name,
+            'sell_method_image_path' => $f->sell_method_image_path,
         ];
     })->values()->toArray();
 @endphp
@@ -133,16 +140,13 @@
         {{-- Exchange mode selector --}}
         <div class="tma-mode-tabs" id="modeTabs">
             <button class="tma-mode-tab is-active" data-exchange-mode="buy">
-                <span class="tma-mode-tab__icon"><i class="fas fa-ruble-sign"></i></span>
-                <span class="tma-mode-tab__text"><strong>Купить</strong><small>RUB → крипта</small></span>
+                <i class="fas fa-ruble-sign"></i><span>Купить</span>
             </button>
             <button class="tma-mode-tab" data-exchange-mode="sell">
-                <span class="tma-mode-tab__icon"><i class="fas fa-wallet"></i></span>
-                <span class="tma-mode-tab__text"><strong>Продать</strong><small>крипта → RUB</small></span>
+                <i class="fas fa-wallet"></i><span>Продать</span>
             </button>
             <button class="tma-mode-tab" data-exchange-mode="exchange">
-                <span class="tma-mode-tab__icon"><i class="fas fa-repeat"></i></span>
-                <span class="tma-mode-tab__text"><strong>Обмен</strong><small>крипта → крипта</small></span>
+                <i class="fas fa-repeat"></i><span>Обмен</span>
             </button>
         </div>
 
@@ -272,11 +276,33 @@
 <div class="tma-modal" id="currencyModal" hidden>
     <div class="tma-modal__content">
         <div class="tma-modal__head">
-            <h3>Выберите валюту</h3>
+            <h3 id="currencyModalTitle">Выберите валюту</h3>
             <button class="tma-modal__close" id="modalClose"><i class="fas fa-times"></i></button>
         </div>
         <input class="tma-modal__search" id="currencySearch" placeholder="Поиск..." type="text">
         <div class="tma-modal__list" id="currencyList"></div>
+    </div>
+</div>
+
+{{-- ===== EMAIL BIND MODAL ===== --}}
+<div class="tma-modal" id="emailBindModal" hidden>
+    <div class="tma-modal__content tma-email-modal">
+        <div class="tma-modal__head">
+            <h3>Привяжите Email</h3>
+            <button class="tma-modal__close" id="emailBindLater" type="button"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="tma-email-icon"><i class="far fa-envelope"></i></div>
+        <p class="tma-email-copy">Привяжите почту, чтобы не потерять доступ к аккаунту и получать уведомления по заявкам.</p>
+        <div class="tma-email-form">
+            <input class="tma-modal__search" id="emailBindInput" type="email" placeholder="email@example.com" autocomplete="email">
+            <button class="tma-primary-btn" id="emailBindSend" type="button">Отправить код</button>
+            <div id="emailVerifyStep" hidden>
+                <input class="tma-modal__search" id="emailBindCode" type="text" inputmode="numeric" placeholder="Код из письма">
+                <button class="tma-primary-btn" id="emailBindVerify" type="button">Подтвердить Email</button>
+            </div>
+            <button class="tma-secondary-btn" id="emailBindSkip" type="button">Позже</button>
+            <small id="emailBindMessage"></small>
+        </div>
     </div>
 </div>
 
@@ -326,9 +352,12 @@
         stats: @json($telegramStatsUrl),
         kyc: @json($telegramKycUrl),
         kycSubmit: @json($telegramKycSubmitUrl),
+        emailSend: @json($telegramEmailSendUrl),
+        emailVerify: @json($telegramEmailVerifyUrl),
         policy: @json($telegramPolicyUrl),
         privacy: @json($telegramPrivacyUrl),
     };
+    let needsEmailBind = @json($needsEmailBind);
 
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -404,6 +433,7 @@
 
     function hydrateAuthenticatedUser(user) {
         if (!user || !user.id) return;
+        needsEmailBind = !!user.needs_email;
 
         const headerSub = document.querySelector('.tma-header__brand small');
         if (headerSub) headerSub.textContent = 'обмен в Telegram';
@@ -455,6 +485,7 @@
                 </a>
             </div>
         `;
+        maybeShowEmailBindModal();
     }
 
     // ---------- Auth (auto-login via initData) ----------
@@ -487,6 +518,86 @@
         overlay.classList.add('tma-auth-overlay--inline');
     }
 
+    const emailModal = document.getElementById('emailBindModal');
+    const emailInput = document.getElementById('emailBindInput');
+    const emailCodeInput = document.getElementById('emailBindCode');
+    const emailSendBtn = document.getElementById('emailBindSend');
+    const emailVerifyBtn = document.getElementById('emailBindVerify');
+    const emailVerifyStep = document.getElementById('emailVerifyStep');
+    const emailMessage = document.getElementById('emailBindMessage');
+
+    function setEmailMessage(text, type = '') {
+        if (!emailMessage) return;
+        emailMessage.textContent = text || '';
+        emailMessage.classList.toggle('is-error', type === 'error');
+        emailMessage.classList.toggle('is-success', type === 'success');
+    }
+
+    function maybeShowEmailBindModal() {
+        if (needsEmailBind && emailModal && initData) {
+            emailModal.hidden = false;
+        }
+    }
+
+    function closeEmailBindModal() {
+        if (emailModal) emailModal.hidden = true;
+    }
+
+    ['emailBindLater', 'emailBindSkip'].forEach((id) => {
+        document.getElementById(id)?.addEventListener('click', closeEmailBindModal);
+    });
+
+    emailSendBtn?.addEventListener('click', function() {
+        const email = emailInput?.value?.trim();
+        if (!email) {
+            setEmailMessage('Введите email.', 'error');
+            return;
+        }
+        emailSendBtn.disabled = true;
+        setEmailMessage('Отправляем код...');
+        fetch(apiUrls.emailSend, {
+            method:'POST',
+            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':initData},
+            body: JSON.stringify({email, initData}),
+            credentials:'same-origin'
+        })
+        .then(r => r.json().then(data => ({ok:r.ok, data})))
+        .then(({ok, data}) => {
+            if (!ok || data.status === false) throw new Error(data.message || 'Не удалось отправить код.');
+            if (emailVerifyStep) emailVerifyStep.hidden = false;
+            setEmailMessage(data.message || 'Код отправлен.', 'success');
+        })
+        .catch((error) => setEmailMessage(error.message, 'error'))
+        .finally(() => { emailSendBtn.disabled = false; });
+    });
+
+    emailVerifyBtn?.addEventListener('click', function() {
+        const code = emailCodeInput?.value?.trim();
+        if (!code) {
+            setEmailMessage('Введите код из письма.', 'error');
+            return;
+        }
+        emailVerifyBtn.disabled = true;
+        setEmailMessage('Проверяем код...');
+        fetch(apiUrls.emailVerify, {
+            method:'POST',
+            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':initData},
+            body: JSON.stringify({code, initData}),
+            credentials:'same-origin'
+        })
+        .then(r => r.json().then(data => ({ok:r.ok, data})))
+        .then(({ok, data}) => {
+            if (!ok || data.status === false) throw new Error(data.message || 'Код не подошёл.');
+            needsEmailBind = false;
+            setEmailMessage(data.message || 'Email привязан.', 'success');
+            setTimeout(closeEmailBindModal, 700);
+        })
+        .catch((error) => setEmailMessage(error.message, 'error'))
+        .finally(() => { emailVerifyBtn.disabled = false; });
+    });
+
+    maybeShowEmailBindModal();
+
     // ---------- Tab navigation ----------
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -511,9 +622,43 @@
         return code === 'RUB' ? 'Рубли' : code;
     }
 
+    function isRubMethod(currency) {
+        return String(currency?.code || '').toUpperCase() === 'RUB';
+    }
+
+    function displaySelectorTitle(currency, target) {
+        if (exchangeMode === 'buy' && target === 'send' && isRubMethod(currency)) {
+            return currency.buy_method_name || currency.name || 'Способ оплаты';
+        }
+        if (exchangeMode === 'sell' && target === 'get' && isRubMethod(currency)) {
+            return currency.sell_method_name || currency.name || 'Способ получения';
+        }
+        return displayCurrencyCode(currency);
+    }
+
+    function displaySelectorSubtitle(currency, target) {
+        if (exchangeMode === 'buy' && target === 'send' && isRubMethod(currency)) {
+            return 'Оплата рублями';
+        }
+        if (exchangeMode === 'sell' && target === 'get' && isRubMethod(currency)) {
+            return 'Получение рублей';
+        }
+        return currency?.name || '';
+    }
+
+    function displaySelectorImage(currency, target) {
+        if (exchangeMode === 'buy' && target === 'send' && isRubMethod(currency)) {
+            return currency.buy_method_image_path || currency.image_path || '';
+        }
+        if (exchangeMode === 'sell' && target === 'get' && isRubMethod(currency)) {
+            return currency.sell_method_image_path || currency.image_path || '';
+        }
+        return currency?.image_path || '';
+    }
+
     function updateCurrencyLabels() {
-        if (sendCurrLabel) sendCurrLabel.textContent = displayCurrencyCode(sendCurrency);
-        if (getCurrLabel) getCurrLabel.textContent = displayCurrencyCode(getCurrency);
+        if (sendCurrLabel) sendCurrLabel.textContent = displaySelectorTitle(sendCurrency, 'send');
+        if (getCurrLabel) getCurrLabel.textContent = displaySelectorTitle(getCurrency, 'get');
     }
 
     function updateExchangeFieldLabels() {
@@ -626,12 +771,16 @@
     function openPicker(target) {
         pickerTarget = target;
         let items;
+        const modalTitle = document.getElementById('currencyModalTitle');
         if (exchangeMode === 'buy') {
             items = target === 'send' ? fiats : cryptos;
+            if (modalTitle) modalTitle.textContent = target === 'send' ? 'Выберите способ оплаты' : 'Выберите криптовалюту';
         } else if (exchangeMode === 'sell') {
             items = target === 'send' ? cryptos : fiats;
+            if (modalTitle) modalTitle.textContent = target === 'get' ? 'Выберите способ получения' : 'Выберите криптовалюту';
         } else {
             items = cryptos;
+            if (modalTitle) modalTitle.textContent = 'Выберите криптовалюту';
         }
         renderPickerItems(items);
         if (modal) modal.hidden = false;
@@ -641,9 +790,9 @@
 
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
-            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-display="${escapeHtml(c.display_code||c.code)}" data-name="${escapeHtml(c.name)}" data-img="${escapeHtml(c.image_path||'')}">
-                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${c.image_path ? `<img src="${escapeHtml(c.image_path)}" alt="${escapeHtml(c.display_code||c.code)}">` : escapeHtml(String(c.display_code||c.code).charAt(0))}</div>
-                <div><strong>${escapeHtml(displayCurrencyCode(c))}</strong><small>${escapeHtml(c.name)}</small></div>
+            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">
+                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${displaySelectorImage(c, pickerTarget) ? `<img src="${escapeHtml(displaySelectorImage(c, pickerTarget))}" alt="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">` : escapeHtml(String(displaySelectorTitle(c, pickerTarget)).charAt(0))}</div>
+                <div><strong>${escapeHtml(displaySelectorTitle(c, pickerTarget))}</strong><small>${escapeHtml(displaySelectorSubtitle(c, pickerTarget))}</small></div>
             </button>`
         ).join('');
     }
@@ -663,7 +812,11 @@
     modalList?.addEventListener('click', (e) => {
         const btn = e.target.closest('.tma-modal__item');
         if (!btn) return;
-        const selected = {id: parseInt(btn.dataset.id), code: btn.dataset.code, display_code: btn.dataset.display || btn.dataset.code, name: btn.dataset.name, image_path: btn.dataset.img || ''};
+        const pool = exchangeMode === 'buy'
+            ? (pickerTarget === 'send' ? fiats : cryptos)
+            : (exchangeMode === 'sell' ? (pickerTarget === 'send' ? cryptos : fiats) : cryptos);
+        const selected = pool.find((currency) => Number(currency.id) === Number(btn.dataset.id));
+        if (!selected) return;
         if (pickerTarget === 'send') sendCurrency = selected;
         else getCurrency = selected;
         updateCurrencyLabels();

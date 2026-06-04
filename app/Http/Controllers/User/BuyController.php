@@ -28,7 +28,13 @@ class BuyController extends Controller
 
     public function getBuyCurrency()
     {
-        $sendCurrencies = FiatCurrency::query()->active()->visibleInBuy()->sorted()->get();
+        $sendCurrencies = FiatCurrency::query()
+            ->with('buyGateway')
+            ->active()
+            ->visibleInBuy()
+            ->where('code', strtoupper((string) (basicControl()->base_currency ?: 'RUB')))
+            ->sorted()
+            ->get();
         $getCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
 
         return response()->json([

@@ -125,6 +125,7 @@
                 Notiflix.Block.remove('#showLoader');
                 availableSendCurrencies = response.data.sendCurrencies;
                 availableGetCurrencies = response.data.getCurrencies;
+                updateSelectorModalTitles();
                 activeSendCurrency = getPreferredCurrency(availableSendCurrencies, preferredSendCurrencyId, response.data.selectedSendCurrency);
                 activeGetCurrency = getPreferredCurrency(availableGetCurrencies, preferredGetCurrencyId, response.data.selectedGetCurrency);
                 setSendCurrency(activeSendCurrency);
@@ -197,6 +198,45 @@
     function displayCurrencyCode(currency) {
         const code = String(currency?.code || currency?.display_code || '').toUpperCase();
         return code === 'RUB' ? 'Рубли' : code;
+    }
+
+    function isRubMethod(currency) {
+        return String(currency?.code || '').toUpperCase() === 'RUB';
+    }
+
+    function displaySelectorTitle(currency, side) {
+        if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
+            return currency.buy_method_name || currency.name || 'Способ оплаты';
+        }
+        if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
+            return currency.sell_method_name || currency.name || 'Способ получения';
+        }
+        return displayCurrencyCode(currency);
+    }
+
+    function displaySelectorSubtitle(currency, side) {
+        if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
+            return 'Оплата рублями';
+        }
+        if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
+            return 'Получение рублей';
+        }
+        return currency?.name || '';
+    }
+
+    function displaySelectorImage(currency, side) {
+        if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
+            return currency.buy_method_image_path || currency.image_path || currency.image;
+        }
+        if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
+            return currency.sell_method_image_path || currency.image_path || currency.image;
+        }
+        return currency?.image_path || currency?.image;
+    }
+
+    function updateSelectorModalTitles() {
+        $('#calculator-modal .modal-title').text(activeTab === 'buy' ? 'Выберите способ оплаты' : 'Выберите валюту');
+        $('#calculator-modal2 .modal-title').text(activeTab === 'sell' ? 'Выберите способ получения' : 'Выберите валюту');
     }
 
     function getNetworkBadgeLabel(code) {
@@ -278,12 +318,12 @@
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <img class="img-flag" src="${displaySelectorImage(currencies[i], 'send')}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${displayCurrencyCode(currencies[i])}</div>
+                                <div class="title">${displaySelectorTitle(currencies[i], 'send')}</div>
                                 ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="sub-title">${displaySelectorSubtitle(currencies[i], 'send')}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -304,12 +344,12 @@
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
-                                <img class="img-flag" src="${currencies[i].image_path}" alt="...">
+                                <img class="img-flag" src="${displaySelectorImage(currencies[i], 'get')}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${displayCurrencyCode(currencies[i])}</div>
+                                <div class="title">${displaySelectorTitle(currencies[i], 'get')}</div>
                                 ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
-                                <div class="sub-title">${currencies[i].name}</div>
+                                <div class="sub-title">${displaySelectorSubtitle(currencies[i], 'get')}</div>
                             </div>
                         </div>
                         <div class="right-side">${isChecked}</div>
@@ -319,28 +359,28 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path || currency.image);
-        $('#showSendCode').text(displayCurrencyCode(currency));
+        $('#showSendImage').attr('src', displaySelectorImage(currency, 'send'));
+        $('#showSendCode').text(displaySelectorTitle(currency, 'send'));
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
             const badge = getNetworkBadgeLabel(currency.code);
             sendNetwork.textContent = badge;
             sendNetwork.style.display = badge ? 'inline-flex' : 'none';
         }
-        $('#showSendName').text(currency.name);
+        $('#showSendName').text(displaySelectorSubtitle(currency, 'send'));
         $('input[name="exchangeSendCurrency"]').val(currency.id);
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path || currency.image);
-        $('#showGetCode').text(displayCurrencyCode(currency));
+        $('#showGetImage').attr('src', displaySelectorImage(currency, 'get'));
+        $('#showGetCode').text(displaySelectorTitle(currency, 'get'));
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {
             const badge = getNetworkBadgeLabel(currency.code);
             getNetwork.textContent = badge;
             getNetwork.style.display = badge ? 'inline-flex' : 'none';
         }
-        $('#showGetName').text(currency.name);
+        $('#showGetName').text(displaySelectorSubtitle(currency, 'get'));
         $('input[name="exchangeGetCurrency"]').val(currency.id);
     }
 
@@ -397,6 +437,7 @@
             preferredSelection ? preferredSelection.sendAmount : null
         );
         $("#submitBtn").text(buttonText);
+        updateSelectorModalTitles();
     }
 
     function getPreferredCurrency(currencies, preferredId, fallbackCurrency = null) {

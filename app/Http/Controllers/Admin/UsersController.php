@@ -199,13 +199,6 @@ class UsersController extends Controller
         $request->validate([
             'firstName' => 'required|string|min:2|max:100',
             'lastName' => 'required|string|min:2|max:100',
-            'phone' => 'required|unique:users,phone,' . $id,
-            'country' => 'required|string|min:2|max:100',
-            'city' => 'required|string|min:2|max:100',
-            'state' => 'required|string|min:2|max:100',
-            'address' => 'required|string|min:2|max:100',
-            'addressTwo' => 'required|string|min:2',
-            'zipCode' => 'required|string|min:2|max:100',
             'status' => 'nullable|integer|in:0,1',
             'language_id' => Rule::in($languages),
         ]);
@@ -219,14 +212,7 @@ class UsersController extends Controller
             $user->update([
                 'firstname' => $request->firstName,
                 'lastname' => $request->lastName,
-                'phone' => $request->phone,
                 'language_id' => $request->language_id,
-                'address' => $request->address,
-                'address_two' => $request->addressTwo,
-                'city' => $request->city,
-                'state' => $request->state,
-                'zip_code' => $request->zipCode,
-                'country' => $request->country,
                 'status' => $request->status
             ]);
 
@@ -386,13 +372,6 @@ class UsersController extends Controller
             'lastName' => 'required|string|min:2|max:255',
             'username' => 'required|string|unique:users,username|min:2|max:255',
             'email' => 'required|email:rfc,dns|unique:users,email|min:2|max:255',
-            'phone' => 'required|string|unique:users,phone|min:2|max:20',
-            'country' => 'required|string|not_in:country|min:2|max:255',
-            'city' => 'required|string|min:2|max:255',
-            'state' => 'nullable|string|min:2|max:255',
-            'zipCode' => 'nullable|string|min:2|max:20',
-            'addressOne' => 'required|string|min:2',
-            'addressTwo' => 'nullable|string|min:2',
             'status' => 'nullable|integer|in:0,1',
         ]);
         if ($validator->fails()) {
@@ -405,14 +384,7 @@ class UsersController extends Controller
                 'lastname' => $request->lastName,
                 'username' => $request->username,
                 'email' => $request->email,
-                'phone' => $request->phone,
                 'language_id' => $request->language_id,
-                'address_one' => $request->addressOne,
-                'address_two' => $request->addressTwo,
-                'city' => $request->city,
-                'state' => $request->state,
-                'zip_code' => $request->zipCode,
-                'country' => $request->country,
                 'image' => null,
                 'image_driver' => 'local',
                 'status' => $request->status

@@ -97,94 +97,6 @@
                                         @enderror
                                     </div>
                                 </div>
-                                <div class="row mb-4">
-                                    <label for="phoneLabel"
-                                           class="col-sm-3 col-form-label form-label">@lang('Phone')</label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="js-input-mask form-control" name="phone"
-                                               id="phoneLabel" placeholder="Phone"
-                                               aria-label="Phone" value="{{ old('phone') }}"
-                                               autocomplete="off">
-                                        @error('phone')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-                                </div>
-                                <div class="row mb-4">
-                                    <label for="locationLabel"
-                                           class="col-sm-3 col-form-label form-label">@lang('Country')</label>
-                                    <div class="col-sm-9">
-                                        <div class="tom-select-custom mb-4">
-                                            <select class="js-select form-select" id="locationLabel" name="country">
-                                                <option value="country">@lang("Select Country")</option>
-                                                @forelse($allCountry as $country)
-                                                    <option value="{{ $country['name'] }}"
-                                                            data-option-template='<span class="d-flex align-items-center"><img class="avatar avatar-xss avatar-circle me-2" src="{{ asset($country['flag']) }}" alt="Flag" /><span class="text-truncate">{{ $country['name'] }}</span></span>'>
-                                                        @lang($country['name'])
-                                                    </option>
-                                                @empty
-                                                @endforelse
-                                            </select>
-                                            @error('country')
-                                            <span class="invalid-feedback d-block">{{ $message }}</span>
-                                            @enderror
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <div class="input-group input-group-sm-vertical">
-                                                <input type="text" class="form-control" name="city" id="cityLabel"
-                                                       placeholder="City" aria-label="City"
-                                                       value="{{ old('city') }}" autocomplete="off">
-                                                <input type="text" class="form-control" name="state" id="stateLabel"
-                                                       placeholder="@lang("State")" aria-label="@lang("State")"
-                                                       value="{{ old('state') }}" autocomplete="off">
-                                                <input type="text" class="js-input-mask form-control" name="zipCode"
-                                                       id="zipCodeLabel" placeholder="Zip code" aria-label="Zip code"
-                                                       value="{{ old('zipCode') }}" autocomplete="off">
-                                            </div>
-                                            @error('city')
-                                            <span class="invalid-feedback d-inline">{{ $message }}</span>
-                                            @enderror
-                                            @error('state')
-                                            <span class="invalid-feedback d-inline">{{ $message }}</span>
-                                            @enderror
-                                            @error('zipCode')
-                                            <span class="invalid-feedback d-block">{{ $message }}</span>
-                                            @enderror
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row mb-4">
-                                    <label for="addressLine1Label" class="col-sm-3 col-form-label form-label">
-                                        @lang('Address line 1')</label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="form-control" name="addressOne"
-                                               id="addressLine1Label" placeholder="@lang('Address line 1')"
-                                               aria-label="@lang('Address line 1')"
-                                               value="{{ old('addressOne') }}" autocomplete="off">
-                                        @error('addressOne')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-                                </div>
-
-                                <div class="row mb-4">
-                                    <label for="addressLine2Label" class="col-sm-3 col-form-label form-label">
-                                        @lang('Address line 2')
-                                        <span class="form-label-secondary"> (@lang('Optional'))</span></label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="form-control" name="addressTwo"
-                                               id="addressLine2Label" placeholder="@lang('Address line 2 (optional)')"
-                                               aria-label="Address Two"
-                                               value="{{ old('addressTwo') }}" autocomplete="off">
-                                        @error('addressTwo')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-                                </div>
-
-
                                 <label class="row form-check form-switch mb-4" for="userStatusSwitch">
                                     <span class="col-8 col-sm-3 ms-0">
                                       <span class="d-block text-dark">@lang('Status')</span>
@@ -227,27 +139,6 @@
 
                                     <dt class="col-sm-6 text-sm-end mb-2">@lang('Email:')</dt>
                                     <dd class="col-sm-6 email">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('Phone:')</dt>
-                                    <dd class="col-sm-6 phone">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('Country:')</dt>
-                                    <dd class="col-sm-6 country">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('City:')</dt>
-                                    <dd class="col-sm-6 city">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('State:')</dt>
-                                    <dd class="col-sm-6 state">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('Address line 1:')</dt>
-                                    <dd class="col-sm-6 address_line1">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('Address line 2:')</dt>
-                                    <dd class="col-sm-6 address_line2">-</dd>
-
-                                    <dt class="col-sm-6 text-sm-end mb-2">@lang('Zip code:')</dt>
-                                    <dd class="col-sm-6 zip_code">-</dd>
                                 </dl>
                             </div>
 
@@ -312,61 +203,6 @@
 
         $(document).on("input", "#userNameLabel", updateUsernameText);
         updateUsernameText();
-
-        function updatePhoneText() {
-            let phoneValue = $("#phoneLabel").val();
-            $('.phone').text(phoneValue);
-        }
-
-        $(document).on("input", "#phoneLabel", updatePhoneText);
-        updatePhoneText();
-
-        $(document).on("change", "#locationLabel", function () {
-            let countryValue = $("#locationLabel").val();
-            $('.country').text(countryValue);
-        });
-
-        function updateCityText() {
-            let cityValue = $("#cityLabel").val();
-            $('.city').text(cityValue);
-        }
-
-        $(document).on("input", "#cityLabel", updateCityText);
-        updateCityText();
-
-        function updateStateText() {
-            let stateValue = $("#stateLabel").val();
-            $('.state').text(stateValue);
-        }
-
-        $(document).on("input", "#stateLabel", updateStateText);
-        updateStateText();
-
-
-        function updateZipCodeText() {
-            let zipCodeValue = $("#zipCodeLabel").val();
-            $('.zip_code').text(zipCodeValue);
-        }
-
-        $(document).on("input", "#zipCodeLabel", updateZipCodeText);
-        updateZipCodeText();
-
-
-        function updateAddressLine1() {
-            let addressOneValue = $("#addressLine1Label").val();
-            $('.address_line1').text(addressOneValue);
-        }
-
-        $(document).on("input", "#addressLine1Label", updateAddressLine1);
-        updateAddressLine1();
-
-        function updateAddressLine2() {
-            let addressTwoValue = $("#addressLine2Label").val();
-            $('.address_line2').text(addressTwoValue);
-        }
-
-        $(document).on("input", "#addressLine2Label", updateAddressLine2);
-        updateAddressLine2();
 
         $(document).ready(function () {
             new HSStepForm('.js-step-form', {

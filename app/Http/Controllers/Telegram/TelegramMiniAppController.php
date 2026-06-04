@@ -16,7 +16,9 @@ use App\Services\Kyc\UserKycManager;
 use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Services\TradeQuote\BuyQuoteService;
 use App\Services\TradeQuote\SellQuoteService;
+use App\Traits\Notify;
 use App\Traits\Upload;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Schema;
@@ -25,7 +27,7 @@ use RuntimeException;
 
 class TelegramMiniAppController extends Controller
 {
-    use Upload;
+    use Notify, Upload;
 
     public function index(Request $request, TelegramMiniAppAuthService $authService)
     {
@@ -58,6 +60,8 @@ class TelegramMiniAppController extends Controller
                     'user' => [
                         'id' => $user->id,
                         'name' => $user->firstname ?: $user->username ?: $user->email,
+                        'email' => $user->email,
+                        'needs_email' => $this->needsEmailBind($user),
                         'telegram_id' => $user->telegram_id,
                     ],
                 ]);
@@ -109,6 +113,63 @@ class TelegramMiniAppController extends Controller
                 'sell' => (clone $sell)->count(),
                 'exchange' => (clone $exchange)->count(),
             ],
+        ]);
+    }
+
+    public function sendEmailCode(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        $this->authenticateTelegramRequest($request, $authService);
+
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Откройте Mini App из Telegram.'], 401);
+        }
+
+        $validated = $request->validate([
+            'email' => 'required|email:rfc,dns|unique:users,email,' . Auth::id(),
+        ]);
+
+        $user = Auth::user();
+        $user->email = strtolower($validated['email']);
+        $user->email_verification = 0;
+        $user->verify_code = code(6);
+        $user->sent_at = Carbon::now();
+        $user->save();
+
+        $this->verifyToMail($user, 'VERIFICATION_CODE', [
+            'code' => $user->verify_code,
+        ]);
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Код подтверждения отправлен на email.',
+        ]);
+    }
+
+    public function verifyEmailCode(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        $this->authenticateTelegramRequest($request, $authService);
+
+        if (!Auth::check()) {
+            return response()->json(['status' => false, 'message' => 'Откройте Mini App из Telegram.'], 401);
+        }
+
+        $validated = $request->validate([
+            'code' => 'required|string',
+        ]);
+
+        $user = Auth::user();
+        if (!$this->emailCodeIsValid($user, $validated['code'])) {
+            return response()->json(['status' => false, 'message' => 'Код подтверждения не совпал.'], 422);
+        }
+
+        $user->email_verification = 1;
+        $user->verify_code = null;
+        $user->sent_at = null;
+        $user->save();
+
+        return response()->json([
+            'status' => true,
+            'message' => 'Email успешно привязан.',
         ]);
     }
 
@@ -384,7 +445,9 @@ class TelegramMiniAppController extends Controller
     private function fiatCurrencies()
     {
         return FiatCurrency::query()
+            ->with(['buyGateway', 'fiatSendGateway'])
             ->active()
+            ->where('code', $this->defaultFiatCode())
             ->sorted()
             ->limit(4)
             ->get();
@@ -476,6 +539,26 @@ class TelegramMiniAppController extends Controller
         }
 
         return $currency->applyRateMarkupToUsdRate((float) $referenceUsdt->usd_rate / (float) $referenceUsdt->rate);
+    }
+
+    private function needsEmailBind($user): bool
+    {
+        $email = strtolower((string) ($user->email ?? ''));
+
+        return $email === '' || str_ends_with($email, '@telegram.local');
+    }
+
+    private function emailCodeIsValid($user, string $code): bool
+    {
+        if (!$user->verify_code || !$user->sent_at) {
+            return false;
+        }
+
+        if ($user->sent_at->copy()->addMinutes(30)->lt(Carbon::now())) {
+            return false;
+        }
+
+        return hash_equals((string) $user->verify_code, trim($code));
     }
 
     private function defaultFiatCode(): string

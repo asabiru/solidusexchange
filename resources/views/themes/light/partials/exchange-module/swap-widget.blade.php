@@ -4,18 +4,28 @@
 
 <div class="swap-card">
     <!-- Modern Tabs -->
-    <div class="modern-tabs exchange-method-tabs">
+    <div class="modern-tabs">
         <button class="tab-button active" data-tab="exchange">
-            <span class="method-icon"><i class="fa-solid fa-repeat"></i></span>
-            <span class="method-text"><strong>Крипта ↔ крипта</strong><small>обмен монет</small></span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="17 1 21 5 12 5 12 5"></polyline>
+                <path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"></path>
+            </svg>
+            <span>Обмен</span>
         </button>
         <button class="tab-button" data-tab="buy">
-            <span class="method-icon"><i class="fa-solid fa-ruble-sign"></i></span>
-            <span class="method-text"><strong>Купить за RUB</strong><small>рубли → крипта</small></span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4-1 1-5.5-5.5a2.121 2.121 0 0 1 3-3"></path>
+            </svg>
+            <span>Купить</span>
         </button>
         <button class="tab-button" data-tab="sell">
-            <span class="method-icon"><i class="fa-solid fa-wallet"></i></span>
-            <span class="method-text"><strong>Продать в RUB</strong><small>крипта → рубли</small></span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"></path>
+                <path d="M9 9l3 3-3 3"></path>
+                <path d="M9 15h6"></path>
+            </svg>
+            <span>Продать</span>
         </button>
     </div>
 
@@ -265,6 +275,47 @@ function displayHeroCurrencyCode(currency) {
     return code === 'RUB' ? 'Рубли' : code;
 }
 
+function isHeroRubMethod(currency) {
+    return String(currency?.code || '').toUpperCase() === 'RUB';
+}
+
+function displayHeroSelectorTitle(currency, side) {
+    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+        return currency.buy_method_name || currency.name || 'Способ оплаты';
+    }
+    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+        return currency.sell_method_name || currency.name || 'Способ получения';
+    }
+    return displayHeroCurrencyCode(currency);
+}
+
+function displayHeroSelectorSubtitle(currency, side) {
+    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+        return 'Оплата рублями';
+    }
+    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+        return 'Получение рублей';
+    }
+    return currency?.name || '';
+}
+
+function displayHeroSelectorImage(currency, side) {
+    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+        return currency.buy_method_image_path || currency.image_path || currency.image;
+    }
+    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+        return currency.sell_method_image_path || currency.image_path || currency.image;
+    }
+    return currency?.image_path || currency?.image;
+}
+
+function updateHeroModalTitles() {
+    const sendTitle = document.querySelector('#calculator-modal .modal-title');
+    const getTitle = document.querySelector('#calculator-modal2 .modal-title');
+    if (sendTitle) sendTitle.textContent = typeof activeTab !== 'undefined' && activeTab === 'buy' ? 'Выберите способ оплаты' : 'Выберите валюту';
+    if (getTitle) getTitle.textContent = typeof activeTab !== 'undefined' && activeTab === 'sell' ? 'Выберите способ получения' : 'Выберите валюту';
+}
+
 function getNetworkBadgeLabel(code) {
     if (!code || code.indexOf('_') === -1) {
         return '';
@@ -287,6 +338,7 @@ function getNetworkBadgeLabel(code) {
 
 // Update send currency selector
 function updateSendCurrencySelector(currencies, selected) {
+    updateHeroModalTitles();
     const modal = document.querySelector('#calculator-modal .modal-body');
     if (!modal || !currencies || currencies.length === 0) return;
 
@@ -298,12 +350,12 @@ function updateSendCurrencySelector(currencies, selected) {
             <div class="item sendModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
                 <div class="left-side">
                     <div class="img-area">
-                        <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
+                        <img class="img-flag" src="${displayHeroSelectorImage(currency, 'send')}" alt="${currency.code}">
                     </div>
                     <div class="text-area">
-                        <div class="title">${displayHeroCurrencyCode(currency)}</div>
+                        <div class="title">${displayHeroSelectorTitle(currency, 'send')}</div>
                         ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
-                        <div class="sub-title">${currency.name}</div>
+                        <div class="sub-title">${displayHeroSelectorSubtitle(currency, 'send')}</div>
                     </div>
                 </div>
                 <div class="right-side"></div>
@@ -320,8 +372,8 @@ function updateSendCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showSendImage').src = selected.image_path || selected.image;
-        document.getElementById('showSendCode').textContent = displayHeroCurrencyCode(selected);
+        document.getElementById('showSendImage').src = displayHeroSelectorImage(selected, 'send');
+        document.getElementById('showSendCode').textContent = displayHeroSelectorTitle(selected, 'send');
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
             const badge = getNetworkBadgeLabel(selected.code);
@@ -334,6 +386,7 @@ function updateSendCurrencySelector(currencies, selected) {
 
 // Update get currency selector
 function updateGetCurrencySelector(currencies, selected) {
+    updateHeroModalTitles();
     const modal = document.querySelector('#calculator-modal2 .modal-body');
     if (!modal || !currencies || currencies.length === 0) return;
 
@@ -345,12 +398,12 @@ function updateGetCurrencySelector(currencies, selected) {
             <div class="item getModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
                 <div class="left-side">
                     <div class="img-area">
-                        <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
+                        <img class="img-flag" src="${displayHeroSelectorImage(currency, 'get')}" alt="${currency.code}">
                     </div>
                     <div class="text-area">
-                        <div class="title">${displayHeroCurrencyCode(currency)}</div>
+                        <div class="title">${displayHeroSelectorTitle(currency, 'get')}</div>
                         ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
-                        <div class="sub-title">${currency.name}</div>
+                        <div class="sub-title">${displayHeroSelectorSubtitle(currency, 'get')}</div>
                     </div>
                 </div>
                 <div class="right-side"></div>
@@ -367,8 +420,8 @@ function updateGetCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showGetImage').src = selected.image_path || selected.image;
-        document.getElementById('showGetCode').textContent = displayHeroCurrencyCode(selected);
+        document.getElementById('showGetImage').src = displayHeroSelectorImage(selected, 'get');
+        document.getElementById('showGetCode').textContent = displayHeroSelectorTitle(selected, 'get');
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {
             const badge = getNetworkBadgeLabel(selected.code);

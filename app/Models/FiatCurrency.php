@@ -20,7 +20,7 @@ class FiatCurrency extends Model
         'fiat_send_gateway_id' => 'integer',
     ];
 
-    protected $appends = ['image_path', 'currency_name'];
+    protected $appends = ['image_path', 'currency_name', 'buy_method_name', 'buy_method_image_path', 'sell_method_name', 'sell_method_image_path'];
 
     public function getImagePathAttribute()
     {
@@ -30,6 +30,40 @@ class FiatCurrency extends Model
     public function getCurrencyNameAttribute()
     {
         return $this->code . ' - ' . $this->name;
+    }
+
+    public function getBuyMethodNameAttribute(): string
+    {
+        return $this->formatRubMethodName($this->buyGateway?->name ?? $this->name);
+    }
+
+    public function getBuyMethodImagePathAttribute(): string
+    {
+        return $this->buyGateway?->image_path ?: $this->image_path;
+    }
+
+    public function getSellMethodNameAttribute(): string
+    {
+        return $this->formatRubMethodName($this->fiatSendGateway?->name ?? $this->name);
+    }
+
+    public function getSellMethodImagePathAttribute(): string
+    {
+        return $this->fiatSendGateway?->image_path ?: $this->image_path;
+    }
+
+    private function formatRubMethodName(?string $name): string
+    {
+        $name = trim((string) $name);
+
+        if ($name === '') {
+            return $this->code === 'RUB' ? 'Рубли' : $this->name;
+        }
+
+        $name = preg_replace('/\s+—\s*Russian Ruble$/iu', '', $name) ?: $name;
+        $name = preg_replace('/\s+-\s*Russian Ruble$/iu', '', $name) ?: $name;
+
+        return trim($name);
     }
 
     public function fiatSendGateway()
