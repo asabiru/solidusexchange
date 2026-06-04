@@ -1,3 +1,13 @@
+@php
+    $user = $user ?? auth()->user();
+    $rateCards = collect($rateCards ?? []);
+    $telegramIndexUrl = \Illuminate\Support\Facades\Route::has('telegram.mini-app')
+        ? route('telegram.mini-app')
+        : (\Illuminate\Support\Facades\Route::has('telegram.miniapp.index') ? route('telegram.miniapp.index') : url('/telegram/mini-app'));
+    $telegramAuthUrl = \Illuminate\Support\Facades\Route::has('telegram.miniapp.login')
+        ? route('telegram.miniapp.login')
+        : $telegramIndexUrl;
+@endphp
 <!DOCTYPE html>
 <html lang="{{ app()->getLocale() }}">
 <head>
@@ -171,7 +181,7 @@
             applyTheme(webApp?.colorScheme === 'light' ? 'light' : 'dark');
 
             if (authState && webApp?.initData && csrfToken) {
-                fetch(@json(route('telegram.mini-app')), {
+                fetch(@json($telegramAuthUrl), {
                     method: 'POST',
                     headers: {
                         'Accept': 'application/json',
