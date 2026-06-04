@@ -488,7 +488,7 @@ class TelegramMiniAppController extends Controller
 
     private function sellGateways(): array
     {
-        return FiatSendGateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')
+        return FiatSendGateway::query()->where('status', 1)->orderBy('id', 'ASC')->orderBy('name', 'ASC')
             ->get()
             ->map(fn($gw) => ['id' => $gw->id, 'name' => $gw->name, 'image_path' => $gw->image_path])
             ->values()

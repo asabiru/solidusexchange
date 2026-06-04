@@ -408,7 +408,7 @@ class SellController extends Controller
 
     private function expandFiatIntoSellGateways($baseFiats): array
     {
-        $gateways = FiatSendGateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')->get();
+        $gateways = FiatSendGateway::query()->where('status', 1)->orderBy('id', 'ASC')->orderBy('name', 'ASC')->get();
 
         if ($gateways->isEmpty()) {
             return $baseFiats->toArray();
