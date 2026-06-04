@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Auth;
 
 class TelegramMiniAppController extends Controller
 {
+    public function index(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        return $this->launch($request, $authService);
+    }
+
     public function launch(Request $request, TelegramMiniAppAuthService $authService)
     {
         $initData = (string) ($request->input('tgWebAppData') ?: $request->input('initData') ?: $request->header('X-Telegram-Init-Data'));
