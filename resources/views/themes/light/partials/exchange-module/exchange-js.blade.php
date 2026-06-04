@@ -30,6 +30,7 @@
     });
 
     $(document).on("click", "#swapBtn", function () {
+        $("#swapBtn").toggleClass("flipped");
         if (!activeSendCurrency || !activeGetCurrency) {
             return;
         }
@@ -69,12 +70,34 @@
         }
     });
 
+    $(document).on("click", ".crypto-button[data-send-currency-id], .exchange-link[data-send-currency-id]", function () {
+        const preferredCurrencyId = $(this).data('send-currency-id');
+
+        if (!preferredCurrencyId) {
+            return;
+        }
+
+        pendingTabSwap = null;
+        activeTab = 'exchange';
+        $("#submitFormId").attr("action", "{{ route('exchangeRequest', [], false) }}");
+        $("#exchangeType").val("exchange");
+        $("#formTitle").text("Обмен криптовалют");
+        $("#submitBtn").text("Обменять");
+        $("#sendLabel").text("Вы отправляете (криптовалюта)");
+        $("#receiveLabel").text("Вы получаете (криптовалюта)");
+        $(".tab-button").removeClass("active");
+        $('.tab-button[data-tab="exchange"]').addClass("active");
+
+        getExchangeCurrency("{{ route('getExchangeCurrency', [], false) }}", preferredCurrencyId);
+    });
+
     $(document).on("click", ".sendModal", function () {
         activeSendCurrency = $(this).data('res');
         if (!isCurrencySelectable('send', activeSendCurrency)) {
             return;
         }
         setSendCurrency(activeSendCurrency);
+        $('input[name="payment_method"]').val(activeSendCurrency.gateway_id || '');
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal').modal('hide');
 
@@ -88,6 +111,7 @@
             return;
         }
         setGetCurrency(activeGetCurrency);
+        $('input[name="payment_method"]').val(activeGetCurrency.gateway_id || '');
         requestQuoteDebounced($("input[name='exchangeSendAmount']").val(), 0);
         $('#calculator-modal2').modal('hide');
 
@@ -169,6 +193,26 @@
         }, delay);
     }
 
+    function getNetworkBadgeLabel(code) {
+        if (!code || code.indexOf('_') === -1) {
+            return '';
+        }
+
+        const suffix = code.split('_').pop().toUpperCase();
+        const aliases = {
+            ERC20: 'ERC20',
+            TRC20: 'TRC20',
+            BSC: 'BSC',
+            SOL: 'SOL',
+            ARB: 'ARB',
+            BASE: 'BASE',
+            OPT: 'OPT',
+            TON: 'TON',
+        };
+
+        return aliases[suffix] || suffix;
+    }
+
     function requestQuote(sendAmount) {
         const routeMap = {
             exchange: "{{ route('exchangeAutoRate', [], false) }}",
@@ -176,11 +220,18 @@
             sell: "{{ route('sellAutoRate', [], false) }}",
         };
 
-        axios.post(routeMap[activeTab], {
+        const payload = {
             sendAmount: sendAmount,
             sendCurrency: activeSendCurrency.id,
             getCurrency: activeGetCurrency.id,
-        })
+        };
+        if (activeSendCurrency && activeSendCurrency.gateway_id) {
+            payload.sendGatewayId = activeSendCurrency.gateway_id;
+        }
+        if (activeGetCurrency && activeGetCurrency.gateway_id) {
+            payload.getGatewayId = activeGetCurrency.gateway_id;
+        }
+        axios.post(routeMap[activeTab], payload)
             .then(function (response) {
                 applyQuote(response.data.quote);
             })
@@ -197,6 +248,16 @@
         $("input[name='exchangeSendAmount']").val(formatSendAmount(quote.sendAmount));
         $("input[name='exchangeGetAmount']").val(formatReceiveAmount(quote.finalAmount));
         $("input[name='exchangeGetAmount']").prop('readonly', activeTab === 'exchange' && !!quote.receiveReadonly);
+
+        const finalReceive = document.getElementById('finalReceive');
+        const receiveCurrency = document.getElementById('receiveCurrency');
+        if (finalReceive) {
+            finalReceive.textContent = formatReceiveAmount(quote.finalAmount);
+        }
+        if (receiveCurrency) {
+            const code = activeGetCurrency ? (activeGetCurrency.code || '') : '';
+            receiveCurrency.textContent = code;
+        }
     }
 
     function showSend(currencies) {
@@ -207,6 +268,7 @@
                 continue;
             }
             let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -214,6 +276,7 @@
                             </div>
                             <div class="text-area">
                                 <div class="title">${currencies[i].code}</div>
+                                ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
                         </div>
@@ -231,6 +294,7 @@
                 continue;
             }
             let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
                             <div class="img-area">
@@ -238,6 +302,7 @@
                             </div>
                             <div class="text-area">
                                 <div class="title">${currencies[i].code}</div>
+                                ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
                         </div>
@@ -248,15 +313,27 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', currency.image_path);
+        $('#showSendImage').attr('src', currency.image_path || currency.image);
         $('#showSendCode').text(currency.code);
+        const sendNetwork = document.getElementById('showSendNetwork');
+        if (sendNetwork) {
+            const badge = getNetworkBadgeLabel(currency.code);
+            sendNetwork.textContent = badge;
+            sendNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         $('#showSendName').text(currency.name);
         $('input[name="exchangeSendCurrency"]').val(currency.id);
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', currency.image_path);
+        $('#showGetImage').attr('src', currency.image_path || currency.image);
         $('#showGetCode').text(currency.code);
+        const getNetwork = document.getElementById('showGetNetwork');
+        if (getNetwork) {
+            const badge = getNetworkBadgeLabel(currency.code);
+            getNetwork.textContent = badge;
+            getNetwork.style.display = badge ? 'inline-flex' : 'none';
+        }
         $('#showGetName').text(currency.name);
         $('input[name="exchangeGetCurrency"]').val(currency.id);
     }
@@ -267,11 +344,17 @@
         }
 
         if (side === 'send' && activeGetCurrency) {
-            return Number(currency.id) !== Number(activeGetCurrency.id);
+            if (Number(currency.id) !== Number(activeGetCurrency.id)) {
+                return true;
+            }
+            return Number(currency.gateway_id || 0) !== Number(activeGetCurrency.gateway_id || 0);
         }
 
         if (side === 'get' && activeSendCurrency) {
-            return Number(currency.id) !== Number(activeSendCurrency.id);
+            if (Number(currency.id) !== Number(activeSendCurrency.id)) {
+                return true;
+            }
+            return Number(currency.gateway_id || 0) !== Number(activeSendCurrency.gateway_id || 0);
         }
 
         return true;

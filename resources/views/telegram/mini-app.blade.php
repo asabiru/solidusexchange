@@ -4,9 +4,7 @@
     $cryptos = $cryptoCurrencies ?? collect();
     $fiats = $fiatCurrencies ?? collect();
     $defaultFiat = $defaultFiatCode ?? 'RUB';
-    $telegramAuthUrl = \Illuminate\Support\Facades\Route::has('telegram.miniapp.login')
-        ? route('telegram.miniapp.login')
-        : (\Illuminate\Support\Facades\Route::has('telegram.mini-app') ? route('telegram.mini-app') : url('/telegram/mini-app'));
+    $telegramAuthUrl = route('telegram.mini-app');
     $telegramQuoteUrl = route('telegram.mini-app.quote');
     $telegramRequestUrl = route('telegram.mini-app.request');
 
@@ -288,6 +286,16 @@
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
     const overlay = document.getElementById('authOverlay');
 
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;',
+        })[char]);
+    }
+
     // ---------- Currency data from server ----------
     const cryptos = @json($cryptosJson);
     const fiats = @json($fiatsJson);
@@ -313,9 +321,77 @@
         if (el2) el2.textContent = labels[t];
     }
     applyTheme();
-    document.querySelectorAll('[data-theme-toggle]').forEach(btn => {
-        btn.addEventListener('click', () => { themeIdx = (themeIdx+1) % 3; applyTheme(); webApp?.HapticFeedback?.impactOccurred('light'); });
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('[data-theme-toggle]')) return;
+        themeIdx = (themeIdx+1) % 3;
+        applyTheme();
+        webApp?.HapticFeedback?.impactOccurred('light');
     });
+
+    function hydrateAuthenticatedUser(user) {
+        if (!user || !user.id) return;
+
+        const headerSub = document.querySelector('.tma-header__brand small');
+        if (headerSub) headerSub.textContent = 'UID ' + user.id;
+
+        const profile = document.querySelector('[data-panel="profile"]');
+        if (!profile) return;
+
+        const name = user.name || user.username || 'Пользователь';
+        profile.innerHTML = `
+            <div class="tma-profile-header">
+                <div class="tma-avatar tma-avatar--lg">${escapeHtml(String(name).charAt(0).toUpperCase() || 'U')}</div>
+                <div>
+                    <strong>${escapeHtml(name)}</strong>
+                    <small class="tma-uid">UID ${escapeHtml(user.id)}</small>
+                </div>
+            </div>
+
+            <div class="tma-menu-group">
+                <a class="tma-menu-item" href="javascript:void(0)">
+                    <div class="tma-menu-item__icon tma-menu-item__icon--blue"><i class="fas fa-chart-bar"></i></div>
+                    <div class="tma-menu-item__body">
+                        <strong>Статистика</strong>
+                        <small>Пополнения, выводы, обмены</small>
+                    </div>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+                <a class="tma-menu-item" href="javascript:void(0)">
+                    <div class="tma-menu-item__icon tma-menu-item__icon--green"><i class="fas fa-shield-alt"></i></div>
+                    <div class="tma-menu-item__body">
+                        <strong>Статус</strong>
+                        <small>Пройти KYC</small>
+                    </div>
+                    <span class="tma-status-dot">● не начато</span>
+                </a>
+            </div>
+
+            <div class="tma-menu-group">
+                <button class="tma-menu-item" data-theme-toggle>
+                    <div class="tma-menu-item__icon tma-menu-item__icon--accent"><i class="fas fa-moon"></i></div>
+                    <div class="tma-menu-item__body">
+                        <strong>Тема</strong>
+                        <small id="themeLabel2">Авто</small>
+                    </div>
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <div class="tma-menu-group">
+                <a class="tma-menu-item" href="javascript:void(0)">
+                    <div class="tma-menu-item__icon"><i class="fas fa-file-alt"></i></div>
+                    <div class="tma-menu-item__body"><strong>Условия использования</strong></div>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+                <a class="tma-menu-item" href="javascript:void(0)">
+                    <div class="tma-menu-item__icon"><i class="fas fa-lock"></i></div>
+                    <div class="tma-menu-item__body"><strong>Политика конфиденциальности</strong></div>
+                    <i class="fas fa-chevron-right"></i>
+                </a>
+            </div>
+        `;
+        applyTheme();
+    }
 
     // ---------- Auth (auto-login via initData) ----------
     function telegramInitData() {
@@ -334,7 +410,11 @@
             credentials:'same-origin'
         })
         .then(r => { if(!r.ok) throw new Error(); return r.json(); })
-        .then(d => { if(d.authenticated) window.location.reload(); else throw new Error(); })
+        .then(d => {
+            if(!d.authenticated) throw new Error();
+            if (overlay) overlay.remove();
+            hydrateAuthenticatedUser(d.user);
+        })
         .catch(() => {
             overlay.innerHTML = '<i class="fas fa-exclamation-triangle" style="font-size:32px;color:#ff6b6b"></i><strong>Telegram-вход недоступен</strong><span>Откройте Mini App из Telegram</span>';
         });
@@ -457,16 +537,6 @@
         modalSearch.focus();
     }
 
-    function escapeHtml(value) {
-        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;',
-        })[char]);
-    }
-
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
             `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-display="${escapeHtml(c.display_code||c.code)}" data-name="${escapeHtml(c.name)}" data-img="${escapeHtml(c.image_path||'')}">
@@ -515,6 +585,7 @@
                 send_amount: amount,
                 send_currency_id: sendCurrency.id,
                 get_currency_id: getCurrency.id,
+                initData: initData,
             };
             const res = await fetch(@json($telegramRequestUrl), {
                 method:'POST',

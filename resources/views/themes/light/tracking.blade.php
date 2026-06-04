@@ -14,7 +14,7 @@
                         <form class="search-box2" method="GET" action="{{route('tracking')}}">
                             <input type="text" value="{{@request()->trx_id}}" name="trx_id" class="form-control"
                                    id="search-box2"
-                                   placeholder="e.g 65defbe618d07">
+                                   placeholder="например, 65defbe618d07">
                             <button type="submit" class="search-btn2">@lang("Track")</button>
                         </form>
                     </div>

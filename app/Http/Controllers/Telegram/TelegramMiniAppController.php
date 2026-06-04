@@ -25,7 +25,7 @@ class TelegramMiniAppController extends Controller
 
     public function launch(Request $request, TelegramMiniAppAuthService $authService)
     {
-        $initData = (string) ($request->input('tgWebAppData') ?: $request->input('initData') ?: $request->header('X-Telegram-Init-Data'));
+        $initData = (string) ($request->header('X-Telegram-Init-Data') ?: $request->input('tgWebAppData') ?: $request->input('initData'));
 
         if ($initData !== '') {
             try {
@@ -100,8 +100,10 @@ class TelegramMiniAppController extends Controller
         ]);
     }
 
-    public function storeRequest(Request $request, BuyQuoteService $buyQuoteService, SellQuoteService $sellQuoteService, ExchangeQuoteService $exchangeQuoteService)
+    public function storeRequest(Request $request, TelegramMiniAppAuthService $authService, BuyQuoteService $buyQuoteService, SellQuoteService $sellQuoteService, ExchangeQuoteService $exchangeQuoteService)
     {
+        $this->authenticateTelegramRequest($request, $authService);
+
         if (!Auth::check()) {
             return response()->json([
                 'status' => false,
@@ -175,6 +177,26 @@ class TelegramMiniAppController extends Controller
                 'final_amount' => (float) $trade->final_amount,
             ],
         ]);
+    }
+
+    private function authenticateTelegramRequest(Request $request, TelegramMiniAppAuthService $authService): void
+    {
+        if (Auth::check()) {
+            return;
+        }
+
+        $initData = (string) ($request->header('X-Telegram-Init-Data') ?: $request->input('initData'));
+
+        if ($initData === '') {
+            return;
+        }
+
+        try {
+            $payload = $authService->validateInitData($initData);
+            Auth::login($authService->syncUser($payload));
+        } catch (RuntimeException) {
+            // The JSON response below handles unauthenticated Telegram requests.
+        }
     }
 
     private function cryptoCurrencies()

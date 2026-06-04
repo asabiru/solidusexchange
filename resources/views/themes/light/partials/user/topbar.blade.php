@@ -29,22 +29,21 @@
 
     <nav class="header-nav ms-auto">
         @php
-            $activeLanguages = \App\Models\Language::query()
-                ->where('status', 1)
-                ->orderByDesc('default_status')
-                ->orderBy('name')
-                ->get();
+            $activeLanguages = \Illuminate\Support\Facades\Cache::remember(
+                'active_languages', now()->addHours(2),
+                fn() => \App\Models\Language::where('status', 1)
+                    ->orderByDesc('default_status')->orderBy('name')->get()
+            );
             $currentLanguage = $activeLanguages->firstWhere('short_name', app()->getLocale()) ?: $activeLanguages->first();
         @endphp
         <ul class="d-flex align-items-center">
-            @if(basicControl()->changeable_mode == 1 )
+            {{-- Theme toggle — always visible in dashboard --}}
             <li class="nav-item pe-3">
-                <a id="toggle-btn" class="nav-link d-flex toggle-btn">
+                <a id="toggle-btn" class="nav-link d-flex toggle-btn" title="Переключить тему" style="cursor:pointer;">
                     <i class="fa-light fa-moon" id="moon"></i>
                     <i class="fa-light fa-sun-bright" id="sun"></i>
                 </a>
             </li>
-            @endif
 
             <li class="nav-item d-none d-lg-block d-xl-none">
                 <a class="nav-link nav-icon search-bar-toggle" href="#">
@@ -106,7 +105,7 @@
                 </a><!-- End Profile Iamge Icon -->
 
                 <ul class="dropdown-menu dropdown-menu-end dropdown-menu-arrow profile">
-                    <li class="dropdown-header d-flex justify-content-center text-start">
+                    <li class="dropdown-header d-flex align-items-center text-start">
                         <div class="profile-thum">
                             <span class="d-inline-flex align-items-center justify-content-center rounded-circle text-white fw-semibold"
                                   style="width:48px;height:48px;background:linear-gradient(120deg,var(--solidus-accent),var(--solidus-accent-2));">

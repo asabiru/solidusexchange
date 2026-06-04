@@ -181,14 +181,14 @@
                 data: {gateway: selectedGateway},
                 type: "GET",
                 success: function (data) {
-                    
+
                     if (data === "") {
                         let baseCurrency = @json(strtoupper((string) (basicControl()->base_currency ?: 'USD')));
                         let markup = `<option value="${baseCurrency}">${baseCurrency}</option>`;
                         $('#supported_currency').append(markup);
                     }
 
-                    let markup = '<option value="">Selected Currency</option>';
+                    let markup = '<option value="">Выбранная валюта</option>';
                     $('#supported_currency').append(markup);
 
                     $(data).each(function (index, value) {
@@ -237,7 +237,7 @@
                 }
             }).done(function (response) {
                 let amountField = $('#amount');
-                
+
                 if (response.status) {
                     clearMessage(amountField);
                     $('#msgShow').addClass('d-none');

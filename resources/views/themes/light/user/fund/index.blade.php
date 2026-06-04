@@ -120,7 +120,7 @@
                     return `<li class="list-group-item">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="text-capitalize">${field_name_text}</span>
-                                        <a href="${field_value}" target="_blank"><img src="${field_value}" alt="Image Description" class="rounded-1" width="100"></a>
+                                        <a href="${field_value}" target="_blank"><img src="${field_value}" alt="Описание изображения" class="rounded-1" width="100"></a>
                                     </div>
                                 </li>`;
                 } else {

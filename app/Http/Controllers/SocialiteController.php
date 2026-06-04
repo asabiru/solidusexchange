@@ -127,7 +127,7 @@ class SocialiteController extends Controller
             return response()->json(['message' => __('Telegram authorization is disabled.')], 403);
         }
 
-        $initData = (string) ($request->input('initData') ?: $request->header('X-Telegram-Init-Data'));
+        $initData = (string) ($request->header('X-Telegram-Init-Data') ?: $request->input('initData'));
 
         try {
             $telegramAuth = $authService->validateInitData($initData);

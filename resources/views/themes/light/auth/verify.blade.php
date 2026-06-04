@@ -8,6 +8,14 @@
                 <div class="card-header">{{ __('Verify Your Email Address') }}</div>
 
                 <div class="card-body">
+                    <div class="auth-form-logo text-center mb-3">
+                        <a href="{{ url('/') }}" class="d-inline-block">
+                            <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
+                                 alt="{{ basicControl()->site_title }}"
+                                 class="auth-logo-img" width="80" height="80">
+                        </a>
+                        <div class="auth-logo-name mt-2">{{ basicControl()->site_title }}</div>
+                    </div>
                     @if (session('resent'))
                         <div class="alert alert-success" role="alert">
                             {{ __('A fresh verification link has been sent to your email address.') }}

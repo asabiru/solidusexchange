@@ -25,7 +25,7 @@
                                     <div class="btn-area">
                                         <button type="button" onclick="copyCryptoAddress()" class="cmn-btn"><i
                                                 class="fa-light fa-copy"></i><span
-                                                class="d-none d-sm-block">Copy address</span></button>
+                                                class="d-none d-sm-block">Копировать адрес</span></button>
                                     </div>
 
                                 </div>
