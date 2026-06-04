@@ -238,7 +238,18 @@ body.tma{
     color:var(--text);font-size:14px;font-weight:700;
     cursor:pointer;white-space:nowrap;
 }
+.tma-currency-btn__icon{
+    width:24px;height:24px;border-radius:50%;
+    display:grid;place-items:center;flex-shrink:0;
+    background:linear-gradient(135deg,rgba(232,201,160,.18),rgba(150,102,50,.24));
+    border:1px solid rgba(232,201,160,.24);
+    color:var(--accent);font-size:11px;overflow:hidden;
+}
+.tma-currency-btn__icon img{
+    width:100%;height:100%;object-fit:cover;border-radius:inherit;display:block;
+}
 .tma-currency-btn i{font-size:10px;color:var(--text3)}
+.tma-currency-btn__icon i{font-size:11px;color:var(--accent)}
 
 .tma-swap-btn{
     display:flex;align-items:center;justify-content:center;gap:0;
@@ -368,13 +379,19 @@ body.tma{
 .tma-modal__item{
     display:flex;align-items:center;gap:12px;
     width:100%;padding:10px 12px;
-    border:none;background:transparent;border-radius:var(--radius-sm);
+    border:1px solid transparent;background:transparent;border-radius:var(--radius-sm);
     color:var(--text);cursor:pointer;font-family:var(--font);
     text-align:left;
 }
-.tma-modal__item:active{background:var(--surface2)}
+.tma-modal__item:active{background:var(--surface2);border-color:var(--border2)}
 .tma-modal__item strong{display:block;font-size:14px;font-weight:600}
 .tma-modal__item small{display:block;font-size:11px;color:var(--text3)}
+.tma-modal__item .tma-coin-icon--picker{
+    background:linear-gradient(135deg,rgba(232,201,160,.18),rgba(150,102,50,.24));
+    border:1px solid rgba(232,201,160,.22);
+    color:var(--accent);
+}
+.tma-modal__item .tma-coin-icon--picker i{font-size:13px;color:var(--accent)}
 .tma-stats-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-bottom:12px}
 .tma-stats-grid>div{
     background:var(--bg);

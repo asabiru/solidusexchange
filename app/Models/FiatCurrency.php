@@ -34,36 +34,68 @@ class FiatCurrency extends Model
 
     public function getBuyMethodNameAttribute(): string
     {
-        return $this->formatRubMethodName($this->buyGateway?->name ?? $this->name);
+        return $this->formatRubMethodName($this->buyGateway?->name, 'Способ оплаты');
     }
 
     public function getBuyMethodImagePathAttribute(): string
     {
-        return $this->buyGateway?->image_path ?: $this->image_path;
+        if ($this->buyGateway && !empty($this->buyGateway->image)) {
+            return $this->buyGateway->image_path;
+        }
+
+        return $this->methodImagePath();
     }
 
     public function getSellMethodNameAttribute(): string
     {
-        return $this->formatRubMethodName($this->fiatSendGateway?->name ?? $this->name);
+        return $this->formatRubMethodName($this->fiatSendGateway?->name, 'Способ получения');
     }
 
     public function getSellMethodImagePathAttribute(): string
     {
-        return $this->fiatSendGateway?->image_path ?: $this->image_path;
+        if ($this->fiatSendGateway && !empty($this->fiatSendGateway->image)) {
+            return $this->fiatSendGateway->image_path;
+        }
+
+        return $this->methodImagePath();
     }
 
-    private function formatRubMethodName(?string $name): string
+    private function formatRubMethodName(?string $name, string $fallback): string
     {
         $name = trim((string) $name);
 
-        if ($name === '') {
-            return $this->code === 'RUB' ? 'Рубли' : $this->name;
+        if ($name === '' || $this->isGenericRubLabel($name)) {
+            return strtoupper((string) $this->code) === 'RUB' ? $fallback : $this->name;
         }
 
         $name = preg_replace('/\s+—\s*Russian Ruble$/iu', '', $name) ?: $name;
         $name = preg_replace('/\s+-\s*Russian Ruble$/iu', '', $name) ?: $name;
 
-        return trim($name);
+        $name = trim($name);
+
+        return $this->isGenericRubLabel($name) ? $fallback : $name;
+    }
+
+    private function methodImagePath(): string
+    {
+        if (empty($this->image) || $this->isGenericRubLabel($this->name)) {
+            return '';
+        }
+
+        return $this->image_path;
+    }
+
+    private function isGenericRubLabel(?string $name): bool
+    {
+        $name = trim((string) $name);
+
+        if ($name === '') {
+            return true;
+        }
+
+        $normalized = preg_replace('/[\s_\-—]+/u', ' ', $name) ?: $name;
+
+        return (bool) preg_match('/^(rub|rur|russian r[ou]ble|рубл[ьиь]|российский рубл[ьиь]|оплата рублями|получение рубл[её]й)$/iu', trim($normalized));
     }
 
     public function fiatSendGateway()

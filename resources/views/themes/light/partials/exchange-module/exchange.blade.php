@@ -11,6 +11,7 @@
                     <div class="sc-currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal">
                         <div class="currency-icon">
                             <img class="img-flag" id="showSendImage" src="" alt="...">
+                            <span class="method-fallback-icon" id="showSendFallback"><i class="fa-solid fa-credit-card"></i></span>
                         </div>
                         <div class="currency-info">
                             <span class="currency-symbol" id="showSendCode"></span>
@@ -41,6 +42,7 @@
                     <div class="sc-currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal2">
                         <div class="currency-icon">
                             <img class="img-flag" id="showGetImage" src="" alt="...">
+                            <span class="method-fallback-icon" id="showGetFallback"><i class="fa-solid fa-credit-card"></i></span>
                         </div>
                         <div class="currency-info">
                             <span class="currency-symbol" id="showGetCode"></span>

@@ -465,7 +465,6 @@ class TelegramMiniAppController extends Controller
             ->active()
             ->where('code', $this->defaultFiatCode())
             ->sorted()
-            ->limit(4)
             ->get();
     }
 

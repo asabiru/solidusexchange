@@ -76,6 +76,7 @@
                 <div class="currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal">
                     <div class="currency-icon">
                         <img class="img-flag" id="showSendImage" src="" alt="...">
+                        <span class="method-fallback-icon" id="showSendFallback"><i class="fa-solid fa-credit-card"></i></span>
                     </div>
                     <div class="currency-info">
                         <span class="currency-symbol" id="showSendCode"></span>
@@ -111,6 +112,7 @@
                 <div class="currency-selector" data-bs-toggle="modal" data-bs-target="#calculator-modal2">
                     <div class="currency-icon">
                         <img class="img-flag" id="showGetImage" src="" alt="...">
+                        <span class="method-fallback-icon" id="showGetFallback"><i class="fa-solid fa-credit-card"></i></span>
                     </div>
                     <div class="currency-info">
                         <span class="currency-symbol" id="showGetCode"></span>
@@ -280,12 +282,22 @@ function isHeroRubMethod(currency) {
     return String(currency?.code || '').toUpperCase() === 'RUB';
 }
 
+function isGenericHeroRubLabel(value) {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[\s_\-—]+/g, ' ');
+    return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей'].includes(normalized);
+}
+
+function heroMethodTitle(currency, key, fallback) {
+    const title = String(currency?.[key] || '').trim();
+    return title && !isGenericHeroRubLabel(title) ? title : fallback;
+}
+
 function displayHeroSelectorTitle(currency, side) {
     if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
-        return currency.buy_method_name || currency.name || 'Способ оплаты';
+        return heroMethodTitle(currency, 'buy_method_name', 'Способ оплаты');
     }
     if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
-        return currency.sell_method_name || currency.name || 'Способ получения';
+        return heroMethodTitle(currency, 'sell_method_name', 'Способ получения');
     }
     return displayHeroCurrencyCode(currency);
 }
@@ -302,12 +314,43 @@ function displayHeroSelectorSubtitle(currency, side) {
 
 function displayHeroSelectorImage(currency, side) {
     if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
-        return currency.buy_method_image_path || currency.image_path || currency.image;
+        return currency.buy_method_image_path || '';
     }
     if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
-        return currency.sell_method_image_path || currency.image_path || currency.image;
+        return currency.sell_method_image_path || '';
     }
     return currency?.image_path || currency?.image;
+}
+
+function renderHeroSelectorIcon(currency, side) {
+    const image = displayHeroSelectorImage(currency, side);
+    const title = displayHeroSelectorTitle(currency, side);
+    if (image) {
+        return `<img class="img-flag" src="${image}" alt="${title}">`;
+    }
+
+    if ((typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) ||
+        (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency))) {
+        return '<span class="method-fallback-icon method-fallback-icon--list"><i class="fa-solid fa-credit-card"></i></span>';
+    }
+
+    return `<span class="method-fallback-icon method-fallback-icon--list">${String(title || '•').charAt(0)}</span>`;
+}
+
+function updateHeroSelectedIcon(side, currency) {
+    const imageEl = document.getElementById(side === 'send' ? 'showSendImage' : 'showGetImage');
+    const fallbackEl = document.getElementById(side === 'send' ? 'showSendFallback' : 'showGetFallback');
+    const image = displayHeroSelectorImage(currency, side);
+    if (!imageEl || !fallbackEl) return;
+    if (image) {
+        imageEl.src = image;
+        imageEl.style.display = '';
+        fallbackEl.style.display = 'none';
+        return;
+    }
+    imageEl.removeAttribute('src');
+    imageEl.style.display = 'none';
+    fallbackEl.style.display = 'grid';
 }
 
 function updateHeroModalTitles() {
@@ -350,8 +393,8 @@ function updateSendCurrencySelector(currencies, selected) {
         html += `
             <div class="item sendModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
                 <div class="left-side">
-                    <div class="img-area">
-                        <img class="img-flag" src="${displayHeroSelectorImage(currency, 'send')}" alt="${currency.code}">
+                    <div class="img-area method-icon-area">
+                        ${renderHeroSelectorIcon(currency, 'send')}
                     </div>
                     <div class="text-area">
                         <div class="title">${displayHeroSelectorTitle(currency, 'send')}</div>
@@ -373,7 +416,7 @@ function updateSendCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showSendImage').src = displayHeroSelectorImage(selected, 'send');
+        updateHeroSelectedIcon('send', selected);
         document.getElementById('showSendCode').textContent = displayHeroSelectorTitle(selected, 'send');
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
@@ -398,8 +441,8 @@ function updateGetCurrencySelector(currencies, selected) {
         html += `
             <div class="item getModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
                 <div class="left-side">
-                    <div class="img-area">
-                        <img class="img-flag" src="${displayHeroSelectorImage(currency, 'get')}" alt="${currency.code}">
+                    <div class="img-area method-icon-area">
+                        ${renderHeroSelectorIcon(currency, 'get')}
                     </div>
                     <div class="text-area">
                         <div class="title">${displayHeroSelectorTitle(currency, 'get')}</div>
@@ -421,7 +464,7 @@ function updateGetCurrencySelector(currencies, selected) {
 
     // Update selected currency display
     if (selected) {
-        document.getElementById('showGetImage').src = displayHeroSelectorImage(selected, 'get');
+        updateHeroSelectedIcon('get', selected);
         document.getElementById('showGetCode').textContent = displayHeroSelectorTitle(selected, 'get');
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {

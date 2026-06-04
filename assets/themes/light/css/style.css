@@ -3234,20 +3234,37 @@ Hero end
 
 .calculator-modal .modal-header {
     align-items: initial;
-    background-color: var(--bg-color2);
+    background: #130b10;
+    border-bottom: 1px solid rgba(232, 201, 160, 0.16);
 }
 
 .calculator-modal .modal-header .modal-title {
     font-weight: 500;
     font-size: 20px;
+    color: #f5ede4;
 }
 
 .calculator-modal .modal-body {
     max-height: 400px;
     overflow: auto;
     min-height: 400px;
-    background-color: var(--bg-color2);
+    background: #0b0608;
     border-radius: 0 0 7px 7px;
+}
+
+.calculator-modal .modal-content {
+    background: #130b10;
+    border: 1px solid rgba(232, 201, 160, 0.18);
+}
+
+.calculator-modal .search-box .form-control {
+    background: #0b0608;
+    border-color: rgba(232, 201, 160, 0.22);
+    color: #f5ede4;
+}
+
+.calculator-modal .search-box .form-control::placeholder {
+    color: rgba(245, 237, 228, 0.58);
 }
 
 .calculator-modal .search-box .search-btn {
@@ -3255,30 +3272,59 @@ Hero end
 }
 
 .calculator-modal .search-box .search-btn i {
-    color: var(--heading-color);
+    color: #e8c9a0;
 }
 
 .calculator-modal img.img-flag {
     width: 32px;
     min-width: 32px;
     height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.currency-icon,
+.method-icon-area {
+    display: grid;
+    place-items: center;
+}
+
+.method-fallback-icon {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 50%;
+    display: none;
+    place-items: center;
+    color: #e8c9a0;
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.16), rgba(150, 102, 50, 0.26));
+    border: 1px solid rgba(232, 201, 160, 0.28);
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.method-fallback-icon--list {
+    display: grid;
 }
 
 .currency-list .item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px;
-    border-radius: 2px;
+    padding: 11px 10px;
+    border-radius: 10px;
     cursor: pointer;
+    color: #f5ede4;
+    border: 1px solid transparent;
 }
 
 .currency-list .item:hover {
-    background-color: var(--primary-color-opacity-low);
+    background: rgba(232, 201, 160, 0.10);
+    border-color: rgba(232, 201, 160, 0.18);
 }
 
 .currency-list .item:not(:last-child) {
-    border-bottom: 1px solid var(--border-color1);
+    border-bottom-color: rgba(232, 201, 160, 0.10);
 }
 
 .currency-list .left-side {
@@ -3292,18 +3338,20 @@ Hero end
 }
 
 .currency-list .left-side .text-area .title {
-    text-transform: uppercase;
+    text-transform: none;
     font-size: 16px;
     font-weight: 600;
+    color: #f5ede4;
 }
 
 .currency-list .left-side .text-area .sub-title {
     text-transform: capitalize;
+    color: rgba(245, 237, 228, 0.62);
 }
 
 .currency-list .right-side i {
     font-size: 20px;
-    color: var(--primary-color);
+    color: #e8c9a0;
 }
 
 .fw-500 {

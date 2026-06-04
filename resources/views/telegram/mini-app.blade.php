@@ -39,6 +39,8 @@
             'buy_method_image_path' => $f->buy_method_image_path,
             'sell_method_name' => $f->sell_method_name,
             'sell_method_image_path' => $f->sell_method_image_path,
+            'show_in_buy' => (bool) $f->show_in_buy,
+            'show_in_sell' => (bool) $f->show_in_sell,
         ];
     })->values()->toArray();
 @endphp
@@ -167,6 +169,7 @@
                 <div class="tma-calc__input-row">
                     <input type="number" id="sendAmount" placeholder="0" min="0" step="any" inputmode="decimal">
                     <button class="tma-currency-btn" id="sendCurrencyBtn" data-type="send">
+                        <span class="tma-currency-btn__icon" id="sendCurrencyIcon"></span>
                         <span id="sendCurrencyLabel">Рубли</span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
@@ -182,6 +185,7 @@
                 <div class="tma-calc__input-row">
                     <input type="number" id="getAmount" placeholder="0" readonly>
                     <button class="tma-currency-btn" id="getCurrencyBtn" data-type="get">
+                        <span class="tma-currency-btn__icon" id="getCurrencyIcon"></span>
                         <span id="getCurrencyLabel">{{ $cryptos->first() ? strtoupper($cryptos->first()->normalized_code ?? $cryptos->first()->code ?? 'USDT') : 'USDT' }}</span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
@@ -376,7 +380,9 @@
 
     // ---------- Exchange state ----------
     let sendType = 'fiat';   // fiat→crypto = buy, crypto→fiat = sell
-    let sendCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+    const buyFiats = fiats.filter(f => f.show_in_buy !== false);
+    const sellFiats = fiats.filter(f => f.show_in_sell !== false);
+    let sendCurrency = buyFiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
     let getCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
     let debounceTimer = null;
     let exchangeMode = 'buy'; // buy, sell, exchange
@@ -390,12 +396,12 @@
             exchangeMode = tab.dataset.exchangeMode;
 
             if (exchangeMode === 'buy') {
-                sendCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+                sendCurrency = buyFiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
                 getCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
                 sendType = 'fiat';
             } else if (exchangeMode === 'sell') {
                 sendCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
-                getCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+                getCurrency = sellFiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
                 sendType = 'crypto';
             } else {
                 sendCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
@@ -627,12 +633,33 @@
         return String(currency?.code || '').toUpperCase() === 'RUB';
     }
 
+    function isGenericRubLabel(value) {
+        const normalized = String(value || '').trim().toLowerCase().replace(/[\s_\-—]+/g, ' ');
+        return [
+            'rub',
+            'rur',
+            'russian ruble',
+            'russian rouble',
+            'рубль',
+            'рубли',
+            'российский рубль',
+            'российские рубли',
+            'оплата рублями',
+            'получение рублей',
+        ].includes(normalized);
+    }
+
+    function methodTitle(currency, key, fallback) {
+        const title = String(currency?.[key] || '').trim();
+        return title && !isGenericRubLabel(title) ? title : fallback;
+    }
+
     function displaySelectorTitle(currency, target) {
         if (exchangeMode === 'buy' && target === 'send' && isRubMethod(currency)) {
-            return currency.buy_method_name || currency.name || 'Способ оплаты';
+            return methodTitle(currency, 'buy_method_name', 'Способ оплаты');
         }
         if (exchangeMode === 'sell' && target === 'get' && isRubMethod(currency)) {
-            return currency.sell_method_name || currency.name || 'Способ получения';
+            return methodTitle(currency, 'sell_method_name', 'Способ получения');
         }
         return displayCurrencyCode(currency);
     }
@@ -649,17 +676,35 @@
 
     function displaySelectorImage(currency, target) {
         if (exchangeMode === 'buy' && target === 'send' && isRubMethod(currency)) {
-            return currency.buy_method_image_path || currency.image_path || '';
+            return currency.buy_method_image_path || '';
         }
         if (exchangeMode === 'sell' && target === 'get' && isRubMethod(currency)) {
-            return currency.sell_method_image_path || currency.image_path || '';
+            return currency.sell_method_image_path || '';
         }
         return currency?.image_path || '';
+    }
+
+    function selectorIconHtml(currency, target, small = false) {
+        const title = displaySelectorTitle(currency, target);
+        const image = displaySelectorImage(currency, target);
+        if (image) {
+            return `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}">`;
+        }
+
+        if (isRubMethod(currency) && ((exchangeMode === 'buy' && target === 'send') || (exchangeMode === 'sell' && target === 'get'))) {
+            return '<i class="fas fa-credit-card"></i>';
+        }
+
+        return escapeHtml(String(title).charAt(0) || '•');
     }
 
     function updateCurrencyLabels() {
         if (sendCurrLabel) sendCurrLabel.textContent = displaySelectorTitle(sendCurrency, 'send');
         if (getCurrLabel) getCurrLabel.textContent = displaySelectorTitle(getCurrency, 'get');
+        const sendIcon = document.getElementById('sendCurrencyIcon');
+        const getIcon = document.getElementById('getCurrencyIcon');
+        if (sendIcon) sendIcon.innerHTML = selectorIconHtml(sendCurrency, 'send');
+        if (getIcon) getIcon.innerHTML = selectorIconHtml(getCurrency, 'get');
     }
 
     function updateExchangeFieldLabels() {
@@ -774,10 +819,10 @@
         let items;
         const modalTitle = document.getElementById('currencyModalTitle');
         if (exchangeMode === 'buy') {
-            items = target === 'send' ? fiats : cryptos;
+            items = target === 'send' ? buyFiats : cryptos;
             if (modalTitle) modalTitle.textContent = target === 'send' ? 'Выберите способ оплаты' : 'Выберите криптовалюту';
         } else if (exchangeMode === 'sell') {
-            items = target === 'send' ? cryptos : fiats;
+            items = target === 'send' ? cryptos : sellFiats;
             if (modalTitle) modalTitle.textContent = target === 'get' ? 'Выберите способ получения' : 'Выберите криптовалюту';
         } else {
             items = cryptos;
@@ -792,7 +837,7 @@
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
             `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">
-                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${displaySelectorImage(c, pickerTarget) ? `<img src="${escapeHtml(displaySelectorImage(c, pickerTarget))}" alt="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">` : escapeHtml(String(displaySelectorTitle(c, pickerTarget)).charAt(0))}</div>
+                <div class="tma-coin-icon tma-coin-icon--sm tma-coin-icon--picker" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${selectorIconHtml(c, pickerTarget, true)}</div>
                 <div><strong>${escapeHtml(displaySelectorTitle(c, pickerTarget))}</strong><small>${escapeHtml(displaySelectorSubtitle(c, pickerTarget))}</small></div>
             </button>`
         ).join('');
@@ -814,8 +859,8 @@
         const btn = e.target.closest('.tma-modal__item');
         if (!btn) return;
         const pool = exchangeMode === 'buy'
-            ? (pickerTarget === 'send' ? fiats : cryptos)
-            : (exchangeMode === 'sell' ? (pickerTarget === 'send' ? cryptos : fiats) : cryptos);
+            ? (pickerTarget === 'send' ? buyFiats : cryptos)
+            : (exchangeMode === 'sell' ? (pickerTarget === 'send' ? cryptos : sellFiats) : cryptos);
         const selected = pool.find((currency) => Number(currency.id) === Number(btn.dataset.id));
         if (!selected) return;
         if (pickerTarget === 'send') sendCurrency = selected;

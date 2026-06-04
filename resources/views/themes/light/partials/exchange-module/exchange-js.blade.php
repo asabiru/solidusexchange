@@ -205,12 +205,22 @@
         return String(currency?.code || '').toUpperCase() === 'RUB';
     }
 
+    function isGenericRubLabel(value) {
+        const normalized = String(value || '').trim().toLowerCase().replace(/[\s_\-—]+/g, ' ');
+        return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей'].includes(normalized);
+    }
+
+    function methodTitle(currency, key, fallback) {
+        const title = String(currency?.[key] || '').trim();
+        return title && !isGenericRubLabel(title) ? title : fallback;
+    }
+
     function displaySelectorTitle(currency, side) {
         if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
-            return currency.buy_method_name || currency.name || 'Способ оплаты';
+            return methodTitle(currency, 'buy_method_name', 'Способ оплаты');
         }
         if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
-            return currency.sell_method_name || currency.name || 'Способ получения';
+            return methodTitle(currency, 'sell_method_name', 'Способ получения');
         }
         return displayCurrencyCode(currency);
     }
@@ -227,12 +237,43 @@
 
     function displaySelectorImage(currency, side) {
         if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
-            return currency.buy_method_image_path || currency.image_path || currency.image;
+            return currency.buy_method_image_path || '';
         }
         if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
-            return currency.sell_method_image_path || currency.image_path || currency.image;
+            return currency.sell_method_image_path || '';
         }
         return currency?.image_path || currency?.image;
+    }
+
+    function renderSelectorIcon(currency, side) {
+        const image = displaySelectorImage(currency, side);
+        const title = displaySelectorTitle(currency, side);
+        if (image) {
+            return `<img class="img-flag" src="${image}" alt="${title}">`;
+        }
+
+        if ((activeTab === 'buy' && side === 'send' && isRubMethod(currency)) ||
+            (activeTab === 'sell' && side === 'get' && isRubMethod(currency))) {
+            return '<span class="method-fallback-icon method-fallback-icon--list"><i class="fa-solid fa-credit-card"></i></span>';
+        }
+
+        return `<span class="method-fallback-icon method-fallback-icon--list">${String(title || '•').charAt(0)}</span>`;
+    }
+
+    function updateSelectedIcon(side, currency) {
+        const imageEl = document.getElementById(side === 'send' ? 'showSendImage' : 'showGetImage');
+        const fallbackEl = document.getElementById(side === 'send' ? 'showSendFallback' : 'showGetFallback');
+        const image = displaySelectorImage(currency, side);
+        if (!imageEl || !fallbackEl) return;
+        if (image) {
+            imageEl.src = image;
+            imageEl.style.display = '';
+            fallbackEl.style.display = 'none';
+            return;
+        }
+        imageEl.removeAttribute('src');
+        imageEl.style.display = 'none';
+        fallbackEl.style.display = 'grid';
     }
 
     function updateSelectorModalTitles() {
@@ -318,8 +359,8 @@
             let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
-                            <div class="img-area">
-                                <img class="img-flag" src="${displaySelectorImage(currencies[i], 'send')}" alt="...">
+                            <div class="img-area method-icon-area">
+                                ${renderSelectorIcon(currencies[i], 'send')}
                             </div>
                             <div class="text-area">
                                 <div class="title">${displaySelectorTitle(currencies[i], 'send')}</div>
@@ -344,8 +385,8 @@
             let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
-                            <div class="img-area">
-                                <img class="img-flag" src="${displaySelectorImage(currencies[i], 'get')}" alt="...">
+                            <div class="img-area method-icon-area">
+                                ${renderSelectorIcon(currencies[i], 'get')}
                             </div>
                             <div class="text-area">
                                 <div class="title">${displaySelectorTitle(currencies[i], 'get')}</div>
@@ -360,7 +401,7 @@
     }
 
     function setSendCurrency(currency) {
-        $('#showSendImage').attr('src', displaySelectorImage(currency, 'send'));
+        updateSelectedIcon('send', currency);
         $('#showSendCode').text(displaySelectorTitle(currency, 'send'));
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
@@ -373,7 +414,7 @@
     }
 
     function setGetCurrency(currency) {
-        $('#showGetImage').attr('src', displaySelectorImage(currency, 'get'));
+        updateSelectedIcon('get', currency);
         $('#showGetCode').text(displaySelectorTitle(currency, 'get'));
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {
