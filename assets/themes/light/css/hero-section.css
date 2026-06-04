@@ -150,6 +150,9 @@ Swap Card - eazy228/design style
     font-size: 12px;
     color: var(--color-text-muted);
     margin-bottom: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .swap-reserve span {
@@ -183,6 +186,9 @@ Swap Card - eazy228/design style
     cursor: pointer;
     transition: all 0.2s;
     min-width: 120px;
+    max-width: 220px;
+    overflow: hidden;
+    flex-shrink: 0;
 }
 
 .currency-selector:hover {
@@ -213,6 +219,7 @@ Swap Card - eazy228/design style
 
 .currency-selector .currency-info {
     flex: 1;
+    min-width: 0;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
@@ -224,6 +231,10 @@ Swap Card - eazy228/design style
     font-weight: 500;
     color: var(--color-text-primary);
     line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
 }
 
 .currency-network-badge {
@@ -598,6 +609,9 @@ Exchange Calculator - eazy228/design style
 .swap-reserve {
     font-size: 12px;
     color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .swap-reserve span {
