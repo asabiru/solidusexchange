@@ -323,6 +323,11 @@ class BasicControlController extends Controller
             'sumsub_base_url' => 'nullable|url',
             'sumsub_level_name' => 'nullable|string|max:191',
             'sumsub_websdk_url' => 'nullable|url',
+            'didit_enabled' => 'nullable|integer|in:0,1',
+            'didit_api_key' => 'nullable|string',
+            'didit_webhook_secret' => 'nullable|string',
+            'didit_base_url' => 'nullable|url',
+            'didit_workflow_id' => 'nullable|string|max:191',
         ]);
 
         if ((int) $request->input('sumsub_enabled', 0) === 1) {
@@ -330,6 +335,15 @@ class BasicControlController extends Controller
                 'sumsub_app_token' => 'required|string',
                 'sumsub_secret_key' => 'required|string',
                 'sumsub_base_url' => 'required|url',
+            ]);
+        }
+
+        if ((int) $request->input('didit_enabled', 0) === 1) {
+            $request->validate([
+                'didit_api_key' => 'required|string',
+                'didit_webhook_secret' => 'required|string',
+                'didit_workflow_id' => 'required|string',
+                'didit_base_url' => 'required|url',
             ]);
         }
 
@@ -341,6 +355,11 @@ class BasicControlController extends Controller
                 'sumsub_base_url' => $this->normalizeSumsubBaseUrl((string) ($request->sumsub_base_url ?: 'https://api.sumsub.com')),
                 'sumsub_level_name' => trim((string) $request->sumsub_level_name),
                 'sumsub_websdk_url' => trim((string) ($request->sumsub_websdk_url ?: 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js')),
+                'didit_enabled' => $request->input('didit_enabled', 0),
+                'didit_api_key' => trim((string) $request->didit_api_key),
+                'didit_webhook_secret' => trim((string) $request->didit_webhook_secret),
+                'didit_base_url' => $this->normalizeDiditBaseUrl((string) ($request->didit_base_url ?: 'https://verification.didit.me')),
+                'didit_workflow_id' => trim((string) $request->didit_workflow_id),
             ]);
 
             Artisan::call('optimize:clear');
@@ -361,6 +380,25 @@ class BasicControlController extends Controller
         $parts = parse_url($baseUrl);
         if (!is_array($parts) || empty($parts['host'])) {
             return 'https://api.sumsub.com';
+        }
+
+        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
+    }
+
+    private function normalizeDiditBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = trim($baseUrl);
+        if ($baseUrl === '') {
+            return 'https://verification.didit.me';
+        }
+
+        $parts = parse_url($baseUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return 'https://verification.didit.me';
         }
 
         $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';

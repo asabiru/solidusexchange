@@ -30,10 +30,24 @@ class FrontendController extends Controller
         $this->theme = template();
     }
 
+    public function home()
+    {
+        try {
+            $selectedTheme = basicControl()->theme ?? 'solidchange';
+            return view("themes.{$selectedTheme}.home");
+        } catch (\Exception $exception) {
+            report($exception);
+            if (config('app.debug')) {
+                throw $exception;
+            }
+            return redirect()->route('instructionPage');
+        }
+    }
+
     public function page($slug = '/')
     {
         try {
-            $selectedTheme = basicControl()->theme ?? 'light';
+            $selectedTheme = basicControl()->theme ?? 'solidchange';
             [$preferredLanguageId, $fallbackLanguageId] = $this->languagePriorityIds();
             $existingSlugs = collect([]);
             DB::table('pages')->select('slug')->get()->map(function ($item) use ($existingSlugs) {
@@ -45,7 +59,10 @@ class FrontendController extends Controller
 
             $pageDetails = $this->resolvePageDetail($slug, $selectedTheme, $preferredLanguageId, $fallbackLanguageId);
             if (!$pageDetails) {
-                return redirect()->route('instructionPage');
+                if (auth()->guard('admin')->check()) {
+                    return redirect()->route('instructionPage');
+                }
+                abort(404);
             }
 
             $pageSeo = [
@@ -97,7 +114,10 @@ class FrontendController extends Controller
                 throw $exception;
             }
 
-            return redirect()->route('instructionPage');
+            if (auth()->guard('admin')->check()) {
+                return redirect()->route('instructionPage');
+            }
+            abort(404);
         }
     }
 
@@ -222,7 +242,7 @@ class FrontendController extends Controller
         $subscribe->email = $purifiedData->email;
         $subscribe->save();
 
-        return back()->with('success', 'Subscribed successfully');
+        return back()->with('success', 'Подписка оформлена успешно');
     }
 
     public function contactSend(Request $request)
@@ -242,7 +262,7 @@ class FrontendController extends Controller
         $from = $email_from;
 
         Mail::to(basicControl()->sender_email)->send(new SendMail($from, $subject, $message));
-        return back()->with('success', 'Mail has been sent');
+        return back()->with('success', 'Письмо отправлено');
     }
 
     public function tracking(Request $request)

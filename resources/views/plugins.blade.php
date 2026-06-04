@@ -72,12 +72,6 @@
     root.style.setProperty('--btn-hover-bg', '{{'#6e6eff'}}');
     root.style.setProperty('--btn-bg1', '{{basicControl()->primary_color??'#00d095'}}');
 
-    if (localStorage.getItem('dark-theme') == null) {
-        root.style.setProperty('--loader-color', "{{basicControl()->default_mode == 1 ?'#021711':'#F3F4F6' }}");
-    } else if (localStorage.getItem('dark-theme') == 1) {
-        root.style.setProperty('--loader-color', "#021711");
-    } else {
-        root.style.setProperty('--loader-color', "#F3F4F6");
-    }
+    root.style.setProperty('--loader-color', "#021711");
 
 </script>

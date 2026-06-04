@@ -1,0 +1,244 @@
+.rates-section {
+    padding: 72px 0;
+    background: transparent;
+    color: #f8efe3;
+}
+
+.rates-section .container {
+    max-width: 1180px;
+}
+
+.rates-header,
+.rates-subheader {
+    text-align: center;
+}
+
+.rates-subheader {
+    margin: 12px 0 28px;
+}
+
+.rates-subheader h3 {
+    margin: 0 0 8px;
+    color: #e8c9a0;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+.rates-subheader .update-time {
+    color: rgba(248, 239, 227, 0.58);
+    font-size: 13px;
+}
+
+.rates-ticker {
+    overflow: hidden;
+    margin-bottom: 28px;
+    border: 1px solid rgba(232, 201, 160, 0.16);
+    border-radius: 18px;
+    background: rgba(20, 10, 13, 0.72);
+    box-shadow: 0 18px 55px rgba(0, 0, 0, 0.26);
+}
+
+.ticker-track {
+    display: flex;
+    gap: 10px;
+    width: max-content;
+    padding: 12px;
+    animation: ratesTicker 52s linear infinite;
+}
+
+.rates-ticker:hover .ticker-track {
+    animation-play-state: paused;
+}
+
+.ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    min-width: max-content;
+    padding: 11px 16px;
+    border: 1px solid rgba(232, 201, 160, 0.12);
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(232, 201, 160, 0.09), rgba(255, 255, 255, 0.025));
+}
+
+.ticker-pair {
+    color: #f6dfbf;
+    font-weight: 800;
+}
+
+.ticker-price {
+    color: rgba(248, 239, 227, 0.72);
+    font-size: 13px;
+}
+
+.ticker-change,
+.change-value {
+    font-weight: 800;
+    font-size: 13px;
+}
+
+.ticker-change.positive,
+.change-value.positive {
+    color: #7adea6;
+}
+
+.ticker-change.negative,
+.change-value.negative {
+    color: #ff7d87;
+}
+
+.rates-table-container {
+    overflow: hidden;
+    border: 1px solid rgba(232, 201, 160, 0.17);
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(18, 9, 12, 0.96), rgba(10, 4, 6, 0.98));
+    box-shadow: 0 26px 80px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.rates-table {
+    width: 100%;
+}
+
+.table-header,
+.table-row {
+    display: grid;
+    grid-template-columns: minmax(220px, 1.7fr) 1fr 1fr 0.75fr 120px;
+    align-items: center;
+}
+
+.table-header {
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(232, 201, 160, 0.12);
+    color: rgba(248, 239, 227, 0.54);
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+}
+
+.table-row {
+    padding: 18px 22px;
+    border-bottom: 1px solid rgba(232, 201, 160, 0.08);
+    transition: background .18s ease, transform .18s ease;
+}
+
+.table-row:last-child {
+    border-bottom: 0;
+}
+
+.table-row:hover {
+    background: rgba(232, 201, 160, 0.055);
+}
+
+.currency-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.currency-flag {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 44px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.04);
+    box-shadow: 0 0 0 1px rgba(232, 201, 160, 0.14), 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.currency-flag img,
+.currency-placeholder {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    object-fit: contain;
+}
+
+.currency-placeholder {
+    display: grid;
+    place-items: center;
+    background: #e8c9a0;
+    color: #11070a;
+    font-weight: 900;
+    font-size: 12px;
+}
+
+.currency-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.currency-code {
+    color: #fff6e8;
+    font-size: 15px;
+    font-weight: 900;
+}
+
+.currency-name {
+    color: rgba(248, 239, 227, 0.48);
+    font-size: 12px;
+}
+
+.price-value {
+    color: #fff7ea;
+    font-weight: 900;
+    font-size: 15px;
+    white-space: nowrap;
+}
+
+.exchange-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 15px;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #f0d2a7, #c79a5c);
+    color: #120709 !important;
+    font-weight: 900;
+    font-size: 13px;
+    text-decoration: none;
+    box-shadow: 0 10px 24px rgba(201, 154, 92, 0.2);
+}
+
+.exchange-link:hover {
+    transform: translateY(-1px);
+    color: #120709 !important;
+}
+
+@keyframes ratesTicker {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
+@media (max-width: 820px) {
+    .table-header {
+        display: none;
+    }
+
+    .table-row {
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 18px;
+    }
+
+    .table-cell:not(:first-child) {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .table-cell:not(:first-child)::before {
+        content: attr(data-label);
+        color: rgba(248, 239, 227, 0.52);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+    }
+}

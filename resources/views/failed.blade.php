@@ -6,7 +6,7 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>@lang('Payment Failed')</title>
     <link href='https://fonts.googleapis.com/css?family=Lato:300,400|Montserrat:700' rel='stylesheet' type='text/css'>
-	<link rel="stylesheet" href="{{ asset('assets/themes/light/css/all.min.css') }}">
+	<link rel="stylesheet" href="{{ asset('assets/themes/solidchange/css/all.min.css') }}">
     <link href="{{asset('assets/global/css/success_faield.css')}}" rel="stylesheet" type="text/css">
     <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}"
           type="image/x-icon">

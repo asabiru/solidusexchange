@@ -1,6 +1,6 @@
 <!-- ========== HEADER ========== -->
 <header id="header"
-        class="navbar navbar-expand-lg navbar-fixed navbar-height navbar-container navbar-bordered bg-white">
+        class="navbar navbar-expand-lg navbar-fixed navbar-height navbar-container navbar-dark bg-dark">
     <div class="navbar-nav-wrap">
         <a class="navbar-brand" href="{{ route('admin.dashboard') }}" aria-label="{{ $basicControl->site_title }}">
             <img class="navbar-brand-logo"
@@ -381,4 +381,3 @@
         });
     </script>
 @endpush
-

@@ -45,6 +45,13 @@ class Gateway extends Model
         'extra_parameters' => 'object',
     ];
 
+    protected $appends = ['image_path'];
+
+    public function getImagePathAttribute()
+    {
+        return getFile($this->driver, $this->image);
+    }
+
     public function scopeAutomatic()
     {
         return $this->where('id', '<', 1000);

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="16" fill="#1a1a2e"/>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="none" stroke="#c9a96e" stroke-width="1.5" opacity="0.3"/>
+  <rect x="14" y="14" width="10" height="10" rx="2" fill="#c9a96e"/>
+  <rect x="40" y="14" width="10" height="10" rx="2" fill="#c9a96e"/>
+  <rect x="14" y="40" width="10" height="10" rx="2" fill="#c9a96e"/>
+  <rect x="27" y="27" width="10" height="10" rx="2" fill="#c9a96e" opacity="0.7"/>
+  <path d="M40 36l-4 8h5l-4 8" stroke="#c9a96e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="32" y="60" text-anchor="middle" font-family="system-ui" font-size="6" fill="#c9a96e" opacity="0.6">СБП QR</text>
+</svg>

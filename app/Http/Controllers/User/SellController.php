@@ -33,7 +33,15 @@ class SellController extends Controller
     public function getSellCurrency()
     {
         $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = FiatCurrency::query()->active()->visibleInSell()->sorted()->get();
+        $baseFiats = FiatCurrency::query()
+            ->with('fiatSendGateway')
+            ->active()
+            ->visibleInSell()
+            ->where('code', strtoupper((string) (basicControl()->base_currency ?: 'RUB')))
+            ->sorted()
+            ->get();
+
+        $getCurrencies = $this->expandFiatIntoSellGateways($baseFiats);
 
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
@@ -136,6 +144,7 @@ class SellController extends Controller
                     }
                 }
             }
+            $this->rememberPhoneFromExchangeFields($reqField);
 
             try {
                 $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
@@ -159,6 +168,29 @@ class SellController extends Controller
             $sellRequest->save();
 
             return redirect()->route('sellProcessingOverview', $sellRequest->utr);
+        }
+    }
+
+    private function rememberPhoneFromExchangeFields(array $fields): void
+    {
+        $user = auth()->user();
+        if (!$user || $user->phone) {
+            return;
+        }
+
+        foreach ($fields as $key => $field) {
+            $haystack = mb_strtolower(trim($key . ' ' . ($field['field_name'] ?? '') . ' ' . ($field['field_label'] ?? '')));
+            if (!str_contains($haystack, 'phone') && !str_contains($haystack, 'телефон')) {
+                continue;
+            }
+
+            $phone = preg_replace('/[^\d+]/', '', (string) ($field['field_value'] ?? ''));
+            if (mb_strlen($phone) >= 10) {
+                $user->phone = $phone;
+                $user->save();
+            }
+
+            return;
         }
     }
 
@@ -373,4 +405,34 @@ class SellController extends Controller
             'rateSource' => $quote['rate_source'],
         ];
     }
+
+    private function expandFiatIntoSellGateways($baseFiats): array
+    {
+        $gateways = FiatSendGateway::query()->where('status', 1)->orderBy('id', 'ASC')->orderBy('name', 'ASC')->get();
+
+        if ($gateways->isEmpty()) {
+            return $baseFiats->toArray();
+        }
+
+        $baseFiat = $baseFiats->first();
+        if (!$baseFiat) {
+            return [];
+        }
+
+        $methods = [];
+        foreach ($gateways as $gw) {
+            $entry = $baseFiat->toArray();
+            $entry['gateway_id'] = $gw->id;
+            $entry['method_name'] = $gw->name;
+            $entry['method_image_path'] = $gw->image_path;
+            $entry['buy_method_name'] = $gw->name;
+            $entry['buy_method_image_path'] = $gw->image_path;
+            $entry['sell_method_name'] = $gw->name;
+            $entry['sell_method_image_path'] = $gw->image_path;
+            $methods[] = $entry;
+        }
+
+        return $methods;
+    }
+
 }
