@@ -33,7 +33,7 @@ class FrontendController extends Controller
     public function home()
     {
         try {
-            $selectedTheme = basicControl()->theme ?? 'light';
+            $selectedTheme = basicControl()->theme ?? 'solidchange';
             return view("themes.{$selectedTheme}.home");
         } catch (\Exception $exception) {
             report($exception);
@@ -47,7 +47,7 @@ class FrontendController extends Controller
     public function page($slug = '/')
     {
         try {
-            $selectedTheme = basicControl()->theme ?? 'light';
+            $selectedTheme = basicControl()->theme ?? 'solidchange';
             [$preferredLanguageId, $fallbackLanguageId] = $this->languagePriorityIds();
             $existingSlugs = collect([]);
             DB::table('pages')->select('slug')->get()->map(function ($item) use ($existingSlugs) {

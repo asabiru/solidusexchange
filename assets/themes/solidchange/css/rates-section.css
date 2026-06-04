@@ -1,7 +1,6 @@
 .rates-section {
     padding: 72px 0;
-    background: radial-gradient(circle at 12% 18%, rgba(201, 169, 110, 0.08), transparent 28%),
-    linear-gradient(180deg, #070304 0%, #10070a 100%);
+    background: transparent;
     color: #f8efe3;
 }
 

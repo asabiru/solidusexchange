@@ -4,7 +4,7 @@
         <div class="footer-top">
             <div class="footer-brand">
                 <div class="footer-logo">
-                    <img src="{{ getFile(basicControl()->logo_driver, basicControl()->logo) }}" alt="{{ basicControl()->site_title }}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;" class="logo-for-light"><img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}" alt="{{ basicControl()->site_title }}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;" class="logo-for-dark">
+                    <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}" alt="{{ basicControl()->site_title }}" style="width:40px;height:40px;object-fit:contain;border-radius:10px;">
                     <span class="logo-text">SolidChange</span>
                 </div>
                 <p class="footer-description">

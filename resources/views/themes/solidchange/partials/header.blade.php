@@ -26,7 +26,7 @@
         color: var(--color-text-primary);
     }
 
-    /* ── Logo images — dual theme support ───────────────────── */
+    /* ── Logo image ───────────────────── */
     .solidchange-navbar .site-logo-img {
         height: 40px;
         width: 40px;
@@ -42,8 +42,6 @@
         letter-spacing: -0.3px;
         color: var(--color-text-primary);
     }
-    .logo-for-light { display: none !important; }
-    .logo-for-dark  { display: block; }
 
     .solidchange-navbar .logo-badge {
         display: flex;

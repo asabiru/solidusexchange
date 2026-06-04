@@ -6,7 +6,7 @@
 
 
 
-<head data-base_url="{{url('/')}}" data-theme="{{basicControl()->default_mode??'dark'}}" data-changeable_mode="{{basicControl()->changeable_mode??0}}"
+<head data-base_url="{{url('/')}}" data-theme="dark" data-changeable_mode="0"
 
 
 

@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru" data-theme="dark">
-<head data-base_url="{{url('/')}}" data-theme="{{basicControl()->default_mode??'dark'}}" data-changeable_mode="{{basicControl()->changeable_mode??0}}"
+<head data-base_url="{{url('/')}}" data-theme="dark" data-changeable_mode="0"
       data-light_logo="{{ getFile(basicControl()->logo_driver,basicControl()->logo) }}"
       data-dark_logo="{{ getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo) }}">
 	<meta charset="UTF-8"/>

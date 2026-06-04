@@ -6,7 +6,7 @@ Hero Section - eazy228/design style
     padding: 80px 0 60px;
     min-height: auto;
     display: block;
-    background: var(--color-bg);
+    background: transparent;
     overflow: hidden;
 }
 
@@ -501,23 +501,6 @@ Swap Card - eazy228/design style
 
 .calculator-banner:hover .right-side {
     transform: translateX(3px);
-}
-
-body:not(.dark-theme) .calculator-banner {
-    background:
-        radial-gradient(circle at 8% 50%, rgba(201, 162, 39, 0.20), transparent 30%),
-        linear-gradient(135deg, #fffaf0, #f2e5c8 48%, #e5c98d);
-    border-color: rgba(137, 105, 15, 0.25);
-}
-
-body:not(.dark-theme) .banner-kicker {
-    background: rgba(137, 105, 15, 0.12);
-    color: #7a5b0b;
-}
-
-body:not(.dark-theme) .calculator-banner .text-area p {
-    color: #25190a;
-    text-shadow: none;
 }
 
 /* Responsive */
