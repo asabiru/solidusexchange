@@ -17,8 +17,8 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <!-- Favicon-link -->
     <link rel="icon" type="image/x-icon"  href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
-    <link rel="icon" type="image/svg+xml" href="{{ asset('assets/upload/logo/favicon.svg') }}">
-    <link rel="apple-touch-icon" sizes="64x64" href="{{ asset('assets/upload/logo/favicon-64.png') }}">
+    <link rel="icon" type="image/png" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
+    <link rel="apple-touch-icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
     @include($theme.'partials.style')
 
     @include($theme.'partials.loader-js')
