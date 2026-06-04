@@ -46,7 +46,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         Route::controller(BuyController::class)->group(function () {
             Route::get('buy/get-status/{utr}', 'buyGetStatus')->name('buyGetStatus');
             Route::post('buy/request', 'buyRequest')->name('buyRequest');
-            Route::post('buy/request', 'buyRequest')->name('publicBuyRequest');
+            Route::post('public/buy/request', 'buyRequest')->name('publicBuyRequest');
             Route::any('buy/processing/{utr}', 'buyProcessing')->name('buyProcessing');
             Route::get('buy/processing-overview/{utr}', 'buyProcessingOverview')->name('buyProcessingOverview');
             Route::any('buy/initiate-payment/{utr}', 'buyInitPayment')->name('buyInitPayment');
@@ -56,7 +56,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         Route::controller(SellController::class)->group(function () {
             Route::get('sell/get-status/{utr}', 'sellGetStatus')->name('sellGetStatus');
             Route::post('sell/request', 'sellRequest')->name('sellRequest');
-            Route::post('sell/request', 'sellRequest')->name('publicSellRequest');
+            Route::post('public/sell/request', 'sellRequest')->name('publicSellRequest');
             Route::any('sell/processing/{utr}', 'sellProcessing')->name('sellProcessing');
             Route::get('sell/processing-overview/{utr}', 'sellProcessingOverview')->name('sellProcessingOverview');
             Route::any('sell/initiate-payment/{utr}', 'sellInitPayment')->name('sellInitPayment');
