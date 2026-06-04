@@ -67,17 +67,13 @@
             <div>
                 <strong>SolidChange</strong>
                 @if($user)
-                    <small>UID {{ $user->id }}</small>
+                    <small>TG {{ $user->telegram_id ?: $user->id }}</small>
                 @else
                     <small>обмен в Telegram</small>
                 @endif
             </div>
         </div>
-        @if($user)
-            <button class="tma-badge tma-badge--auto" data-theme-toggle>
-                <i class="fas fa-globe"></i> <span id="themeLabel">Авто</span>
-            </button>
-        @endif
+
     </header>
 
     {{-- ===== TAB: КУРСЫ ===== --}}
@@ -131,14 +127,38 @@
                 <div class="tma-avatar">{{ mb_substr($user->firstname ?: $user->username ?: 'U', 0, 1) }}</div>
                 <div>
                     <strong>{{ $user->firstname ?: $user->username ?: 'Пользователь' }}</strong>
-                    <small>UID {{ $user->id }}</small>
+                    <small>TG {{ $user->telegram_id ?: $user->id }}</small>
                 </div>
             </div>
             <button class="tma-badge" id="historyBtn"><i class="fas fa-history"></i> История</button>
         </div>
         @endif
 
-        <div class="tma-calc">
+        {{-- Exchange mode selector --}}
+        <div class="tma-mode-tabs" id="modeTabs">
+            <button class="tma-mode-tab is-active" data-exchange-mode="buy">
+                <i class="fas fa-shopping-cart"></i> Купить
+            </button>
+            <button class="tma-mode-tab" data-exchange-mode="sell">
+                <i class="fas fa-coins"></i> Продать
+            </button>
+            <button class="tma-mode-tab" data-exchange-mode="exchange">
+                <i class="fas fa-exchange-alt"></i> Обмен
+            </button>
+        </div>
+
+        @if($user && !$user->identity_verify)
+        <div class="tma-kyc-gate" id="kycGate">
+            <i class="fas fa-shield-alt" style="font-size:28px;color:var(--accent)"></i>
+            <strong>Пройдите KYC для обмена</strong>
+            <small>Для совершения обмена необходимо пройти верификацию личности</small>
+            <button class="tma-primary-btn" id="kycGateBtn" type="button" style="margin-top:12px">
+                <i class="fas fa-id-card"></i>&nbsp; Пройти KYC
+            </button>
+        </div>
+        @endif
+
+        <div class="tma-calc" id="exchangeCalc" @if($user && !$user->identity_verify) style="display:none" @endif>
             <div class="tma-calc__field">
                 <label>Вы отдаёте</label>
                 <div class="tma-calc__input-row">
@@ -226,16 +246,7 @@
             </a>
         </div>
 
-        <div class="tma-menu-group">
-            <button class="tma-menu-item" data-theme-toggle>
-                <div class="tma-menu-item__icon tma-menu-item__icon--accent"><i class="fas fa-moon"></i></div>
-                <div class="tma-menu-item__body">
-                    <strong>Тема</strong>
-                    <small id="themeLabel2">Авто</small>
-                </div>
-                <i class="fas fa-sync-alt"></i>
-            </button>
-        </div>
+
 
         <div class="tma-menu-group">
             <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="policy">
@@ -340,33 +351,62 @@
     let sendCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
     let getCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
     let debounceTimer = null;
+    let exchangeMode = 'buy'; // buy, sell, exchange
 
-    // ---------- Theme ----------
-    const themes = ['auto','light','dark'];
-    let themeIdx = 0;
-    function applyTheme() {
-        const t = themes[themeIdx];
-        const resolved = t === 'auto' ? (webApp?.colorScheme || 'dark') : t;
-        body.dataset.theme = resolved;
-        const labels = {auto:'Авто', light:'Светлая', dark:'Тёмная'};
-        const el1 = document.getElementById('themeLabel');
-        const el2 = document.getElementById('themeLabel2');
-        if (el1) el1.textContent = labels[t];
-        if (el2) el2.textContent = labels[t];
-    }
-    applyTheme();
-    document.addEventListener('click', (event) => {
-        if (!event.target.closest('[data-theme-toggle]')) return;
-        themeIdx = (themeIdx+1) % 3;
-        applyTheme();
-        webApp?.HapticFeedback?.impactOccurred('light');
+    // ---------- Exchange mode tabs ----------
+    const modeTabs = document.querySelectorAll('[data-exchange-mode]');
+    modeTabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            modeTabs.forEach(function(t) { t.classList.remove('is-active'); });
+            tab.classList.add('is-active');
+            exchangeMode = tab.dataset.exchangeMode;
+
+            if (exchangeMode === 'buy') {
+                sendCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+                getCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
+                sendType = 'fiat';
+            } else if (exchangeMode === 'sell') {
+                sendCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
+                getCurrency = fiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+                sendType = 'crypto';
+            } else {
+                sendCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
+                getCurrency = cryptos[1] || cryptos[0] || {id:0, code:'BTC', name:'Bitcoin'};
+                sendType = 'crypto';
+            }
+            updateCurrencyLabels();
+            if (sendAmountEl && sendAmountEl.value) calcRate();
+            else {
+                if (getAmountEl) getAmountEl.value = '';
+                if (rateDisplay) rateDisplay.textContent = '—';
+                if (exchangeBtn) { exchangeBtn.disabled = true; exchangeBtn.textContent = 'Введите сумму'; }
+            }
+            webApp?.HapticFeedback?.impactOccurred('light');
+        });
     });
+
+    // KYC gate button
+    var kycGateBtn = document.getElementById('kycGateBtn');
+    if (kycGateBtn) {
+        kycGateBtn.addEventListener('click', function() {
+            // Switch to profile tab and open KYC
+            tabs.forEach(function(t) { t.classList.remove('is-active'); });
+            panels.forEach(function(p) { p.hidden = true; });
+            var profileTab = document.querySelector('[data-tab="profile"]');
+            var profilePanel = document.querySelector('[data-panel="profile"]');
+            if (profileTab) profileTab.classList.add('is-active');
+            if (profilePanel) profilePanel.hidden = false;
+            // Trigger KYC action
+            var kycAction = document.querySelector('[data-profile-action="kyc"]');
+            if (kycAction) kycAction.click();
+        });
+    }
 
     function hydrateAuthenticatedUser(user) {
         if (!user || !user.id) return;
 
         const headerSub = document.querySelector('.tma-header__brand small');
-        if (headerSub) headerSub.textContent = 'UID ' + user.id;
+        if (headerSub) headerSub.textContent = 'TG ' + (user.telegram_id || user.id);
 
         const profile = document.querySelector('[data-panel="profile"]');
         if (!profile) return;
@@ -377,7 +417,7 @@
                 <div class="tma-avatar tma-avatar--lg">${escapeHtml(String(name).charAt(0).toUpperCase() || 'U')}</div>
                 <div>
                     <strong>${escapeHtml(name)}</strong>
-                    <small class="tma-uid">UID ${escapeHtml(user.id)}</small>
+                    <small class="tma-uid">TG ${escapeHtml(user.telegram_id || user.id)}</small>
                 </div>
             </div>
 
@@ -400,16 +440,7 @@
                 </a>
             </div>
 
-            <div class="tma-menu-group">
-                <button class="tma-menu-item" data-theme-toggle>
-                    <div class="tma-menu-item__icon tma-menu-item__icon--accent"><i class="fas fa-moon"></i></div>
-                    <div class="tma-menu-item__body">
-                        <strong>Тема</strong>
-                        <small id="themeLabel2">Авто</small>
-                    </div>
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
+
 
             <div class="tma-menu-group">
                 <a class="tma-menu-item" href="javascript:void(0)" data-profile-action="policy">
@@ -424,7 +455,6 @@
                 </a>
             </div>
         `;
-        applyTheme();
     }
 
     // ---------- Auth (auto-login via initData) ----------
@@ -525,7 +555,18 @@
                 const getAmt = q.final_amount || q.get_amount || 0;
                 if (getAmountEl) getAmountEl.value = parseFloat(getAmt).toFixed(6);
                 const rate = q.exchange_rate || 0;
-                if (rateDisplay) rateDisplay.textContent = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(6) + ' ' + (getCurrency.display_code||getCurrency.code);
+                // Show rate as 1 CRYPTO = X FIAT (inverted for buy mode)
+                const mode = currentMode();
+                let rateText;
+                if (mode === 'buy') {
+                    const invRate = rate > 0 ? (1 / rate) : 0;
+                    rateText = '1 ' + (getCurrency.display_code||getCurrency.code) + ' = ' + invRate.toFixed(2) + ' ' + (sendCurrency.display_code||sendCurrency.code);
+                } else if (mode === 'sell') {
+                    rateText = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(2) + ' ' + (getCurrency.display_code||getCurrency.code);
+                } else {
+                    rateText = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(6) + ' ' + (getCurrency.display_code||getCurrency.code);
+                }
+                if (rateDisplay) rateDisplay.textContent = rateText;
                 if (exchangeBtn) { exchangeBtn.disabled = false; exchangeBtn.textContent = 'Обменять'; }
                 if (calcNote) calcNote.textContent = '';
             } else {
@@ -562,9 +603,14 @@
 
     function openPicker(target) {
         pickerTarget = target;
-        const items = target === 'send'
-            ? (sendType === 'fiat' ? fiats : [...fiats, ...cryptos])
-            : (sendType === 'fiat' ? cryptos : [...cryptos, ...fiats]);
+        let items;
+        if (exchangeMode === 'buy') {
+            items = target === 'send' ? fiats : cryptos;
+        } else if (exchangeMode === 'sell') {
+            items = target === 'send' ? cryptos : fiats;
+        } else {
+            items = cryptos;
+        }
         renderPickerItems(items);
         if (modal) modal.hidden = false;
         modalSearch.value = '';

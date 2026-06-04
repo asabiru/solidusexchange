@@ -58,6 +58,7 @@ class TelegramMiniAppController extends Controller
                     'user' => [
                         'id' => $user->id,
                         'name' => $user->firstname ?: $user->username ?: $user->email,
+                        'telegram_id' => $user->telegram_id,
                     ],
                 ]);
             }
@@ -274,6 +275,14 @@ class TelegramMiniAppController extends Controller
                 'status' => false,
                 'message' => 'Откройте Mini App из Telegram для автоматического входа.',
             ], 401);
+        }
+
+        $user = Auth::user();
+        if (!$user->identity_verify) {
+            return response()->json([
+                'status' => false,
+                'message' => 'Для совершения обмена необходимо пройти KYC верификацию.',
+            ], 403);
         }
 
         $validated = $request->validate([

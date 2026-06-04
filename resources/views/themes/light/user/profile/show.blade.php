@@ -99,6 +99,50 @@
                                 </div>
                             </div>
                         </div>
+
+                        {{-- Telegram linking --}}
+                        <div class="card">
+                            <div class="card-header border-0">
+                                <h5 class="card-title">Telegram</h5>
+                            </div>
+                            <div class="card-body pt-0">
+                                @if($userProfile->telegram_id)
+                                    <div class="d-flex align-items-center gap-3 mb-3">
+                                        <i class="fab fa-telegram" style="font-size:28px;color:var(--dash-accent)"></i>
+                                        <div>
+                                            <strong style="color:var(--dash-text)">Telegram привязан</strong>
+                                            <div style="color:var(--dash-text-2);font-size:13px">
+                                                ID: {{ $userProfile->telegram_id }}
+                                                @if($userProfile->telegram_username)
+                                                    &middot; @<span>{{ $userProfile->telegram_username }}</span>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <form method="post" action="{{ route('user.telegram.unlink') }}">
+                                        @csrf
+                                        <button type="submit" class="cmn-btn" style="background:var(--dash-border);color:var(--dash-text)">Отвязать Telegram</button>
+                                    </form>
+                                @else
+                                    @php
+                                        $tgBotName = ltrim((string) config('services.telegram.bot_name'), '@');
+                                        $tgBotId = explode(':', (string) config('services.telegram.bot_token'))[0] ?? '';
+                                        $tgLinkUrl = route('user.telegram.link');
+                                        $tgOAuthUrl = $tgBotId !== ''
+                                            ? 'https://oauth.telegram.org/auth?bot_id=' . $tgBotId . '&origin=' . urlencode(config('app.url')) . '&embed=0&request_access=write&return_to=' . urlencode($tgLinkUrl)
+                                            : null;
+                                    @endphp
+                                    <p style="color:var(--dash-text-2);margin-bottom:16px">Привяжите Telegram для быстрого входа и доступа к Mini App.</p>
+                                    @if($tgOAuthUrl && $tgBotName !== '')
+                                        <a href="{{ $tgOAuthUrl }}" class="cmn-btn d-inline-flex align-items-center gap-2" style="text-decoration:none">
+                                            <i class="fab fa-telegram"></i> Привязать Telegram
+                                        </a>
+                                    @else
+                                        <p style="color:var(--dash-muted)">Telegram авторизация не настроена.</p>
+                                    @endif
+                                @endif
+                            </div>
+                        </div>
                     </div>
                 </div>
             </form>
@@ -114,11 +158,11 @@
         }
 
         .profile-identity-card {
-            border: 1px solid rgba(171, 131, 255, 0.18);
+            border: 1px solid rgba(232, 201, 160, 0.18);
             background:
-                radial-gradient(circle at top right, rgba(164, 93, 255, 0.14), transparent 34%),
-                linear-gradient(180deg, rgba(27, 15, 53, 0.94), rgba(18, 11, 38, 0.96));
-            box-shadow: 0 28px 50px rgba(8, 5, 22, 0.28);
+                radial-gradient(circle at top right, rgba(232, 201, 160, 0.10), transparent 34%),
+                linear-gradient(180deg, rgba(21, 12, 16, 0.94), rgba(11, 6, 8, 0.96));
+            box-shadow: 0 28px 50px rgba(0, 0, 0, 0.28);
         }
 
         .profile-card-text {
@@ -128,7 +172,7 @@
         .profile-identity-card .form-control[readonly],
         .profile-identity-card textarea[readonly] {
             color: rgba(255, 255, 255, 0.82);
-            border-color: rgba(171, 131, 255, 0.18);
+            border-color: rgba(232, 201, 160, 0.18);
             background: rgba(255, 255, 255, 0.04);
             cursor: default;
         }

@@ -26,23 +26,6 @@
     --font:'Inter',system-ui,-apple-system,sans-serif;
     --nav-h:72px;
 }
-[data-theme="light"]{
-    --bg:#fffaf3;
-    --bg2:#f8f1e8;
-    --surface:#fff3e4;
-    --surface2:#f1e0ca;
-    --surface3:#ead3b6;
-    --text:#241914;
-    --text2:#6c5b4f;
-    --text3:#8a7668;
-    --accent:#b9824f;
-    --accent2:#8c5e38;
-    --accent-soft:rgba(185,130,79,.14);
-    --green-soft:rgba(120,212,155,.14);
-    --red-soft:rgba(239,125,125,.14);
-    --border:rgba(74,48,30,.12);
-    --border2:rgba(185,130,79,.28);
-    --shadow:0 8px 32px rgba(0,0,0,.08);
 }
 
 body.tma{
@@ -94,18 +77,18 @@ body.tma{
 
 /* ===== HEADER ===== */
 .tma-header{
-    display:flex;align-items:center;justify-content:space-between;
-    margin-bottom:16px;
+    display:flex;align-items:center;justify-content:center;
+    margin-bottom:16px;padding:4px 0;
 }
-.tma-header__brand{display:flex;align-items:center;gap:10px}
-.tma-header__brand strong{display:block;font-size:16px;font-weight:700;color:var(--text)}
+.tma-header__brand{display:flex;align-items:center;gap:12px;justify-content:center}
+.tma-header__brand strong{display:block;font-size:17px;font-weight:700;color:var(--text);letter-spacing:-0.3px}
 .tma-header__brand small{display:block;font-size:11px;color:var(--text3);font-weight:500}
 .tma-logo{
-    width:36px;height:36px;border-radius:10px;
+    width:40px;height:40px;border-radius:12px;
     background:rgba(255,255,255,.06);
     display:grid;place-items:center;
     border:1px solid var(--border2);
-    overflow:hidden;
+    overflow:hidden;flex-shrink:0;
 }
 .tma-logo img{
     width:100%;
@@ -199,6 +182,34 @@ body.tma{
     color:#0b0608;font-weight:700;font-size:15px;
 }
 .tma-avatar--lg{width:48px;height:48px;font-size:20px}
+
+/* ===== EXCHANGE MODE TABS ===== */
+.tma-mode-tabs{
+    display:flex;gap:6px;margin-bottom:16px;
+}
+.tma-mode-tab{
+    flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+    padding:10px 6px;border-radius:var(--radius-sm);
+    background:var(--surface);border:1px solid var(--border);
+    color:var(--text2);font-size:13px;font-weight:600;font-family:var(--font);
+    cursor:pointer;transition:all .2s;
+}
+.tma-mode-tab i{font-size:14px}
+.tma-mode-tab:hover{background:var(--surface2);color:var(--text)}
+.tma-mode-tab.is-active{
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    color:#0b0608;border-color:transparent;
+}
+.tma-mode-tab.is-active i{color:#0b0608}
+
+/* ===== KYC GATE ===== */
+.tma-kyc-gate{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:20px;padding:32px 20px;
+    text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;
+}
+.tma-kyc-gate strong{font-size:16px;color:var(--text);margin-top:4px}
+.tma-kyc-gate small{font-size:13px;color:var(--text3);max-width:280px}
 
 .tma-calc{
     background:var(--surface);

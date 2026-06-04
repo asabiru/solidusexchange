@@ -26,18 +26,11 @@
         Notiflix.Block.standard('#exchangeFigures', {
             backgroundColor: loaderColor,
         });
-        var isDarkMode = false;
+        var isDarkMode = true;
 
-        if (localStorage.getItem('dark-theme') == null) {
-             isDarkMode =   "{{basicControl()->default_mode == 1 ?true :false}}";
-        }else{
-             isDarkMode = localStorage.getItem("dark-theme") == 1 ? true:false;
-        }
-
-
-        const baseColor = isDarkMode ? '#ffffff' : '#000000';
-        const gridColors = isDarkMode ? ['#333333', 'transparent'] : ['#f3f3f3', 'transparent'];
-        const labelColor = isDarkMode ? '#cccccc' : '#504e4e';
+        const baseColor = '#ffffff';
+        const gridColors = ['#333333', 'transparent'];
+        const labelColor = '#cccccc';
 
 
         var options = {

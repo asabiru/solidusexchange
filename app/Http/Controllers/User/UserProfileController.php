@@ -139,4 +139,62 @@ class UserProfileController extends Controller
             return back()->with('success', 'Notification settings updated successfully');
         }
     }
+
+    public function telegramLink(Request $request)
+    {
+        $telegramAuth = $request->only([
+            'id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date', 'hash',
+        ]);
+
+        if (empty($telegramAuth['hash']) || empty($telegramAuth['id']) || empty($telegramAuth['auth_date'])) {
+            return redirect()->route('user.profile')->with('error', 'Неверные данные Telegram авторизации.');
+        }
+
+        $authDate = (int)$telegramAuth['auth_date'];
+        if ($authDate < (time() - 86400)) {
+            return redirect()->route('user.profile')->with('error', 'Данные Telegram авторизации устарели.');
+        }
+
+        $checkHash = (string)$telegramAuth['hash'];
+        $checkData = $telegramAuth;
+        unset($checkData['hash']);
+        ksort($checkData);
+        $dataCheckArray = [];
+        foreach ($checkData as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $dataCheckArray[] = $key . '=' . $value;
+            }
+        }
+        $dataCheckString = implode("\n", $dataCheckArray);
+        $secretKey = hash('sha256', config('services.telegram.bot_token'), true);
+        $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
+
+        if (!hash_equals($calculatedHash, $checkHash)) {
+            return redirect()->route('user.profile')->with('error', 'Проверка подписи Telegram не пройдена.');
+        }
+
+        $telegramId = (string)$telegramAuth['id'];
+
+        $existing = \App\Models\User::where('telegram_id', $telegramId)->where('id', '!=', Auth::id())->first();
+        if ($existing) {
+            return redirect()->route('user.profile')->with('error', 'Этот Telegram аккаунт уже привязан к другому пользователю.');
+        }
+
+        $user = Auth::user();
+        $user->telegram_id = $telegramId;
+        $user->telegram_username = $telegramAuth['username'] ?? null;
+        $user->save();
+
+        return redirect()->route('user.profile')->with('success', 'Telegram успешно привязан!');
+    }
+
+    public function telegramUnlink()
+    {
+        $user = Auth::user();
+        $user->telegram_id = null;
+        $user->telegram_username = null;
+        $user->save();
+
+        return redirect()->route('user.profile')->with('success', 'Telegram отвязан.');
+    }
 }

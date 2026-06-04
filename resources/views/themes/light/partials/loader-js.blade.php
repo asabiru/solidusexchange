@@ -1,57 +1,25 @@
 <script>
     (function () {
-        let defaultTheme = "{{ basicControl()->default_mode ?? 'dark' }}";
-        let changeable = "{{ basicControl()->changeable_mode ?? 0 }}";
-        let storedTheme = localStorage.getItem('dark-theme');
+        // Always dark theme — no switching
+        localStorage.setItem('dark-theme', '1');
 
-        const isDarkValue = function (value) {
-            const normalized = String(value).toLowerCase();
-            return normalized === '1' || normalized === 'dark';
-        };
-
-        const resolveTheme = function () {
-            if (changeable != 1) {
-                localStorage.setItem('dark-theme', defaultTheme);
-                storedTheme = defaultTheme;
-            }
-
-            if (storedTheme === null || storedTheme === '') {
-                storedTheme = defaultTheme;
-            }
-
-            return isDarkValue(storedTheme) ? 'dark' : 'light';
-        };
-
-        const applyThemeClass = function (theme) {
-            if (!document.body) {
-                return;
-            }
-
-            document.body.classList.toggle('dark-theme', theme === 'dark');
-        };
-
-        document.documentElement.setAttribute('data-solidus-site-theme', resolveTheme());
+        document.documentElement.setAttribute('data-solidus-site-theme', 'dark');
 
         document.addEventListener('DOMContentLoaded', function () {
+            if (document.body) {
+                document.body.classList.add('dark-theme');
+            }
             if (typeof setTheme === 'function') {
                 setTheme();
-            } else {
-                applyThemeClass(resolveTheme());
             }
         });
 
-        const hideLoader = function () {
-            const loader = document.querySelector('.loader-wrap');
-            if (!loader || loader.dataset.hidden === '1') {
-                return;
-            }
-
+        var hideLoader = function () {
+            var loader = document.querySelector('.loader-wrap');
+            if (!loader || loader.dataset.hidden === '1') return;
             loader.dataset.hidden = '1';
             loader.classList.add('loaded');
-
-            window.setTimeout(function () {
-                loader.style.display = 'none';
-            }, 400);
+            window.setTimeout(function () { loader.style.display = 'none'; }, 400);
         };
 
         window.addEventListener('load', hideLoader, { once: true });

@@ -11,9 +11,7 @@
 
 
 
-    body:not(.dark-theme) .solidchange-navbar {
-        background: rgba(250, 248, 245, 0.92);
-    }
+
 
     .solidchange-navbar .nav-link {
         border-radius: 8px;
@@ -44,13 +42,8 @@
         letter-spacing: -0.3px;
         color: var(--color-text-primary);
     }
-    /* theme switching */
-    .logo-for-dark  { display: none;  }
-    .logo-for-light { display: block; }
-    body.dark-theme .logo-for-light,
-    html[data-solidus-theme="dark"] .logo-for-light { display: none;  }
-    body.dark-theme .logo-for-dark,
-    html[data-solidus-theme="dark"] .logo-for-dark  { display: block; }
+    .logo-for-light { display: none !important; }
+    .logo-for-dark  { display: block; }
 
     .solidchange-navbar .logo-badge {
         display: flex;
@@ -147,12 +140,7 @@
         <div class="d-flex align-items-center justify-content-between" style="height: 64px; padding: 0 20px;">
             <!-- Logo -->
             <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none">
-                {{-- Light logo (shown on light theme) --}}
-                <img class="site-logo-img logo-for-light"
-                     src="{{ getFile(basicControl()->logo_driver, basicControl()->logo) }}"
-                     alt="SolidChange" width="40" height="40">
-                {{-- Dark logo (shown on dark theme) --}}
-                <img class="site-logo-img logo-for-dark"
+                <img class="site-logo-img"
                      src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
                      alt="SolidChange" width="40" height="40">
                 <span class="site-logo-name">SolidChange</span>
@@ -170,13 +158,7 @@
 
             <!-- Right Actions -->
             <div class="d-none d-lg-flex align-items-center gap-2">
-                <!-- Theme Toggle -->
-                @if(basicControl()->changeable_mode == 1)
-                <button id="toggle-btn" class="utility-btn" type="button">
-                    <i class="fa-solid fa-moon" id="moon"></i>
-                    <i class="fa-solid fa-sun" id="sun"></i>
-                </button>
-                @endif
+
 
                 <!-- Language Selector -->
                 @php
@@ -256,12 +238,6 @@
             </div>
 
             <!-- Mobile Menu Button -->
-            @if(basicControl()->changeable_mode == 1)
-            <button id="toggle-btn-mobile" class="d-lg-none utility-btn" type="button">
-                <i class="fa-solid fa-moon" id="moon-mobile"></i>
-                <i class="fa-solid fa-sun" id="sun-mobile"></i>
-            </button>
-            @endif
             <button class="d-lg-none utility-btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileMenu">
                 <i class="fa-solid fa-bars"></i>
             </button>
@@ -274,12 +250,7 @@
 <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileMenu">
         <div class="offcanvas-header">
             <a href="{{ url('/') }}" class="d-flex align-items-center gap-2 text-decoration-none">
-                {{-- Light logo (shown on light theme) --}}
-                <img class="site-logo-img logo-for-light"
-                     src="{{ getFile(basicControl()->logo_driver, basicControl()->logo) }}"
-                     alt="SolidChange" width="40" height="40">
-                {{-- Dark logo (shown on dark theme) --}}
-                <img class="site-logo-img logo-for-dark"
+                <img class="site-logo-img"
                      src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo) }}"
                      alt="SolidChange" width="40" height="40">
                 <span class="site-logo-name">SolidChange</span>

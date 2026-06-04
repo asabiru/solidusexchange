@@ -158,90 +158,20 @@ $(document).ready(function () {
     // cmn select2 modal start
 
 });
-// Dark theme start
-const toggleBtn = document.getElementById("toggle-btn");
-if (toggleBtn) {
-    const body = document.querySelector("body");
-    toggleBtn.addEventListener("click", function () {
-        document.body.classList.toggle("dark-theme");
-        if (document.body.classList.contains("dark-theme")) {
-            localStorage.setItem("dark-theme", 1);
-        } else {
-            localStorage.setItem("dark-theme", 0);
-        }
-        setTheme();
-    });
-}
-
-var loaderColor = "rgba(250, 244, 255, 0.92)";
+// Dark theme — always dark, no toggle
+var loaderColor = "rgba(45, 24, 78, 0.94)";
 var loaderColorDark = "rgba(45, 24, 78, 0.94)";
-var loaderColorLight = "rgba(250, 244, 255, 0.92)";
 
 function setTheme() {
-    const isDarkTheme = localStorage.getItem("dark-theme");
-    const head = document.querySelector("head");
-    const defaultTheme = head.getAttribute("data-theme");
-    const changeable_mode = head.getAttribute("data-changeable_mode");
-    if (isDarkTheme == 1) {
-        $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
-        $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
-        document.querySelector('body').classList.add('dark-theme');
-        if (document.getElementById("moon")) {
-            document.getElementById("moon").style.display = "none";
-        }
-        if (document.getElementById("sun")) {
-            document.getElementById("sun").style.display = "block";
-        }
-        loaderColor = loaderColorDark;
-    } else if (isDarkTheme == 0) {
-        $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
-        $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
-        document.querySelector('body').classList.remove('dark-theme');
-
-
-        if (document.getElementById("moon")) {
-            document.getElementById("moon").style.display = "block";
-        }
-        if (document.getElementById("sun")) {
-            document.getElementById("sun").style.display = "none";
-        }
-
-        loaderColor = loaderColorLight;
-    } else {
-        if (defaultTheme == 1) {
-            $('#logoSet').attr('src', head.getAttribute("data-dark_logo"))
-            $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"))
-            document.querySelector('body').classList.add('dark-theme');
-
-            if (document.getElementById("moon")) {
-                document.getElementById("moon").style.display = "none";
-            }
-            if (document.getElementById("sun")) {
-                document.getElementById("sun").style.display = "block";
-            }
-
-            loaderColor = loaderColorDark;
-        } else {
-            $('#logoSet').attr('src', head.getAttribute("data-light_logo"))
-            $('#logoSetMobile').attr('src', head.getAttribute("data-light_logo"))
-            document.querySelector('body').classList.remove('dark-theme');
-
-            if (document.getElementById("moon")) {
-                document.getElementById("moon").style.display = "block";
-            }
-            if (document.getElementById("sun")) {
-                document.getElementById("sun").style.display = "none";
-            }
-            loaderColor = loaderColorLight;
-        }
-    }
-
-    document.documentElement.setAttribute('data-solidus-site-theme', document.querySelector('body').classList.contains('dark-theme') ? 'dark' : 'light');
+    var head = document.querySelector("head");
+    $('#logoSet').attr('src', head.getAttribute("data-dark_logo"));
+    $('#logoSetMobile').attr('src', head.getAttribute("data-dark_logo"));
+    document.querySelector('body').classList.add('dark-theme');
+    document.documentElement.setAttribute('data-solidus-site-theme', 'dark');
+    localStorage.setItem('dark-theme', '1');
 }
 
-if (toggleBtn) {
-    setTheme();
-}
+setTheme();
 // Dark theme end
 
 

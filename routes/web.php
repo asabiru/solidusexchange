@@ -168,6 +168,8 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
             Route::match(['get', 'post'], 'profile', 'index')->name('profile');
             Route::match(['get', 'post'], 'change-password', 'changePassword')->name('change.password');
             Route::match(['get', 'post'], 'notification', 'notification')->name('notification');
+            Route::get('telegram/link', 'telegramLink')->name('telegram.link');
+            Route::post('telegram/unlink', 'telegramUnlink')->name('telegram.unlink');
         });
 
         // TWO-FACTOR SECURITY

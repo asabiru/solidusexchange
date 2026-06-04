@@ -23,6 +23,14 @@ class SocialiteController extends Controller
     public function socialiteLogin($socialite)
     {
         if ($socialite === 'telegram') {
+            $botId = explode(':', (string) config('services.telegram.bot_token'))[0] ?? '';
+            if ($botId !== '') {
+                $callbackUrl = route('socialiteCallback', ['socialite' => 'telegram']);
+                $oauthUrl = 'https://oauth.telegram.org/auth?bot_id=' . $botId
+                    . '&origin=' . urlencode(config('app.url'))
+                    . '&embed=0&request_access=write&return_to=' . urlencode($callbackUrl);
+                return redirect()->away($oauthUrl);
+            }
             return redirect()->route('login');
         }
 
@@ -92,9 +100,20 @@ class SocialiteController extends Controller
         }
 
         $telegramId = (string)$telegramAuth['id'];
-        $searchUser = User::where('provider', 'telegram')
-            ->where('provider_id', $telegramId)
+        $searchUser = User::where('telegram_id', $telegramId)
+            ->orWhere(function($q) use ($telegramId) {
+                $q->where('provider', 'telegram')->where('provider_id', $telegramId);
+            })
             ->first();
+
+        if ($searchUser) {
+            if (!$searchUser->telegram_id) {
+                $searchUser->update([
+                    'telegram_id' => $telegramId,
+                    'telegram_username' => $telegramAuth['username'] ?? $searchUser->telegram_username,
+                ]);
+            }
+        }
 
         if ($searchUser) {
             Auth::login($searchUser);
@@ -109,6 +128,8 @@ class SocialiteController extends Controller
             'password' => Hash::make(Str::random(32)),
             'provider' => 'telegram',
             'provider_id' => $telegramId,
+            'telegram_id' => $telegramId,
+            'telegram_username' => $telegramAuth['username'] ?? null,
             'language_id' => $languageId,
             'email_verification' => 1,
             'sms_verification' => 1,
