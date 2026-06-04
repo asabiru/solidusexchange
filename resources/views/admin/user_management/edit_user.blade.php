@@ -106,12 +106,8 @@
                 <div class="d-grid gap-3 gap-lg-5">
                     <form action="{{ route('admin.user.update', $user->id) }}" method="post">
                         @csrf
-                        <div class="profile-cover">
-                            <div class="profile-cover-img-wrapper">
-                                <img id="profileCoverImg" class="profile-cover-img"
-                                     src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                     alt="Image Description">
-                            </div>
+                        <div class="profile-cover sc-profile-cover">
+                            <div class="profile-cover-img-wrapper"></div>
                         </div>
 
                         <div class="card">
@@ -222,7 +218,6 @@
 
     </script>
 @endpush
-
 
 
 

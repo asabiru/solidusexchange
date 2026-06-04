@@ -122,11 +122,8 @@
                         </div>
 
                         <div id="addUserStepConfirmation" class="card card-lg">
-                            <div class="profile-cover">
-                                <div class="profile-cover-img-wrapper">
-                                    <img class="profile-cover-img" src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                         alt="Image Description">
-                                </div>
+                            <div class="profile-cover sc-profile-cover">
+                                <div class="profile-cover-img-wrapper"></div>
                             </div>
 
                             <div class="card-body">
@@ -254,7 +251,6 @@
     </script>
 
 @endpush
-
 
 
 

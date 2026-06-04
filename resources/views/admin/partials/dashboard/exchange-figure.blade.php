@@ -71,7 +71,7 @@
                     }
                 }
             },
-            colors: ['#6e71ff'],
+            colors: ['#e8c9a0'],
         };
         updateExchangePerformanceGraph();
 
@@ -126,7 +126,7 @@
                     }
                 }
             },
-            colors: ['#6e71ff'],
+            colors: ['#e8c9a0'],
         };
 
         updateBuyPerformanceGraph();
@@ -184,7 +184,7 @@
                     }
                 }
             },
-            colors: ['#6e71ff'],
+            colors: ['#e8c9a0'],
         };
 
         updateSellPerformanceGraph();

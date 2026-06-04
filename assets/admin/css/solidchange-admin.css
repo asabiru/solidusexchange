@@ -1,0 +1,274 @@
+body.has-navbar-vertical-aside,
+body.has-navbar-vertical-aside.footer-offset,
+body:not(.has-navbar-vertical-aside) .main,
+body.solidchange-admin-login,
+body:has(.login-form) {
+    --sc-admin-bg: #0b0608;
+    --sc-admin-panel: #12090d;
+    --sc-admin-panel-2: #180d12;
+    --sc-admin-panel-3: #211318;
+    --sc-admin-border: rgba(232, 201, 160, 0.13);
+    --sc-admin-border-strong: rgba(232, 201, 160, 0.24);
+    --sc-admin-text: #f5ede4;
+    --sc-admin-muted: #c8b7a5;
+    --sc-admin-dim: #8d7d70;
+    --sc-admin-accent: #e8c9a0;
+    --sc-admin-accent-2: #f2d8b4;
+    --sc-admin-danger: #d07d6f;
+    --sc-admin-shadow: 0 24px 70px rgba(0, 0, 0, 0.46);
+}
+
+html[data-solidus-admin-theme],
+body.has-navbar-vertical-aside,
+body.solidchange-admin-login,
+body:has(.login-form) {
+    background:
+        radial-gradient(circle at 18% 10%, rgba(232, 201, 160, 0.12), transparent 28%),
+        radial-gradient(circle at 84% 18%, rgba(150, 102, 50, 0.14), transparent 32%),
+        linear-gradient(135deg, #0b0608 0%, #12080d 58%, #080405 100%) !important;
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .main,
+body.has-navbar-vertical-aside .content,
+body.has-navbar-vertical-aside .content.container-fluid,
+body.solidchange-admin-login .main,
+body:has(.login-form) .main {
+    background: transparent !important;
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .navbar-fixed,
+body.has-navbar-vertical-aside #header.navbar,
+body.has-navbar-vertical-aside .navbar-container,
+body.has-navbar-vertical-aside .navbar-vertical-aside {
+    background: rgba(12, 6, 8, 0.92) !important;
+    border-color: var(--sc-admin-border) !important;
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.30) !important;
+    backdrop-filter: blur(18px);
+}
+
+body.has-navbar-vertical-aside .navbar-vertical-container,
+body.has-navbar-vertical-aside .navbar-vertical-content {
+    background: transparent !important;
+}
+
+body.has-navbar-vertical-aside .navbar-brand-logo,
+body.has-navbar-vertical-aside .navbar-brand-logo-mini,
+body:has(.login-form) .navbar-brand-logo {
+    filter: drop-shadow(0 0 14px rgba(232, 201, 160, 0.42));
+}
+
+body.has-navbar-vertical-aside .card,
+body.has-navbar-vertical-aside .dropdown-menu,
+body.has-navbar-vertical-aside .modal-content,
+body.has-navbar-vertical-aside .offcanvas,
+body.has-navbar-vertical-aside .list-group,
+body.has-navbar-vertical-aside .profile-cover,
+body.solidchange-admin-login .card,
+body:has(.login-form) .card {
+    background: rgba(18, 9, 13, 0.94) !important;
+    border: 1px solid var(--sc-admin-border) !important;
+    border-radius: 18px !important;
+    box-shadow: var(--sc-admin-shadow) !important;
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .card-header,
+body.has-navbar-vertical-aside .card-footer,
+body.has-navbar-vertical-aside .modal-header,
+body.has-navbar-vertical-aside .modal-footer {
+    background: rgba(232, 201, 160, 0.035) !important;
+    border-color: var(--sc-admin-border) !important;
+}
+
+body.has-navbar-vertical-aside .card-title,
+body.has-navbar-vertical-aside .page-header-title,
+body.has-navbar-vertical-aside h1,
+body.has-navbar-vertical-aside h2,
+body.has-navbar-vertical-aside h3,
+body.has-navbar-vertical-aside h4,
+body.has-navbar-vertical-aside h5,
+body.has-navbar-vertical-aside h6,
+body.solidchange-admin-login h1,
+body.solidchange-admin-login h2,
+body.solidchange-admin-login h3,
+body:has(.login-form) h1,
+body:has(.login-form) h2,
+body:has(.login-form) h3 {
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .text-muted,
+body.has-navbar-vertical-aside .text-body,
+body.has-navbar-vertical-aside .form-label,
+body.has-navbar-vertical-aside .col-form-label,
+body.has-navbar-vertical-aside .breadcrumb-item,
+body.has-navbar-vertical-aside .breadcrumb-link,
+body.has-navbar-vertical-aside .dropdown-header,
+body.has-navbar-vertical-aside small,
+body.solidchange-admin-login .form-label,
+body.solidchange-admin-login .form-label-link,
+body:has(.login-form) .form-label,
+body:has(.login-form) .form-label-link {
+    color: var(--sc-admin-muted) !important;
+}
+
+body.has-navbar-vertical-aside a,
+body.solidchange-admin-login a,
+body:has(.login-form) a {
+    color: var(--sc-admin-accent) !important;
+}
+
+body.has-navbar-vertical-aside a:hover,
+body.solidchange-admin-login a:hover,
+body:has(.login-form) a:hover {
+    color: var(--sc-admin-accent-2) !important;
+}
+
+body.has-navbar-vertical-aside .form-control,
+body.has-navbar-vertical-aside .form-select,
+body.has-navbar-vertical-aside .input-group-text,
+body.has-navbar-vertical-aside .ts-control,
+body.has-navbar-vertical-aside .tom-select-custom .ts-control,
+body.solidchange-admin-login .form-control,
+body.solidchange-admin-login .input-group-text,
+body:has(.login-form) .form-control,
+body:has(.login-form) .input-group-text {
+    background: #0b0608 !important;
+    border-color: var(--sc-admin-border) !important;
+    color: var(--sc-admin-text) !important;
+    border-radius: 12px !important;
+}
+
+body.has-navbar-vertical-aside .form-control:focus,
+body.has-navbar-vertical-aside .form-select:focus,
+body.solidchange-admin-login .form-control:focus,
+body:has(.login-form) .form-control:focus {
+    border-color: var(--sc-admin-accent) !important;
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.11) !important;
+}
+
+body.has-navbar-vertical-aside .form-control::placeholder,
+body.solidchange-admin-login .form-control::placeholder,
+body:has(.login-form) .form-control::placeholder {
+    color: var(--sc-admin-dim) !important;
+}
+
+body.has-navbar-vertical-aside .btn-primary,
+body.has-navbar-vertical-aside .btn-success,
+body.has-navbar-vertical-aside .btn-soft-primary:hover,
+body.solidchange-admin-login .btn-primary,
+body:has(.login-form) .btn-primary {
+    background: linear-gradient(135deg, var(--sc-admin-accent), var(--sc-admin-accent-2)) !important;
+    border-color: rgba(232, 201, 160, 0.35) !important;
+    color: #0b0608 !important;
+    box-shadow: 0 14px 30px rgba(232, 201, 160, 0.18) !important;
+}
+
+body.has-navbar-vertical-aside .btn-white,
+body.has-navbar-vertical-aside .btn-ghost-secondary,
+body.has-navbar-vertical-aside .btn-soft-primary,
+body.has-navbar-vertical-aside .btn-soft-secondary,
+body.has-navbar-vertical-aside .btn-outline-primary {
+    background: rgba(232, 201, 160, 0.08) !important;
+    border-color: var(--sc-admin-border) !important;
+    color: var(--sc-admin-accent) !important;
+}
+
+body.has-navbar-vertical-aside .btn-white:hover,
+body.has-navbar-vertical-aside .btn-ghost-secondary:hover,
+body.has-navbar-vertical-aside .btn-soft-primary:hover,
+body.has-navbar-vertical-aside .btn-outline-primary:hover {
+    background: rgba(232, 201, 160, 0.14) !important;
+    border-color: var(--sc-admin-border-strong) !important;
+}
+
+body.has-navbar-vertical-aside .nav-pills .nav-link,
+body.has-navbar-vertical-aside .navbar-vertical-aside .nav-link {
+    color: var(--sc-admin-muted) !important;
+    border: 1px solid transparent !important;
+    border-radius: 12px !important;
+}
+
+body.has-navbar-vertical-aside .nav-pills .nav-link:hover,
+body.has-navbar-vertical-aside .navbar-vertical-aside .nav-link:hover,
+body.has-navbar-vertical-aside .nav-pills .nav-link.active,
+body.has-navbar-vertical-aside .navbar-vertical-aside .nav-link.active,
+body.has-navbar-vertical-aside .navbar-vertical-aside .nav-link[aria-expanded="true"] {
+    background: rgba(232, 201, 160, 0.12) !important;
+    border-color: var(--sc-admin-border) !important;
+    color: var(--sc-admin-text) !important;
+    box-shadow: none !important;
+}
+
+body.has-navbar-vertical-aside .nav-icon,
+body.has-navbar-vertical-aside .bi,
+body.has-navbar-vertical-aside .fas,
+body.has-navbar-vertical-aside .far {
+    color: var(--sc-admin-accent) !important;
+}
+
+body.has-navbar-vertical-aside .table,
+body.has-navbar-vertical-aside table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--sc-admin-text);
+    --bs-table-striped-bg: rgba(232, 201, 160, 0.035);
+    --bs-table-hover-bg: rgba(232, 201, 160, 0.06);
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .table thead th,
+body.has-navbar-vertical-aside .table th,
+body.has-navbar-vertical-aside .table td {
+    border-color: rgba(232, 201, 160, 0.10) !important;
+}
+
+body.has-navbar-vertical-aside .badge.bg-primary,
+body.has-navbar-vertical-aside .badge-success,
+body.has-navbar-vertical-aside .badge.bg-success,
+body.has-navbar-vertical-aside .bg-success,
+body.has-navbar-vertical-aside .text-success {
+    background: rgba(232, 201, 160, 0.16) !important;
+    color: var(--sc-admin-accent) !important;
+    border-color: rgba(232, 201, 160, 0.28) !important;
+}
+
+body.has-navbar-vertical-aside .alert,
+body.has-navbar-vertical-aside .alert-soft-dark {
+    background: rgba(232, 201, 160, 0.08) !important;
+    border: 1px solid var(--sc-admin-border) !important;
+    color: var(--sc-admin-text) !important;
+}
+
+body.has-navbar-vertical-aside .profile-cover,
+body.has-navbar-vertical-aside .sc-profile-cover,
+body.solidchange-admin-login .bg-img-start,
+body:has(.login-form) .bg-img-start {
+    min-height: 10rem;
+    background:
+        radial-gradient(circle at 18% 25%, rgba(232, 201, 160, 0.18), transparent 30%),
+        linear-gradient(135deg, #160b10 0%, #0b0608 58%, #241318 100%) !important;
+}
+
+body.solidchange-admin-login .bg-img-start .shape,
+body:has(.login-form) .bg-img-start .shape {
+    display: none !important;
+}
+
+body.has-navbar-vertical-aside .filepond--panel-root {
+    background: #0b0608 !important;
+    border-color: var(--sc-admin-border) !important;
+}
+
+body.has-navbar-vertical-aside .page-item .page-link {
+    background: rgba(232, 201, 160, 0.07) !important;
+    border-color: var(--sc-admin-border) !important;
+    color: var(--sc-admin-muted) !important;
+}
+
+body.has-navbar-vertical-aside .page-item.active .page-link {
+    background: var(--sc-admin-accent) !important;
+    border-color: var(--sc-admin-accent) !important;
+    color: #0b0608 !important;
+}
