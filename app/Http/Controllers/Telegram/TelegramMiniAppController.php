@@ -12,6 +12,7 @@ use App\Models\PageDetail;
 use App\Models\SellRequest;
 use App\Models\UserKyc;
 use App\Services\ExchangeEngine\ExchangeQuoteService;
+use App\Services\Kyc\DiditKycService;
 use App\Services\Kyc\UserKycManager;
 use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Services\TradeQuote\BuyQuoteService;
@@ -220,7 +221,7 @@ class TelegramMiniAppController extends Controller
         ]);
     }
 
-    public function submitKyc(Request $request, TelegramMiniAppAuthService $authService, UserKycManager $userKycManager)
+    public function submitKyc(Request $request, TelegramMiniAppAuthService $authService, UserKycManager $userKycManager, DiditKycService $diditKycService)
     {
         $this->authenticateTelegramRequest($request, $authService);
 
@@ -229,6 +230,21 @@ class TelegramMiniAppController extends Controller
         }
 
         $kyc = Kyc::where('status', 1)->findOrFail((int) $request->input('kyc_id'));
+
+        if (($kyc->provider ?? 'manual') === 'didit') {
+            try {
+                $session = $diditKycService->startSession(Auth::user(), $kyc, route('telegram.mini-app'));
+
+                return response()->json([
+                    'status' => true,
+                    'provider' => 'didit',
+                    'url' => $session['url'],
+                    'message' => 'Откройте Didit и завершите проверку.',
+                ]);
+            } catch (\Throwable $exception) {
+                return response()->json(['status' => false, 'message' => $exception->getMessage()], 422);
+            }
+        }
 
         if (($kyc->provider ?? 'manual') !== 'manual') {
             return response()->json(['status' => false, 'message' => 'Этот KYC-провайдер пока открывается через кабинет.'], 422);

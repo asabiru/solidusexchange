@@ -3,7 +3,8 @@
 
 @php
     $isVerified = $kyc->kycPosition() === 'verified';
-    $isAmlBot = ($kyc->provider ?? 'manual') === 'amlbot';
+    $isHostedProvider = in_array(($kyc->provider ?? 'manual'), ['sumsub', 'didit'], true);
+    $providerName = ($kyc->provider ?? 'manual') === 'didit' ? 'Didit' : (($kyc->provider ?? 'manual') === 'sumsub' ? 'Sumsub' : __('Manual'));
     $fieldCount = count((array) ($kyc->input_form ?? []));
     $statusCode = $isVerified ? 1 : $latestUserKyc?->status;
     $statusMap = [
@@ -29,8 +30,8 @@
                                     <span class="kyc-status-pill {{ $currentStatus['class'] }}">{{ $currentStatus['label'] }}</span>
                                     <h4 class="kyc-hero-title">{{ $kyc->name }}</h4>
                                     <p class="kyc-hero-text">
-                                        @if($isAmlBot)
-                                            @lang('This verification is processed automatically through AMLBot.')
+                                        @if($isHostedProvider)
+                                            @lang('This verification is processed automatically through the selected provider.')
                                         @else
                                             @lang('Verify your process instantly.')
                                         @endif
@@ -41,7 +42,7 @@
                                 <div class="kyc-hero-meta">
                                     <div class="kyc-meta-card">
                                         <span class="kyc-meta-label">@lang('Provider')</span>
-                                        <strong>{{ $isAmlBot ? 'AMLBot' : __('Manual') }}</strong>
+                                        <strong>{{ $providerName }}</strong>
                                     </div>
                                     <div class="kyc-meta-card">
                                         <span class="kyc-meta-label">@lang('Current status')</span>
@@ -51,7 +52,7 @@
                                         <span class="kyc-meta-label">@lang('Submitted At')</span>
                                         <strong>{{ $latestUserKyc ? dateTime($latestUserKyc->created_at, basicControl()->date_time_format) : __('Not started') }}</strong>
                                     </div>
-                                    @if(!$isAmlBot)
+                                    @if(!$isHostedProvider)
                                         <div class="kyc-meta-card">
                                             <span class="kyc-meta-label">@lang('Required fields')</span>
                                             <strong>{{ $fieldCount }}</strong>
@@ -80,7 +81,7 @@
                                 </div>
                             </div>
                         </div>
-                    @elseif($isAmlBot)
+                    @elseif($isHostedProvider)
                         <div class="row g-4">
                             <div class="col-lg-4">
                                 <div class="card kyc-side-card">
@@ -134,15 +135,15 @@
                                         <div class="kyc-main-header">
                                             <div>
                                                 <h5 class="kyc-panel-title">@lang('Verification widget')</h5>
-                                                <p class="kyc-panel-text">@lang('Complete identity verification in the secure AMLBot form below.')</p>
+                                                <p class="kyc-panel-text">@lang('Complete identity verification in the secure provider form below.')</p>
                                             </div>
-                                            <button type="button" class="cmn-btn" id="start-amlbot-kyc" data-url="{{ route('user.kyc.amlbot.session', $kyc->id) }}">
+                                            <button type="button" class="cmn-btn" id="start-hosted-kyc" data-url="{{ route('user.kyc.amlbot.session', $kyc->id) }}" data-provider="{{ $providerName }}">
                                                 @lang('Start verification')
                                             </button>
                                         </div>
 
-                                        <div class="kyc-sdk-stage" id="amlbot-iframe-stage" style="display:none;">
-                                            <iframe id="amlbot-kyc-iframe" src="" frameborder="0" allow="camera; microphone" style="width:100%;min-height:600px;border:0;border-radius:8px;"></iframe>
+                                        <div class="kyc-sdk-stage" id="hosted-kyc-stage" style="display:none;">
+                                            <iframe id="hosted-kyc-iframe" src="" frameborder="0" allow="camera; microphone" style="width:100%;min-height:600px;border:0;border-radius:8px;"></iframe>
                                         </div>
                                     </div>
                                 </div>
@@ -602,25 +603,25 @@
                 };
             });
 
-            $(document).on('click', '#start-amlbot-kyc', function () {
+            $(document).on('click', '#start-hosted-kyc', function () {
                 let button = $(this);
                 let url = button.data('url');
+                let provider = button.data('provider') || 'KYC provider';
 
                 button.prop('disabled', true);
 
                 axios.post(url)
                     .then(function (response) {
                         let data = response.data || {};
-                        let iframeUrl = data.iframe_url || '';
+                        let iframeUrl = data.iframe_url || data.url || '';
                         if (!iframeUrl) {
-                            throw new Error('AMLBot did not return a session URL.');
+                            throw new Error(provider + ' did not return a session URL.');
                         }
 
-                        $('#amlbot-kyc-iframe').attr('src', iframeUrl);
-                        $('#amlbot-iframe-stage').show();
+                        $('#hosted-kyc-iframe').attr('src', iframeUrl);
+                        $('#hosted-kyc-stage').show();
                         button.text(@json(__('Restart verification')));
 
-                        // Listen for postMessage callbacks from AMLBot iFrame
                         window.addEventListener('message', function (event) {
                             if (!event.data || typeof event.data !== 'object') return;
                             let status = String(event.data.status || '').toLowerCase();
@@ -630,7 +631,7 @@
                         });
                     })
                     .catch(function (error) {
-                        let message = error?.response?.data?.message || error.message || 'AMLBot verification could not be started.';
+                        let message = error?.response?.data?.message || error.message || 'Verification could not be started.';
                         Notiflix.Notify.failure(message);
                     })
                     .finally(function () {

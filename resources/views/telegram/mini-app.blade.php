@@ -943,8 +943,22 @@
             return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-alt"></i><p>KYC-форма пока не настроена.</p></div>';
         }
 
+        if (data.kyc.provider === 'didit') {
+            return `
+                <form class="tma-kyc-form" id="tmaKycForm">
+                    <input type="hidden" name="kyc_id" value="${Number(data.kyc.id)}">
+                    <div class="tma-empty tma-empty--compact">
+                        <i class="fas fa-shield-alt"></i>
+                        <p>Проверка личности проходит через защищённую форму Didit.</p>
+                    </div>
+                    <button class="tma-primary-btn" type="submit">Открыть Didit KYC</button>
+                    <div class="tma-calc__note" id="kycSubmitNote"></div>
+                </form>
+            `;
+        }
+
         if (data.kyc.provider !== 'manual') {
-            return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-alt"></i><p>Этот KYC-провайдер будет подключён в Mini App отдельным виджетом.</p></div>';
+            return '<div class="tma-empty tma-empty--compact"><i class="fas fa-shield-alt"></i><p>Этот KYC-провайдер открывается через кабинет.</p></div>';
         }
 
         const fields = (data.kyc.fields || []).map(field => {
@@ -1007,6 +1021,18 @@
         }
         try {
             const data = await tmaJson(apiUrls.kycSubmit, {method: 'POST', body});
+            if (data.provider === 'didit' && data.url) {
+                if (note) {
+                    note.className = 'tma-calc__note tma-calc__note--success';
+                    note.textContent = data.message || 'Открываем Didit...';
+                }
+                if (webApp?.openLink) {
+                    webApp.openLink(data.url);
+                } else {
+                    window.location.href = data.url;
+                }
+                return;
+            }
             if (note) {
                 note.className = 'tma-calc__note tma-calc__note--success';
                 note.textContent = data.message || 'KYC отправлен на проверку.';

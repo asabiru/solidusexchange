@@ -134,14 +134,81 @@ class UserKycManager
         return $kycInfo;
     }
 
+    public function buildKycInfoFromDiditDecision(array $decision): array
+    {
+        $idVerification = $this->firstArray($decision['id_verifications'] ?? []);
+        $contactDetails = $this->asArray($decision['contact_details'] ?? []);
+        $phoneVerification = $this->firstArray($decision['phone_verifications'] ?? []);
+
+        $fullName = $this->firstNonEmpty([
+            $idVerification['full_name'] ?? null,
+            $idVerification['fullName'] ?? null,
+        ]);
+        [$firstName, $lastName] = $this->splitFullName($fullName);
+
+        $fields = [
+            'first_name' => $this->firstNonEmpty([$idVerification['first_name'] ?? null, $idVerification['firstName'] ?? null, $firstName]),
+            'last_name' => $this->firstNonEmpty([$idVerification['last_name'] ?? null, $idVerification['lastName'] ?? null, $lastName]),
+            'phone' => $this->sanitizePhone($this->firstNonEmpty([
+                $phoneVerification['phone'] ?? null,
+                $phoneVerification['phone_number'] ?? null,
+                $contactDetails['phone'] ?? null,
+            ])),
+            'document_number' => $this->firstNonEmpty([
+                $idVerification['document_number'] ?? null,
+                $idVerification['documentNumber'] ?? null,
+                $idVerification['document_id'] ?? null,
+            ]),
+            'country' => $this->resolveCountryName($this->firstNonEmpty([
+                $idVerification['country'] ?? null,
+                $idVerification['issuing_country'] ?? null,
+                $idVerification['nationality'] ?? null,
+            ])),
+            'country_code' => $this->resolveCountryCode($this->firstNonEmpty([
+                $idVerification['country'] ?? null,
+                $idVerification['issuing_country'] ?? null,
+                $idVerification['nationality'] ?? null,
+            ])),
+        ];
+
+        if ($this->containsMockIdentityData($fields)) {
+            return [];
+        }
+
+        $kycInfo = [];
+        foreach ($fields as $key => $value) {
+            $value = is_string($value) ? trim($value) : $value;
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $kycInfo[$key] = [
+                'field_name' => $key,
+                'field_label' => Str::headline($key),
+                'field_value' => $value,
+                'type' => 'text',
+                'validation' => 'optional',
+            ];
+        }
+
+        return $kycInfo;
+    }
+
     private function extractProfileData(UserKyc $userKyc): array
     {
         $kycInfo = $this->normalizeKycInfo($userKyc->kyc_info);
 
-        if ($userKyc->provider === 'sumsub' && $kycInfo === []) {
-            $applicant = $this->asArray(data_get($userKyc->provider_payload, 'applicant', []));
-            if ($applicant !== []) {
-                $kycInfo = $this->normalizeKycInfo($this->buildKycInfoFromSumsubApplicant($applicant));
+        if ($kycInfo === []) {
+            if ($userKyc->provider === 'sumsub') {
+                $applicant = $this->asArray(data_get($userKyc->provider_payload, 'applicant', []));
+                if ($applicant !== []) {
+                    $kycInfo = $this->normalizeKycInfo($this->buildKycInfoFromSumsubApplicant($applicant));
+                }
+            } elseif ($userKyc->provider === 'didit') {
+                $decision = $this->asArray(data_get($userKyc->provider_payload, 'decision', []));
+                if ($decision !== []) {
+                    $kycInfo = $this->normalizeKycInfo($this->buildKycInfoFromDiditDecision($decision));
+                }
             }
         }
 
@@ -390,5 +457,26 @@ class UserKycManager
         }
 
         return [];
+    }
+
+    private function firstArray(mixed $value): array
+    {
+        if (!is_array($value)) {
+            return [];
+        }
+
+        $first = reset($value);
+
+        return is_array($first) ? $first : [];
+    }
+
+    private function splitFullName(?string $fullName): array
+    {
+        $parts = preg_split('/\s+/', trim((string) $fullName), 2);
+        if (!is_array($parts)) {
+            return [null, null];
+        }
+
+        return [$parts[0] ?? null, $parts[1] ?? null];
     }
 }
