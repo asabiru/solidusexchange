@@ -169,6 +169,8 @@ Swap Card - eazy228/design style
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md);
     transition: border-color 0.2s;
+    min-width: 0;
+    overflow: hidden;
 }
 
 .swap-input-wrapper:focus-within {
@@ -263,6 +265,8 @@ Swap Card - eazy228/design style
 
 .swap-input-wrapper input {
     flex: 1;
+    min-width: 0;
+    width: 100%;
     background: transparent;
     border: none;
     color: var(--color-text-primary);
