@@ -42,6 +42,8 @@
     --solidus-cyan: #d4a84b;
     --solidus-shadow: 0 14px 36px rgba(11, 6, 8, 0.7);
     --solidus-body-bg: #0b0608;
+    --bs-success: #e8c9a0;
+    --bs-success-rgb: 232, 201, 160;
 
     --body-font: "Inter", sans-serif;
     --heading-font: "Inter", sans-serif;
@@ -546,3 +548,38 @@ body:not(.has-navbar-vertical-aside) .rate-btn-area .btn-check:checked + .btn.ra
     box-shadow: none !important;
 }
 body:not(.has-navbar-vertical-aside) .rate-btn-area .btn.rate-btn i{ color: var(--color-accent,#e8c9a0) !important; }
+
+/* Replace Bootstrap/success green with SolidChange champagne */
+.text-success,
+.link-success,
+.alert-success,
+.badge-success,
+.badge.text-bg-success,
+.btn-success {
+    color: #e8c9a0 !important;
+}
+
+.bg-success,
+.btn-success,
+.alert-success,
+.badge-success,
+.badge.text-bg-success {
+    background-color: rgba(232, 201, 160, 0.16) !important;
+    border-color: rgba(232, 201, 160, 0.28) !important;
+}
+
+.btn-success:hover,
+.btn-success:focus {
+    background-color: #e8c9a0 !important;
+    border-color: #e8c9a0 !important;
+    color: #0b0608 !important;
+}
+
+.was-validated :valid,
+.was-validated .form-control:valid,
+.was-validated .form-select:valid,
+.was-validated :valid + .ts-wrapper,
+.was-validated :valid + .ts-wrapper .ts-control {
+    border-color: rgba(232, 201, 160, 0.55) !important;
+    box-shadow: 0 0 0 0.2rem rgba(232, 201, 160, 0.12) !important;
+}

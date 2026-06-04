@@ -13,8 +13,8 @@
     --accent:#e8c9a0;
     --accent2:#c99b68;
     --accent-soft:rgba(232,201,160,.14);
-    --green:#78d49b;
-    --green-soft:rgba(120,212,155,.12);
+    --green:#e8c9a0;
+    --green-soft:rgba(232,201,160,.14);
     --red:#ef7d7d;
     --red-soft:rgba(239,125,125,.12);
     --border:rgba(255,255,255,.10);
@@ -151,7 +151,7 @@ body.tma{
 }
 .tma-coin-icon[data-coin="btc"]{background:#f7931a22;color:#f7931a}
 .tma-coin-icon[data-coin="eth"]{background:#627eea22;color:#627eea}
-.tma-coin-icon[data-coin="usdt"]{background:#26a17b22;color:#26a17b}
+.tma-coin-icon[data-coin="usdt"]{background:var(--accent-soft);color:var(--accent)}
 .tma-coin-icon[data-coin="ton"]{background:#0098ea22;color:#0098ea}
 .tma-coin-icon[data-coin="trx"]{background:#ff060622;color:#ff0606}
 .tma-coin-icon--sm{width:32px;height:32px;font-size:12px}
@@ -464,4 +464,4 @@ body.tma{
 .tma-email-form{display:grid;gap:10px}
 .tma-email-form small{min-height:18px;color:var(--text3)}
 .tma-email-form small.is-error{color:#ff9b9b}
-.tma-email-form small.is-success{color:#91e6b7}
+.tma-email-form small.is-success{color:var(--accent)}

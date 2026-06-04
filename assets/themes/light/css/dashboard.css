@@ -9,16 +9,16 @@ Typography
     --heading-color: #000000;
     --black: #000000;
     --grayish-blue: #929cbf;
-    --btn-hover-bg: #9f63ff;
+    --btn-hover-bg: #f2d8b4;
     --white: #ffffff;
     --magenta: #b125c0;
     --blue: #966632;
     --orange: #FFC83E;
     --soft-blue: #d9bbff;
-    --soft-green: #ccf888;
+    --soft-green: #e8c9a0;
     --loader-color: #F3F4F6;
     --soft-red: #d82a68;
-    --lime-green: #40b781;
+    --lime-green: #e8c9a0;
     --vivid-orange: #fb6116;
     --vivid-cyan: #e8c9a0;
     --vivid-yellow: #ffc107;
@@ -39,7 +39,7 @@ Typography
 
 :root{
     --grayish-blue: 168, 167, 212;
-    --grayish-green: 178, 214, 163;
+    --grayish-green: 232, 201, 160;
     --strong-orange: 198, 121, 31;
 }
 /* Box Card section start*/
@@ -54,11 +54,11 @@ Typography
 }
 
 .grayish-custom-card {
-    background-color: rgb(106 154 157 / 20%);
+    background-color: rgb(232 201 160 / 20%);
     background-image: url(../img/grayish-blue-card-shape.png);
 }
 .dark-theme .grayish-custom-card {
-    background-color: rgb(106 154 157 / 80%);
+    background-color: rgb(201 169 110 / 80%);
 }
 
 .box-card .top {
@@ -193,15 +193,15 @@ Typography
 Dark theme section start
 ----------------------------------------------*/
 .dark-theme {
-    --bg-color1: #00150F;
-    --bg-color2: #2c403d;
-    --bg-color3: #1B2D29;
+    --bg-color1: #0b0608;
+    --bg-color2: #150c10;
+    --bg-color3: #0b0608;
     --heading-color: #ffffff;
     --border-color1: #37333e;
     --border-color2: rgba(234, 219, 215, 0.06);
     --border-color3: #ffffff;
-    --bg-grad-color: #253A33;
-    --input-color: #1B2D29;
+    --bg-grad-color: #160b10;
+    --input-color: #0b0608;
     --body-color: #d1cbdb;
 }
 
@@ -478,7 +478,7 @@ body {
 
 body.dark-theme {
     color: #d1cbdb;
-    background-color: #00150F;
+    background-color: #0b0608;
 }
 
 @media (max-width: 991px) {
@@ -522,7 +522,7 @@ textarea.form-control {
 
 .form-control:focus,
 .form-select:focus {
-    box-shadow: 0 0 0 4px rgba(0, 208, 149, 0.1);
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.1);
     border: 1px solid var(--primary-color);
     background-color: var(--white);
 }
@@ -668,7 +668,7 @@ intlTelInput end
 .select2-container .select2-selection--single:focus,
 .select2-container .select2-selection--multiple:focus {
     border: 1px solid var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(0, 208, 149, 0.1);
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.1);
 }
 
 .select2-container--default .select2-selection--single .select2-selection__arrow {
@@ -727,7 +727,7 @@ intlTelInput end
 
 .select2-container--default.select2-container--focus .select2-selection--multiple {
     border: 1px solid var(--primary-color);
-    box-shadow: 0 0 0 4px rgba(5, 160, 129, 0.1);
+    box-shadow: 0 0 0 4px rgba(232, 201, 160, 0.1);
 }
 
 .select2-container--default .select2-selection--multiple {
@@ -1602,12 +1602,12 @@ section {
 }
 
 .badge.text-bg-success {
-    color: rgba(39, 183, 100) !important;
-    background-color: rgba(39, 183, 100, var(--bs-bg-opacity, 0.1)) !important;
+    color: rgba(232, 201, 160) !important;
+    background-color: rgba(232, 201, 160, var(--bs-bg-opacity, 0.1)) !important;
 }
 
 .badge.text-bg-success::before {
-    background-color: rgba(39, 183, 100) !important;
+    background-color: rgba(232, 201, 160) !important;
 }
 
 .badge.text-bg-danger {
