@@ -284,7 +284,7 @@ function isHeroRubMethod(currency) {
 
 function isGenericHeroRubLabel(value) {
     const normalized = String(value || '').trim().toLowerCase().replace(/[\s_\-—]+/g, ' ');
-    return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей'].includes(normalized);
+    return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей', 'способ оплаты', 'способ получения'].includes(normalized);
 }
 
 function heroMethodTitle(currency, key, fallback) {
@@ -294,20 +294,20 @@ function heroMethodTitle(currency, key, fallback) {
 
 function displayHeroSelectorTitle(currency, side) {
     if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
-        return heroMethodTitle(currency, 'buy_method_name', 'Способ оплаты');
+        return heroMethodTitle(currency, 'buy_method_name', 'Банковская карта / СБП');
     }
     if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
-        return heroMethodTitle(currency, 'sell_method_name', 'Способ получения');
+        return heroMethodTitle(currency, 'sell_method_name', 'СБП / Банковский перевод');
     }
     return displayHeroCurrencyCode(currency);
 }
 
 function displayHeroSelectorSubtitle(currency, side) {
     if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
-        return 'Оплата рублями';
+        return 'RUB • оплата';
     }
     if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
-        return 'Получение рублей';
+        return 'RUB • получение';
     }
     return currency?.name || '';
 }

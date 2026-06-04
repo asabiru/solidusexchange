@@ -28,7 +28,7 @@ class BuyController extends Controller
 
     public function getBuyCurrency()
     {
-        $sendCurrencies = FiatCurrency::query()
+        $baseFiats = FiatCurrency::query()
             ->with('buyGateway')
             ->active()
             ->visibleInBuy()
@@ -37,12 +37,14 @@ class BuyController extends Controller
             ->get();
         $getCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
 
+        $sendCurrencies = $this->expandFiatIntoGateways($baseFiats, 'buy');
+
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
             'getCurrencies' => $getCurrencies,
             'selectedSendCurrency' => $sendCurrencies[0]??null,
             'selectedGetCurrency' => $getCurrencies[0]??null,
-            'initialSendAmount' => isset($sendCurrencies[0]) ? (($sendCurrencies[0]->min_send + $sendCurrencies[0]->max_send) / 2) : 1,
+            'initialSendAmount' => isset($baseFiats[0]) ? (($baseFiats[0]->min_send + $baseFiats[0]->max_send) / 2) : 1,
         ]);
     }
 
@@ -281,6 +283,37 @@ class BuyController extends Controller
         }
 
         return $query;
+    }
+
+    private function expandFiatIntoGateways($baseFiats, string $side): array
+    {
+        $gateways = ($side === 'buy')
+            ? Gateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')->get()
+            : \App\Models\FiatSendGateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')->get();
+
+        if ($gateways->isEmpty()) {
+            return $baseFiats->toArray();
+        }
+
+        $baseFiat = $baseFiats->first();
+        if (!$baseFiat) {
+            return [];
+        }
+
+        $methods = [];
+        foreach ($gateways as $gw) {
+            $entry = $baseFiat->toArray();
+            $entry['gateway_id'] = $gw->id;
+            $entry['method_name'] = $gw->name;
+            $entry['method_image_path'] = $gw->image_path;
+            $entry['buy_method_name'] = $gw->name;
+            $entry['buy_method_image_path'] = $gw->image_path;
+            $entry['sell_method_name'] = $gw->name;
+            $entry['sell_method_image_path'] = $gw->image_path;
+            $methods[] = $entry;
+        }
+
+        return $methods;
     }
 
 }

@@ -33,13 +33,15 @@ class SellController extends Controller
     public function getSellCurrency()
     {
         $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $getCurrencies = FiatCurrency::query()
+        $baseFiats = FiatCurrency::query()
             ->with('fiatSendGateway')
             ->active()
             ->visibleInSell()
             ->where('code', strtoupper((string) (basicControl()->base_currency ?: 'RUB')))
             ->sorted()
             ->get();
+
+        $getCurrencies = $this->expandFiatIntoSellGateways($baseFiats);
 
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
@@ -403,4 +405,34 @@ class SellController extends Controller
             'rateSource' => $quote['rate_source'],
         ];
     }
+
+    private function expandFiatIntoSellGateways($baseFiats): array
+    {
+        $gateways = FiatSendGateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')->get();
+
+        if ($gateways->isEmpty()) {
+            return $baseFiats->toArray();
+        }
+
+        $baseFiat = $baseFiats->first();
+        if (!$baseFiat) {
+            return [];
+        }
+
+        $methods = [];
+        foreach ($gateways as $gw) {
+            $entry = $baseFiat->toArray();
+            $entry['gateway_id'] = $gw->id;
+            $entry['method_name'] = $gw->name;
+            $entry['method_image_path'] = $gw->image_path;
+            $entry['buy_method_name'] = $gw->name;
+            $entry['buy_method_image_path'] = $gw->image_path;
+            $entry['sell_method_name'] = $gw->name;
+            $entry['sell_method_image_path'] = $gw->image_path;
+            $methods[] = $entry;
+        }
+
+        return $methods;
+    }
+
 }

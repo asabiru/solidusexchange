@@ -7,6 +7,8 @@ use App\Models\BuyRequest;
 use App\Models\CryptoCurrency;
 use App\Models\ExchangeRequest;
 use App\Models\FiatCurrency;
+use App\Models\FiatSendGateway;
+use App\Models\Gateway;
 use App\Models\Kyc;
 use App\Models\PageDetail;
 use App\Models\SellRequest;
@@ -73,6 +75,8 @@ class TelegramMiniAppController extends Controller
             'user' => Auth::user(),
             'cryptoCurrencies' => $this->cryptoCurrencies(),
             'fiatCurrencies' => $this->fiatCurrencies(),
+            'buyGateways' => $this->buyGateways(),
+            'sellGateways' => $this->sellGateways(),
             'rateCards' => app(MarketRateCardService::class)->cards(),
             'defaultFiatCode' => $this->defaultFiatCode(),
             'appLogo' => $this->appLogo(),
@@ -367,7 +371,10 @@ class TelegramMiniAppController extends Controller
             'send_amount' => 'required|numeric|min:0.00000001',
             'send_currency_id' => 'required|integer',
             'get_currency_id' => 'required|integer',
+            'gateway_id' => 'nullable|integer',
         ]);
+
+        $gatewayId = $validated['gateway_id'] ?? null;
 
         try {
             if ($validated['mode'] === 'buy') {
@@ -384,6 +391,7 @@ class TelegramMiniAppController extends Controller
                     'service_fee' => $quote['service_fee'],
                     'network_fee' => $quote['network_fee'],
                     'final_amount' => $quote['final_amount'],
+                    'gateway_id' => $gatewayId,
                     'utr' => uniqid('B'),
                 ]);
             } elseif ($validated['mode'] === 'sell') {
@@ -399,6 +407,7 @@ class TelegramMiniAppController extends Controller
                     'exchange_rate' => $quote['exchange_rate'],
                     'processing_fee' => $quote['processing_fee'],
                     'final_amount' => $quote['final_amount'],
+                    'fiat_send_gateway_id' => $gatewayId,
                     'utr' => uniqid('S'),
                 ]);
             } else {
@@ -466,6 +475,24 @@ class TelegramMiniAppController extends Controller
             ->where('code', $this->defaultFiatCode())
             ->sorted()
             ->get();
+    }
+
+    private function buyGateways(): array
+    {
+        return Gateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')
+            ->get()
+            ->map(fn($gw) => ['id' => $gw->id, 'name' => $gw->name, 'image_path' => $gw->image_path])
+            ->values()
+            ->toArray();
+    }
+
+    private function sellGateways(): array
+    {
+        return FiatSendGateway::query()->where('status', 1)->orderBy('sort_by', 'ASC')->orderBy('name', 'ASC')
+            ->get()
+            ->map(fn($gw) => ['id' => $gw->id, 'name' => $gw->name, 'image_path' => $gw->image_path])
+            ->values()
+            ->toArray();
     }
 
     private function appLogo(): string

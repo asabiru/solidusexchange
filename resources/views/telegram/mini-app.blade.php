@@ -43,6 +43,9 @@
             'show_in_sell' => (bool) $f->show_in_sell,
         ];
     })->values()->toArray();
+
+    $buyGatewaysJson = $buyGateways ?? [];
+    $sellGatewaysJson = $sellGateways ?? [];
 @endphp
 <!DOCTYPE html>
 <html lang="ru">
@@ -384,11 +387,29 @@
     const cryptos = @json($cryptosJson);
     const fiats = @json($fiatsJson);
     const defaultFiat = @json($defaultFiat);
+    const buyGateways = @json($buyGatewaysJson);
+    const sellGateways = @json($sellGatewaysJson);
+
+    function expandFiatIntoGateways(fiatList, gateways) {
+        if (!gateways || gateways.length === 0) return fiatList;
+        const baseFiat = fiatList[0];
+        if (!baseFiat) return [];
+        return gateways.map(gw => ({
+            ...baseFiat,
+            gateway_id: gw.id,
+            method_name: gw.name,
+            method_image_path: gw.image_path,
+            buy_method_name: gw.name,
+            buy_method_image_path: gw.image_path,
+            sell_method_name: gw.name,
+            sell_method_image_path: gw.image_path,
+        }));
+    }
 
     // ---------- Exchange state ----------
     let sendType = 'fiat';   // fiat→crypto = buy, crypto→fiat = sell
-    const buyFiats = fiats.filter(f => f.show_in_buy !== false);
-    const sellFiats = fiats.filter(f => f.show_in_sell !== false);
+    const buyFiats = expandFiatIntoGateways(fiats.filter(f => f.show_in_buy !== false), buyGateways);
+    const sellFiats = expandFiatIntoGateways(fiats.filter(f => f.show_in_sell !== false), sellGateways);
     let sendCurrency = buyFiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
     let getCurrency = cryptos[0] || {id:0, code:'USDT', name:'Tether'};
     let debounceTimer = null;
@@ -762,6 +783,7 @@
             send_amount: amount,
             send_currency_id: sendCurrency.id,
             get_currency_id: getCurrency.id,
+            gateway_id: sendCurrency.gateway_id || getCurrency.gateway_id || null,
         };
 
         try {
@@ -843,7 +865,7 @@
 
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
-            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">
+            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-gateway-id="${Number(c.gateway_id || 0)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(displaySelectorTitle(c, pickerTarget))}">
                 <div class="tma-coin-icon tma-coin-icon--sm tma-coin-icon--picker" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${selectorIconHtml(c, pickerTarget, true)}</div>
                 <div><strong>${escapeHtml(displaySelectorTitle(c, pickerTarget))}</strong><small>${escapeHtml(displaySelectorSubtitle(c, pickerTarget))}</small></div>
             </button>`
@@ -868,7 +890,8 @@
         const pool = exchangeMode === 'buy'
             ? (pickerTarget === 'send' ? buyFiats : cryptos)
             : (exchangeMode === 'sell' ? (pickerTarget === 'send' ? cryptos : sellFiats) : cryptos);
-        const selected = pool.find((currency) => Number(currency.id) === Number(btn.dataset.id));
+        const gwId = Number(btn.dataset.gatewayId || 0);
+        const selected = pool.find((currency) => Number(currency.id) === Number(btn.dataset.id) && Number(currency.gateway_id || 0) === gwId);
         if (!selected) return;
         if (pickerTarget === 'send') sendCurrency = selected;
         else getCurrency = selected;
@@ -893,6 +916,7 @@
                 send_amount: amount,
                 send_currency_id: sendCurrency.id,
                 get_currency_id: getCurrency.id,
+                gateway_id: sendCurrency.gateway_id || getCurrency.gateway_id || null,
                 initData: initData,
             };
             const res = await fetch(@json($telegramRequestUrl), {

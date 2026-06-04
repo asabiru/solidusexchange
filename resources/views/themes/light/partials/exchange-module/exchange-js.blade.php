@@ -207,7 +207,7 @@
 
     function isGenericRubLabel(value) {
         const normalized = String(value || '').trim().toLowerCase().replace(/[\s_\-—]+/g, ' ');
-        return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей'].includes(normalized);
+        return ['rub', 'rur', 'russian ruble', 'russian rouble', 'рубль', 'рубли', 'российский рубль', 'российские рубли', 'оплата рублями', 'получение рублей', 'способ оплаты', 'способ получения'].includes(normalized);
     }
 
     function methodTitle(currency, key, fallback) {
@@ -217,20 +217,20 @@
 
     function displaySelectorTitle(currency, side) {
         if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
-            return methodTitle(currency, 'buy_method_name', 'Способ оплаты');
+            return methodTitle(currency, 'buy_method_name', 'Банковская карта / СБП');
         }
         if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
-            return methodTitle(currency, 'sell_method_name', 'Способ получения');
+            return methodTitle(currency, 'sell_method_name', 'СБП / Банковский перевод');
         }
         return displayCurrencyCode(currency);
     }
 
     function displaySelectorSubtitle(currency, side) {
         if (activeTab === 'buy' && side === 'send' && isRubMethod(currency)) {
-            return 'Оплата рублями';
+            return 'RUB • оплата';
         }
         if (activeTab === 'sell' && side === 'get' && isRubMethod(currency)) {
-            return 'Получение рублей';
+            return 'RUB • получение';
         }
         return currency?.name || '';
     }
@@ -355,7 +355,7 @@
             if (!isCurrencySelectable('send', currencies[i])) {
                 continue;
             }
-            let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let isChecked = (activeSendCurrency && currencies[i].id === activeSendCurrency.id && (currencies[i].gateway_id || 0) === (activeSendCurrency.gateway_id || 0)) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
             let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item sendModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
@@ -381,7 +381,7 @@
             if (!isCurrencySelectable('get', currencies[i])) {
                 continue;
             }
-            let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
+            let isChecked = (activeGetCurrency && currencies[i].id === activeGetCurrency.id && (currencies[i].gateway_id || 0) === (activeGetCurrency.gateway_id || 0)) ? '<i class="fa-sharp fa-solid fa-circle-check"></i>' : '';
             let networkBadge = getNetworkBadgeLabel(currencies[i].code);
             options += `<div class="item getModal" data-res='${JSON.stringify(currencies[i])}'>
                         <div class="left-side">
