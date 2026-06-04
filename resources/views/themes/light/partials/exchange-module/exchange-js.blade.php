@@ -193,6 +193,12 @@
         }, delay);
     }
 
+
+    function displayCurrencyCode(currency) {
+        const code = String(currency?.code || currency?.display_code || '').toUpperCase();
+        return code === 'RUB' ? 'Рубли' : code;
+    }
+
     function getNetworkBadgeLabel(code) {
         if (!code || code.indexOf('_') === -1) {
             return '';
@@ -275,7 +281,7 @@
                                 <img class="img-flag" src="${currencies[i].image_path}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
+                                <div class="title">${displayCurrencyCode(currencies[i])}</div>
                                 ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
@@ -301,7 +307,7 @@
                                 <img class="img-flag" src="${currencies[i].image_path}" alt="...">
                             </div>
                             <div class="text-area">
-                                <div class="title">${currencies[i].code}</div>
+                                <div class="title">${displayCurrencyCode(currencies[i])}</div>
                                 ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                                 <div class="sub-title">${currencies[i].name}</div>
                             </div>
@@ -314,7 +320,7 @@
 
     function setSendCurrency(currency) {
         $('#showSendImage').attr('src', currency.image_path || currency.image);
-        $('#showSendCode').text(currency.code);
+        $('#showSendCode').text(displayCurrencyCode(currency));
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
             const badge = getNetworkBadgeLabel(currency.code);
@@ -327,7 +333,7 @@
 
     function setGetCurrency(currency) {
         $('#showGetImage').attr('src', currency.image_path || currency.image);
-        $('#showGetCode').text(currency.code);
+        $('#showGetCode').text(displayCurrencyCode(currency));
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {
             const badge = getNetworkBadgeLabel(currency.code);

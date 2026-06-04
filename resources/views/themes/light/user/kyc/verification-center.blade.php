@@ -231,19 +231,19 @@
         .kyc-next-step-card,
         .kyc-stat-card,
         .kyc-history-card {
-            border: 1px solid rgba(171, 131, 255, 0.18);
+            border: 1px solid rgba(232, 201, 160, 0.18);
             background:
-                radial-gradient(circle at top right, rgba(164, 93, 255, 0.14), transparent 35%),
-                linear-gradient(180deg, rgba(27, 15, 53, 0.94), rgba(18, 11, 38, 0.96));
+                radial-gradient(circle at top right, rgba(232, 201, 160, 0.10), transparent 35%),
+                linear-gradient(180deg, rgba(21, 12, 16, 0.94), rgba(11, 6, 8, 0.96));
             box-shadow: 0 28px 50px rgba(8, 5, 22, 0.28);
         }
 
         .kyc-next-step-card {
             border-color: rgba(96, 218, 255, 0.22);
             background:
-                radial-gradient(circle at top right, rgba(96, 218, 255, 0.12), transparent 35%),
-                radial-gradient(circle at bottom left, rgba(164, 93, 255, 0.14), transparent 35%),
-                linear-gradient(180deg, rgba(27, 15, 53, 0.96), rgba(18, 11, 38, 0.98));
+                radial-gradient(circle at top right, rgba(150, 102, 50, 0.12), transparent 35%),
+                radial-gradient(circle at bottom left, rgba(232, 201, 160, 0.10), transparent 35%),
+                linear-gradient(180deg, rgba(21, 12, 16, 0.96), rgba(11, 6, 8, 0.98));
         }
 
         .kyc-next-step-title {
@@ -265,8 +265,8 @@
             align-items: center;
             padding: 8px 14px;
             border-radius: 999px;
-            background: rgba(171, 131, 255, 0.14);
-            color: #dacaff;
+            background: rgba(232, 201, 160, 0.14);
+            color: #e8c9a0;
             font-size: 0.8rem;
             font-weight: 600;
             letter-spacing: 0.08em;
@@ -339,7 +339,7 @@
             padding: 42px 24px;
             text-align: center;
             border-radius: 24px;
-            border: 1px dashed rgba(171, 131, 255, 0.22);
+            border: 1px dashed rgba(232, 201, 160, 0.22);
             background: rgba(255, 255, 255, 0.03);
         }
 
@@ -352,8 +352,8 @@
             justify-content: center;
             border-radius: 22px;
             font-size: 1.8rem;
-            color: #dccbff;
-            background: linear-gradient(135deg, rgba(171, 93, 255, 0.16), rgba(96, 218, 255, 0.08));
+            color: #e8c9a0;
+            background: linear-gradient(135deg, rgba(232, 201, 160, 0.16), rgba(150, 102, 50, 0.08));
         }
 
         @media (max-width: 767px) {

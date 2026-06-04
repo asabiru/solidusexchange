@@ -60,7 +60,7 @@
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#8d3dff",
+                        "primary": "#966632",
                         "transparent": "transparent",
                         "white": "#fff",
                         "dark": "132144",

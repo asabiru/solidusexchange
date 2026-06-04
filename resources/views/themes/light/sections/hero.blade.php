@@ -54,28 +54,18 @@
             <div class="col-lg-6">
                 <div class="swap-card" id="showLoader">
                     <!-- Modern Tabs -->
-                    <div class="modern-tabs">
+                    <div class="modern-tabs exchange-method-tabs">
                         <button class="tab-button active" data-tab="exchange">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <polyline points="17 1 21 5 12 5 12 5"></polyline>
-                                <path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5"></path>
-                            </svg>
-                            <span>Обмен</span>
+                            <span class="method-icon"><i class="fa-solid fa-repeat"></i></span>
+                            <span class="method-text"><strong>Крипта ↔ крипта</strong><small>обмен монет</small></span>
                         </button>
                         <button class="tab-button" data-tab="buy">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4-1 1-5.5-5.5a2.121 2.121 0 0 1 3-3"></path>
-                            </svg>
-                            <span>Купить</span>
+                            <span class="method-icon"><i class="fa-solid fa-ruble-sign"></i></span>
+                            <span class="method-text"><strong>Купить за RUB</strong><small>рубли → крипта</small></span>
                         </button>
                         <button class="tab-button" data-tab="sell">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6"></path>
-                                <path d="M9 9l3 3-3 3"></path>
-                                <path d="M9 15h6"></path>
-                            </svg>
-                            <span>Продать</span>
+                            <span class="method-icon"><i class="fa-solid fa-wallet"></i></span>
+                            <span class="method-text"><strong>Продать в RUB</strong><small>крипта → рубли</small></span>
                         </button>
                     </div>
 
@@ -325,6 +315,11 @@ function loadSellCurrencies() {
     }
 }
 
+function displayHeroCurrencyCode(currency) {
+    const code = String(currency?.code || currency?.display_code || '').toUpperCase();
+    return code === 'RUB' ? 'Рубли' : code;
+}
+
 function getNetworkBadgeLabel(code) {
     if (!code || code.indexOf('_') === -1) {
         return '';
@@ -361,7 +356,7 @@ function updateSendCurrencySelector(currencies, selected) {
                         <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
                     </div>
                     <div class="text-area">
-                        <div class="title">${currency.code}</div>
+                        <div class="title">${displayHeroCurrencyCode(currency)}</div>
                         ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                         <div class="sub-title">${currency.name}</div>
                     </div>
@@ -381,7 +376,7 @@ function updateSendCurrencySelector(currencies, selected) {
     // Update selected currency display
     if (selected) {
         document.getElementById('showSendImage').src = selected.image_path || selected.image;
-        document.getElementById('showSendCode').textContent = selected.code;
+        document.getElementById('showSendCode').textContent = displayHeroCurrencyCode(selected);
         const sendNetwork = document.getElementById('showSendNetwork');
         if (sendNetwork) {
             const badge = getNetworkBadgeLabel(selected.code);
@@ -408,7 +403,7 @@ function updateGetCurrencySelector(currencies, selected) {
                         <img class="img-flag" src="${currency.image_path || currency.image}" alt="${currency.code}">
                     </div>
                     <div class="text-area">
-                        <div class="title">${currency.code}</div>
+                        <div class="title">${displayHeroCurrencyCode(currency)}</div>
                         ${networkBadge ? `<div class="network-badge"><span class="currency-network-badge">${networkBadge}</span></div>` : ''}
                         <div class="sub-title">${currency.name}</div>
                     </div>
@@ -428,7 +423,7 @@ function updateGetCurrencySelector(currencies, selected) {
     // Update selected currency display
     if (selected) {
         document.getElementById('showGetImage').src = selected.image_path || selected.image;
-        document.getElementById('showGetCode').textContent = selected.code;
+        document.getElementById('showGetCode').textContent = displayHeroCurrencyCode(selected);
         const getNetwork = document.getElementById('showGetNetwork');
         if (getNetwork) {
             const badge = getNetworkBadgeLabel(selected.code);

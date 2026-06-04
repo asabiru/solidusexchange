@@ -6,9 +6,9 @@ Typography
 :root {
     --body-font: "IBM Plex Sans", sans-serif;
     --heading-font: "IBM Plex Sans", sans-serif;
-    --primary-color: #b76bff;
-    --primary-color-rgb: 183, 107, 255;
-    --secondary-color: #8d3dff;
+    --primary-color: #e8c9a0;
+    --primary-color-rgb: 232, 201, 160;
+    --secondary-color: #966632;
     --heading-color: #26282C;
     --black: #26282C;
     --grayish-blue: #929cbf;
@@ -24,7 +24,7 @@ Typography
     --loader-color: #F3F4F6;
     --orange: #FFC83E;
     --input-color: #F2F6FA;
-    --primary-color-opacity-low: rgb(183, 107, 255, 0.1);
+    --primary-color-opacity-low: rgb(232, 201, 160, 0.1);
     --secondary-color-opacity-low: rgb(141, 61, 255, 0.12);
     --soft-red-opacity-low: rgba(216, 42, 103, 0.1);
     --bg-color1: linear-gradient(152deg, rgba(237, 242, 248, 0.22) 0%, #edf2f8 100%);
@@ -38,7 +38,7 @@ Typography
     --border-color3: #000000;
     --shadow1: 0px 12px 30px rgba(87, 46, 171, 0.1);
     --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.10);
-    --shadow3: 5px 5px 20px rgba(141, 61, 255, .16);
+    --shadow3: 5px 5px 20px rgba(232, 201, 160, .16);
     --shadow4: 5px 5px 20px 0 5px 25px rgba(0, 0, 0, 0.15);
     --transition: all .3s ease-in-out;
 }
@@ -5716,4 +5716,64 @@ img {
     .btn.rate-btn {
         padding: 15px 15px;
     }
+}
+
+/* SolidChange exchange method selector */
+.exchange-method-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 22px;
+    background: rgba(11, 6, 8, 0.42);
+    border: 1px solid rgba(232, 201, 160, 0.12);
+}
+.exchange-method-tabs .tab-button {
+    width: 100%;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(232, 201, 160, 0.14);
+    background: linear-gradient(180deg, rgba(28, 17, 23, .92), rgba(19, 11, 16, .96));
+    color: #f5ede4;
+    text-align: left;
+    transition: .22s ease;
+}
+.exchange-method-tabs .tab-button:hover,
+.exchange-method-tabs .tab-button.active {
+    border-color: rgba(232, 201, 160, .48);
+    background: linear-gradient(135deg, rgba(232, 201, 160, .18), rgba(150, 102, 50, .18));
+    transform: translateY(-1px);
+}
+.exchange-method-tabs .method-icon {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 13px;
+    color: #0b0608;
+    background: linear-gradient(135deg, #e8c9a0, #966632);
+    box-shadow: 0 10px 24px rgba(150, 102, 50, .22);
+}
+.exchange-method-tabs .method-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.exchange-method-tabs .method-text strong {
+    font-size: 14px;
+    line-height: 1.15;
+    color: #f5ede4;
+    white-space: nowrap;
+}
+.exchange-method-tabs .method-text small {
+    font-size: 12px;
+    line-height: 1.15;
+    color: rgba(245, 237, 228, .58);
 }

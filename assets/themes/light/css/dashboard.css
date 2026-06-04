@@ -5,14 +5,14 @@ Typography
 :root {
     --body-font: "IBM Plex Sans", sans-serif;
     --heading-font: "IBM Plex Sans", sans-serif;
-    --primary-color: #b76bff;
+    --primary-color: #e8c9a0;
     --heading-color: #000000;
     --black: #000000;
     --grayish-blue: #929cbf;
     --btn-hover-bg: #9f63ff;
     --white: #ffffff;
     --magenta: #b125c0;
-    --blue: #8d3dff;
+    --blue: #966632;
     --orange: #FFC83E;
     --soft-blue: #d9bbff;
     --soft-green: #ccf888;
@@ -20,7 +20,7 @@ Typography
     --soft-red: #d82a68;
     --lime-green: #40b781;
     --vivid-orange: #fb6116;
-    --vivid-cyan: #b76bff;
+    --vivid-cyan: #e8c9a0;
     --vivid-yellow: #ffc107;
     --bg-color1: #F3F4F6;
     --bg-color2: #ffffff;
@@ -28,11 +28,11 @@ Typography
     --body-color: #707070;
     --border-color1: #e5e7eb;
     --border-color2: #e1e1e1;
-    --primary-color-opacity-low: rgb(183, 107, 255, 0.1);
+    --primary-color-opacity-low: rgb(232, 201, 160, 0.1);
     --primary-color-opacity-low2: rgba(255, 153, 51, 0.3);
     --shadow1: 0px 3px 5px 0px rgba(0, 0, 0, 0.10);
     --shadow2: 0px 0px 5px 0px rgba(0, 0, 0, 0.10);
-    --shadow3: 5px 5px 20px rgba(141, 61, 255, .16);
+    --shadow3: 5px 5px 20px rgba(232, 201, 160, .16);
     --transition: all .3s ease-in-out;
 }
 
@@ -3535,3 +3535,53 @@ img.img-flag {
         max-width: 110px !important;
     }
 }
+
+/* SolidChange exchange method selector */
+.exchange-method-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 22px;
+    background: rgba(11, 6, 8, 0.42);
+    border: 1px solid rgba(232, 201, 160, 0.12);
+}
+.exchange-method-tabs .tab-button {
+    width: 100%;
+    min-height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(232, 201, 160, 0.14);
+    background: linear-gradient(180deg, rgba(28, 17, 23, .92), rgba(19, 11, 16, .96));
+    color: #f5ede4;
+    text-align: left;
+    transition: .22s ease;
+}
+.exchange-method-tabs .tab-button:hover,
+.exchange-method-tabs .tab-button.active {
+    border-color: rgba(232, 201, 160, .48);
+    background: linear-gradient(135deg, rgba(232, 201, 160, .18), rgba(150, 102, 50, .18));
+    transform: translateY(-1px);
+}
+.exchange-method-tabs .method-icon {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+    border-radius: 13px;
+    color: #0b0608;
+    background: linear-gradient(135deg, #e8c9a0, #966632);
+}
+.exchange-method-tabs .method-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+.exchange-method-tabs .method-text strong {font-size:14px;line-height:1.15;color:#f5ede4;white-space:nowrap}
+.exchange-method-tabs .method-text small {font-size:12px;line-height:1.15;color:rgba(245,237,228,.58)}

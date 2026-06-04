@@ -44,7 +44,7 @@
     <title>SolidChange</title>
     <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
     <link rel="stylesheet" href="{{ asset('assets/global/css/tma-app.css') }}">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -66,11 +66,7 @@
             <div class="tma-logo"><img src="{{ $logoUrl }}" alt="SolidChange"></div>
             <div>
                 <strong>SolidChange</strong>
-                @if($user)
-                    <small>TG {{ $user->telegram_id ?: $user->id }}</small>
-                @else
-                    <small>обмен в Telegram</small>
-                @endif
+                <small>обмен в Telegram</small>
             </div>
         </div>
 
@@ -127,7 +123,7 @@
                 <div class="tma-avatar">{{ mb_substr($user->firstname ?: $user->username ?: 'U', 0, 1) }}</div>
                 <div>
                     <strong>{{ $user->firstname ?: $user->username ?: 'Пользователь' }}</strong>
-                    <small>TG {{ $user->telegram_id ?: $user->id }}</small>
+                    <small>обмен внутри Telegram</small>
                 </div>
             </div>
             <button class="tma-badge" id="historyBtn"><i class="fas fa-history"></i> История</button>
@@ -137,13 +133,16 @@
         {{-- Exchange mode selector --}}
         <div class="tma-mode-tabs" id="modeTabs">
             <button class="tma-mode-tab is-active" data-exchange-mode="buy">
-                <i class="fas fa-shopping-cart"></i> Купить
+                <span class="tma-mode-tab__icon"><i class="fas fa-ruble-sign"></i></span>
+                <span class="tma-mode-tab__text"><strong>Купить</strong><small>RUB → крипта</small></span>
             </button>
             <button class="tma-mode-tab" data-exchange-mode="sell">
-                <i class="fas fa-coins"></i> Продать
+                <span class="tma-mode-tab__icon"><i class="fas fa-wallet"></i></span>
+                <span class="tma-mode-tab__text"><strong>Продать</strong><small>крипта → RUB</small></span>
             </button>
             <button class="tma-mode-tab" data-exchange-mode="exchange">
-                <i class="fas fa-exchange-alt"></i> Обмен
+                <span class="tma-mode-tab__icon"><i class="fas fa-repeat"></i></span>
+                <span class="tma-mode-tab__text"><strong>Обмен</strong><small>крипта → крипта</small></span>
             </button>
         </div>
 
@@ -160,11 +159,11 @@
 
         <div class="tma-calc" id="exchangeCalc" @if($user && !$user->identity_verify) style="display:none" @endif>
             <div class="tma-calc__field">
-                <label>Вы отдаёте</label>
+                <label id="sendFieldLabel">Способ оплаты</label>
                 <div class="tma-calc__input-row">
                     <input type="number" id="sendAmount" placeholder="0" min="0" step="any" inputmode="decimal">
                     <button class="tma-currency-btn" id="sendCurrencyBtn" data-type="send">
-                        <span id="sendCurrencyLabel">{{ $defaultFiat }}</span>
+                        <span id="sendCurrencyLabel">Рубли</span>
                         <i class="fas fa-chevron-down"></i>
                     </button>
                 </div>
@@ -175,7 +174,7 @@
             </button>
 
             <div class="tma-calc__field">
-                <label>Вы получаете</label>
+                <label id="getFieldLabel">Получаете криптовалюту</label>
                 <div class="tma-calc__input-row">
                     <input type="number" id="getAmount" placeholder="0" readonly>
                     <button class="tma-currency-btn" id="getCurrencyBtn" data-type="get">
@@ -223,7 +222,7 @@
             <div class="tma-avatar tma-avatar--lg">{{ mb_substr($user->firstname ?: $user->username ?: 'U', 0, 1) }}</div>
             <div>
                 <strong>{{ $user->firstname ?: $user->username ?: 'Пользователь' }} {{ $user->lastname ?? '' }}</strong>
-                <small class="tma-uid">UID {{ $user->id }}</small>
+                <small class="tma-uid">Telegram ID: {{ $user->telegram_id ?: $user->id }}</small>
             </div>
         </div>
 
@@ -375,6 +374,7 @@
                 sendType = 'crypto';
             }
             updateCurrencyLabels();
+            updateExchangeFieldLabels();
             if (sendAmountEl && sendAmountEl.value) calcRate();
             else {
                 if (getAmountEl) getAmountEl.value = '';
@@ -406,7 +406,7 @@
         if (!user || !user.id) return;
 
         const headerSub = document.querySelector('.tma-header__brand small');
-        if (headerSub) headerSub.textContent = 'TG ' + (user.telegram_id || user.id);
+        if (headerSub) headerSub.textContent = 'обмен в Telegram';
 
         const profile = document.querySelector('[data-panel="profile"]');
         if (!profile) return;
@@ -417,7 +417,7 @@
                 <div class="tma-avatar tma-avatar--lg">${escapeHtml(String(name).charAt(0).toUpperCase() || 'U')}</div>
                 <div>
                     <strong>${escapeHtml(name)}</strong>
-                    <small class="tma-uid">TG ${escapeHtml(user.telegram_id || user.id)}</small>
+                    <small class="tma-uid">Telegram ID: ${escapeHtml(user.telegram_id || user.id)}</small>
                 </div>
             </div>
 
@@ -506,11 +506,33 @@
     const exchangeBtn = document.getElementById('exchangeBtn');
     const calcNote = document.getElementById('calcNote');
 
+    function displayCurrencyCode(currency) {
+        const code = String(currency?.display_code || currency?.code || '').toUpperCase();
+        return code === 'RUB' ? 'Рубли' : code;
+    }
+
     function updateCurrencyLabels() {
-        if (sendCurrLabel) sendCurrLabel.textContent = sendCurrency.display_code || sendCurrency.code;
-        if (getCurrLabel) getCurrLabel.textContent = getCurrency.display_code || getCurrency.code;
+        if (sendCurrLabel) sendCurrLabel.textContent = displayCurrencyCode(sendCurrency);
+        if (getCurrLabel) getCurrLabel.textContent = displayCurrencyCode(getCurrency);
+    }
+
+    function updateExchangeFieldLabels() {
+        const sendFieldLabel = document.getElementById('sendFieldLabel');
+        const getFieldLabel = document.getElementById('getFieldLabel');
+        if (!sendFieldLabel || !getFieldLabel) return;
+        if (exchangeMode === 'buy') {
+            sendFieldLabel.textContent = 'Способ оплаты';
+            getFieldLabel.textContent = 'Получаете криптовалюту';
+        } else if (exchangeMode === 'sell') {
+            sendFieldLabel.textContent = 'Отдаёте криптовалюту';
+            getFieldLabel.textContent = 'Способ получения';
+        } else {
+            sendFieldLabel.textContent = 'Отдаёте криптовалюту';
+            getFieldLabel.textContent = 'Получаете криптовалюту';
+        }
     }
     updateCurrencyLabels();
+    updateExchangeFieldLabels();
 
     function isFiat(code) {
         return fiats.some(f => f.code === code);
@@ -560,11 +582,11 @@
                 let rateText;
                 if (mode === 'buy') {
                     const invRate = rate > 0 ? (1 / rate) : 0;
-                    rateText = '1 ' + (getCurrency.display_code||getCurrency.code) + ' = ' + invRate.toFixed(2) + ' ' + (sendCurrency.display_code||sendCurrency.code);
+                    rateText = '1 ' + displayCurrencyCode(getCurrency) + ' = ' + invRate.toFixed(2) + ' ' + displayCurrencyCode(sendCurrency);
                 } else if (mode === 'sell') {
-                    rateText = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(2) + ' ' + (getCurrency.display_code||getCurrency.code);
+                    rateText = '1 ' + displayCurrencyCode(sendCurrency) + ' = ' + parseFloat(rate).toFixed(2) + ' ' + displayCurrencyCode(getCurrency);
                 } else {
-                    rateText = '1 ' + (sendCurrency.display_code||sendCurrency.code) + ' = ' + parseFloat(rate).toFixed(6) + ' ' + (getCurrency.display_code||getCurrency.code);
+                    rateText = '1 ' + displayCurrencyCode(sendCurrency) + ' = ' + parseFloat(rate).toFixed(6) + ' ' + displayCurrencyCode(getCurrency);
                 }
                 if (rateDisplay) rateDisplay.textContent = rateText;
                 if (exchangeBtn) { exchangeBtn.disabled = false; exchangeBtn.textContent = 'Обменять'; }
@@ -621,7 +643,7 @@
         modalList.innerHTML = items.map(c =>
             `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-display="${escapeHtml(c.display_code||c.code)}" data-name="${escapeHtml(c.name)}" data-img="${escapeHtml(c.image_path||'')}">
                 <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.display_code||c.code).toLowerCase())}">${c.image_path ? `<img src="${escapeHtml(c.image_path)}" alt="${escapeHtml(c.display_code||c.code)}">` : escapeHtml(String(c.display_code||c.code).charAt(0))}</div>
-                <div><strong>${escapeHtml(c.display_code||c.code)}</strong><small>${escapeHtml(c.name)}</small></div>
+                <div><strong>${escapeHtml(displayCurrencyCode(c))}</strong><small>${escapeHtml(c.name)}</small></div>
             </button>`
         ).join('');
     }

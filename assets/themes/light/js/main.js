@@ -159,8 +159,8 @@ $(document).ready(function () {
 
 });
 // Dark theme — always dark, no toggle
-var loaderColor = "rgba(45, 24, 78, 0.94)";
-var loaderColorDark = "rgba(45, 24, 78, 0.94)";
+var loaderColor = "rgba(11, 6, 8, 0.94)";
+var loaderColorDark = "rgba(11, 6, 8, 0.94)";
 
 function setTheme() {
     var head = document.querySelector("head");

@@ -297,10 +297,10 @@
         .kyc-main-card,
         .kyc-side-card,
         .kyc-success-card {
-            border: 1px solid rgba(171, 131, 255, 0.18);
+            border: 1px solid rgba(232, 201, 160, 0.18);
             background:
-                radial-gradient(circle at top right, rgba(164, 93, 255, 0.18), transparent 35%),
-                linear-gradient(180deg, rgba(27, 15, 53, 0.94), rgba(18, 11, 38, 0.96));
+                radial-gradient(circle at top right, rgba(232, 201, 160, 0.12), transparent 35%),
+                linear-gradient(180deg, rgba(21, 12, 16, 0.94), rgba(11, 6, 8, 0.96));
             box-shadow: 0 28px 50px rgba(8, 5, 22, 0.32);
         }
 
@@ -443,8 +443,8 @@
             border-radius: 14px;
             font-weight: 700;
             color: #fff;
-            background: linear-gradient(135deg, rgba(171, 93, 255, 0.95), rgba(96, 218, 255, 0.9));
-            box-shadow: 0 12px 24px rgba(131, 73, 255, 0.28);
+            background: linear-gradient(135deg, rgba(232, 201, 160, 0.95), rgba(150, 102, 50, 0.9));
+            box-shadow: 0 12px 24px rgba(150, 102, 50, 0.28);
         }
 
         .kyc-note-danger {
@@ -463,7 +463,7 @@
         .kyc-sdk-stage {
             min-height: 420px;
             border-radius: 24px;
-            border: 1px dashed rgba(171, 131, 255, 0.22);
+            border: 1px dashed rgba(232, 201, 160, 0.22);
             background: rgba(255, 255, 255, 0.03);
             padding: 18px;
         }
