@@ -51,13 +51,13 @@
                 "version": "?v=1.0"
             },
             "layoutBuilder": {
-                "extend": {"switcherSupport": false},
+                "extend": {"switcherSupport": true},
                 "header": {"layoutMode": "default", "containerMode": "container-fluid"},
                 "sidebarLayout": "default"
             },
             "themeAppearance": {
-                "layoutSkin": "dark",
-                "sidebarSkin": "dark",
+                "layoutSkin": "default",
+                "sidebarSkin": "default",
                 "styles": {
                     "colors": {
                         "primary": "#966632",
@@ -93,7 +93,12 @@
     <script>
         (function () {
             function resolveAdminTheme() {
-                return 'dark';
+                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
+                var theme = localStorage.getItem('hs_theme') || fallback;
+                if (theme === 'auto') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+                }
+                return theme;
             }
 
             function applyAdminTheme(theme) {
@@ -199,10 +204,10 @@
                     success: function (response) {
                         if (response != 'dark') {
                             if (response == 'auto') {
-                                var $themeImgSource = "{{ getFile($basicControl->dark_logo_driver, $basicControl->dark_logo, true) }}";
+                                var $themeImgSource = "{{ getFile($basicControl->admin_dark_mode_logo_driver, $basicControl->admin_dark_mode_logo, true) }}";
                                 loaderColor = "#fff";
                             } else {
-                                var $themeImgSource = "{{ getFile($basicControl->dark_logo_driver, $basicControl->dark_logo, true) }}";
+                                var $themeImgSource = "{{ getFile($basicControl->admin_logo_driver, $basicControl->admin_logo, true) }}";
                                 loaderColor = "#fff";
                             }
                             var element = document.querySelector('.navbar-brand-logo-auto');

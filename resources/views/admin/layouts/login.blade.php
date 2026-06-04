@@ -46,13 +46,13 @@
                 "version": "?v=1.0"
             },
             "layoutBuilder": {
-                "extend": {"switcherSupport": false},
+                "extend": {"switcherSupport": true},
                 "header": {"layoutMode": "default", "containerMode": "container-fluid"},
                 "sidebarLayout": "default"
             },
             "themeAppearance": {
-                "layoutSkin": "dark",
-                "sidebarSkin": "dark",
+                "layoutSkin": "default",
+                "sidebarSkin": "default",
                 "styles": {
                     "colors": {
                         "primary": "#966632",
@@ -91,7 +91,12 @@
     <script>
         (function () {
             function resolveAdminTheme() {
-                return 'dark';
+                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
+                var theme = localStorage.getItem('hs_theme') || fallback;
+                if (theme === 'auto') {
+                    theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
+                }
+                return theme;
             }
 
             function applyAdminTheme(theme) {
@@ -116,18 +121,24 @@
     </script>
 </head>
 
-<body class="solidchange-admin-login">
+<body>
 
 <script src="{{ asset('assets/admin/js/hs.theme-appearance.js') }}"></script>
 
 <!-- ========== MAIN CONTENT ========== -->
 <main id="content" role="main" class="main">
+    <div class="position-fixed top-0 end-0 start-0 bg-img-start">
+        <!-- Shape -->
+        <div class="shape shape-bottom zi-1">
+            <svg preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" viewBox="0 0 1921 273">
+                <polygon fill="#fff" points="0,273 1921,273 1921,0 "/>
+            </svg>
+        </div>
+        <!-- End Shape -->
+    </div>
+
     <!-- Content -->
     <div class="container py-5 py-sm-7">
-        <a href="{{ route('home') }}" class="solidchange-admin-login-logo">
-            <img src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo, true) }}"
-                 alt="{{ basicControl()->site_title }}">
-        </a>
         <div class="login-form mx-auto">
             @yield('content')
         </div>

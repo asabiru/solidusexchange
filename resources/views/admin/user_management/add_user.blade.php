@@ -124,7 +124,7 @@
                         <div id="addUserStepConfirmation" class="card card-lg">
                             <div class="profile-cover">
                                 <div class="profile-cover-img-wrapper">
-                                    <img class="profile-cover-img" src="{{ getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo, true) }}"
+                                    <img class="profile-cover-img" src="{{ asset('assets/admin/img/img1.jpg') }}"
                                          alt="Image Description">
                                 </div>
                             </div>
@@ -254,6 +254,7 @@
     </script>
 
 @endpush
+
 
 
 
