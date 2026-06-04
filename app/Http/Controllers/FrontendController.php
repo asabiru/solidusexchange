@@ -33,6 +33,7 @@ class FrontendController extends Controller
     public function page($slug = '/')
     {
         try {
+            $slug = $slug ?: '/';
             $selectedTheme = basicControl()->theme ?? 'light';
             [$preferredLanguageId, $fallbackLanguageId] = $this->languagePriorityIds();
             $existingSlugs = collect([]);
