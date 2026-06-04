@@ -30,17 +30,23 @@ class MarketRateCardService
 
     private function card(CryptoCurrency $currency, string $baseCurrency, ?FiatCurrency $buyFiat, ?FiatCurrency $sellFiat): array
     {
-        $buyRate = $this->cryptoFiatRate($currency, $buyFiat);
-        $sellRate = $this->cryptoFiatRate($currency, $sellFiat);
+        $quoteCode = $this->isStablecoin($currency) ? $baseCurrency : 'USDT';
+        $buyRate = $quoteCode === $baseCurrency
+            ? $this->cryptoFiatRate($currency, $buyFiat)
+            : $this->cryptoUsdtRate($currency);
+        $sellRate = $quoteCode === $baseCurrency
+            ? $this->cryptoFiatRate($currency, $sellFiat)
+            : $this->cryptoUsdtRate($currency);
         $change = $currency->change_24h;
+        $code = strtoupper((string) $currency->normalized_code);
 
         return [
             'id' => (int) $currency->id,
-            'code' => strtoupper((string) $currency->normalized_code),
+            'code' => $code,
             'name' => $currency->name,
             'image_path' => $currency->image_path,
-            'quote_code' => $baseCurrency,
-            'pair' => strtoupper((string) $currency->normalized_code) . '/' . $baseCurrency,
+            'quote_code' => $quoteCode,
+            'pair' => $code . '/' . $quoteCode,
             'buy_rate' => $buyRate,
             'sell_rate' => $sellRate,
             'display_buy_rate' => $this->formatRate($buyRate),
@@ -62,6 +68,36 @@ class MarketRateCardService
         }
 
         return $query->visibleInSell()->first();
+    }
+
+
+    private function cryptoUsdtRate(CryptoCurrency $currency): ?float
+    {
+        $referenceUsdt = CryptoCurrency::where('status', 1)
+            ->orderBy('sort_by', 'ASC')
+            ->get()
+            ->first(function (CryptoCurrency $cryptoCurrency) {
+                return strtoupper((string) $cryptoCurrency->normalized_code) === 'USDT'
+                    && (float) $cryptoCurrency->usd_rate > 0;
+            });
+
+        $usdtUsdRate = $referenceUsdt ? (float) $referenceUsdt->usd_rate : 1.0;
+        $cryptoUsdRate = $this->cryptoUsdRate($currency);
+
+        if ($cryptoUsdRate <= 0 || $usdtUsdRate <= 0) {
+            return null;
+        }
+
+        return $cryptoUsdRate / $usdtUsdRate;
+    }
+
+    private function isStablecoin(CryptoCurrency $currency): bool
+    {
+        if (isset($currency->is_stablecoin)) {
+            return (bool) $currency->is_stablecoin;
+        }
+
+        return in_array(strtoupper((string) $currency->normalized_code), ['USDT', 'USDC', 'DAI'], true);
     }
 
     private function cryptoFiatRate(CryptoCurrency $currency, ?FiatCurrency $fiatCurrency): ?float
