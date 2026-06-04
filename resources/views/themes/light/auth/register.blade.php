@@ -123,6 +123,63 @@
                                 @endif
                             </div>
                             <button type="submit" class="btn cmn-btn mt-30 w-100">@lang('signup')</button>
+
+                            @php
+                                $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
+                                $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
+                                $publicBaseUrl = rtrim((string) config('app.url'), '/');
+                                $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
+                                $hasAnySocialLogin = config('socialite.google_status')
+                                    || config('socialite.facebook_status')
+                                    || config('socialite.github_status')
+                                    || (config('socialite.telegram_status') && $telegramBotName !== '');
+                            @endphp
+
+                            @if($hasAnySocialLogin)
+                                <div class="text-center mt-20 mb-10"><span class="text-muted">@lang('or continue with')</span></div>
+                            @endif
+
+                            <div class="cmn-btn-group">
+                                <div class="row g-2 social-login-grid">
+                                    @if(config('socialite.google_status'))
+                                        <div class="col-12 col-sm-6">
+                                            <a href="{{route('socialiteLogin','google')}}"
+                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
+                                                    src="{{$themeTrue.'img/google.png'}}"
+                                                    alt="...">@lang('Google')
+                                            </a>
+                                        </div>
+                                    @endif
+                                    @if(config('socialite.facebook_status'))
+                                        <div class="col-12 col-sm-6">
+                                            <a href="{{route('socialiteLogin','facebook')}}"
+                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
+                                                    src="{{$themeTrue.'img/facebook.png'}}"
+                                                    alt="...">@lang('Facebook')
+                                            </a>
+                                        </div>
+                                    @endif
+                                    @if(config('socialite.github_status'))
+                                        <div class="col-12 col-sm-6">
+                                            <a href="{{route('socialiteLogin','github')}}"
+                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
+                                                    src="{{$themeTrue.'img/github.png'}}"
+                                                    alt="...">@lang('Github')
+                                            </a>
+                                        </div>
+                                    @endif
+                                    @if(config('socialite.telegram_status') && $telegramBotName !== '')
+                                        <div class="col-12">
+                                            <a href="{{ $telegramAuthUrl }}"
+                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex align-items-center justify-content-center gap-2"
+                                               onclick="event.preventDefault(); window.location.href='https://oauth.telegram.org/auth?bot_id={{ explode(':', config('services.telegram.bot_token'))[0] }}&origin={{ urlencode(config('app.url')) }}&embed=0&request_access=write&return_to={{ urlencode($telegramAuthUrl) }}';">
+                                                <i class="fab fa-telegram-plane"></i>
+                                                <span>@lang('Telegram')</span>
+                                            </a>
+                                        </div>
+                                    @endif
+                                </div>
+                            </div>
                         </form>
                         <div class="pt-20 text-center">
                             @lang("Already have an account?")

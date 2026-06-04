@@ -134,21 +134,16 @@
                                 $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
                                 $publicBaseUrl = rtrim((string) config('app.url'), '/');
                                 $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
-                                $telegramRequestLooksSecure = request()->isSecure()
-                                    || strcasecmp((string) request()->header('X-Forwarded-Proto'), 'https') === 0
-                                    || strcasecmp((string) request()->server('HTTP_X_FORWARDED_PROTO'), 'https') === 0
-                                    || strcasecmp((string) request()->server('HTTPS'), 'on') === 0
-                                    || str_starts_with($publicBaseUrl, 'https://')
-                                    || (int) (basicControl()->is_force_ssl ?? 0) === 1;
+
                                 $hasAnySocialLogin = config('socialite.google_status')
                                     || config('socialite.facebook_status')
                                     || config('socialite.github_status')
                                     || (config('socialite.telegram_status') && $telegramBotName !== '');
-                                $telegramWidgetAllowed = !in_array(request()->getHost(), ['127.0.0.1', 'localhost'], true) && $telegramRequestLooksSecure;
+
                             @endphp
 
                             @if($hasAnySocialLogin)
-                                <hr class="divider">
+                                <div class="text-center mt-20 mb-10"><span class="text-muted">@lang('or continue with')</span></div>
                             @endif
 
                             <div class="cmn-btn-group">
@@ -181,24 +176,13 @@
                                         </div>
                                     @endif
                                     @if(config('socialite.telegram_status') && $telegramBotName !== '')
-                                        <div class="col-12 col-sm-6">
-                                            @if($telegramWidgetAllowed)
-                                                <div class="telegram-login-widget text-center">
-                                                    <script async src="https://telegram.org/js/telegram-widget.js?22"
-                                                            data-telegram-login="{{ $telegramBotName }}"
-                                                            data-size="large"
-                                                            data-radius="8"
-                                                            data-auth-url="{{ $telegramAuthUrl }}"
-                                                            data-request-access="write"></script>
-                                                </div>
-                                            @else
-                                                <a href="https://t.me/{{ $telegramBotName }}?start=web_login"
-                                                   target="_blank" rel="noopener"
-                                                   class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex align-items-center justify-content-center gap-2">
-                                                    <i class="fab fa-telegram-plane"></i>
-                                                    <span>@lang('Telegram')</span>
-                                                </a>
-                                            @endif
+                                        <div class="col-12">
+                                            <a href="{{ $telegramAuthUrl }}"
+                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex align-items-center justify-content-center gap-2"
+                                               onclick="event.preventDefault(); window.location.href='https://oauth.telegram.org/auth?bot_id={{ explode(':', config('services.telegram.bot_token'))[0] }}&origin={{ urlencode(config('app.url')) }}&embed=0&request_access=write&return_to={{ urlencode($telegramAuthUrl) }}';">
+                                                <i class="fab fa-telegram-plane"></i>
+                                                <span>@lang('Telegram')</span>
+                                            </a>
                                         </div>
                                     @endif
                                 </div>
@@ -236,22 +220,7 @@
             width: 100%;
         }
 
-        .social-login-grid .telegram-login-widget {
-            min-height: 52px;
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 12px;
-            overflow: hidden;
-            background: linear-gradient(120deg, var(--solidus-accent), var(--solidus-accent-2));
-        }
 
-        .social-login-grid .telegram-login-widget iframe {
-            width: 100% !important;
-            min-width: 100% !important;
-            border: 0;
-        }
     </style>
 
     <script>
