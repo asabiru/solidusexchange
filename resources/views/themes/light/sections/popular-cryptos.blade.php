@@ -55,6 +55,12 @@
                     $change24h = $crypto->change_24h;
                     $isPositive = $change24h !== null && $change24h >= 0;
                     $sparkline = $crypto->sparkline_7d;
+                    if (is_string($sparkline)) {
+                        $sparkline = json_decode($sparkline, true);
+                    }
+                    if (!is_array($sparkline)) {
+                        $sparkline = null;
+                    }
                 @endphp
             <div class="crypto-card">
                 <div class="crypto-header">
