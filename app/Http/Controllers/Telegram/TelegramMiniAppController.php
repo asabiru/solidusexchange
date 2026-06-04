@@ -1,7 +1,8 @@
 <?php
 
-namespace App\Http\Controllers;
+namespace App\Http\Controllers\Telegram;
 
+use App\Http\Controllers\Controller;
 use App\Models\CryptoCurrency;
 use App\Models\FiatCurrency;
 use App\Services\Telegram\TelegramMiniAppAuthService;

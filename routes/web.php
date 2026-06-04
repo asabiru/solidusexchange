@@ -19,7 +19,7 @@ use App\Http\Controllers\User\VerificationController;
 use App\Http\Controllers\FaSecurityController;
 use App\Http\Controllers\User\UserProfileController;
 use App\Http\Controllers\SocialiteController;
-use App\Http\Controllers\TelegramMiniAppController;
+use App\Http\Controllers\Telegram\TelegramMiniAppController;
 
 $basicControl = basicControl();
 
