@@ -81,7 +81,7 @@
                         <div class="currency-info">
                             <div class="currency-flag">
                                 @if(!empty($rc['image_path']))
-                                    <img src="{{ $rc['image_path'] }}" alt="{{ $rc['code'] }}" onerror="this.src='https://via.placeholder.com/32?text={{ substr($rc['code'], 0, 2) }}'">
+                                    <img src="{{ $rc['image_path'] }}" alt="{{ $rc['code'] }}">
                                 @else
                                     <div class="currency-placeholder">{{ substr($rc['code'], 0, 2) }}</div>
                                 @endif

@@ -72,8 +72,8 @@
             <div class="crypto-card">
                 <div class="crypto-header">
                     <div class="crypto-icon">
-                        @if($crypto->image)
-                            <img src="{{ getFile($crypto->driver, $crypto->image) }}" alt="{{ $crypto->code }}">
+                        @if($crypto->image_path)
+                            <img src="{{ $crypto->image_path }}" alt="{{ $crypto->code }}">
                         @else
                             <div class="icon-placeholder">{{ substr($crypto->code, 0, 2) }}</div>
                         @endif

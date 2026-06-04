@@ -36,8 +36,8 @@
             @endphp
             <div class="reserve-card">
                 <div class="reserve-icon">
-                    @if($crypto->image)
-                        <img src="{{ getFile($crypto->driver, $crypto->image) }}"
+                    @if($crypto->image_path)
+                        <img src="{{ $crypto->image_path }}"
                              alt="{{ $crypto->code }}"
                              class="reserve-icon-img">
                     @else
