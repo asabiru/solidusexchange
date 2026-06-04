@@ -1,239 +1,144 @@
 @extends($theme.'layouts.login_register')
-@section('title',trans('Register'))
+@section('title', 'Регистрация')
 @section('content')
-    @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-        <style>
-            .login-signup-page .login-signup-thums {
-                background-image: url({{getFile(@$loginRegister->content->media->register_page_image->driver,@$loginRegister->content->media->register_page_image->path)}});
-            }
-        </style>
-    @endif
-    <section class="login-signup-page pt-0 pb-0 min-vh-100 h-100">
-        <div class="container-fluid h-100">
-            <div class="row min-vh-100">
-                <div class="col-md-6 p-0 d-none d-md-block">
-                    <div class="login-signup-thums h-100">
-                        <div class="content-area">
-                            <div class="logo-area mb-30">
-                                <a href="{{url('/')}}">
-                                    <img class="logo"
-                                         src="{{getFile(basicControl()->dark_logo_driver,basicControl()->dark_logo)}}" alt="...">
-                                </a>
-                            </div>
-                            @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-                                <div class="middle-content">
-                                    <h3 class="section-title">{{@$loginRegister->description->register_heading}}</h3>
-                                    <p>{{@$loginRegister->description->register_sub_heading}}</p>
-                                </div>
-                            @endif
-                            @if(isset($template['social']) && count($template['social']) > 0)
-                                <div class="bottom-content">
-                                    <div class="social-area mt-50">
-                                        <ul class="d-flex">
-                                            @foreach($template['social'] as $social)
-                                                <li><a href="{{@$social->content->media->my_link}}"><i
-                                                            class="{{@$social->content->media->icon}}"></i></a></li>
-                                            @endforeach
-                                        </ul>
-                                    </div>
-                                </div>
-                            @endif
-                        </div>
-                    </div>
+    @php
+        $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
+        $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
+        $publicBaseUrl = rtrim((string) config('app.url'), '/');
+        $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
+        $telegramBotId = explode(':', (string) config('services.telegram.bot_token'))[0] ?? '';
+        $telegramOAuthUrl = $telegramBotId !== ''
+            ? 'https://oauth.telegram.org/auth?bot_id=' . $telegramBotId . '&origin=' . urlencode(config('app.url')) . '&embed=0&request_access=write&return_to=' . urlencode($telegramAuthUrl)
+            : null;
+    @endphp
+
+    <section class="auth-clean-page">
+        <div class="auth-clean-card auth-clean-card--wide">
+            <a class="auth-clean-back" href="{{ url('/') }}">
+                <i class="far fa-arrow-left"></i>
+                <span>На главную</span>
+            </a>
+
+            <div class="auth-clean-brand">
+                <a href="{{ url('/') }}" class="auth-clean-logo"><span>SC</span></a>
+                <div>
+                    <strong>SolidChange</strong>
+                    <small>обмен и управление заявками</small>
                 </div>
-                <div class="col-md-6 p-0 d-flex align-items-center">
-                    <div class="login-signup-form">
-                        <form action="{{ route('register') }}" method="post" class="php-email-form">
-                            @csrf
-                            @if(isset($template['login-register']) && $loginRegister = $template['login-register'][0])
-                                <div class="section-header">
-                                    <h3>{{@$loginRegister->description->register_heading}}</h3>
-                                    <div
-                                        class="description">{{@$loginRegister->description->register_sub_heading}}</div>
-                                </div>
-                            @endif
-                            <div class="row g-4">
-                                <div class="col-12">
-                                    <input type="email" name="email" value="{{old('email')}}" class="form-control"
-                                           id="exampleInputEmail4"
-                                           placeholder="@lang('Email')">
-                                    @error('email')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="text" name="username" value="{{old('username')}}" class="form-control"
-                                           id="exampleInputEmail3"
-                                           placeholder="@lang('Username')">
-                                    @error('username')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <div class="password-box">
-                                        <input type="password" name="password" value="{{ old('password') }}"
-                                               class="form-control password" id="exampleInputPassword1"
-                                               placeholder="@lang('Password')">
-                                        <i class="password-icon fa-regular fa-eye"></i>
-                                    </div>
-                                    @error('password')
-                                    <span class="text-danger">{{$message}}</span>
-                                    @enderror
-                                </div>
-                                <div class="col-12">
-                                    <input type="password" name="password_confirmation"
-                                           value="{{ old('password_confirmation') }}" class="form-control password"
-                                           id="exampleInputPassword2"
-                                           placeholder="@lang('Confirm Password')">
-                                </div>
-                                @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration))
-
-                                    <div class="form-group">
-                                        {!! NoCaptcha::renderJs() !!}
-                                        {!! NoCaptcha::display() !!}
-                                        @error('g-recaptcha-response')
-                                        <div class="text-danger">@lang($message)</div>
-                                        @enderror
-                                    </div>
-                                @endif
-                                @if(basicControl()->manual_recaptcha &&  basicControl()->reCaptcha_status_registration)
-                                    <div class="input-box mb-4">
-                                        <input type="text" tabindex="2"
-                                               class="form-control @error('captcha') is-invalid @enderror"
-                                               name="captcha" id="captcha" autocomplete="off"
-                                               placeholder="@lang('Enter captcha code')">
-
-                                        @error('captcha')
-                                        <div class="text-danger">@lang($message)</div>
-                                        @enderror
-                                    </div>
-
-                                    <div class="mb-4">
-                                        <div
-                                            class="input-group input-group-merge d-flex justify-content-between"
-                                            data-hs-validation-validate-class>
-                                            <img src="{{route('captcha').'?rand='. rand()}}"
-                                                 id='captcha_image2'>
-                                            <a class="input-group-append input-group-text"
-                                               href='javascript: refreshCaptcha2();'>
-                                                <i class="fal fa-sync"></i>
-                                            </a>
-                                        </div>
-                                    </div>
-                                @endif
-                            </div>
-                            <button type="submit" class="btn cmn-btn mt-30 w-100">@lang('signup')</button>
-
-                            @php
-                                $telegramBotName = ltrim((string) config('services.telegram.bot_name'), '@');
-                                $telegramCallbackPath = route('socialiteCallback', ['socialite' => 'telegram'], false);
-                                $publicBaseUrl = rtrim((string) config('app.url'), '/');
-                                $telegramAuthUrl = $publicBaseUrl !== '' ? $publicBaseUrl . $telegramCallbackPath : route('socialiteCallback', 'telegram');
-                                $hasAnySocialLogin = config('socialite.google_status')
-                                    || config('socialite.facebook_status')
-                                    || config('socialite.github_status')
-                                    || (config('socialite.telegram_status') && $telegramBotName !== '');
-                            @endphp
-
-                            @if($hasAnySocialLogin)
-                                <div class="text-center mt-20 mb-10"><span class="text-muted">@lang('or continue with')</span></div>
-                            @endif
-
-                            <div class="cmn-btn-group">
-                                <div class="row g-2 social-login-grid">
-                                    @if(config('socialite.google_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','google')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/google.png'}}"
-                                                    alt="...">@lang('Google')
-                                            </a>
-                                        </div>
-                                    @endif
-                                    @if(config('socialite.facebook_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','facebook')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/facebook.png'}}"
-                                                    alt="...">@lang('Facebook')
-                                            </a>
-                                        </div>
-                                    @endif
-                                    @if(config('socialite.github_status'))
-                                        <div class="col-12 col-sm-6">
-                                            <a href="{{route('socialiteLogin','github')}}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn"><img
-                                                    src="{{$themeTrue.'img/github.png'}}"
-                                                    alt="...">@lang('Github')
-                                            </a>
-                                        </div>
-                                    @endif
-                                    @if(config('socialite.telegram_status') && $telegramBotName !== '')
-                                        <div class="col-12">
-                                            <a href="{{ $telegramAuthUrl }}"
-                                               class="btn cmn-btn3 w-100 social-btn social-unified-btn d-flex align-items-center justify-content-center gap-2"
-                                               onclick="event.preventDefault(); window.location.href='https://oauth.telegram.org/auth?bot_id={{ explode(':', config('services.telegram.bot_token'))[0] }}&origin={{ urlencode(config('app.url')) }}&embed=0&request_access=write&return_to={{ urlencode($telegramAuthUrl) }}';">
-                                                <i class="fab fa-telegram-plane"></i>
-                                                <span>@lang('Telegram')</span>
-                                            </a>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </form>
-                        <div class="pt-20 text-center">
-                            @lang("Already have an account?")
-                            <p class="mb-0 highlight"><a
-                                    href="{{ route('login') }}">@lang('Login here')</a></p>
-                        </div>
-                    </div>
-                </div>
-
             </div>
+
+            <div class="auth-clean-header">
+                <span class="auth-clean-kicker">Новый аккаунт</span>
+                <h1>Регистрация</h1>
+                <p>Создайте аккаунт или используйте Telegram для быстрого входа.</p>
+            </div>
+
+            <form action="{{ route('register') }}" method="post" class="auth-clean-form php-email-form">
+                @csrf
+                <div class="auth-field">
+                    <label for="registerEmail">E-mail</label>
+                    <input type="email" name="email" value="{{ old('email') }}" class="form-control" id="registerEmail" placeholder="Введите e-mail">
+                    @error('email')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="auth-field">
+                    <label for="registerUsername">Имя пользователя</label>
+                    <input type="text" name="username" value="{{ old('username') }}" class="form-control" id="registerUsername" placeholder="Придумайте логин">
+                    @error('username')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="auth-field">
+                    <label for="registerPassword">Пароль</label>
+                    <div class="password-box auth-password-box">
+                        <input type="password" name="password" value="{{ old('password') }}" class="form-control password" id="registerPassword" placeholder="Введите пароль">
+                        <i class="password-icon fa-regular fa-eye"></i>
+                    </div>
+                    @error('password')
+                    <span class="text-danger">{{ $message }}</span>
+                    @enderror
+                </div>
+
+                <div class="auth-field">
+                    <label for="registerPasswordConfirm">Повторите пароль</label>
+                    <input type="password" name="password_confirmation" value="{{ old('password_confirmation') }}" class="form-control" id="registerPasswordConfirm" placeholder="Повторите пароль">
+                </div>
+
+                @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration))
+                    <div class="form-group">
+                        {!! NoCaptcha::renderJs() !!}
+                        {!! NoCaptcha::display() !!}
+                        @error('g-recaptcha-response')
+                        <div class="text-danger">@lang($message)</div>
+                        @enderror
+                    </div>
+                @endif
+
+                @if(basicControl()->manual_recaptcha && basicControl()->reCaptcha_status_registration)
+                    <div class="auth-field">
+                        <label for="captcha">Код с картинки</label>
+                        <input type="text" class="form-control @error('captcha') is-invalid @enderror" name="captcha" id="captcha" autocomplete="off" placeholder="Введите код">
+                        @error('captcha')
+                        <div class="text-danger">@lang($message)</div>
+                        @enderror
+                    </div>
+                    <div class="auth-captcha">
+                        <img src="{{ route('captcha').'?rand='. rand() }}" id="captcha_image2" alt="captcha">
+                        <a href="javascript: refreshCaptcha2();" aria-label="Обновить код"><i class="fal fa-sync"></i></a>
+                    </div>
+                @endif
+
+                <button type="submit" class="cmn-btn auth-primary-btn">Создать аккаунт</button>
+
+                @if(config('socialite.telegram_status') && $telegramBotName !== '' && $telegramOAuthUrl)
+                    <div class="auth-divider"><span>или</span></div>
+                    <a href="{{ $telegramAuthUrl }}" class="auth-telegram-btn" onclick="event.preventDefault(); window.location.href='{{ $telegramOAuthUrl }}';">
+                        <i class="fab fa-telegram-plane"></i>
+                        <span>Зарегистрироваться через Telegram</span>
+                    </a>
+                @endif
+
+                <div class="auth-switch">
+                    <span>Уже есть аккаунт?</span>
+                    <a href="{{ route('login') }}">Войти</a>
+                </div>
+            </form>
         </div>
     </section>
-
 @endsection
 
 @push('js-lib')
-    @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_login == 1))
+    @if((basicControl()->google_recaptcha == 1) && (basicControl()->google_reCaptcha_status_registration == 1))
         <script async src="https://www.google.com/recaptcha/api.js"></script>
     @endif
 @endpush
 
 @push('extra_scripts')
+    @include($theme.'auth.partials.clean-auth-style')
     <script>
+        'use strict';
         const password = document.querySelector('.password');
         const passwordIcon = document.querySelector('.password-icon');
 
-        passwordIcon.addEventListener("click", function () {
-            if (password.type == 'password') {
-                password.type = 'text';
-                passwordIcon.classList.add('fa-eye-slash');
-            } else {
-                password.type = 'password';
-                passwordIcon.classList.remove('fa-eye-slash');
-            }
-        })
-
-        function refreshCaptcha() {
-            let img = document.images['captcha_image'];
-            img.src = img.src.substring(
-                0, img.src.lastIndexOf("?")
-            ) + "?rand=" + Math.random() * 1000;
+        if (password && passwordIcon) {
+            passwordIcon.addEventListener('click', function () {
+                if (password.type === 'password') {
+                    password.type = 'text';
+                    passwordIcon.classList.add('fa-eye-slash');
+                } else {
+                    password.type = 'password';
+                    passwordIcon.classList.remove('fa-eye-slash');
+                }
+            });
         }
 
         function refreshCaptcha2() {
             let img = document.images['captcha_image2'];
-            img.src = img.src.substring(
-                0, img.src.lastIndexOf("?")
-            ) + "?rand=" + Math.random() * 1000;
+            if (!img) return;
+            img.src = img.src.substring(0, img.src.lastIndexOf('?')) + '?rand=' + Math.random() * 1000;
         }
-
-        $(document).on('click', '.btn-custom', function () {
-            $('.text-danger').html('');
-            refreshCaptcha();
-        })
-
     </script>
 @endpush
