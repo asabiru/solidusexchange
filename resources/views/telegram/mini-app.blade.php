@@ -7,6 +7,8 @@
     $telegramAuthUrl = \Illuminate\Support\Facades\Route::has('telegram.miniapp.login')
         ? route('telegram.miniapp.login')
         : (\Illuminate\Support\Facades\Route::has('telegram.mini-app') ? route('telegram.mini-app') : url('/telegram/mini-app'));
+    $telegramQuoteUrl = route('telegram.mini-app.quote');
+    $telegramRequestUrl = route('telegram.mini-app.request');
 @endphp
 <!DOCTYPE html>
 <html lang="ru">
@@ -64,7 +66,13 @@
             @forelse($rateCards as $rc)
             <div class="tma-rate-row">
                 <div class="tma-rate-row__coin">
-                    <div class="tma-coin-icon" data-coin="{{ strtolower($rc['code']) }}">{{ mb_substr($rc['code'],0,1) }}</div>
+                    <div class="tma-coin-icon" data-coin="{{ strtolower($rc['code']) }}">
+                        @if(!empty($rc['image_path']))
+                            <img src="{{ $rc['image_path'] }}" alt="{{ $rc['code'] }}">
+                        @else
+                            {{ mb_substr($rc['code'],0,1) }}
+                        @endif
+                    </div>
                     <div>
                         <strong>{{ $rc['code'] }}</strong>
                         <small>{{ $rc['name'] }}</small>
@@ -189,7 +197,7 @@
 
         <div class="tma-menu-group">
             <button class="tma-menu-item" data-theme-toggle>
-                <div class="tma-menu-item__icon tma-menu-item__icon--purple"><i class="fas fa-moon"></i></div>
+                <div class="tma-menu-item__icon tma-menu-item__icon--accent"><i class="fas fa-moon"></i></div>
                 <div class="tma-menu-item__body">
                     <strong>Тема</strong>
                     <small id="themeLabel2">Авто</small>
@@ -260,8 +268,8 @@
     const overlay = document.getElementById('authOverlay');
 
     // ---------- Currency data from server ----------
-    const cryptos = @json($cryptos->map(fn($c) => ['id' => $c->id, 'code' => strtoupper($c->code ?? $c->normalized_code ?? ''), 'name' => $c->name])->values());
-    const fiats = @json($fiats->map(fn($f) => ['id' => $f->id, 'code' => strtoupper($f->code ?? ''), 'name' => $f->name])->values());
+    const cryptos = @json($cryptos->map(fn($c) => ['id' => $c->id, 'code' => strtoupper($c->code ?? $c->normalized_code ?? ''), 'name' => $c->name, 'image_path' => $c->image_path])->values());
+    const fiats = @json($fiats->map(fn($f) => ['id' => $f->id, 'code' => strtoupper($f->code ?? ''), 'name' => $f->name, 'image_path' => $f->image_path])->values());
     const defaultFiat = @json($defaultFiat);
 
     // ---------- Exchange state ----------
@@ -289,11 +297,19 @@
     });
 
     // ---------- Auth (auto-login via initData) ----------
-    if (overlay && webApp?.initData && csrf) {
+    function telegramInitData() {
+        if (webApp?.initData) return webApp.initData;
+        const hash = new URLSearchParams(String(location.hash || '').replace(/^#/, ''));
+        return hash.get('tgWebAppData') || '';
+    }
+
+    const initData = telegramInitData();
+
+    if (overlay && initData && csrf) {
         fetch(@json($telegramAuthUrl), {
             method:'POST',
-            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':webApp.initData},
-            body: JSON.stringify({initData: webApp.initData}),
+            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':initData},
+            body: JSON.stringify({initData}),
             credentials:'same-origin'
         })
         .then(r => { if(!r.ok) throw new Error(); return r.json(); })
@@ -339,6 +355,12 @@
         sendType = isFiat(sendCurrency.code) ? 'fiat' : 'crypto';
     }
 
+    function currentMode() {
+        detectMode();
+        if (sendType === 'fiat') return 'buy';
+        return isFiat(getCurrency.code) ? 'sell' : 'exchange';
+    }
+
     async function calcRate() {
         const amount = parseFloat(sendAmountEl?.value);
         if (!amount || amount <= 0) {
@@ -350,30 +372,25 @@
         }
 
         detectMode();
-        let url, payload;
-        if (sendType === 'fiat') {
-            url = '/buy/auto-rate';
-            payload = {sendAmount: amount, sendCurrency: sendCurrency.id, getCurrency: getCurrency.id};
-        } else if (isFiat(getCurrency.code)) {
-            url = '/sell/auto-rate';
-            payload = {sendAmount: amount, sendCurrency: sendCurrency.id, getCurrency: getCurrency.id};
-        } else {
-            url = '/exchange/auto-rate';
-            payload = {sendAmount: amount, sendCurrency: sendCurrency.id, getCurrency: getCurrency.id};
-        }
+        const payload = {
+            mode: currentMode(),
+            send_amount: amount,
+            send_currency_id: sendCurrency.id,
+            get_currency_id: getCurrency.id,
+        };
 
         try {
-            const res = await fetch(url, {
+            const res = await fetch(@json($telegramQuoteUrl), {
                 method:'POST', headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf},
                 body: JSON.stringify(payload), credentials:'same-origin'
             });
             const data = await res.json();
             if (data.status && data.quote) {
                 const q = data.quote;
-                const getAmt = q.get_amount ?? q.getAmount ?? q.receive_amount ?? 0;
-                if (getAmountEl) getAmountEl.value = parseFloat(getAmt).toFixed(q.get_precision ?? 6);
-                const rate = q.exchange_rate ?? q.rate ?? q.exchangeRate ?? 0;
-                if (rateDisplay) rateDisplay.textContent = '1 ' + sendCurrency.code + ' = ' + parseFloat(rate).toFixed(2) + ' ' + getCurrency.code;
+                const getAmt = q.final_amount || q.get_amount || 0;
+                if (getAmountEl) getAmountEl.value = parseFloat(getAmt).toFixed(6);
+                const rate = q.exchange_rate || 0;
+                if (rateDisplay) rateDisplay.textContent = '1 ' + sendCurrency.code + ' = ' + parseFloat(rate).toFixed(6) + ' ' + getCurrency.code;
                 if (exchangeBtn) { exchangeBtn.disabled = false; exchangeBtn.textContent = 'Обменять'; }
                 if (calcNote) calcNote.textContent = '';
             } else {
@@ -419,11 +436,21 @@
         modalSearch.focus();
     }
 
+    function escapeHtml(value) {
+        return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;',
+        })[char]);
+    }
+
     function renderPickerItems(items) {
         modalList.innerHTML = items.map(c =>
-            `<button class="tma-modal__item" data-id="${c.id}" data-code="${c.code}" data-name="${c.name}">
-                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${c.code.toLowerCase()}">${c.code.charAt(0)}</div>
-                <div><strong>${c.code}</strong><small>${c.name}</small></div>
+            `<button class="tma-modal__item" data-id="${Number(c.id)}" data-code="${escapeHtml(c.code)}" data-name="${escapeHtml(c.name)}">
+                <div class="tma-coin-icon tma-coin-icon--sm" data-coin="${escapeHtml(String(c.code).toLowerCase())}">${c.image_path ? `<img src="${escapeHtml(c.image_path)}" alt="${escapeHtml(c.code)}">` : escapeHtml(String(c.code).charAt(0))}</div>
+                <div><strong>${escapeHtml(c.code)}</strong><small>${escapeHtml(c.name)}</small></div>
             </button>`
         ).join('');
     }
@@ -461,28 +488,21 @@
         exchangeBtn.disabled = true;
         exchangeBtn.textContent = 'Оформляем...';
 
-        detectMode();
-        let url;
-        if (sendType === 'fiat') url = '/buy/request';
-        else if (isFiat(getCurrency.code)) url = '/sell/request';
-        else url = '/exchange/request';
-
         try {
             const payload = {
-                sendAmount: amount,
-                sendCurrency: sendCurrency.id,
-                getCurrency: getCurrency.id,
-                source_channel: 'telegram_mini_app',
-                user_agreement: 1,
+                mode: currentMode(),
+                send_amount: amount,
+                send_currency_id: sendCurrency.id,
+                get_currency_id: getCurrency.id,
             };
-            const res = await fetch(url, {
+            const res = await fetch(@json($telegramRequestUrl), {
                 method:'POST',
                 headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN': csrf},
                 body: JSON.stringify(payload), credentials:'same-origin'
             });
             const data = await res.json();
-            if (data.utr || data.success || data.redirect) {
-                if (calcNote) { calcNote.className = 'tma-calc__note tma-calc__note--success'; calcNote.textContent = '✓ Заявка создана! UTR: ' + (data.utr || '—'); }
+            if (data.status && data.trade) {
+                if (calcNote) { calcNote.className = 'tma-calc__note tma-calc__note--success'; calcNote.textContent = '✓ Заявка создана! UTR: ' + data.trade.utr; }
                 exchangeBtn.textContent = 'Заявка отправлена';
                 webApp?.HapticFeedback?.notificationOccurred('success');
             } else {
