@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-button');
     // Use global currentMode so displayHeroSelectorTitle can access it
     // Initialize _swapCurrentMode from blade default tab
-    var _defaultTabInit = '{{  }}';
+    var _defaultTabInit = '{{ $swapDefaultTab }}';
     window._swapCurrentMode = window._swapCurrentMode || _defaultTabInit || 'exchange';
     let currentMode = window._swapCurrentMode;
 
