@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\InternalTransferController;
 use App\Http\Controllers\Admin\TatumController;
 use App\Http\Controllers\Admin\SupportCabinetController;
 use App\Http\Controllers\Admin\SupportAgentController;
@@ -410,6 +411,13 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::post('settings', [TatumController::class, 'saveSettings'])->name('settings.save');
             Route::get('test', [TatumController::class, 'testConnection'])->name('test');
             Route::delete('subscription/{id}', [TatumController::class, 'unsubscribe'])->name('unsubscribe');
+        });
+
+        // Internal Wallet Transfers
+        Route::middleware('adminRole:admin')->prefix('internal-transfer')->as('internal.transfer.')->group(function () {
+            Route::get('/', [InternalTransferController::class, 'index'])->name('index');
+            Route::post('/', [InternalTransferController::class, 'store'])->name('store');
+            Route::get('balance/{id}', [InternalTransferController::class, 'balance'])->name('balance');
         });
     });
 

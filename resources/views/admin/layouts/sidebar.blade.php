@@ -482,6 +482,13 @@
                             <span class="nav-link-title">Tatum.io Gateway</span>
                         </a>
                     </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.internal.transfer.index']) }}"
+                           href="{{ route('admin.internal.transfer.index') }}" data-placement="left">
+                            <i class="bi-arrow-left-right nav-icon"></i>
+                            <span class="nav-link-title">@lang('Internal Transfer')</span>
+                        </a>
+                    </div>
 
 
                     <span class="dropdown-header mt-3">@lang("Themes Settings")</span>
