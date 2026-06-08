@@ -1,6 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\TatumController;
+use App\Http\Controllers\Admin\SupportCabinetController;
+use App\Http\Controllers\Admin\SupportAgentController;
 use App\Http\Controllers\Admin\Auth\ForgotPasswordController;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\Auth\ResetPasswordController;
@@ -380,6 +382,26 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
                 Route::post('{utr}/send', 'send')->name('send');
                 Route::post('{utr}/cancel', 'cancel')->name('cancel');
             });
+        });
+
+        // Support Cabinet (for support-role agents)
+        Route::middleware('adminRole:support,admin')->prefix('support')->as('support.')->group(function () {
+            Route::get('dashboard', [SupportCabinetController::class, 'dashboard'])->name('dashboard');
+            Route::get('tickets/{status?}', [SupportCabinetController::class, 'tickets'])->name('tickets');
+            Route::post('tickets-search/{status}', [SupportCabinetController::class, 'ticketSearch'])->name('tickets.search');
+            Route::get('ticket/{id}', [SupportCabinetController::class, 'ticketView'])->name('ticket.view');
+            Route::put('ticket/{id}/reply', [SupportCabinetController::class, 'ticketReplySend'])->name('ticket.reply');
+            Route::put('ticket/{id}/close', [SupportCabinetController::class, 'ticketClose'])->name('ticket.close');
+        });
+
+        // Support Agent Management
+        Route::middleware('adminRole:admin')->prefix('support-agents')->as('support.agents.')->group(function () {
+            Route::get('/', [SupportAgentController::class, 'index'])->name('index');
+            Route::get('create', [SupportAgentController::class, 'create'])->name('create');
+            Route::post('store', [SupportAgentController::class, 'store'])->name('store');
+            Route::get('edit/{id}', [SupportAgentController::class, 'edit'])->name('edit');
+            Route::put('update/{id}', [SupportAgentController::class, 'update'])->name('update');
+            Route::delete('destroy/{id}', [SupportAgentController::class, 'destroy'])->name('destroy');
         });
 
         // Tatum.io Crypto Gateway
