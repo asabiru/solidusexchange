@@ -868,7 +868,7 @@
         const title = displaySelectorTitle(currency, target);
         const image = displaySelectorImage(currency, target);
         if (image) {
-            return `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}">`;
+            return `<img src="${escapeHtml(image)}" alt="${escapeHtml(title)}" width="24" height="24" style="width:24px;height:24px;object-fit:cover;border-radius:50%;display:block">`;
         }
 
         if (isRubMethod(currency) && ((exchangeMode === 'buy' && target === 'send') || (exchangeMode === 'sell' && target === 'get'))) {
