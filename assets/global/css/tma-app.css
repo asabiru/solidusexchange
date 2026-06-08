@@ -174,14 +174,14 @@ body.tma{
 .tma-rate-row__prices{text-align:right;display:grid;gap:4px}
 .tma-rate-row__prices strong{font-size:14px;color:var(--text)}
 .tma-rate-change{font-size:12px;font-weight:700;color:var(--text3)}
-.tma-rate-change.is-positive{color:var(--green)}
-.tma-rate-change.is-negative{color:var(--red)}
+.tma-rate-change.is-positive{color:#4ade80}
+.tma-rate-change.is-negative{color:#f87171}
 .tma-rate-row__prices>div{display:flex;align-items:center;gap:8px;justify-content:flex-end}
 .tma-rate-row__prices>div+div{margin-top:4px}
 .tma-label{font-size:11px;color:var(--text3);min-width:56px;text-align:left}
 .tma-value{font-size:13px;font-weight:700;color:var(--text)}
-.tma-value--buy{color:var(--accent)}
-.tma-value--sell{color:var(--accent2)}
+.tma-value--buy{color:#4ade80}
+.tma-value--sell{color:#f87171}
 
 /* ===== EXCHANGE TAB ===== */
 .tma-exchange-header{

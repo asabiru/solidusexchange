@@ -117,8 +117,9 @@
                         <span class="tma-value tma-value--sell">{{ $rc['display_sell_rate'] }} {{ $rc['quote_code'] }}</span>
                     </div>
                     @if($rc['change_24h'] !== null)
-                        <span class="tma-rate-change {{ $rc['change_24h'] >= 0 ? 'is-positive' : 'is-negative' }}">
-                            {{ $rc['change_24h'] >= 0 ? '+' : '' }}{{ number_format($rc['change_24h'], 2) }}%
+                        @php $ch = (float) $rc['change_24h']; @endphp
+                        <span class="tma-rate-change {{ $ch > 0 ? 'is-positive' : ($ch < 0 ? 'is-negative' : '') }}">
+                            {{ $ch > 0 ? '+' : '' }}{{ number_format($ch, 2) }}%
                         </span>
                     @else
                         <span class="tma-rate-change">—</span>
