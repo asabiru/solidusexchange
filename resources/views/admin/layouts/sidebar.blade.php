@@ -1,7 +1,7 @@
 <!-- Navbar Vertical -->
 <aside
     class="js-navbar-vertical-aside navbar navbar-vertical-aside navbar-vertical navbar-vertical-fixed navbar-expand-xl navbar-vertical-aside-initialized
-    {{in_array(session()->get('themeMode'), [null, 'auto'] )?  'navbar-dark bg-dark ' : 'navbar-light bg-white'}}">
+    navbar-dark bg-dark">
     <div class="navbar-vertical-container">
         <div class="navbar-vertical-footer-offset">
             <!-- Logo -->
@@ -51,6 +51,36 @@
                     @php
                         $adminUser = auth()->guard('admin')->user();
                     @endphp
+                    @if($adminUser && $adminUser->isSupport())
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.support.dashboard']) }}"
+                               href="{{ route('admin.support.dashboard') }}">
+                                <i class="bi-headset nav-icon"></i>
+                                <span class="nav-link-title">@lang("Support Dashboard")</span>
+                            </a>
+                        </div>
+
+                        <span class="dropdown-header mt-3">@lang('Tickets')</span>
+                        <small class="bi-three-dots nav-subtitle-replacer"></small>
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.support.tickets']) }}"
+                               href="{{ route('admin.support.tickets') }}">
+                                <i class="bi-ticket nav-icon"></i>
+                                <span class="nav-link-title">@lang("All Tickets")</span>
+                            </a>
+                        </div>
+
+                        <span class="dropdown-header mt-3">@lang('Account')</span>
+                        <small class="bi-three-dots nav-subtitle-replacer"></small>
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.profile']) }}"
+                               href="{{ route('admin.profile') }}">
+                                <i class="bi-person nav-icon"></i>
+                                <span class="nav-link-title">@lang("Profile")</span>
+                            </a>
+                        </div>
+                    @endif
+
                     @if($adminUser && $adminUser->isTrader())
                         <div class="nav-item">
                             <a class="nav-link {{ menuActive(['admin.trader.dashboard']) }}"
@@ -104,7 +134,7 @@
                         </div>
                     @endif
 
-                    @if(!$adminUser || !$adminUser->isTrader())
+                    @if($adminUser && $adminUser->isAdmin())
 
                     <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.dashboard']) }}"
@@ -510,6 +540,13 @@
                            href="{{ route('admin.tatum.settings') }}" data-placement="left">
                             <i class="bi-currency-bitcoin nav-icon"></i>
                             <span class="nav-link-title">Tatum.io Gateway</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.support.agents.index','admin.support.agents.create','admin.support.agents.edit']) }}"
+                           href="{{ route('admin.support.agents.index') }}" data-placement="left">
+                            <i class="bi-headset nav-icon"></i>
+                            <span class="nav-link-title">@lang('Support Agents')</span>
                         </a>
                     </div>
                     <div class="nav-item">

@@ -67,10 +67,29 @@
 
 html,
 body {
-    background: var(--color-bg);
+    background:
+        radial-gradient(circle at 18% 0%, rgba(232, 201, 160, 0.08), transparent 26%),
+        radial-gradient(circle at 88% 10%, rgba(46, 73, 149, 0.16), transparent 31%),
+        linear-gradient(180deg, #0b0608 0%, #10070a 38%, #0b0608 100%);
+    background-attachment: fixed;
     color: var(--color-text-primary);
     font-family: var(--font-sans);
     font-feature-settings: "ss01", "cv11";
+}
+
+body:not(.has-navbar-vertical-aside) :is(
+    .hero-section,
+    .rates-section,
+    .popular-cryptos-section,
+    .security-aml-section,
+    .how-it-works-section,
+    .advantages-section,
+    .reserves-section,
+    .reviews-section,
+    .faq-section,
+    .footer-section
+) {
+    background: transparent;
 }
 
 /* Admin area: let admin theme handle its own background */
