@@ -189,12 +189,17 @@
 // Tab switching functionality
 document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-button');
-    let currentMode = 'exchange';
+    // Use global currentMode so displayHeroSelectorTitle can access it
+    window._swapCurrentMode = window._swapCurrentMode || 'exchange';
+    let currentMode = window._swapCurrentMode;
 
     tabButtons.forEach(button => {
         button.addEventListener('click', function() {
             const tab = this.getAttribute('data-tab');
             currentMode = tab;
+            window._swapCurrentMode = tab;
+            // Sync with exchange-js activeTab if it exists
+            if (typeof activeTab !== 'undefined') { activeTab = tab; }
 
             // Remove active class from all buttons
             tabButtons.forEach(btn => btn.classList.remove('active'));
@@ -300,20 +305,34 @@ function heroMethodTitle(currency, key, fallback) {
 }
 
 function displayHeroSelectorTitle(currency, side) {
-    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+    // Determine current tab from either activeTab (exchange-js) or _swapCurrentMode (swap-widget)
+    const _tab = (typeof activeTab !== 'undefined' && activeTab !== 'exchange' ? activeTab : null)
+               || window._swapCurrentMode
+               || 'exchange';
+
+    if (_tab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
         return heroMethodTitle(currency, 'buy_method_name', 'Банковская карта / СБП');
     }
-    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+    if (_tab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
         return heroMethodTitle(currency, 'sell_method_name', 'СБП / Банковский перевод');
+    }
+    // For fiat currencies with method_name always show it
+    if (isHeroRubMethod(currency) && currency.method_name) {
+        const mn = String(currency.method_name).trim();
+        if (mn && !['рубли', 'рубль', 'rub', 'russian ruble'].includes(mn.toLowerCase())) {
+            return mn;
+        }
     }
     return displayHeroCurrencyCode(currency);
 }
 
 function displayHeroSelectorSubtitle(currency, side) {
-    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+    const _tab = (typeof activeTab !== 'undefined' && activeTab !== 'exchange' ? activeTab : null)
+               || window._swapCurrentMode || 'exchange';
+    if (_tab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
         return 'RUB • оплата';
     }
-    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+    if (_tab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
         return 'RUB • получение';
     }
     return currency?.name || '';
@@ -395,7 +414,10 @@ function updateSendCurrencySelector(currencies, selected) {
 
     let html = '<div class="currency-list">';
     currencies.forEach(currency => {
-        const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        // Use gateway_id for gateways to distinguish same-currency payment methods
+        const selectedKey = selected ? (selected.gateway_id ? selected.id + '_' + selected.gateway_id : selected.id) : null;
+        const currKey = currency.gateway_id ? currency.id + '_' + currency.gateway_id : currency.id;
+        const isSelected = selectedKey && selectedKey === currKey ? 'active' : '';
         const networkBadge = getNetworkBadgeLabel(currency.code);
         html += `
             <div class="item sendModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
@@ -443,7 +465,10 @@ function updateGetCurrencySelector(currencies, selected) {
 
     let html = '<div class="currency-list">';
     currencies.forEach(currency => {
-        const isSelected = selected && selected.id === currency.id ? 'active' : '';
+        // Use gateway_id for gateways to distinguish same-currency payment methods
+        const selectedKey = selected ? (selected.gateway_id ? selected.id + '_' + selected.gateway_id : selected.id) : null;
+        const currKey = currency.gateway_id ? currency.id + '_' + currency.gateway_id : currency.id;
+        const isSelected = selectedKey && selectedKey === currKey ? 'active' : '';
         const networkBadge = getNetworkBadgeLabel(currency.code);
         html += `
             <div class="item getModal ${isSelected}" data-res='${JSON.stringify(currency)}'>
