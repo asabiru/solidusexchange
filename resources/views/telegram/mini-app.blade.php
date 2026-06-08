@@ -15,7 +15,12 @@
     $telegramPolicyUrl = $policyUrl ?? route('telegram.mini-app.page', ['slug' => 'terms-and-conditions']);
     $telegramPrivacyUrl = $privacyUrl ?? route('telegram.mini-app.page', ['slug' => 'privacy-policy']);
     $logoUrl = $appLogo ?? getFile(basicControl()->dark_logo_driver, basicControl()->dark_logo);
-    $needsEmailBind = $user && (!$user->email || str_ends_with((string) $user->email, '@telegram.local'));
+    $emailRaw = (string) ($user->email ?? '');
+    $needsEmailBind = $user && (
+        !$emailRaw ||
+        str_ends_with($emailRaw, '@telegram.local') ||
+        (!$user->email_verified_at && !$user->email_verification)
+    );
 
     // Pre-build JSON-safe arrays (arrow fns inside @json confuse Blade parser)
     $cryptosJson = $cryptos->map(function($c) {
@@ -729,12 +734,10 @@
         .finally(() => { emailVerifyBtn.disabled = false; });
     });
 
-    // Auto-submit when 6 digits entered
+    // Strip non-digits from code input (digits only, no auto-submit)
     emailCodeInput?.addEventListener('input', () => {
-        if (emailCodeInput.value.replace(/\D/g, '').length === 6) {
-            emailCodeInput.value = emailCodeInput.value.replace(/\D/g, '');
-            emailVerifyBtn?.click();
-        }
+        const clean = emailCodeInput.value.replace(/\D/g, '').slice(0, 6);
+        if (clean !== emailCodeInput.value) emailCodeInput.value = clean;
     });
 
     maybeShowEmailBindModal();

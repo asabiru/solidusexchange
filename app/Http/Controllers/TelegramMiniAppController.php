@@ -35,7 +35,9 @@ class TelegramMiniAppController extends Controller
 
             if ($request->expectsJson() || $request->ajax()) {
                 $email = (string) $user->email;
-                $needsEmail = !$email || str_ends_with($email, '@telegram.local');
+                $needsEmail = !$email
+                    || str_ends_with($email, '@telegram.local')
+                    || (!$user->email_verified_at && !$user->email_verification);
                 return response()->json([
                     'authenticated' => true,
                     'user' => [
@@ -199,6 +201,7 @@ class TelegramMiniAppController extends Controller
 
         $user->email = $stored['email'];
         $user->email_verified_at = now();
+        $user->email_verification = 1; // sync with standard Laravel verify flag
         $user->save();
 
         return response()->json(['status' => true, 'message' => 'Email успешно привязан!']);
