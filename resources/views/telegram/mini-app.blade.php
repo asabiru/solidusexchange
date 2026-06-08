@@ -635,10 +635,14 @@
     }
 
     function maybeShowEmailBindModal() {
-        if (needsEmailBind && emailModal && initData) {
-            emailModal.hidden = false;
-            emailStep1?.classList.remove('tma-email-screen--hidden');
-            emailStep2?.classList.add('tma-email-screen--hidden');
+        // Show either immediately (if user already authed on server) or after auth fetch
+        if (needsEmailBind && emailModal) {
+            setTimeout(() => {
+                if (!needsEmailBind) return; // might have been resolved meanwhile
+                emailModal.hidden = false;
+                emailStep1?.classList.remove('tma-email-screen--hidden');
+                emailStep2?.classList.add('tma-email-screen--hidden');
+            }, 800);
         }
     }
 

@@ -34,11 +34,14 @@ class TelegramMiniAppController extends Controller
             }
 
             if ($request->expectsJson() || $request->ajax()) {
+                $email = (string) $user->email;
+                $needsEmail = !$email || str_ends_with($email, '@telegram.local');
                 return response()->json([
                     'authenticated' => true,
                     'user' => [
-                        'id' => $user->id,
-                        'name' => $user->firstname ?: $user->username ?: $user->email,
+                        'id'          => $user->id,
+                        'name'        => $user->firstname ?: $user->username ?: $email,
+                        'needs_email' => $needsEmail,
                     ],
                 ]);
             }
