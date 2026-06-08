@@ -124,3 +124,27 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
 
 
+
+// Custodial Wallets & Withdrawals (2FA required on execute/approve)
+Route::group(['prefix' => 'admin', 'as' => 'admin.', 'middleware' => ['auth:admin', 'verifyAdmin', 'demo', 'adminRole:admin']], function () {
+    Route::controller(\App\Http\Controllers\Admin\Module\CustodialWalletController::class)->group(function () {
+        Route::get('custodial-wallets', 'index')->name('custodialWallets');
+        Route::post('custodial-wallets/list', 'walletsList')->name('custodialWalletsList');
+        Route::get('custodial-wallets/deposits', 'depositsIndex')->name('custodialDeposits');
+        Route::post('custodial-wallets/deposits/list', 'depositsList')->name('custodialDepositsList');
+        Route::get('custodial-wallets/withdrawals', 'withdrawalsIndex')->name('custodialWithdrawals');
+        Route::post('custodial-wallets/withdrawals/list', 'withdrawalsList')->name('custodialWithdrawalsList');
+        Route::get('custodial-wallets/{id}/withdraw', 'createWithdrawal')->name('custodialWithdrawalCreate');
+        Route::post('custodial-wallets/withdrawal/store', 'storeWithdrawal')->name('custodialWithdrawalStore');
+
+        // Approve and Execute require 2FA
+        Route::post('custodial-wallets/withdrawal/{id}/approve', 'approveWithdrawal')
+            ->middleware('require2fa.withdraw')
+            ->name('custodialWithdrawalApprove');
+        Route::post('custodial-wallets/withdrawal/{id}/execute', 'executeWithdrawal')
+            ->middleware('require2fa.withdraw')
+            ->name('custodialWithdrawalExecute');
+        Route::post('custodial-wallets/withdrawal/{id}/reject', 'rejectWithdrawal')->name('custodialWithdrawalReject');
+        Route::post('custodial-wallets/withdrawal/{id}/retry', 'retryWithdrawal')->name('custodialWithdrawalRetry');
+    });
+});

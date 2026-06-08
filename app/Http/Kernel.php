@@ -82,5 +82,6 @@ class Kernel extends HttpKernel
         'checkAuthenticate' => \App\Http\Middleware\CheckApiAuthenticate::class,
         'Ensure' => EnsureUserHasService::class,
         'adminRole' => EnsureAdminRole::class,
+        'require2fa.withdraw' => \App\Http\Middleware\Require2FAForWithdraw::class,
     ];
 }

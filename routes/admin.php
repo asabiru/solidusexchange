@@ -413,10 +413,12 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
             Route::delete('subscription/{id}', [TatumController::class, 'unsubscribe'])->name('unsubscribe');
         });
 
-        // Internal Wallet Transfers
+        // Internal Wallet Transfers (POST requires Google 2FA)
         Route::middleware('adminRole:admin')->prefix('internal-transfer')->as('internal.transfer.')->group(function () {
             Route::get('/', [InternalTransferController::class, 'index'])->name('index');
-            Route::post('/', [InternalTransferController::class, 'store'])->name('store');
+            Route::post('/', [InternalTransferController::class, 'store'])
+                ->middleware('require2fa.withdraw')
+                ->name('store');
             Route::get('balance/{id}', [InternalTransferController::class, 'balance'])->name('balance');
         });
     });

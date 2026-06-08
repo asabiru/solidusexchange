@@ -100,8 +100,21 @@
                             Source and destination must have the same currency.
                         </div>
 
+                        {{-- Google 2FA --}}
+                        <div class="mb-4 border-top pt-4">
+                            <label class="form-label fw-semibold">
+                                <i class="bi-shield-lock me-1 text-warning"></i>
+                                Google Authenticator Code <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" name="two_fa_code" class="form-control form-control-lg text-center"
+                                   placeholder="6-digit code" maxlength="6" inputmode="numeric"
+                                   autocomplete="one-time-code" required
+                                   style="letter-spacing:.5rem;font-weight:700;font-size:1.5rem">
+                            <small class="text-muted">Required for every manual transfer to prevent unauthorized withdrawals.</small>
+                        </div>
+
                         <div class="d-grid">
-                            <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
                                 <i class="bi-send me-1"></i> Execute Transfer
                             </button>
                         </div>
