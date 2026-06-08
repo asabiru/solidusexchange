@@ -198,6 +198,56 @@
                 </div>
             </div>
         </div>
+
+        {{-- Trader Wallets --}}
+        @if(!empty($traderWallets))
+        <div class="row">
+            <div class="col-12 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h4 class="card-title mb-0">
+                            <i class="bi-wallet2 me-2"></i>@lang('My Crypto Wallets')
+                        </h4>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-borderless table-align-middle card-table mb-0">
+                            <thead class="thead-light">
+                            <tr>
+                                <th>@lang('Currency')</th>
+                                <th>@lang('Deposit Address')</th>
+                                <th class="text-end">@lang('Balance')</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            @foreach($traderWallets as $w)
+                                <tr>
+                                    <td><strong>{{ $w['currency'] }}</strong></td>
+                                    <td>
+                                        <code style="font-size:.8rem">{{ $w['address'] }}</code>
+                                        <button class="btn btn-xs btn-white ms-1"
+                                                onclick="navigator.clipboard.writeText('{{ $w['address'] }}')"
+                                                title="@lang('Copy')">
+                                            <i class="bi-clipboard"></i>
+                                        </button>
+                                    </td>
+                                    <td class="text-end">
+                                        <span class="{{ ($w['balance'] ?? 0) > 0 ? 'text-success fw-bold' : 'text-body' }}">
+                                            {{ number_format($w['balance'] ?? 0, 8) }} {{ $w['currency'] }}
+                                        </span>
+                                    </td>
+                                </tr>
+                            @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="card-footer text-muted" style="font-size:.8rem">
+                        @lang('Send crypto to your deposit address. Balances update automatically.')
+                    </div>
+                </div>
+            </div>
+        </div>
+        @endif
+
     </div>
 @endsection
 @push('script')

@@ -10,6 +10,7 @@ class CustodialWallet extends Model
     use HasFactory;
 
     protected $fillable = [
+        'trader_id',
         'currency_code', 'network', 'address', 'derivation_path',
         'hd_wallet_index', 'encrypted_private_key',
         'provider', 'provider_reference', 'purpose', 'status',
@@ -29,9 +30,24 @@ class CustodialWallet extends Model
 
     protected $hidden = ['encrypted_private_key'];
 
+    public function trader()
+    {
+        return $this->belongsTo(Admin::class, 'trader_id');
+    }
+
     public function assignedExchange()
     {
         return $this->belongsTo(ExchangeRequest::class, 'assigned_exchange_id');
+    }
+
+    public function scopeForTrader($query, int $traderId)
+    {
+        return $query->where('trader_id', $traderId);
+    }
+
+    public function scopePayout($query)
+    {
+        return $query->whereIn('purpose', ['payout', 'both']);
     }
 
     public function deposits()

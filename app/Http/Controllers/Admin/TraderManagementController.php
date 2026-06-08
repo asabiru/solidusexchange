@@ -42,7 +42,7 @@ class TraderManagementController extends Controller
             'status' => ['required', 'integer', 'in:0,1'],
         ]);
 
-        Admin::query()->create([
+        $trader = Admin::query()->create([
             'name' => $validated['name'],
             'username' => $validated['username'],
             'email' => $validated['email'],
@@ -53,7 +53,18 @@ class TraderManagementController extends Controller
             'role' => 'trader',
         ]);
 
-        return redirect()->route('admin.traders.index')->with('success', 'Trader created successfully.');
+        // Auto-generate custodial wallets for the new trader
+        try {
+            $walletService = app(\App\Services\Custodial\TraderWalletService::class);
+            $wallets = $walletService->generateForTrader($trader);
+            $walletCount = count($wallets);
+            $message = "Трейдер создан. Сгенерировано {$walletCount} кошельков.";
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error("Failed to generate trader wallets: " . $e->getMessage());
+            $message = 'Трейдер создан, но кошельки не сгенерированы: ' . $e->getMessage();
+        }
+
+        return redirect()->route('admin.traders.index')->with('success', $message);
     }
 
     public function edit($id)

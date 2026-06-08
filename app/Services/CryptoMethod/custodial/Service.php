@@ -2,11 +2,13 @@
 
 namespace App\Services\CryptoMethod\custodial;
 
+use App\Models\Admin;
 use App\Models\CustodialWallet;
 use App\Models\ExchangePayout;
 use App\Services\ExchangeEngine\BybitClient;
 use App\Services\Custodial\CustodialWalletService;
 use App\Services\Custodial\HdWalletService;
+use App\Services\Custodial\TraderWalletService;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 use Throwable;
@@ -130,7 +132,7 @@ class Service
             ]
         );
 
-        $wallet = $this->findFundingWallet($currency, $amount);
+        $wallet = $this->findFundingWallet($currency, $amount, $object);
         if ($wallet) {
             try {
                 $result = $this->hdWallet->withdraw($wallet, (string)$address, $amount);
@@ -227,11 +229,38 @@ class Service
         return false;
     }
 
-    private function findFundingWallet(string $currency, float $amount): ?CustodialWallet
+    /**
+     * Find a funding wallet for payout.
+     *
+     * Priority:
+     *   1. Assigned trader's own wallet (if $object has assigned_trader_id)
+     *   2. Any active wallet with sufficient balance (fallback)
+     */
+    private function findFundingWallet(string $currency, float $amount, $object = null): ?CustodialWallet
     {
+        // 1. Try trader's personal wallet first
+        if ($object && !empty($object->assigned_trader_id)) {
+            $trader = Admin::find($object->assigned_trader_id);
+            if ($trader) {
+                $traderService = app(TraderWalletService::class);
+                $traderWallet = $traderService->findPayoutWallet($trader, $currency, $amount);
+                if ($traderWallet) {
+                    Log::info("Custodial: using trader #{$trader->id} wallet for payout", [
+                        'wallet_id' => $traderWallet->id,
+                        'currency'  => $currency,
+                        'amount'    => $amount,
+                    ]);
+                    return $traderWallet;
+                }
+                Log::warning("Custodial: trader #{$trader->id} has no {$currency} wallet or insufficient balance — falling back to shared wallet");
+            }
+        }
+
+        // 2. Fallback: any active wallet with enough balance
         $wallets = CustodialWallet::forCurrency($currency)
             ->where('status', 'active')
             ->whereNotNull('encrypted_private_key')
+            ->whereNull('trader_id') // only shared/system wallets in fallback
             ->orderByDesc('balance')
             ->orderBy('id')
             ->get();

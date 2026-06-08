@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Trader;
 
 use App\Http\Controllers\Controller;
 use App\Models\SellRequest;
+use App\Services\Custodial\TraderWalletService;
 use App\Services\Sell\TraderAssignmentService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -11,7 +12,7 @@ use Illuminate\Validation\Rule;
 
 class DashboardController extends Controller
 {
-    public function index(TraderAssignmentService $assignmentService)
+    public function index(TraderAssignmentService $assignmentService, TraderWalletService $walletService)
     {
         $assignmentService->assignPendingManualSells();
 
@@ -29,6 +30,13 @@ class DashboardController extends Controller
         ];
         $data['trader'] = $trader;
         $data['recentSells'] = (clone $sellQuery)->latest()->limit(10)->get();
+
+        // Load trader's wallets (non-blocking)
+        try {
+            $data['traderWallets'] = $walletService->getWalletSummary($trader);
+        } catch (\Throwable $e) {
+            $data['traderWallets'] = [];
+        }
 
         return view('admin.trader.dashboard', $data);
     }
