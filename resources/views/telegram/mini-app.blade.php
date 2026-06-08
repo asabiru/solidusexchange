@@ -303,25 +303,60 @@
 </div>
 
 {{-- ===== EMAIL BIND MODAL ===== --}}
-<div class="tma-modal" id="emailBindModal" hidden>
-    <div class="tma-modal__content tma-email-modal">
-        <div class="tma-modal__head">
-            <h3>Привяжите Email</h3>
-            <button class="tma-modal__close" id="emailBindLater" type="button"><i class="fas fa-times"></i></button>
+<div class="tma-email-overlay" id="emailBindModal" hidden>
+    {{-- STEP 1: Enter email --}}
+    <div class="tma-email-screen" id="emailStep1">
+        <button class="tma-email-overlay__close" id="emailBindLater" type="button">
+            <i class="fas fa-times"></i>
+        </button>
+        <div class="tma-email-screen__icon">
+            <i class="far fa-envelope"></i>
         </div>
-        <div class="tma-email-icon"><i class="far fa-envelope"></i></div>
-        <p class="tma-email-copy">Привяжите почту, чтобы не потерять доступ к аккаунту и получать уведомления по заявкам.</p>
-        <div class="tma-email-form">
-            <input class="tma-modal__search" id="emailBindInput" type="email" placeholder="email@example.com" autocomplete="email">
-            <button class="tma-primary-btn" id="emailBindSend" type="button">Отправить код</button>
-            <div id="emailVerifyStep" hidden>
-                <input class="tma-modal__search" id="emailBindCode" type="text" inputmode="numeric" placeholder="Код из письма">
-                <button class="tma-primary-btn" id="emailBindVerify" type="button">Подтвердить Email</button>
-            </div>
-            <button class="tma-secondary-btn" id="emailBindSkip" type="button">Позже</button>
-            <small id="emailBindMessage"></small>
+        <h2 class="tma-email-screen__title">Привяжите Email</h2>
+        <p class="tma-email-screen__desc">Чтобы не потерять доступ к аккаунту и получать уведомления по заявкам</p>
+        <div class="tma-email-screen__form">
+            <label class="tma-email-screen__label">Email адрес</label>
+            <input class="tma-email-screen__input" id="emailBindInput" type="email"
+                   placeholder="example@email.com" autocomplete="email" inputmode="email">
+            <p class="tma-email-screen__msg" id="emailBindMessage1"></p>
+            <button class="tma-primary-btn" id="emailBindSend" type="button">
+                <i class="fas fa-paper-plane"></i> Отправить код
+            </button>
+            <button class="tma-email-screen__skip" id="emailBindSkip" type="button">Позже</button>
         </div>
     </div>
+
+    {{-- STEP 2: Enter code --}}
+    <div class="tma-email-screen tma-email-screen--hidden" id="emailStep2">
+        <button class="tma-email-overlay__close" id="emailBindBack" type="button">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+        <div class="tma-email-screen__icon tma-email-screen__icon--sent">
+            <i class="fas fa-check"></i>
+        </div>
+        <h2 class="tma-email-screen__title">Проверьте почту</h2>
+        <p class="tma-email-screen__desc">
+            Мы отправили 6-значный код на<br>
+            <strong id="emailBindAddressDisplay" class="tma-email-screen__address"></strong>
+        </p>
+        <div class="tma-email-screen__form">
+            <label class="tma-email-screen__label">Код из письма</label>
+            <input class="tma-email-screen__input tma-email-screen__input--code"
+                   id="emailBindCode" type="text" inputmode="numeric"
+                   placeholder="— — — — — —" maxlength="6" autocomplete="one-time-code">
+            <p class="tma-email-screen__msg" id="emailBindMessage2"></p>
+            <button class="tma-primary-btn" id="emailBindVerify" type="button">
+                <i class="fas fa-check-circle"></i> Подтвердить
+            </button>
+            <button class="tma-email-screen__resend" id="emailBindResend" type="button">
+                Отправить код повторно
+            </button>
+        </div>
+    </div>
+
+    {{-- Hidden fallback for backward compat --}}
+    <div id="emailVerifyStep" hidden></div>
+    <small id="emailBindMessage" hidden></small>
 </div>
 
 {{-- ===== PROFILE ACTION MODAL ===== --}}
@@ -556,24 +591,54 @@
         overlay.classList.add('tma-auth-overlay--inline');
     }
 
-    const emailModal = document.getElementById('emailBindModal');
-    const emailInput = document.getElementById('emailBindInput');
-    const emailCodeInput = document.getElementById('emailBindCode');
-    const emailSendBtn = document.getElementById('emailBindSend');
-    const emailVerifyBtn = document.getElementById('emailBindVerify');
-    const emailVerifyStep = document.getElementById('emailVerifyStep');
-    const emailMessage = document.getElementById('emailBindMessage');
+    // -------- Email Bind Modal (2-step) --------
+    const emailModal    = document.getElementById('emailBindModal');
+    const emailStep1    = document.getElementById('emailStep1');
+    const emailStep2    = document.getElementById('emailStep2');
+    const emailInput    = document.getElementById('emailBindInput');
+    const emailCodeInput= document.getElementById('emailBindCode');
+    const emailSendBtn  = document.getElementById('emailBindSend');
+    const emailVerifyBtn= document.getElementById('emailBindVerify');
+    const emailResendBtn= document.getElementById('emailBindResend');
+    const emailMsg1     = document.getElementById('emailBindMessage1');
+    const emailMsg2     = document.getElementById('emailBindMessage2');
+    const emailAddrDisp = document.getElementById('emailBindAddressDisplay');
 
-    function setEmailMessage(text, type = '') {
-        if (!emailMessage) return;
-        emailMessage.textContent = text || '';
-        emailMessage.classList.toggle('is-error', type === 'error');
-        emailMessage.classList.toggle('is-success', type === 'success');
+    function setEmailMsg(el, text, type = '') {
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'tma-email-screen__msg' + (type ? ' is-' + type : '');
+    }
+
+    function goToCodeStep(email) {
+        if (emailAddrDisp) emailAddrDisp.textContent = email;
+        emailStep1?.classList.add('tma-email-screen--out');
+        setTimeout(() => {
+            emailStep1?.classList.add('tma-email-screen--hidden');
+            emailStep1?.classList.remove('tma-email-screen--out');
+            emailStep2?.classList.remove('tma-email-screen--hidden');
+            emailStep2?.classList.add('tma-email-screen--in');
+            setTimeout(() => emailStep2?.classList.remove('tma-email-screen--in'), 300);
+            emailCodeInput?.focus();
+        }, 260);
+    }
+
+    function backToEmailStep() {
+        emailStep2?.classList.add('tma-email-screen--out');
+        setTimeout(() => {
+            emailStep2?.classList.add('tma-email-screen--hidden');
+            emailStep2?.classList.remove('tma-email-screen--out');
+            emailStep1?.classList.remove('tma-email-screen--hidden');
+            emailStep1?.classList.add('tma-email-screen--in');
+            setTimeout(() => emailStep1?.classList.remove('tma-email-screen--in'), 300);
+        }, 260);
     }
 
     function maybeShowEmailBindModal() {
         if (needsEmailBind && emailModal && initData) {
             emailModal.hidden = false;
+            emailStep1?.classList.remove('tma-email-screen--hidden');
+            emailStep2?.classList.add('tma-email-screen--hidden');
         }
     }
 
@@ -581,57 +646,91 @@
         if (emailModal) emailModal.hidden = true;
     }
 
-    ['emailBindLater', 'emailBindSkip'].forEach((id) => {
-        document.getElementById(id)?.addEventListener('click', closeEmailBindModal);
-    });
+    ['emailBindLater', 'emailBindSkip'].forEach(id =>
+        document.getElementById(id)?.addEventListener('click', closeEmailBindModal));
 
-    emailSendBtn?.addEventListener('click', function() {
+    document.getElementById('emailBindBack')?.addEventListener('click', backToEmailStep);
+
+    function sendEmailCode(email) {
+        emailSendBtn.disabled = true;
+        setEmailMsg(emailMsg1, 'Отправляем код...', '');
+        fetch(apiUrls.emailSend, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Telegram-Init-Data': initData },
+            body: JSON.stringify({ email, initData }),
+            credentials: 'same-origin'
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.status === false) throw new Error(data.message || 'Не удалось отправить код.');
+            setEmailMsg(emailMsg1, '', '');
+            goToCodeStep(email);
+        })
+        .catch(err => setEmailMsg(emailMsg1, err.message, 'error'))
+        .finally(() => { emailSendBtn.disabled = false; });
+    }
+
+    emailSendBtn?.addEventListener('click', function () {
         const email = emailInput?.value?.trim();
-        if (!email) {
-            setEmailMessage('Введите email.', 'error');
+        if (!email || !email.includes('@')) {
+            setEmailMsg(emailMsg1, 'Введите корректный email.', 'error');
             return;
         }
-        emailSendBtn.disabled = true;
-        setEmailMessage('Отправляем код...');
-        fetch(apiUrls.emailSend, {
-            method:'POST',
-            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':initData},
-            body: JSON.stringify({email, initData}),
-            credentials:'same-origin'
-        })
-        .then(r => r.json().then(data => ({ok:r.ok, data})))
-        .then(({ok, data}) => {
-            if (!ok || data.status === false) throw new Error(data.message || 'Не удалось отправить код.');
-            if (emailVerifyStep) emailVerifyStep.hidden = false;
-            setEmailMessage(data.message || 'Код отправлен.', 'success');
-        })
-        .catch((error) => setEmailMessage(error.message, 'error'))
-        .finally(() => { emailSendBtn.disabled = false; });
+        sendEmailCode(email);
     });
 
-    emailVerifyBtn?.addEventListener('click', function() {
+    emailResendBtn?.addEventListener('click', function () {
+        const email = emailInput?.value?.trim() || emailAddrDisp?.textContent;
+        if (!email) return;
+        setEmailMsg(emailMsg2, 'Отправляем повторно...', '');
+        emailResendBtn.disabled = true;
+        fetch(apiUrls.emailSend, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Telegram-Init-Data': initData },
+            body: JSON.stringify({ email, initData }),
+            credentials: 'same-origin'
+        })
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok || data.status === false) throw new Error(data.message || 'Ошибка.');
+            setEmailMsg(emailMsg2, 'Новый код отправлен!', 'success');
+            if (emailCodeInput) emailCodeInput.value = '';
+        })
+        .catch(err => setEmailMsg(emailMsg2, err.message, 'error'))
+        .finally(() => { emailResendBtn.disabled = false; });
+    });
+
+    emailVerifyBtn?.addEventListener('click', function () {
         const code = emailCodeInput?.value?.trim();
-        if (!code) {
-            setEmailMessage('Введите код из письма.', 'error');
+        if (!code || code.length < 4) {
+            setEmailMsg(emailMsg2, 'Введите код из письма.', 'error');
             return;
         }
         emailVerifyBtn.disabled = true;
-        setEmailMessage('Проверяем код...');
+        setEmailMsg(emailMsg2, 'Проверяем...', '');
         fetch(apiUrls.emailVerify, {
-            method:'POST',
-            headers:{'Accept':'application/json','Content-Type':'application/json','X-CSRF-TOKEN':csrf,'X-Telegram-Init-Data':initData},
-            body: JSON.stringify({code, initData}),
-            credentials:'same-origin'
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Telegram-Init-Data': initData },
+            body: JSON.stringify({ code, initData }),
+            credentials: 'same-origin'
         })
-        .then(r => r.json().then(data => ({ok:r.ok, data})))
-        .then(({ok, data}) => {
+        .then(r => r.json().then(data => ({ ok: r.ok, data })))
+        .then(({ ok, data }) => {
             if (!ok || data.status === false) throw new Error(data.message || 'Код не подошёл.');
             needsEmailBind = false;
-            setEmailMessage(data.message || 'Email привязан.', 'success');
-            setTimeout(closeEmailBindModal, 700);
+            setEmailMsg(emailMsg2, '✓ Email успешно привязан!', 'success');
+            setTimeout(closeEmailBindModal, 1000);
         })
-        .catch((error) => setEmailMessage(error.message, 'error'))
+        .catch(err => setEmailMsg(emailMsg2, err.message, 'error'))
         .finally(() => { emailVerifyBtn.disabled = false; });
+    });
+
+    // Auto-submit when 6 digits entered
+    emailCodeInput?.addEventListener('input', () => {
+        if (emailCodeInput.value.replace(/\D/g, '').length === 6) {
+            emailCodeInput.value = emailCodeInput.value.replace(/\D/g, '');
+            emailVerifyBtn?.click();
+        }
     });
 
     maybeShowEmailBindModal();
