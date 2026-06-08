@@ -25,6 +25,7 @@ use App\Traits\Upload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Validator;
 use RuntimeException;
 
@@ -140,13 +141,26 @@ class TelegramMiniAppController extends Controller
         $user->sent_at = Carbon::now();
         $user->save();
 
-        $this->verifyToMail($user, 'VERIFICATION_CODE', [
-            'code' => $user->verify_code,
-        ]);
+        try {
+            $code = $user->verify_code;
+            $email = $user->email;
+            Mail::raw(
+                "Ваш код подтверждения для SolidChange: {$code}\n\nКод действителен 10 минут.",
+                function ($msg) use ($email) {
+                    $msg->to($email)->subject('Код подтверждения email — SolidChange');
+                }
+            );
+        } catch (\Throwable $exception) {
+            report($exception);
+            return response()->json([
+                'status' => false,
+                'message' => 'Не удалось отправить письмо. Проверьте SMTP-настройки.',
+            ], 500);
+        }
 
         return response()->json([
             'status' => true,
-            'message' => 'Код подтверждения отправлен на email.',
+            'message' => 'Код подтверждения отправлен на ' . $user->email . '.',
         ]);
     }
 
