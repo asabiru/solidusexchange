@@ -538,19 +538,17 @@ class TelegramMiniAppController extends Controller
 
     private function emailCodeIsValid($user, string $code): bool
     {
-        if (!$user->verify_code || !$user->sent_at) {
+        if (!$user->verify_code) {
             return false;
         }
 
-        if ($user->sent_at->copy()->addMinutes(30)->lt(Carbon::now())) {
+        // sent_at is cast as "date" (no time), so use updated_at for 30-min expiry
+        $sentAt = $user->updated_at ?? Carbon::now()->subMinutes(5);
+        if ($sentAt->copy()->addMinutes(30)->lt(Carbon::now())) {
             return false;
         }
 
         return hash_equals((string) $user->verify_code, trim($code));
     }
 
-    private function defaultFiatCode(): string
-    {
-        return strtoupper((string) (basicControl()->base_currency ?: 'RUB'));
-    }
 }
