@@ -7,6 +7,7 @@ use App\Models\CustodialWallet;
 use App\Models\ExchangeRequest;
 use App\Models\TatumSubscription;
 use App\Services\ExchangePipeline\ExchangeAmlService;
+use App\Services\Kyc\DiditTransactionService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +36,8 @@ use Illuminate\Support\Facades\Log;
 class TatumWebhookController extends Controller
 {
     public function __construct(
-        private readonly ExchangeAmlService $amlService
+        private readonly ExchangeAmlService $amlService,
+        private readonly DiditTransactionService $diditTm,
     ) {}
 
     public function handle(Request $request): JsonResponse
@@ -110,21 +112,61 @@ class TatumWebhookController extends Controller
             return;
         }
 
-        DB::transaction(function () use ($wallet, $txId, $amountFloat, $asset, $chain, $type, $contractAddress, $raw) {
+        DB::transaction(function () use ($wallet, $txId, $amountFloat, $asset, $chain, $type, $contractAddress, $raw, $address) {
             // Determine confirmed status from block number
             $blockNumber  = $raw['blockNumber'] ?? null;
-            $isConfirmed  = $blockNumber !== null; // Tatum sends confirmed txs by default
+            $isConfirmed  = $blockNumber !== null;
+            $fromAddress  = $raw['counterAddress'] ?? null;
+
+            // ─── Didit AML / Transaction Monitoring ──────────────────────
+            $amlStatus   = 'approved';
+            $amlBlocked  = false;
+            $amlTmId     = null;
+            $amlScore    = null;
+
+            if ($isConfirmed && $fromAddress) {
+                try {
+                    $amlResult  = $this->diditTm->screenDeposit(
+                        txId:        $txId,
+                        fromAddress: $fromAddress,
+                        toAddress:   $address,
+                        amount:      $amountFloat,
+                        currency:    strtoupper($asset),
+                    );
+                    $amlStatus  = strtolower($amlResult['status'] ?? 'approved');
+                    $amlBlocked = (bool) ($amlResult['blocked'] ?? false);
+                    $amlTmId    = $amlResult['tm_id'] ?? null;
+                    $amlScore   = $amlResult['risk_score'] ?? null;
+
+                    if ($amlBlocked) {
+                        Log::warning("Tatum webhook: Didit AML BLOCKED deposit {$txId}", [
+                            'from'   => $fromAddress,
+                            'amount' => $amountFloat,
+                            'asset'  => $asset,
+                            'status' => $amlStatus,
+                            'score'  => $amlScore,
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::error("Tatum webhook: Didit TM error for {$txId}: " . $e->getMessage());
+                }
+            }
+            // ─────────────────────────────────────────────────────────────
 
             $deposit = CustodialDeposit::create([
                 'custodial_wallet_id' => $wallet->id,
                 'tx_id'               => $txId,
                 'amount'              => $amountFloat,
                 'currency_code'       => strtoupper($asset),
-                'status'              => $isConfirmed ? 'confirmed' : 'pending',
+                'status'              => $amlBlocked ? 'aml_blocked' : ($isConfirmed ? 'confirmed' : 'pending'),
                 'confirmations'       => $isConfirmed ? 1 : 0,
                 'block_number'        => $blockNumber,
-                'from_address'        => $raw['counterAddress'] ?? null,
-                'raw_data'            => json_encode($raw),
+                'from_address'        => $fromAddress,
+                'raw_data'            => json_encode(array_merge($raw, [
+                    'aml_status' => $amlStatus,
+                    'aml_tm_id'  => $amlTmId,
+                    'aml_score'  => $amlScore,
+                ])),
             ]);
 
             Log::info("Tatum webhook: deposit recorded", [
@@ -138,8 +180,8 @@ class TatumWebhookController extends Controller
             // Update wallet balance
             $wallet->increment('balance', $amountFloat);
 
-            // Notify the exchange pipeline that deposit arrived
-            if ($wallet->assigned_exchange_id && $isConfirmed) {
+            // Notify the exchange pipeline (only if AML passed and deposit confirmed)
+            if ($wallet->assigned_exchange_id && $isConfirmed && !$amlBlocked) {
                 $this->triggerExchangePipeline($wallet, $deposit);
             }
         });

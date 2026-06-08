@@ -233,13 +233,24 @@ class Service
      * Find a funding wallet for payout.
      *
      * Priority:
-     *   1. Assigned trader's own wallet (if $object has assigned_trader_id)
-     *   2. Any active wallet with sufficient balance (fallback)
+     *   1. For Buy/Sell (RUB↔crypto): assigned trader's own wallet first
+     *   2. For Exchange (crypto↔crypto): ALWAYS system wallet, trader not involved
+     *   3. Fallback: any active system wallet with sufficient balance
      */
     private function findFundingWallet(string $currency, float $amount, $object = null): ?CustodialWallet
     {
-        // 1. Try trader's personal wallet first
-        if ($object && !empty($object->assigned_trader_id)) {
+        // Crypto-to-crypto exchange: skip trader wallet entirely
+        $isExchange = $object && property_exists($object, 'type')
+            ? strtolower((string)($object->type ?? '')) === 'exchange'
+            : false;
+
+        // Also detect ExchangeRequest by class name (no trader involved in exchange)
+        if (!$isExchange && $object && ($object instanceof \App\Models\ExchangeRequest)) {
+            $isExchange = true;
+        }
+
+        // 1. Try trader's personal wallet first (only for buy/sell, NOT exchange)
+        if (!$isExchange && $object && !empty($object->assigned_trader_id)) {
             $trader = Admin::find($object->assigned_trader_id);
             if ($trader) {
                 $traderService = app(TraderWalletService::class);
