@@ -883,8 +883,16 @@
         if (getCurrLabel) getCurrLabel.textContent = displaySelectorTitle(getCurrency, 'get');
         const sendIcon = document.getElementById('sendCurrencyIcon');
         const getIcon = document.getElementById('getCurrencyIcon');
-        if (sendIcon) sendIcon.innerHTML = selectorIconHtml(sendCurrency, 'send');
-        if (getIcon) getIcon.innerHTML = selectorIconHtml(getCurrency, 'get');
+        if (sendIcon) {
+            const html = selectorIconHtml(sendCurrency, 'send');
+            sendIcon.innerHTML = html;
+            sendIcon.classList.toggle('tma-currency-btn__icon--has-img', html.startsWith('<img'));
+        }
+        if (getIcon) {
+            const html = selectorIconHtml(getCurrency, 'get');
+            getIcon.innerHTML = html;
+            getIcon.classList.toggle('tma-currency-btn__icon--has-img', html.startsWith('<img'));
+        }
     }
 
     function updateExchangeFieldLabels() {
