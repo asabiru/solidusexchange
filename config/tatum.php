@@ -15,7 +15,19 @@ return [
 
     'api_key'        => env('TATUM_API_KEY', ''),
     'api_url'        => env('TATUM_API_URL', 'https://api.tatum.io/v4'),
+
+    /*
+    | WEBHOOK SECRET — генерируется вами, используется только локально для верификации.
+    | В Tatum API v4 hmacSecret НЕ передаётся при создании подписки.
+    | Tatum подписывает webhook заголовком x-payload-hash (если настроено в Dashboard).
+    */
     'webhook_secret' => env('TATUM_WEBHOOK_SECRET', ''),
+
+    /*
+    | TESTNET: true = используется testnet ключ (только для тестовых сетей).
+    | Для реальных транзакций создайте Mainnet ключ на dashboard.tatum.io.
+    | При testnet=true цепи автоматически переключаются на тестовые версии.
+    */
     'testnet'        => env('TATUM_TESTNET', false),
 
     /*
@@ -34,8 +46,8 @@ return [
     |--------------------------------------------------------------------------
     | Maps internal currency codes → Tatum chain identifiers
     */
+    // Mainnet chain identifiers
     'chains' => [
-        // Native coins
         'BTC'         => 'bitcoin-mainnet',
         'LTC'         => 'litecoin-mainnet',
         'ETH'         => 'ethereum-mainnet',
@@ -45,25 +57,31 @@ return [
         'TON'         => 'ton-mainnet',
         'MATIC'       => 'polygon-mainnet',
         'XRP'         => 'xrp-mainnet',
-
-        // USDT variants
         'USDT'        => 'ethereum-mainnet',
         'USDT_TRC20'  => 'tron-mainnet',
         'USDT_BSC'    => 'bsc-mainnet',
         'USDT_TON'    => 'ton-mainnet',
         'USDT_SOL'    => 'solana-mainnet',
         'USDT_MATIC'  => 'polygon-mainnet',
-
-        // USDC variants
         'USDC'        => 'ethereum-mainnet',
         'USDC_BSC'    => 'bsc-mainnet',
         'USDC_SOL'    => 'solana-mainnet',
-
-        // Other tokens
         'SHIB'        => 'ethereum-mainnet',
         'PEPE'        => 'ethereum-mainnet',
         'ARB'         => 'arbitrum-one-mainnet',
         'OP'          => 'optimism-mainnet',
+    ],
+
+    // Testnet chain identifiers (used when TATUM_TESTNET=true)
+    'chains_testnet' => [
+        'BTC'         => 'bitcoin-mainnet',     // no separate testnet in v4 data API
+        'ETH'         => 'ethereum-holesky',
+        'BNB'         => 'bsc-testnet',
+        'MATIC'       => 'polygon-amoy',
+        'USDT'        => 'ethereum-holesky',
+        'USDT_BSC'    => 'bsc-testnet',
+        'USDT_MATIC'  => 'polygon-amoy',
+        'USDC'        => 'ethereum-holesky',
     ],
 
     /*

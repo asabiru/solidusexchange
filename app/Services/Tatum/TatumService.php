@@ -214,9 +214,17 @@ class TatumService
      */
     public function resolveChain(string $currencyCode): string
     {
-        $chains = config('tatum.chains', []);
+        $isTestnet = (bool) config('tatum.testnet', false);
         $code = strtoupper(trim($currencyCode));
 
+        if ($isTestnet) {
+            $testnetChains = config('tatum.chains_testnet', []);
+            if (isset($testnetChains[$code])) {
+                return $testnetChains[$code];
+            }
+        }
+
+        $chains = config('tatum.chains', []);
         if (isset($chains[$code])) {
             return $chains[$code];
         }
