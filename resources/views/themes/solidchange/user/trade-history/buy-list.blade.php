@@ -1,6 +1,25 @@
 @extends($theme.'layouts.user')
 @section('page_title',__('Buy Crypto'))
+@push('extra_styles')
+    <link rel="stylesheet" href="{{ asset($themeTrue.'css/hero-section.css') }}?v={{ (string) (config('app.asset_version') ?? env('APP_VERSION', '1')) }}">
+    <link rel="stylesheet" href="{{ asset($themeTrue.'css/exchange-widget.css') }}?v={{ (string) (config('app.asset_version') ?? env('APP_VERSION', '1')) }}">
+@endpush
+
 @section('content')
+
+    <!-- Exchange widget with default buy tab -->
+    <div class="dash-exchange-heading">
+        <h4>@lang('New exchange')</h4>
+        <p>@lang('Exchange, buy or sell crypto — the rate updates automatically.')</p>
+    </div>
+    <div class="dash-exchange-widget">
+        @include($theme.'partials.exchange-module.swap-widget', ['defaultTab' => 'buy'])
+    </div>
+
+    <!-- History -->
+    <div class="dash-exchange-heading">
+        <h4>@lang('Buy history')</h4>
+    </div>
     <!-- main -->
     <div class="card">
         <div class="card-body">
@@ -138,5 +157,5 @@
         </div>
     </div>
     {{ $buys->appends($_GET)->links($theme.'partials.user.pagination') }}
+    @include($theme.'partials.exchange-module.exchange-js')
 @endsection
-
