@@ -415,6 +415,13 @@
                         </a>
                     </div>
 
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.support.agents.index','admin.support.agents.create','admin.support.agents.edit']) }}"
+                           href="{{ route('admin.support.agents.index') }}" data-placement="left">
+                            <i class="bi-headset nav-icon"></i>
+                            <span class="nav-link-title">@lang('Support Agents')</span>
+                        </a>
+                    </div>
 
                     <span class="dropdown-header mt-3"> @lang('SETTINGS PANEL')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
@@ -466,6 +473,14 @@
                             <a class="nav-link {{ menuActive(['admin.fiatSendGatewayIndex']) }}"
                                href="{{ route('admin.fiatSendGatewayIndex') }}">@lang('Fiat Send Gateway')</a>
                         </div>
+                    </div>
+
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.tatum.settings']) }}"
+                           href="{{ route('admin.tatum.settings') }}" data-placement="left">
+                            <i class="bi-currency-bitcoin nav-icon"></i>
+                            <span class="nav-link-title">Tatum.io Gateway</span>
+                        </a>
                     </div>
 
 
@@ -535,20 +550,6 @@
 
                     <span class="dropdown-header mt-4"> @lang('Application Panel')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.tatum.settings']) }}"
-                           href="{{ route('admin.tatum.settings') }}" data-placement="left">
-                            <i class="bi-currency-bitcoin nav-icon"></i>
-                            <span class="nav-link-title">Tatum.io Gateway</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.support.agents.index','admin.support.agents.create','admin.support.agents.edit']) }}"
-                           href="{{ route('admin.support.agents.index') }}" data-placement="left">
-                            <i class="bi-headset nav-icon"></i>
-                            <span class="nav-link-title">@lang('Support Agents')</span>
-                        </a>
-                    </div>
                     <div class="nav-item">
                         <a class="nav-link"
                            href="{{ route('clear') }}" data-placement="left">
