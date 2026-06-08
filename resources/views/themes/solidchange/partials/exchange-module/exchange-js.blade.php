@@ -3,8 +3,12 @@
         backgroundColor: loaderColor,
     });
 
+    // Sync activeTab from swap-widget _swapCurrentMode (set by PHP $defaultTab)
+    var activeTab = (window._swapCurrentMode && window._swapCurrentMode !== 'exchange')
+        ? window._swapCurrentMode
+        : 'exchange';
+
     getExchangeCurrency();
-    var activeTab = "exchange";
     var activeSendCurrency = "";
     var activeGetCurrency = "";
     var availableSendCurrencies = [];
