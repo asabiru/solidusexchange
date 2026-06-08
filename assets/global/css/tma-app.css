@@ -132,7 +132,23 @@ body.tma{
     border-radius:var(--radius);
     transition:background .2s;
 }
+.tma-rate-row--clickable{cursor:pointer}
+.tma-rate-row--clickable:hover{background:var(--surface2);border-color:var(--border2)}
 .tma-rate-row:active{background:var(--surface2)}
+.tma-rate-row__exchange-btn{
+    display:inline-flex;align-items:center;gap:5px;
+    margin-top:6px;
+    padding:4px 10px;
+    font-size:11px;font-weight:700;
+    color:var(--accent);
+    background:var(--accent-soft);
+    border:1px solid var(--border2);
+    border-radius:8px;
+    cursor:pointer;
+    transition:background .2s,transform .1s;
+    white-space:nowrap;
+}
+.tma-rate-row__exchange-btn:active{transform:scale(.97);background:rgba(232,201,160,.22)}
 .tma-rate-row__coin{display:flex;align-items:center;gap:10px}
 .tma-rate-row__coin strong{display:block;font-size:15px;font-weight:700;color:var(--text)}
 .tma-rate-row__coin small{display:block;font-size:11px;color:var(--text3)}

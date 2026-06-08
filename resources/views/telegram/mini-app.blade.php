@@ -93,7 +93,7 @@
 
         <div class="tma-rates" id="ratesContainer">
             @forelse($rateCards as $rc)
-            <div class="tma-rate-row">
+            <div class="tma-rate-row tma-rate-row--clickable" data-crypto-code="{{ strtoupper($rc['code']) }}" title="Обменять {{ $rc['code'] }}">
                 <div class="tma-rate-row__coin">
                     <div class="tma-coin-icon" data-coin="{{ strtolower($rc['code']) }}">
                         @if(!empty($rc['image_path']))
@@ -123,6 +123,9 @@
                     @else
                         <span class="tma-rate-change">—</span>
                     @endif
+                    <button class="tma-rate-row__exchange-btn" data-crypto-code="{{ strtoupper($rc['code']) }}">
+                        <i class="fas fa-exchange-alt"></i> Обменять
+                    </button>
                 </div>
             </div>
             @empty
@@ -633,12 +636,54 @@
     maybeShowEmailBindModal();
 
     // ---------- Tab navigation ----------
+    function switchToTab(target) {
+        tabs.forEach(t => t.classList.toggle('is-active', t.dataset.tab === target));
+        panels.forEach(p => { p.hidden = p.dataset.panel !== target; });
+        webApp?.HapticFeedback?.impactOccurred('light');
+    }
+
     tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            const target = tab.dataset.tab;
-            tabs.forEach(t => t.classList.toggle('is-active', t === tab));
-            panels.forEach(p => { p.hidden = p.dataset.panel !== target; });
-            webApp?.HapticFeedback?.impactOccurred('light');
+        tab.addEventListener('click', () => switchToTab(tab.dataset.tab));
+    });
+
+    // ---------- Rate row → go to Exchange ----------
+    document.querySelectorAll('.tma-rate-row--clickable, .tma-rate-row__exchange-btn').forEach(el => {
+        el.addEventListener('click', (e) => {
+            // Prevent double-fire when button inside row is clicked
+            e.stopPropagation();
+
+            const code = el.dataset.cryptoCode || el.closest('[data-crypto-code]')?.dataset.cryptoCode;
+            if (!code) return;
+
+            // Find matching crypto object
+            const found = cryptos.find(c =>
+                String(c.code).toUpperCase() === code.toUpperCase() ||
+                String(c.display_code).toUpperCase() === code.toUpperCase()
+            );
+
+            // Switch to buy mode and set the target currency
+            const buyTab = document.querySelector('[data-exchange-mode="buy"]');
+            if (buyTab) {
+                modeTabs.forEach(t => t.classList.toggle('is-active', t === buyTab));
+                exchangeMode = 'buy';
+                sendCurrency = buyFiats[0] || {id:0, code: defaultFiat, name:'Рубль'};
+                sendType = 'fiat';
+            }
+
+            if (found) {
+                getCurrency = found;
+            }
+
+            updateCurrencyLabels();
+            updateExchangeFieldLabels();
+            if (sendAmountEl) sendAmountEl.value = '';
+            if (getAmountEl) getAmountEl.value = '';
+            if (rateDisplay) rateDisplay.textContent = '—';
+            if (exchangeBtn) { exchangeBtn.disabled = true; exchangeBtn.textContent = 'Введите сумму'; }
+
+            switchToTab('exchange');
+
+            webApp?.HapticFeedback?.impactOccurred('medium');
         });
     });
 
