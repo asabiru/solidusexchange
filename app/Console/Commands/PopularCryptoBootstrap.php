@@ -99,9 +99,6 @@ class PopularCryptoBootstrap extends Command
         }
 
         $activeMethod = CryptoMethod::query()->where('status', 1)->first();
-        if (!$activeMethod || $activeMethod->code !== 'crypto_cloud') {
-            return true;
-        }
 
         return !in_array($code, ['TON', 'USDT_TON'], true);
     }

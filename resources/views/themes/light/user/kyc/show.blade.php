@@ -137,7 +137,7 @@
                                                 <h5 class="kyc-panel-title">@lang('Verification widget')</h5>
                                                 <p class="kyc-panel-text">@lang('Complete identity verification in the secure provider form below.')</p>
                                             </div>
-                                            <button type="button" class="cmn-btn" id="start-hosted-kyc" data-url="{{ route('user.kyc.amlbot.session', $kyc->id) }}" data-provider="{{ $providerName }}">
+                                            <button type="button" class="cmn-btn" id="start-hosted-kyc" data-url="{{ route('kyc.amlbot.session', $kyc->id) }}" data-provider="{{ $providerName }}">
                                                 @lang('Start verification')
                                             </button>
                                         </div>

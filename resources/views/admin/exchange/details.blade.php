@@ -86,7 +86,7 @@
                                         </li>
                                         <li class="list-checked-item">@lang('Deposit Provider')
                                             : {{ optional($exchange->cryptoMethod)->name ?? ucfirst(str_replace('_', ' ', $exchange->deposit_provider ?? 'N/A')) }}
-                                            @if((optional($exchange->cryptoMethod)->is_automatic && blank($exchange->deposit_provider)) || in_array($exchange->deposit_provider, ['crypto_cloud', 'crypto_apis', 'coin_payment']))
+                                            @if((optional($exchange->cryptoMethod)->is_automatic && blank($exchange->deposit_provider)) || in_array($exchange->deposit_provider, ['crypto_apis', 'coin_payment']))
                                                 <span
                                                     class="badge bg-soft-success text-success">@lang("Automatic")</span>
                                             @else

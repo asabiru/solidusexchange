@@ -42,7 +42,7 @@ class CustodialWalletController extends Controller
             ->addColumn('provider_badge', function ($w) {
                 return match ($w->provider) {
                     'hd_wallet' => '<span class="badge bg-soft-primary text-primary">HD Wallet</span>',
-                    'crypto_cloud' => '<span class="badge bg-soft-info text-info">CryptoCloud</span>',
+
                     'manual' => '<span class="badge bg-soft-secondary text-body">Manual</span>',
                     default => '<span class="badge bg-soft-secondary text-body">' . $w->provider . '</span>',
                 };
