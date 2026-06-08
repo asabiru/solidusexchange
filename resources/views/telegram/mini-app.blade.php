@@ -180,7 +180,7 @@
             <div class="tma-calc__field">
                 <label id="sendFieldLabel">Способ оплаты</label>
                 <div class="tma-calc__input-row">
-                    <input type="number" id="sendAmount" placeholder="0" min="0" step="any" inputmode="decimal">
+                    <input type="text" id="sendAmount" placeholder="0" inputmode="decimal" autocomplete="off" autocorrect="off" autocapitalize="off">
                     <button class="tma-currency-btn" id="sendCurrencyBtn" data-type="send">
                         <span class="tma-currency-btn__icon" id="sendCurrencyIcon"></span>
                         <span id="sendCurrencyLabel">Рубли</span>
@@ -196,7 +196,7 @@
             <div class="tma-calc__field">
                 <label id="getFieldLabel">Получаете криптовалюту</label>
                 <div class="tma-calc__input-row">
-                    <input type="number" id="getAmount" placeholder="0" readonly>
+                    <input type="text" id="getAmount" placeholder="0" readonly tabindex="-1">
                     <button class="tma-currency-btn" id="getCurrencyBtn" data-type="get">
                         <span class="tma-currency-btn__icon" id="getCurrencyIcon"></span>
                         <span id="getCurrencyLabel">{{ $cryptos->first() ? strtoupper($cryptos->first()->normalized_code ?? $cryptos->first()->code ?? 'USDT') : 'USDT' }}</span>
@@ -812,8 +812,16 @@
         return isFiat(getCurrency.code) ? 'sell' : 'exchange';
     }
 
+    function parseSendAmount() {
+        // Normalize comma → dot for Russian locale (e.g. "1 000,50" → "1000.50")
+        const raw = String(sendAmountEl?.value || '').trim()
+            .replace(/\s/g, '')           // remove spaces used as thousands separator
+            .replace(/,/g, '.');          // comma → dot
+        return parseFloat(raw);
+    }
+
     async function calcRate() {
-        const amount = parseFloat(sendAmountEl?.value);
+        const amount = parseSendAmount();
         if (!amount || amount <= 0) {
             if (getAmountEl) getAmountEl.value = '';
             if (rateDisplay) rateDisplay.textContent = '—';
@@ -867,6 +875,9 @@
     }
 
     sendAmountEl?.addEventListener('input', () => {
+        // Strip all chars except digits, dot, comma
+        const cleaned = sendAmountEl.value.replace(/[^0-9.,]/g, '');
+        if (cleaned !== sendAmountEl.value) sendAmountEl.value = cleaned;
         clearTimeout(debounceTimer);
         debounceTimer = setTimeout(calcRate, 400);
     });
@@ -949,7 +960,7 @@
 
     // ---------- Exchange submit ----------
     exchangeBtn?.addEventListener('click', async () => {
-        const amount = parseFloat(sendAmountEl?.value);
+        const amount = parseSendAmount();
         if (!amount || exchangeBtn.disabled) return;
 
         exchangeBtn.disabled = true;
