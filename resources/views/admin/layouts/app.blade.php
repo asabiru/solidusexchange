@@ -11,12 +11,7 @@
     <!-- Favicon -->
     <link rel="shortcut icon" href="{{ getFile(basicControl()->favicon_driver, basicControl()->favicon) }}">
     <!-- Font -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
-    <noscript>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
-    </noscript>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
     <!-- CSS Implementing Plugins -->
     <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap-icons.css') }}">
@@ -28,6 +23,7 @@
     <link rel="stylesheet" href="{{ asset('assets/admin/css/all.min.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/fontawesome.min.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.css" />
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
 
     @stack('css')
@@ -38,8 +34,7 @@
         }
 
         body {
-            opacity: 1;
-            background-color: #0b0608;
+            opacity: 0;
         }
     </style>
 
@@ -61,11 +56,11 @@
                 "sidebarLayout": "default"
             },
             "themeAppearance": {
-                "layoutSkin": "dark",
+                "layoutSkin": "default",
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#e8c9a0",
+                        "primary": "#966632",
                         "transparent": "transparent",
                         "white": "#fff",
                         "dark": "132144",
@@ -98,7 +93,7 @@
     <script>
         (function () {
             function resolveAdminTheme() {
-                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'dark';
+                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
                 var theme = localStorage.getItem('hs_theme') || fallback;
                 if (theme === 'auto') {
                     theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
@@ -170,9 +165,6 @@
 <script src="{{ asset('assets/admin/js/js-switch-element.min.js') }}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/fancybox/3.5.7/jquery.fancybox.min.js"></script>
 <script src="{{ asset('assets/admin/js/main.js') }}"></script>
-
-{{-- SolidChange design overrides — loaded AFTER theme.min.js so they always win --}}
-<link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}?v=8">
 
 
 <script>

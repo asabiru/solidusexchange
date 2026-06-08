@@ -24,7 +24,7 @@
                         <div class="col-md-4">
                             <small class="text-cap text-secondary mb-0">@lang('Payment method:')</small>
                             <div class="d-flex align-items-center">
-                                <img class="avatar avatar-xss me-2 gateway_modal_image" src="" alt="Описание изображения">
+                                <img class="avatar avatar-xss me-2 gateway_modal_image" src="" alt="Image Description">
                                 <span class="text-dark method"></span>
                             </div>
                         </div>
@@ -86,7 +86,7 @@
                     return `<li class="list-group-item text-dark">
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="text-capitalize">${field_name_text}</span>
-                                        <a href="${field_value}" target="_blank"><img src="${field_value}" alt="Описание изображения" class="rounded-1" width="100"></a>
+                                        <a href="${field_value}" target="_blank"><img src="${field_value}" alt="Image Description" class="rounded-1" width="100"></a>
                                     </div>
                                 </li>`;
                 } else {

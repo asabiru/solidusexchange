@@ -68,7 +68,7 @@ class ContentController extends Controller
                     $image = $this->fileUpload($request->$key, config('filelocation.contents.path'), null, $size, 'webp', 60, @$singleContent->media->image->path, @$singleContent->media->image->driver);
                     $mediaData[$key] = $image;
                 } catch (\Exception $exp) {
-                    return back()->with('alert', 'Изображение не удалось загрузить.');
+                    return back()->with('alert', 'Image could not be uploaded.');
                 }
             } elseif ($request->has($key)) {
                 $mediaData[$key] = $inputData[$key][$language];
@@ -96,9 +96,9 @@ class ContentController extends Controller
         }
 
         if (!$contentDetails) {
-            return back()->with('Что-то пошло не так, пожалуйста, попробуйте снова.');
+            return back()->with('Something went wrong, Please try again.');
         }
-        return back()->with('success', 'Контент успешно создан');
+        return back()->with('success', 'Content Created Successfully');
     }
 
     public function manageContentMultiple($content)
@@ -138,7 +138,7 @@ class ContentController extends Controller
                     $image = $this->fileUpload($request->$key, config('filelocation.contents.path'), null, $size, 'webp', 60);
                     $mediaData[$key] = $image;
                 } catch (\Exception $exp) {
-                    return back()->with('alert', 'Изображение не удалось загрузить.');
+                    return back()->with('alert', 'Image could not be uploaded.');
                 }
             } elseif ($request->has($key)) {
                 $mediaData[$key] = $inputData[$key][$language];
@@ -166,10 +166,10 @@ class ContentController extends Controller
         }
 
         if (!$contentDetails) {
-            throw new \Exception("Что-то пошло не так, пожалуйста, попробуйте снова");
+            throw new \Exception("Something went wrong, Please try again");
         }
 
-        return back()->with('success', 'Успешно создано');
+        return back()->with('success', 'Created Successfully');
     }
 
     public function multipleContentItemEdit($content, $id)
@@ -214,7 +214,7 @@ class ContentController extends Controller
                     $image = $this->fileUpload($request->$key, config('filelocation.contents.path'), null, $size, 'webp', 60, @$multipleContent->media->image->path, @$multipleContent->media->image->driver);
                     $mediaData[$key] = $image;
                 } catch (\Exception $exp) {
-                    return back()->with('alert', 'Изображение не удалось загрузить.');
+                    return back()->with('alert', 'Image could not be uploaded.');
                 }
             } elseif ($request->has($key)) {
                 $mediaData[$key] = $inputData[$key][$language];
@@ -242,10 +242,10 @@ class ContentController extends Controller
         }
 
         if (!$contentDetails) {
-            throw new \Exception("Что-то пошло не так, пожалуйста, попробуйте снова");
+            throw new \Exception("Something went wrong, Please try again");
         }
 
-        return back()->with('success', 'Успешно создано');
+        return back()->with('success', 'Created Successfully');
     }
 
 
@@ -261,7 +261,7 @@ class ContentController extends Controller
             foreach ($contentDetails as $detail) {
                 $detail->delete();
             }
-            return back()->with('success', 'Контент удалён');
+            return back()->with('success', 'Content has been deleted');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

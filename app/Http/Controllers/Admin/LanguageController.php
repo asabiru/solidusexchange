@@ -58,13 +58,13 @@ class LanguageController extends Controller
             ]);
 
             if (!$response) {
-                throw new Exception('Ошибка при сохранении языка. Пожалуйста, попробуйте позже.');
+                throw new Exception('Something went wrong while storing language. Please try again later.');
             }
 
             LocalizationService::createLang(defaultLang()->short_name, $request->short_name);
 
 
-            return redirect()->route('admin.language.index')->with('success', "Язык `{$response->name}` успешно создан.");
+            return redirect()->route('admin.language.index')->with('success', "`{$response->name}` language has been created successfully.");
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -75,7 +75,7 @@ class LanguageController extends Controller
     {
         try {
             $language = Language::where('id', $id)->firstOr(function () {
-                throw new Exception('Язык не найден.');
+                throw new Exception('No Language found.');
             });
 
             $shortNames = (config('languages.langCode'));
@@ -99,7 +99,7 @@ class LanguageController extends Controller
 
         try {
             $language = Language::where('id', $id)->firstOr(function () {
-                throw new \Exception('Язык не найден.');
+                throw new \Exception('No Language found.');
             });
 
             $oldShortName = $language->short_name;
@@ -123,7 +123,7 @@ class LanguageController extends Controller
             ]);
 
             if (!$response) {
-                throw new Exception('Что-то пошло не так. Пожалуйста, попробуйте позже.');
+                throw new Exception('Something went wrong. Please try again later.');
             }
 
             LocalizationService::renameLang($oldShortName, $language->short_name);
@@ -137,7 +137,7 @@ class LanguageController extends Controller
                 });
             }
 
-            return back()->with('success', "Язык `{$language->name}` успешно обновлён");
+            return back()->with('success', "`{$language->name}` language has been updated successfully");
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -148,7 +148,7 @@ class LanguageController extends Controller
     {
         try {
             $language = Language::where(['id' => $id, 'default_status' => false])->firstOr(function () {
-                throw new \Exception('Язык не найден или вы выбрали язык по умолчанию.');
+                throw new \Exception('No language found or may be you had selected default language.');
             });
 
             if ($language->short_name !== 'en') {
@@ -160,11 +160,11 @@ class LanguageController extends Controller
                 $response = $language->delete();
             }
 
-            throw_if(!$response, 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+            throw_if(!$response, 'Something went wrong. Please try again later.');
 
             LocalizationService::deleteLang($language->short_name);
 
-            return back()->with('success', "Язык `{$language->name}` успешно удалён.");
+            return back()->with('success', "`{$language->name}` language has been deleted successfully.");
 
         } catch (\Exception $e) {
 
@@ -177,7 +177,7 @@ class LanguageController extends Controller
     {
         try {
             $language = Language::where('short_name', $shortName)->firstOr(function () {
-                throw new \Exception('Язык не найден.');
+                throw new \Exception('No Language found.');
             });
             $languages = Language::all();
 
@@ -204,7 +204,7 @@ class LanguageController extends Controller
         try {
             $response = LocalizationService::updateLangKeyword($shortName, $request->key, $request->value);
 
-            throw_if(!$response, 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+            throw_if(!$response, 'Something went wrong. Please try again later.');
 
             session()->flash('success', "`{$request->key}` keyword has been added successfully.");
 
@@ -233,7 +233,7 @@ class LanguageController extends Controller
 
             $response = LocalizationService::updateLangKeyword($shortName, $key, $request->value, $default);
 
-            throw_if(!$response, 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+            throw_if(!$response, 'Something went wrong. Please try again later.');
 
             session()->flash('success', "`{$key}` keyword has been updated successfully.");
 
@@ -251,9 +251,9 @@ class LanguageController extends Controller
             $key = urldecode($key);
             $response = LocalizationService::deleteLangKeyword($shortName, $key);
 
-            throw_if(!$response, 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+            throw_if(!$response, 'Something went wrong. Please try again later.');
 
-            return back()->with('success', "Ключевое слово `{$key}` успешно удалено.");
+            return back()->with('success', "`{$key}` keyword has been deleted successfully.");
         } catch (\Exception $exception) {
             return back()->with('alert', $exception->getMessage());
         }
@@ -264,7 +264,7 @@ class LanguageController extends Controller
     {
 
         $myLang = Language::where(['id' => $request->my_lang, 'default_status' => false])->firstOr(function () {
-            throw new \Exception('Язык не найден или вы выбрали язык по умолчанию.');
+            throw new \Exception('No language found or may be you selected default language.');
         });
 
         $lang = Language::findOrFail($request->lang_id);
@@ -274,7 +274,7 @@ class LanguageController extends Controller
         $jsonArray = json_decode($json, true);
         file_put_contents(resource_path('lang/') . $myLang->short_name . '.json', json_encode($jsonArray));
 
-        return redirect()->back()->with('success', 'Данные успешно импортированы');
+        return redirect()->back()->with('success', 'Import Data Successfully');
 
     }
 
@@ -282,17 +282,17 @@ class LanguageController extends Controller
     {
         try {
             $language = Language::where(['id' => $id, 'default_status' => false])->firstOr(function () {
-                throw new \Exception('Язык не найден или вы выбрали язык по умолчанию.');
+                throw new \Exception('No language found or may be you selected default language.');
             });
 
             $response = $language->update([
                 'status' => !$language->status
             ]);
 
-            throw_if(!$response, 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+            throw_if(!$response, 'Something went wrong. Please try again later.');
 
             $status = $language->status == 1 ? 'activated' : 'deactivated';
-            return back()->with('success', "Язык `{$language->name}` успешно {$status}.");
+            return back()->with('success', "`{$language->name}` language has been {$status} successfully.");
         } catch (\Exception $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -315,7 +315,7 @@ class LanguageController extends Controller
         file_put_contents($path, stripslashes(json_encode($contents, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)));
 
         return response([
-            'message' => 'Перевод ключевых слов успешно выполнен.',
+            'message' => 'Keyword Translation Successfully.',
             'translatedText' => $singleTranslatedText
         ]);
     }
@@ -332,7 +332,7 @@ class LanguageController extends Controller
 
         file_put_contents($path, json_encode($mergedTranslations, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE));
 
-        return back()->with('success', 'Перевод ключевых слов успешно выполнен.');
+        return back()->with('success', 'Keyword Translation Successfully.');
 
     }
 }

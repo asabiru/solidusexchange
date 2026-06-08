@@ -20,24 +20,15 @@
                 </div>
             </div>
         </div>
-        @if(in_array($sell->status, [1, 2]))
+        @if($sell->status == 2)
             <div class="row mx-4">
                 <div class="d-flex justify-content-end gap-2">
-                    @if($sell->status == 1 && !$hasCustodialTracking)
-                        <button type="button" class="btn btn-soft-primary" id="confirmDeposit" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i class="fas fa-coins"></i> @lang("Confirm Deposit")
-                        </button>
-                        <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
-                        </button>
-                    @elseif($sell->status == 2)
-                        <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
-                        </button>
-                        <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
-                                data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
-                        </button>
-                    @endif
+                    <button type="button" class="btn btn-soft-success" id="send" data-bs-target="#confirmation"
+                            data-bs-toggle="modal"><i class="fas fa-paper-plane"></i> @lang("Send")
+                    </button>
+                    <button type="button" class="btn btn-soft-danger" id="cancel" data-bs-target="#confirmation"
+                            data-bs-toggle="modal"><i class="fas fa-times"></i> @lang('Cancel')
+                    </button>
                 </div>
             </div>
         @endif
@@ -50,9 +41,7 @@
                             <div class="card-header d-flex justify-content-between">
                                 <h4 class="card-title mt-2">@lang("Trade Information's")</h4>
                                 <div>
-                                    @if ($sell->status == 1)
-                                        <span class="legend-indicator bg-info"></span>@lang("Awaiting Deposit")
-                                    @elseif ($sell->status == 2)
+                                    @if ($sell->status == 2)
                                         <span class="legend-indicator bg-warning"></span>@lang("Awaiting Complete")
                                     @elseif ($sell->status == 3)
                                         <span class="legend-indicator bg-success"></span>@lang("Trade Completed")
@@ -104,13 +93,7 @@
                                         </li>
                                     </ul>
                                     <div class="alert alert-soft-secondary" role="alert">
-                                        @if($sell->status == 1 && !$hasCustodialTracking)
-                                            @lang("Legacy manual sell flow: confirm the crypto deposit only after you have manually verified the transaction and completed AML review outside the system.")
-                                        @elseif($sell->status == 1)
-                                            @lang("This sell is waiting for blockchain confirmation and AML screening from the custodial pipeline.")
-                                        @else
-                                            @lang("Please ensure that you have received the cryptocurrency before finalizing the exchange.")
-                                        @endif
+                                        @lang("Please ensure that you have received the cryptocurrency before finalizing the exchange.")
                                     </div>
                                     <!-- End List Checked -->
                                 </div>
@@ -251,13 +234,6 @@
             let route = "{{route("admin.sellSend",$sell->utr)}}";
             $("#deleteModalHeader").text(`Send Confirmation`);
             $("#deleteModalBody").text(`Do you wish to proceed with finalizing the exchange?`);
-            $(".deleteModalRoute").attr('action', route);
-        });
-
-        $(document).on("click", "#confirmDeposit", function () {
-            let route = "{{route("admin.sellConfirmDeposit",$sell->utr)}}";
-            $("#deleteModalHeader").text(`Deposit Confirmation`);
-            $("#deleteModalBody").text(`Confirm that the crypto deposit has been received and manually reviewed.`);
             $(".deleteModalRoute").attr('action', route);
         });
 

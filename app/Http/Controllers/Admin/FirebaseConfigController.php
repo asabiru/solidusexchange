@@ -60,7 +60,7 @@ class FirebaseConfigController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Firebase успешно настроен.');
+        return back()->with('success', 'Firebase Configure Successfully.');
     }
 
     public function firebaseConfigFileUpload(Request $request)
@@ -72,7 +72,7 @@ class FirebaseConfigController extends Controller
         $file = $request->file('file');
         $file->move(base_path(), getFirebaseFileName());
 
-        return back()->with('success', 'Успешно загружено');
+        return back()->with('success', 'Uploaded Successfully');
     }
 
     public function firebaseConfigFileDownload()

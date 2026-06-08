@@ -3,14 +3,12 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
-use App\Mail\SendMail;
 use App\Models\Kyc;
 use App\Models\Language;
 use App\Models\NotificationTemplate;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Stevebauman\Purify\Facades\Purify;
 use Illuminate\Support\Facades\Validator;
 
@@ -52,20 +50,7 @@ class UserProfileController extends Controller
                 $user->password = bcrypt($purifiedData->password);
                 $user->save();
 
-                // Send email notification about password change
-                $basic = basicControl();
-                if ($basic->email_notification == 1) {
-                    $emailBody = '<p style="margin-bottom: 16px; color: rgba(255,255,255,0.85);">Ваш пароль был успешно изменён.</p>
-<p style="margin-bottom: 16px; color: rgba(255,255,255,0.85);">Если это действие совершили не вы, пожалуйста, немедленно свяжитесь с поддержкой через <a href="https://t.me/solidchange_support_bot" style="color: #e8c9a0;">Telegram</a> или напишите на <a href="mailto:support@solidchange.online" style="color: #e8c9a0;">support@solidchange.online</a>.</p>';
-                    Mail::to($user)->send(new SendMail(
-                        $basic->sender_email,
-                        'Пароль изменён — SolidChange',
-                        $emailBody,
-                        $basic->sender_email_name ?? 'SolidChange'
-                    ));
-                }
-
-                return back()->with('success', 'Пароль успешно изменён');
+                return back()->with('success', 'Password changed successfully');
             } catch (\Exception $e) {
                 return back()->with('error', $e->getMessage());
             }
@@ -104,7 +89,7 @@ class UserProfileController extends Controller
                 $userProfile->email = $purifiedData->email;
 
                 $userProfile->save();
-                return back()->with('success', 'Профиль успешно обновлён');
+                return back()->with('success', 'Profile Update Successfully');
 
             } catch (\Exception $e) {
                 return back()->with('error', $e->getMessage());
@@ -151,7 +136,65 @@ class UserProfileController extends Controller
                 $user->in_app_key = $request->in_app_key;
             }
             $user->save();
-            return back()->with('success', 'Настройки уведомлений успешно обновлены');
+            return back()->with('success', 'Notification settings updated successfully');
         }
+    }
+
+    public function telegramLink(Request $request)
+    {
+        $telegramAuth = $request->only([
+            'id', 'first_name', 'last_name', 'username', 'photo_url', 'auth_date', 'hash',
+        ]);
+
+        if (empty($telegramAuth['hash']) || empty($telegramAuth['id']) || empty($telegramAuth['auth_date'])) {
+            return redirect()->route('user.profile')->with('error', 'Неверные данные Telegram авторизации.');
+        }
+
+        $authDate = (int)$telegramAuth['auth_date'];
+        if ($authDate < (time() - 86400)) {
+            return redirect()->route('user.profile')->with('error', 'Данные Telegram авторизации устарели.');
+        }
+
+        $checkHash = (string)$telegramAuth['hash'];
+        $checkData = $telegramAuth;
+        unset($checkData['hash']);
+        ksort($checkData);
+        $dataCheckArray = [];
+        foreach ($checkData as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $dataCheckArray[] = $key . '=' . $value;
+            }
+        }
+        $dataCheckString = implode("\n", $dataCheckArray);
+        $secretKey = hash('sha256', config('services.telegram.bot_token'), true);
+        $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
+
+        if (!hash_equals($calculatedHash, $checkHash)) {
+            return redirect()->route('user.profile')->with('error', 'Проверка подписи Telegram не пройдена.');
+        }
+
+        $telegramId = (string)$telegramAuth['id'];
+
+        $existing = \App\Models\User::where('telegram_id', $telegramId)->where('id', '!=', Auth::id())->first();
+        if ($existing) {
+            return redirect()->route('user.profile')->with('error', 'Этот Telegram аккаунт уже привязан к другому пользователю.');
+        }
+
+        $user = Auth::user();
+        $user->telegram_id = $telegramId;
+        $user->telegram_username = $telegramAuth['username'] ?? null;
+        $user->save();
+
+        return redirect()->route('user.profile')->with('success', 'Telegram успешно привязан!');
+    }
+
+    public function telegramUnlink()
+    {
+        $user = Auth::user();
+        $user->telegram_id = null;
+        $user->telegram_username = null;
+        $user->save();
+
+        return redirect()->route('user.profile')->with('success', 'Telegram отвязан.');
     }
 }

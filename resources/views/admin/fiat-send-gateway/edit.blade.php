@@ -111,11 +111,11 @@
                                             <img id="logoImg"
                                                  class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                  src="{{ getFile($method->driver, $method->image, true) }}"
-                                                 alt="Описание изображения" data-hs-theme-appearance="default">
+                                                 alt="Image Description" data-hs-theme-appearance="default">
                                             <img id="logoImg"
                                                  class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                  src="{{ getFile($method->driver, $method->image, true) }}"
-                                                 alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                 alt="Image Description" data-hs-theme-appearance="dark">
                                             <span class="d-block">@lang("Browse your file here")</span>
                                             <input type="file" class="js-file-attach form-check-input" name="image"
                                                    id="logoUploader" data-hs-file-attach-options='{

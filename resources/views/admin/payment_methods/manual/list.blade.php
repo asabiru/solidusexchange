@@ -83,7 +83,7 @@
                                             </td>
                                             <td>
                                             <span
-                                                class="badge bg-soft-dark text-dark">@lang(count((array) $method->supported_currency))</span>
+                                                class="badge bg-soft-dark text-dark">@lang(count($method->supported_currency ?? 0))</span>
                                             </td>
                                             <td>
                                                 {{ Str::limit($method->description, 32) }}

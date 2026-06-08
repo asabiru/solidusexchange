@@ -18,6 +18,8 @@ class VerifyCsrfToken extends Middleware
         '*captcha*',
         '*get-exchange/currency*',
         '*exchange/auto-rate*',
-        'sbp/webhook/*',
+        'auth/telegram-miniapp',
+        'telegram/mini-app',
+        'telegram/mini-app/*',
     ];
 }

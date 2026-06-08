@@ -6,11 +6,13 @@ use App\Helpers\UserSystemInfo;
 use App\Models\Language;
 use App\Models\User;
 use App\Models\UserLogin;
+use App\Services\Telegram\TelegramMiniAppAuthService;
 use App\Traits\Upload;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -22,6 +24,14 @@ class SocialiteController extends Controller
     public function socialiteLogin($socialite)
     {
         if ($socialite === 'telegram') {
+            $botId = explode(':', (string) config('services.telegram.bot_token'))[0] ?? '';
+            if ($botId !== '') {
+                $callbackUrl = route('socialiteCallback', ['socialite' => 'telegram']);
+                $oauthUrl = 'https://oauth.telegram.org/auth?bot_id=' . $botId
+                    . '&origin=' . urlencode(config('app.url'))
+                    . '&embed=0&return_to=' . urlencode($callbackUrl);
+                return redirect()->away($oauthUrl);
+            }
             return redirect()->route('login');
         }
 
@@ -76,65 +86,34 @@ class SocialiteController extends Controller
             return redirect()->route('login');
         }
 
-        $telegramAuth = $request->only([
-            'id',
-            'first_name',
-            'last_name',
-            'username',
-            'photo_url',
-            'auth_date',
-            'hash',
-        ]);
+        $telegramAuth = $this->telegramAuthPayload($request);
+        if ($telegramAuth === []) {
+            return $this->telegramOAuthBridge($request);
+        }
 
         if (!$this->validateTelegramAuthData($telegramAuth)) {
             return redirect()->route('login')->with('error', 'Telegram authorization failed.');
         }
 
-        Auth::login($this->findOrCreateTelegramUser($telegramAuth));
-
-        return redirect()->to(url('/'));
-    }
-
-    public function telegramMiniAppLogin(Request $request)
-    {
-        if (!config('socialite.telegram_status')) {
-            return response()->json(['message' => 'Telegram authorization is disabled.'], 403);
-        }
-
-        $initData = (string)$request->input('initData', '');
-        $telegramAuth = $this->parseTelegramMiniAppInitData($initData);
-
-        if (!$this->validateTelegramMiniAppInitData($initData, $telegramAuth)) {
-            return response()->json(['message' => 'Telegram Mini App authorization failed.'], 422);
-        }
-
-        $telegramUser = json_decode($telegramAuth['user'] ?? '', true);
-        if (!is_array($telegramUser) || empty($telegramUser['id'])) {
-            return response()->json(['message' => 'Telegram user payload is missing.'], 422);
-        }
-
-        $user = $this->findOrCreateTelegramUser([
-            'id' => (string)$telegramUser['id'],
-            'first_name' => $telegramUser['first_name'] ?? null,
-            'last_name' => $telegramUser['last_name'] ?? null,
-            'username' => $telegramUser['username'] ?? null,
-            'photo_url' => $telegramUser['photo_url'] ?? null,
-        ]);
-
-        Auth::login($user);
-
-        return response()->json(['redirect' => url('/')]);
-    }
-
-    private function findOrCreateTelegramUser(array $telegramAuth): User
-    {
         $telegramId = (string)$telegramAuth['id'];
-        $searchUser = User::where('provider', 'telegram')
-            ->where('provider_id', $telegramId)
+        $searchUser = User::where('telegram_id', $telegramId)
+            ->orWhere(function($q) use ($telegramId) {
+                $q->where('provider', 'telegram')->where('provider_id', $telegramId);
+            })
             ->first();
 
         if ($searchUser) {
-            return $searchUser;
+            if (!$searchUser->telegram_id) {
+                $searchUser->update([
+                    'telegram_id' => $telegramId,
+                    'telegram_username' => $telegramAuth['username'] ?? $searchUser->telegram_username,
+                ]);
+            }
+        }
+
+        if ($searchUser) {
+            Auth::login($searchUser);
+            return redirect()->to(url('/'));
         }
 
         $languageId = Language::select('id')->where('default_status', 1)->first()->id ?? null;
@@ -145,28 +124,61 @@ class SocialiteController extends Controller
             'password' => Hash::make(Str::random(32)),
             'provider' => 'telegram',
             'provider_id' => $telegramId,
+            'telegram_id' => $telegramId,
+            'telegram_username' => $telegramAuth['username'] ?? null,
             'language_id' => $languageId,
             'email_verification' => 1,
             'sms_verification' => 1,
         ]);
 
         $this->extraWorkWithRegister($newUser);
+        Auth::login($newUser);
 
-        return $newUser;
+        return redirect()->to(url('/'));
+    }
+
+
+    public function telegramMiniAppLogin(Request $request, TelegramMiniAppAuthService $authService)
+    {
+        if (!config('socialite.telegram_status')) {
+            return response()->json(['message' => __('Telegram authorization is disabled.')], 403);
+        }
+
+        $initData = (string) ($request->header('X-Telegram-Init-Data') ?: $request->input('initData'));
+
+        try {
+            $telegramAuth = $authService->validateInitData($initData);
+            $user = $authService->syncUser($telegramAuth, Auth::user());
+        } catch (\RuntimeException $exception) {
+            return response()->json(['message' => __('Telegram Mini App authorization failed.')], 422);
+        }
+
+        Auth::login($user);
+
+        return response()->json([
+            'authenticated' => true,
+            'redirect' => route('telegram.mini-app'),
+        ]);
     }
 
     private function validateTelegramAuthData(array $telegramAuth): bool
     {
-        if (empty(config('services.telegram.bot_token'))) {
+        $botToken = trim((string) config('services.telegram.bot_token'));
+        if ($botToken === '') {
+            $this->logTelegramAuthFailure('missing_bot_token', $telegramAuth);
             return false;
         }
 
         if (empty($telegramAuth['hash']) || empty($telegramAuth['id']) || empty($telegramAuth['auth_date'])) {
+            $this->logTelegramAuthFailure('missing_required_fields', $telegramAuth);
             return false;
         }
 
         $authDate = (int)$telegramAuth['auth_date'];
         if ($authDate < (time() - 86400)) {
+            $this->logTelegramAuthFailure('expired_auth_date', $telegramAuth, [
+                'age_seconds' => time() - $authDate,
+            ]);
             return false;
         }
 
@@ -182,45 +194,78 @@ class SocialiteController extends Controller
         }
 
         $dataCheckString = implode("\n", $dataCheckArray);
-        $secretKey = hash('sha256', config('services.telegram.bot_token'), true);
+        $secretKey = hash('sha256', $botToken, true);
         $calculatedHash = hash_hmac('sha256', $dataCheckString, $secretKey);
 
-        return hash_equals($calculatedHash, $checkHash);
+        $isValid = hash_equals($calculatedHash, $checkHash);
+        if (!$isValid) {
+            $this->logTelegramAuthFailure('hash_mismatch', $telegramAuth, [
+                'data_keys' => array_keys($telegramAuth),
+                'received_hash_length' => strlen($checkHash),
+                'calculated_hash_length' => strlen($calculatedHash),
+            ]);
+        }
+
+        return $isValid;
     }
 
-    private function parseTelegramMiniAppInitData(string $initData): array
+    private function telegramAuthPayload(Request $request): array
     {
-        parse_str($initData, $parsedData);
-        return is_array($parsedData) ? $parsedData : [];
+        parse_str((string) $request->server('QUERY_STRING'), $query);
+
+        if (isset($query['tgAuthResult'])) {
+            $encoded = strtr((string) $query['tgAuthResult'], '-_', '+/');
+            $encoded .= str_repeat('=', (4 - strlen($encoded) % 4) % 4);
+            $decoded = base64_decode($encoded, true);
+            if ($decoded !== false) {
+                $payload = json_decode($decoded, true);
+                if (is_array($payload)) {
+                    return $payload;
+                }
+            }
+        }
+
+        return $query ?: $request->query();
     }
 
-    private function validateTelegramMiniAppInitData(string $initData, array $parsedData): bool
+    private function telegramOAuthBridge(Request $request)
     {
-        if (empty(config('services.telegram.bot_token')) || $initData === '') {
-            return false;
-        }
+        $callbackUrl = route('socialiteCallback', ['socialite' => 'telegram']);
 
-        if (empty($parsedData['hash']) || empty($parsedData['auth_date']) || empty($parsedData['user'])) {
-            return false;
-        }
+        return response(<<<HTML
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Telegram authorization</title>
+</head>
+<body style="margin:0;background:#0b0608;color:#e8c9a0;font-family:Arial,sans-serif;display:grid;min-height:100vh;place-items:center;">
+    <div>Завершаем вход через Telegram...</div>
+    <script>
+        (function () {
+            var hash = window.location.hash ? window.location.hash.substring(1) : '';
+            if (hash) {
+                window.location.replace('{$callbackUrl}?' + hash);
+                return;
+            }
+            window.location.replace('/login?telegram_auth=empty');
+        })();
+    </script>
+</body>
+</html>
+HTML);
+    }
 
-        if ((int)$parsedData['auth_date'] < (time() - 86400)) {
-            return false;
-        }
-
-        $receivedHash = (string)$parsedData['hash'];
-        unset($parsedData['hash']);
-        ksort($parsedData);
-
-        $dataCheckArray = [];
-        foreach ($parsedData as $key => $value) {
-            $dataCheckArray[] = $key . '=' . $value;
-        }
-
-        $secretKey = hash_hmac('sha256', config('services.telegram.bot_token'), 'WebAppData', true);
-        $calculatedHash = hash_hmac('sha256', implode("\n", $dataCheckArray), $secretKey);
-
-        return hash_equals($calculatedHash, $receivedHash);
+    private function logTelegramAuthFailure(string $reason, array $payload, array $extra = []): void
+    {
+        Log::warning('Telegram OAuth validation failed', array_merge([
+            'reason' => $reason,
+            'keys' => array_keys($payload),
+            'has_hash' => !empty($payload['hash']),
+            'has_id' => !empty($payload['id']),
+            'has_auth_date' => !empty($payload['auth_date']),
+        ], $extra));
     }
 
     private function generateTelegramUsername(array $telegramAuth): string

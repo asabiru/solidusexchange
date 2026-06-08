@@ -79,7 +79,7 @@
                                                                    class="js-flatpickr form-control flatpickr-custom @error($name.'.'.$language->id) is-invalid @enderror"
                                                                    name="{{ $name }}[{{ $language->id }}]"
                                                                    value="{{ old($name.'.'.$language->id, isset($singleContentData[$language->id]) ? $singleContentData[$language->id][0]->content->media->{$name} : '') }}"
-                                                                   placeholder="Выберите даты"
+                                                                   placeholder="Select dates"
                                                                    data-hs-flatpickr-options='{
                                                                      "dateFormat": "d/m/Y",
                                                                      "enableTime": false
@@ -142,12 +142,12 @@
                                                                 <img id="contentImg{{$name}}"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ getFile((!$singleContentData->isEmpty())?  @$singleContentData[$language->id][0]->content->media->{$name}->driver : '', (!$singleContentData->isEmpty())? @$singleContentData[$language->id][0]->content->media->{$name}->path:'', true) }}"
-                                                                     alt="Описание изображения"
+                                                                     alt="Image Description"
                                                                      data-hs-theme-appearance="default">
                                                                 <img id="contentImg{{$name}}"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ getFile(!$singleContentData->isEmpty()  ? @$singleContentData[$language->id][0]->content->media->{$name}->driver: '', (!$singleContentData->isEmpty())? @$singleContentData[$language->id][0]->content->media->{$name}->path:'', true) }}"
-                                                                     alt="Описание изображения"
+                                                                     alt="Image Description"
                                                                      data-hs-theme-appearance="dark">
                                                                 <span
                                                                     class="d-block">@lang("Browse your file here")</span>
@@ -348,9 +348,9 @@
                 language: {
                     zeroRecords: `
                         <div class="text-center p-4">
-                          <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
-                          <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
-                            <p class="mb-0">Нет данных для отображения</p>
+                          <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
+                          <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
+                            <p class="mb-0">No data to show</p>
                         </div>`
                 }
             });

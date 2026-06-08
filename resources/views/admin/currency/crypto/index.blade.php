@@ -200,7 +200,7 @@
                                                                   "dropdownWidth": "10rem"
                                                                 }'>
                                                                 <option value="all"
-                                                                        data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-secondary"></span>Все статусы</span>'>
+                                                                        data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-secondary"></span>All Status</span>'>
                                                                 </option>
                                                                 <option value="1"
                                                                         data-option-template='<span class="d-flex align-items-center"><span class="legend-indicator bg-warning"></span>Active</span>'>
@@ -219,7 +219,7 @@
                                                         <div class="input-group mb-3 custom">
                                                             <input type="text" id="filter_date_range"
                                                                    class="js-flatpickr form-control"
-                                                                   placeholder="Выберите даты"
+                                                                   placeholder="Select dates"
                                                                    data-hs-flatpickr-options='{
                                                                  "dateFormat": "d/m/Y",
                                                                  "mode": "range"
@@ -262,7 +262,7 @@
                                class="js-datatable table table-borderless table-thead-bordered table-nowrap table-align-middle card-table"
                                data-hs-datatables-options='{
                                        "columnDefs": [{
-                                          "targets": [0, 7],
+                                          "targets": [0, 6],
                                           "orderable": false
                                         }],
                                         "ordering": false,
@@ -294,8 +294,6 @@
                                 <th scope="col">@lang('Network Fee')</th>
                                 <th scope="col">@lang('Min-Max Send')</th>
                                 <th scope="col">@lang('Status')</th>
-                                <th scope="col">@lang('Homepage')</th>
-                                <th scope="col">@lang('Reserves')</th>
                                 <th scope="col">@lang('Created At')</th>
                                 <th scope="col">@lang('Action')</th>
                             </tr>
@@ -399,8 +397,6 @@
                     {data: 'network_fee', name: 'network_fee'},
                     {data: 'min_max_send', name: 'min_max_send'},
                     {data: 'status', name: 'status'},
-                    {data: 'show_on_homepage', name: 'show_on_homepage'},
-                    {data: 'show_in_reserves', name: 'show_in_reserves'},
                     {data: 'created_at', name: 'created_at'},
                     {data: 'action', name: 'action'},
                 ],
@@ -415,9 +411,9 @@
                 },
                 language: {
                     zeroRecords: `<div class="text-center p-4">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
-                    <p class="mb-0">Нет данных для отображения</p>
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
+                    <p class="mb-0">No data to show</p>
                     </div>`,
                     processing: `<div><div></div><div></div><div></div><div></div></div>`
                 },

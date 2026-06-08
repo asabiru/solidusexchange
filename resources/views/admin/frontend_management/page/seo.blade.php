@@ -151,11 +151,11 @@
                                             <img id="SeoImg"
                                                  class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                  src="{{ getFile($page->meta_image_driver, $page->meta_image, true) }}"
-                                                 alt="Описание изображения" data-hs-theme-appearance="default">
+                                                 alt="Image Description" data-hs-theme-appearance="default">
                                             <img id="SeoImg"
                                                  class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                  src="{{ getFile($page->meta_image_driver, $page->meta_image, true) }}"
-                                                 alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                 alt="Image Description" data-hs-theme-appearance="dark">
                                             <span class="d-block">@lang("Browse your file here")</span>
                                             <input type="file" class="js-file-attach form-check-input"
                                                    id="imageUploader" name="meta_image"

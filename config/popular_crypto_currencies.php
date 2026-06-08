@@ -6,7 +6,7 @@ return [
         'service_fee_type' => 'percent',
         'network_fee' => 0.05,
         'network_fee_type' => 'percent',
-        'status' => 1,
+        'status' => 0,
         'driver' => 'local',
         'image' => null,
         'last_rate_sync_error' => 'Pending bootstrap sync after deploy',

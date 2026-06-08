@@ -55,10 +55,10 @@ class AdminProfileSettingController extends Controller
             ]);
 
             if (!$response) {
-                throw new Exception("Что-то пошло не так");
+                throw new Exception("Something went wrong");
             }
 
-            return back()->with("success", "Профиль администратора успешно обновлён.");
+            return back()->with("success", "Admin Profile Updated Successfully.");
 
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -76,12 +76,12 @@ class AdminProfileSettingController extends Controller
         $admin = Auth::guard('admin')->user();
 
         if (!Hash::check($request->current_password, $admin->password)) {
-            return back()->with('error', "Пароль не't match");
+            return back()->with('error', "Password didn't match");
         }
         $admin->update([
             'password' => bcrypt($request->password)
         ]);
-        return back()->with('success', 'Пароль изменён');
+        return back()->with('success', 'Password has been Changed');
     }
 
     public function notificationPermission(Request $request)
@@ -93,7 +93,7 @@ class AdminProfileSettingController extends Controller
                 'status' => $templateData
             ]);
         }
-        return back()->with('success', 'Разрешения успешно обновлены.');
+        return back()->with('success', 'Permissions updated successfully.');
     }
 
 

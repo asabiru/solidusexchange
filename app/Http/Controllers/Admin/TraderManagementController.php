@@ -53,7 +53,7 @@ class TraderManagementController extends Controller
             'role' => 'trader',
         ]);
 
-        return redirect()->route('admin.traders.index')->with('success', 'Трейдер успешно создан.');
+        return redirect()->route('admin.traders.index')->with('success', 'Trader created successfully.');
     }
 
     public function edit($id)
@@ -96,7 +96,7 @@ class TraderManagementController extends Controller
 
         $trader->save();
 
-        return redirect()->route('admin.traders.index')->with('success', 'Трейдер успешно обновлён.');
+        return redirect()->route('admin.traders.index')->with('success', 'Trader updated successfully.');
     }
 
     private function normalizeTelegramUsername(?string $telegramUsername): ?string

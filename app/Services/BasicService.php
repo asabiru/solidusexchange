@@ -23,17 +23,7 @@ class BasicService
         $env = file($envPath);
         foreach ($env as $env_key => $env_value) {
             $entry = explode("=", $env_value, 2);
-            if (array_key_exists($entry[0], $value)) {
-                // Strip CR/LF to prevent injecting additional .env entries,
-                // and quote values containing whitespace or special chars.
-                $clean = str_replace(["\r", "\n"], '', (string) $value[$entry[0]]);
-                if ($clean !== '' && preg_match('/\s|#|"/', $clean)) {
-                    $clean = '"' . str_replace('"', '\"', $clean) . '"';
-                }
-                $env[$env_key] = $entry[0] . "=" . $clean . "\n";
-            } else {
-                $env[$env_key] = $env_value;
-            }
+            $env[$env_key] = array_key_exists($entry[0], $value) ? $entry[0] . "=" . $value[$entry[0]] . "\n" : $env_value;
         }
         $fp = fopen($envPath, 'w');
         fwrite($fp, implode($env));

@@ -175,29 +175,6 @@ class CryptoCurrencyController extends Controller
                   </span>';
                 }
             })
-            ->addColumn('show_on_homepage', function ($item) {
-                if ($item->show_on_homepage) {
-                    return '<span class="badge bg-soft-info text-info">
-                    <span class="legend-indicator bg-info"></span>' . trans('On Homepage') . '
-                  </span>';
-                } else {
-                    return '<span class="badge bg-soft-secondary text-body">
-                    <span class="legend-indicator bg-secondary"></span>' . trans('Hidden') . '
-                  </span>';
-                }
-            })
-            ->addColumn('show_in_reserves', function ($item) {
-                if ($item->show_in_reserves) {
-                    $amount = $item->reserve_amount ? rtrim(rtrim(number_format($item->reserve_amount, 8), '0'), '.') . ' ' . $item->code : '—';
-                    return '<span class="badge bg-soft-success text-success">
-                    <span class="legend-indicator bg-success"></span>' . trans('Reserve') . '
-                  </span><br><small class="text-body">' . $amount . '</small>';
-                } else {
-                    return '<span class="badge bg-soft-secondary text-body">
-                    <span class="legend-indicator bg-secondary"></span>' . trans('No') . '
-                  </span>';
-                }
-            })
             ->addColumn('created_at', function ($item) {
                 return dateTime($item->created_at, basicControl()->date_time_format);
             })
@@ -236,7 +213,7 @@ class CryptoCurrencyController extends Controller
                 $html .= '</div>';
                 return $html;
             })
-            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'show_on_homepage', 'show_in_reserves', 'created_at', 'action'])
+            ->rawColumns(['checkbox', 'name', 'rate', 'rate_indicator', 'service_fee', 'network_fee', 'min_max_send', 'status', 'created_at', 'action'])
             ->make(true);
     }
 
@@ -257,11 +234,11 @@ class CryptoCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
+                    return back()->withInput()->with('error', 'Image could not be uploaded');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Криптовалюта успешно создана');
+            return back()->with('success', 'Crypto Currency Created Successfully');
         }
     }
 
@@ -281,11 +258,11 @@ class CryptoCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
+                    return back()->withInput()->with('error', 'Image could not be uploaded');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Криптовалюта успешно обновлена');
+            return back()->with('success', 'Crypto Currency Updated Successfully');
         }
     }
 
@@ -306,7 +283,7 @@ class CryptoCurrencyController extends Controller
         try {
             $currency = CryptoCurrency::findOrFail($id)->delete();
             $this->fileDelete($currency->driver, $currency->image);
-            return back()->with('success', 'Успешно удалено');
+            return back()->with('success', 'Deleted Successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -368,8 +345,6 @@ class CryptoCurrencyController extends Controller
                             $currency->update([
                                 'rate' => $apiRes['rate'],
                                 'usd_rate' => $apiRes['usd_rate'],
-                                'change_24h' => $apiRes['change_24h'] ?? null,
-                                'sparkline_7d' => $apiRes['sparkline_7d'] ?? null,
                                 'last_rate_sync_at' => now(),
                                 'last_rate_sync_error' => null,
                             ]);
@@ -382,7 +357,7 @@ class CryptoCurrencyController extends Controller
                         ->whereIn('id', $request->strIds)
                         ->whereIn('code', array_keys($response['errors']))
                         ->update([
-                            'last_rate_sync_error' => collect($response['errors'])->implode(', '),
+                            'last_rate_sync_error' => 'Bybit spot pair not found for this currency',
                         ]);
                 }
             } else {

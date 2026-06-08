@@ -88,7 +88,7 @@ class EmailConfigController extends Controller
 
             });
 
-            return back()->with('success', 'Настройки email успешно обновлены.');
+            return back()->with('success', 'Email Configuration has been updated successfully.');
 
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -103,7 +103,7 @@ class EmailConfigController extends Controller
             ];
             BasicService::setEnv($env);
 
-            return back()->with('success', 'Способ отправки писем по умолчанию успешно установлен.');
+            return back()->with('success', 'Mail method set as default successfully.');
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -120,15 +120,15 @@ class EmailConfigController extends Controller
             $basic = basicControl();
 
             if ($basic->email_notification !== 1) {
-                return back()->with('warning', 'Email-уведомления отключены');
+                return back()->with('warning', 'Your email notification is disabled');
             }
 
             $email_from = $basic->sender_email;
             Mail::to($request->email)->send(new sendTestMail($email_from, "Test Email", "Your " . $_SERVER['SERVER_NAME'] . " email is working."));
 
-            return back()->with('success', 'Email успешно отправлен.');
+            return back()->with('success', 'Email has been sent successfully.');
         } catch (Exception $e) {
-            return back()->with('warning', 'Что-то пошло не так');
+            return back()->with('warning', 'Something went wrong');
         }
     }
 

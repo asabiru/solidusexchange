@@ -1,104 +1,119 @@
 @extends('admin.layouts.login')
 @section('page_title', __('Admin Login'))
 @section('content')
-    @if(Session::has('error'))
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            <span class="fw-semibold">{{ Session::get('error') }}</span>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    @endif
-
-    <div class="admin-logo">
-        <img src="{{ getFile(basicControl()->admin_logo_driver, basicControl()->admin_logo, true) }}"
-             alt="{{ basicControl()->site_title }}"
-             style="width:64px;height:64px;object-fit:contain;border-radius:12px;margin-bottom:12px;display:block;margin-left:auto;margin-right:auto;">
-        <h3>{{ basicControl()->site_title }}</h3>
-        <p>Админ-панель</p>
-    </div>
-
-    <form method="post"
-          action="{{ route('admin.login.submit') }}"
-          data-auth-transition
-          data-submitting-text="@lang('Signing in...')"
-          novalidate>
-        @csrf
-        <div class="form-group">
-            <label class="form-label" for="username">@lang('Email or Username')</label>
-            <input type="text"
-                   class="form-control"
-                   name="username"
-                   value="{{ old('username', config('demo.IS_DEMO') ? (request()->username ?? 'admin') : '') }}"
-                   id="username"
-                   autocomplete="off"
-                   placeholder="@lang('Enter Email or Username')" required>
-            @error('username')
-            <div class="text-danger" style="color: var(--admin-danger); font-size: 14px; margin-top: 8px;">{{ $message }}</div>
-            @enderror
-        </div>
-
-        <div class="form-group">
-            <label class="form-label" for="password">@lang("Password")</label>
-            <input type="password"
-                   class="form-control"
-                   name="password"
-                   value="{{ old('password', config('demo.IS_DEMO') ? (request()->username ?? 'admin') : '') }}"
-                   id="password"
-                   placeholder="@lang('Enter Password')" required>
-            @error('password')
-            <div class="text-danger" style="color: var(--admin-danger); font-size: 14px; margin-top: 8px;">{{ $message }}</div>
-            @enderror
-            <div style="text-align: right; margin-top: 8px;">
-                <a href="{{ route('admin.password.request') }}" style="color: var(--solidus-accent); text-decoration: none; font-size: 14px;">
-                    @lang("Forgot Password?")
-                </a>
-            </div>
-        </div>
-
-        @if($basicControl->google_recaptcha === 1 && $basicControl->google_reCapture_admin_login === 1)
-            <div class="form-group">
-                {!! NoCaptcha::renderJs() !!}
-                {!! NoCaptcha::display() !!}
-                @error('g-recaptcha-response')
-                <div class="text-danger">@lang($message)</div>
-                @enderror
-            </div>
-        @endif
-
-        @if(basicControl()->manual_recaptcha &&  basicControl()->recaptcha_admin_login)
-            <div class="form-group">
-                <label class="form-label" for="captcha">@lang('Captcha Code')</label>
-                <input type="text"
-                       class="form-control"
-                       name="captcha"
-                       id="captcha"
-                       autocomplete="off"
-                       placeholder="@lang('Enter Captcha')" required>
-                @error('captcha')
-                <div class="text-danger">{{ $message }}</div>
-                @enderror
-
-                <div style="margin-top: 8px;">
-                    <img src="{{route('captcha').'?rand='. rand()}}" id='captcha_image' style="border-radius: 8px; border: 1px solid var(--solidus-border);">
-                    <a href='javascript: refreshCaptcha();' style="color: var(--solidus-accent); text-decoration: none; margin-left: 8px;">
-                        <i class="fa-solid fa-rotate"></i>
-                    </a>
+    <div class="card card-lg mt-lg-5">
+        <div class="card-body">
+            @if(Session::has('error'))
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    <span class="fw-semibold">{{ Session::get('error') }}</span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
-            </div>
-        @endif
+            @endif
+            <form method="post" action="{{ route('admin.login.submit') }}" class="js-validate needs-validation"
+                  novalidate>
+                @csrf
+                <div class="text-center">
+                    <div class="mb-5">
+                        <h1 class="display-5">@lang('Sign in')</h1>
+                    </div>
+                </div>
 
-        <div class="form-check mb-4">
-            <input class="form-check-input" type="checkbox" name="remember_me" value=""
-                   id="remember" {{ old('remember') ? 'checked' : '' }}>
-            <label class="form-check-label" for="remember">
-                @lang('Remember me')
-            </label>
+                <div class="mb-4">
+                    <label class="form-label" for="signinSrEmail">@lang('Email or Username')</label>
+                    <input type="text"
+                           class="form-control form-control-lg @error('username') is-invalid @enderror @error('email') is-invalid @enderror"
+                           name="username"
+                           value="{{ old('username', config('demo.IS_DEMO') ? (request()->username ?? 'admin') : '') }}"
+                           id="signinSrEmail" autocomplete="off"
+                           tabindex="0" placeholder="@lang('Enter Email or Username')" required>
+                    @error('username')
+                    <span class="invalid-feedback">{{ $message }}</span>
+                    @enderror
+                    @error('email')
+                    <span class="invalid-feedback">{{ $message }}</span>
+                    @enderror
+                </div>
+                <!-- End Form -->
+
+                <!-- Form -->
+                <div class="mb-2">
+                    <label class="form-label w-100" for="signupSrPassword">
+                        <span>@lang("Password")</span>
+                    </label>
+                    <div class="input-group input-group-merge" data-hs-validation-validate-class>
+                        <input type="password"
+                               tabindex="1"
+                               class="js-toggle-password form-control form-control-lg @error('password') is-invalid @enderror"
+                               name="password" value="{{ old('password', config('demo.IS_DEMO') ? (request()->username ?? 'admin') : '') }}"
+                               id="signupSrPassword"
+                               placeholder="@lang('Enter Password')"
+                               data-hs-toggle-password-options='
+                               {
+                                "target": "#changePassTarget",
+                                "defaultClass": "bi-eye-slash",
+                                "showClass": "bi-eye",
+                                "classChangeTarget": "#changePassIcon"
+                                }'>
+                        <a id="changePassTarget" class="input-group-append input-group-text"
+                           href="javascript:void(0);">
+                            <i id="changePassIcon" class="bi-eye"></i>
+                        </a>
+                    </div>
+                    @error('password')
+                    <span class="invalid-feedback d-block">{{ $message }}</span>
+                    @enderror
+                    <span class="d-flex justify-content-end align-items-center">
+                    <a class="form-label-link mb-0" href="{{ route('admin.password.request') }}">
+                        @lang("Forgot Password?")</a>
+                    </span>
+                </div>
+
+                @if($basicControl->google_recaptcha === 1 && $basicControl->google_reCapture_admin_login === 1)
+                    <div class="form-group mb-2">
+                        {!! NoCaptcha::renderJs() !!}
+                        {!! NoCaptcha::display() !!}
+                        @error('g-recaptcha-response')
+                        <div class="text-danger">@lang($message)</div>
+                        @enderror
+                    </div>
+                @endif
+
+                @if(basicControl()->manual_recaptcha &&  basicControl()->recaptcha_admin_login)
+                    <div class="mb-4">
+                        <label class="form-label" for="captcha">@lang('Captcha Code')</label>
+                        <input type="text" tabindex="2"
+                               class="form-control form-control-lg @error('captcha') is-invalid @enderror"
+                               name="captcha" id="captcha" autocomplete="off"
+                               placeholder="@lang('Enter Captcha')" required>
+                        @error('captcha')
+                        <span class="invalid-feedback">{{ $message }}</span>
+                        @enderror
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="input-group input-group-merge" data-hs-validation-validate-class>
+                            <img src="{{route('captcha').'?rand='. rand()}}" id='captcha_image'>
+                            <a class="input-group-append input-group-text"
+                               href='javascript: refreshCaptcha();'>
+                                <i class="bi-arrow-repeat fs-1 text-primary"></i>
+                            </a>
+                        </div>
+                    </div>
+                @endif
+
+                <div class="form-check mb-4">
+                    <input class="form-check-input" type="checkbox" name="remember_me" value=""
+                           id="termsCheckbox" {{ old('remember') ? 'checked' : '' }}>
+                    <label class="form-check-label" for="termsCheckbox">
+                        @lang('Remember me')
+                    </label>
+                </div>
+
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">@lang('Sign in')</button>
+                </div>
+            </form>
         </div>
-
-        <button type="submit" class="btn-admin-login">@lang('Sign in')</button>
-    </form>
-
-    <div class="admin-footer">
-        <a href="{{ url('/') }}">← @lang('Back to website')</a>
     </div>
 
 @endsection
@@ -111,7 +126,8 @@
             let img = document.images['captcha_image'];
             img.src = img.src.substring(
                 0, img.src.lastIndexOf("?")
-                ) + "?rand=" + Math.random() * 1000;
+            ) + "?rand=" + Math.random() * 1000;
         }
     </script>
 @endpush
+

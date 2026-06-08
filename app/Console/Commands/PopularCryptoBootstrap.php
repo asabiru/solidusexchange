@@ -69,7 +69,7 @@ class PopularCryptoBootstrap extends Command
                 ->whereIn('code', $failedCodes)
                 ->update([
                     'status' => 0,
-                    'last_rate_sync_error' => 'Popular coin bootstrap sync failed: ' . collect($response['errors'])->only($failedCodes)->implode(', '),
+                    'last_rate_sync_error' => 'Popular coin bootstrap sync failed: Bybit spot pair not found for this currency',
                 ]);
         }
 
@@ -91,14 +91,35 @@ class PopularCryptoBootstrap extends Command
 
     private function canActivateCurrency(string $code): bool
     {
-        // With custodial HD wallets, all currencies are supported for deposits.
-        // No CryptoCloud restrictions apply.
-        return true;
+        $code = strtoupper(trim($code));
+        $depositProvider = (string) config('exchange_pipeline.deposit_provider', 'active_crypto_method');
+
+        if ($depositProvider !== 'active_crypto_method') {
+            return true;
+        }
+
+        $activeMethod = CryptoMethod::query()->where('status', 1)->first();
+        if (!$activeMethod || $activeMethod->code !== 'crypto_cloud') {
+            return true;
+        }
+
+        return !in_array($code, ['TON', 'USDT_TON'], true);
     }
 
     private function markUnsupportedCurrencies($currencies): void
     {
-        // No currencies are unsupported with custodial HD wallets.
-        // This method is kept for compatibility but does nothing.
+        foreach ($currencies as $currency) {
+            if (!$currency instanceof CryptoCurrency) {
+                continue;
+            }
+
+            if ($this->canActivateCurrency($currency->code)) {
+                continue;
+            }
+
+            $currency->status = 0;
+            $currency->last_rate_sync_error = 'Inserted but left inactive because CryptoCloud static wallets do not support this network for auto deposits.';
+            $currency->save();
+        }
     }
 }

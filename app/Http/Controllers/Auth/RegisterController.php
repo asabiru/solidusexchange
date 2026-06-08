@@ -62,7 +62,7 @@ class RegisterController extends Controller
     {
         $basic = basicControl();
         if ($basic->registration == 0) {
-            return redirect('/')->with('warning', 'Регистрация отключена.');
+            return redirect('/')->with('warning', 'Registration Has Been Disabled.');
         }
 
         $template = ContentDetails::with(['content'])->whereHas('content', function ($query) {
@@ -119,7 +119,6 @@ class RegisterController extends Controller
     {
         $basic = basicControl();
         return User::create([
-            'name' => $data['username'],
             'firstname' => null,
             'lastname' => null,
             'username' => $data['username'],
@@ -206,26 +205,6 @@ class RegisterController extends Controller
         $ul['get_device'] = UserSystemInfo::get_device();
 
         UserLogin::create($ul);
-        // Check for pending trade requests after registration
-        $pendingBuyUtr = session()->pull('pending_buy_utr');
-        if ($pendingBuyUtr) {
-            $buyRequest = \App\Models\BuyRequest::where('utr', $pendingBuyUtr)->first();
-            if ($buyRequest) {
-                $buyRequest->user_id = $user->id;
-                $buyRequest->save();
-                return redirect()->route('buyProcessing', $pendingBuyUtr);
-            }
-        }
-
-        $pendingSellUtr = session()->pull('pending_sell_utr');
-        if ($pendingSellUtr) {
-            $sellRequest = \App\Models\SellRequest::where('utr', $pendingSellUtr)->first();
-            if ($sellRequest) {
-                $sellRequest->user_id = $user->id;
-                $sellRequest->save();
-                return redirect()->route('sellProcessing', $pendingSellUtr);
-            }
-        }
 
     }
 

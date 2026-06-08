@@ -170,7 +170,7 @@ class SupportTicketController extends Controller
             $admin = Auth::guard('admin')->user();
 
             $ticketRes = SupportTicket::where('id', $id)->firstOr(function () {
-                throw new \Exception('Данные не найдены!');
+                throw new \Exception('No data found!');
             });
 
             $ticketRes->update([
@@ -180,7 +180,7 @@ class SupportTicketController extends Controller
 
             if (!$ticketRes) {
                 DB::rollBack();
-                throw new Exception('Ошибка при обновлении данных.');
+                throw new Exception('Something went wrong while updating data.');
             }
 
             $resTicketDetails = SupportTicketMessage::create([
@@ -191,7 +191,7 @@ class SupportTicketController extends Controller
 
             if (!$resTicketDetails) {
                 DB::rollBack();
-                throw new Exception('Ошибка при обновлении данных.');
+                throw new Exception('Something went wrong while updating data.');
             }
 
             if (!empty($request->attachments)) {
@@ -203,7 +203,7 @@ class SupportTicketController extends Controller
                         $file = $request->file('attachments.' . $i);
                         $supportFile = $this->fileUpload($file, config('filelocation.ticket.path'), null, null, 'webp', null);
                         if (empty($supportFile['path'])) {
-                            throw new Exception('Файл не удалось загрузить.');
+                            throw new Exception('File could not be uploaded.');
                         }
                         $attachments[] = [
                             'support_ticket_message_id' => $resTicketDetails->id,
@@ -218,7 +218,7 @@ class SupportTicketController extends Controller
                 $attachmentResponse = DB::table('support_ticket_attachments')->insert($attachments);
                 if (!$attachmentResponse) {
                     DB::rollBack();
-                    throw new Exception('Ошибка при сохранении вложений. Пожалуйста, попробуйте позже.');
+                    throw new Exception('Something went wrong while storing attachments. Please try again later.');
                 }
             }
 
@@ -243,7 +243,7 @@ class SupportTicketController extends Controller
                 'reply' => $request->message,
             ]);
 
-            return back()->with('success', "На тикет дан ответ");
+            return back()->with('success', "Ticket has been replied");
 
         } catch (\Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -257,7 +257,7 @@ class SupportTicketController extends Controller
         $ticket->update([
             'status' => 3
         ]);
-        return back()->with('success', "Тикет закрыт");
+        return back()->with('success', "Ticket has been closed");
     }
 
     public function ticketDownload($ticket_id)

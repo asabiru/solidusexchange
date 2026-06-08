@@ -92,9 +92,9 @@ class FaSecurityController extends Controller
                 'time' => date('d M, Y h:i:s A'),
             ]);
 
-            return back()->with('success', 'Google Authenticator включён.');
+            return back()->with('success', 'Google Authenticator Has Been Enabled.');
         } else {
-            return back()->with('error', 'Неверный код подтверждения.');
+            return back()->with('error', 'Wrong Verification Code.');
         }
     }
 
@@ -106,13 +106,13 @@ class FaSecurityController extends Controller
         ]);
 
         if (!Hash::check($request->password, auth()->user()->password)) {
-            return back()->with('error', 'Неверный пароль. Пожалуйста, попробуйте снова.');
+            return back()->with('error', 'Incorrect password. Please try again.');
         }
 
         auth()->user()->update([
             'two_fa' => 0,
             'two_fa_verify' => 1,
         ]);
-        return redirect()->route('user.dashboard')->with('success', 'Двухфакторная аутентификация успешно отключена.');
+        return redirect()->route('user.dashboard')->with('success', 'Two-step authentication disabled successfully.');
     }
 }

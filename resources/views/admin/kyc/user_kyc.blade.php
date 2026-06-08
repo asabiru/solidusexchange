@@ -201,7 +201,7 @@
                                                         <input type="text"
                                                                class="js-flatpickr form-control flatpickr-custom"
                                                                id="date_range"
-                                                               placeholder="Выберите даты"
+                                                               placeholder="Select dates"
                                                                data-hs-flatpickr-options='{
                                                                          "dateFormat": "d/m/Y",
                                                                          "mode": "range"
@@ -347,9 +347,9 @@
                 ],
                 language: {
                     zeroRecords: `<div class="text-center p-4">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
-                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
-                    <p class="mb-0">Нет данных для отображения</p>
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
+                    <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
+                    <p class="mb-0">No data to show</p>
                     </div>`,
                     processing: `<div><div></div><div></div><div></div><div></div></div>`
                 },

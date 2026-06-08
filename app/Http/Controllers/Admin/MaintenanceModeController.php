@@ -54,7 +54,7 @@ class MaintenanceModeController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', "Режим обслуживания успешно обновлён");
+        return back()->with('success', "Maintenance Mode updated successfully");
 
     }
 }

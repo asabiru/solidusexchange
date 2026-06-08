@@ -69,7 +69,7 @@ class BasicControlController extends Controller
             ]);
 
             if (!$response)
-                throw new Exception('Ошибка при обновлении данных');
+                throw new Exception('Something went wrong, when updating data');
 
             $env = [
                 'APP_TIMEZONE' => $response->time_zone,
@@ -110,7 +110,7 @@ class BasicControlController extends Controller
                     'fiat_send_time' => $request->fiat_send_time,
                 ]);
 
-                if (!$response) throw new Exception('Ошибка при обновлении данных');
+                if (!$response) throw new Exception('Something went wrong, when updating data');
 
                 session()->flash('success', 'Exchange Configure Successfully');
                 Artisan::call('optimize:clear');
@@ -190,9 +190,9 @@ class BasicControlController extends Controller
                 'time' => date('d M, Y h:i:s A'),
             ]);
 
-            return back()->with('success', 'Google Authenticator включён.');
+            return back()->with('success', 'Google Authenticator Has Been Enabled.');
         } else {
-            return back()->with('error', 'Неверный код подтверждения.');
+            return back()->with('error', 'Wrong Verification Code.');
         }
     }
 
@@ -203,28 +203,18 @@ class BasicControlController extends Controller
         ]);
 
         if (!Hash::check($request->password, auth()->user()->password)) {
-            return back()->with('error', 'Неверный пароль. Пожалуйста, попробуйте снова.');
+            return back()->with('error', 'Incorrect password. Please try again.');
         }
 
         Auth::guard('admin')->user()->update([
             'two_fa' => 0,
             'two_fa_verify' => 1,
         ]);
-        return back()->with('success', 'Двухфакторная аутентификация успешно отключена.');
+        return back()->with('success', 'Two-step authentication disabled successfully.');
     }
 
     public function twoFaCheck(Request $request)
     {
-        $admin = Auth::guard('admin')->user();
-
-        if (!$admin) {
-            return redirect()->route('admin.login');
-        }
-
-        if ((int) $admin->two_fa === 0 || (int) $admin->two_fa_verify === 1) {
-            return redirect()->route('admin.dashboard');
-        }
-
         if ($request->method() == 'GET') {
             return view('admin.auth.twofa-verify');
         } elseif ($request->method() == 'POST') {
@@ -242,7 +232,7 @@ class BasicControlController extends Controller
                 $user->save();
                 return redirect()->intended(route('admin.dashboard'));
             }
-            return back()->with('error', 'Неверный код подтверждения.');
+            return back()->with('error', 'Wrong Verification Code.');
         }
     }
 
@@ -276,7 +266,7 @@ class BasicControlController extends Controller
                 'changeable_mode' => $request->changeable_mode,
             ]);
 
-            if (!$response) throw new Exception('Ошибка при обновлении данных');
+            if (!$response) throw new Exception('Something went wrong, when updating data');
 
             session()->flash('success', 'Basic Control Configure Successfully');
             Artisan::call('optimize:clear');
@@ -312,7 +302,7 @@ class BasicControlController extends Controller
                 'coin_market_cap_auto_update' => $request->coin_market_cap_auto_update,
                 'coin_market_cap_auto_update_at' => $request->coin_market_cap_auto_update_at
             ]);
-            return back()->with('success', 'Настройки успешно изменены');
+            return back()->with('success', 'Configuration changes successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -327,31 +317,95 @@ class BasicControlController extends Controller
         }
 
         $request->validate([
-            'amlbot_enabled'  => 'nullable|integer|in:0,1',
-            'amlbot_api_key'  => 'nullable|string|max:191',
+            'sumsub_enabled' => 'nullable|integer|in:0,1',
+            'sumsub_app_token' => 'nullable|string',
+            'sumsub_secret_key' => 'nullable|string',
+            'sumsub_base_url' => 'nullable|url',
+            'sumsub_level_name' => 'nullable|string|max:191',
+            'sumsub_websdk_url' => 'nullable|url',
+            'didit_enabled' => 'nullable|integer|in:0,1',
+            'didit_api_key' => 'nullable|string',
+            'didit_webhook_secret' => 'nullable|string',
+            'didit_base_url' => 'nullable|url',
+            'didit_workflow_id' => 'nullable|string|max:191',
         ]);
 
-        if ((int) $request->input('amlbot_enabled', 0) === 1) {
+        if ((int) $request->input('sumsub_enabled', 0) === 1) {
             $request->validate([
-                'amlbot_api_key' => 'required|string',
+                'sumsub_app_token' => 'required|string',
+                'sumsub_secret_key' => 'required|string',
+                'sumsub_base_url' => 'required|url',
+            ]);
+        }
+
+        if ((int) $request->input('didit_enabled', 0) === 1) {
+            $request->validate([
+                'didit_api_key' => 'required|string',
+                'didit_webhook_secret' => 'required|string',
+                'didit_workflow_id' => 'required|string',
+                'didit_base_url' => 'required|url',
             ]);
         }
 
         try {
             $basicControl->update([
-                'amlbot_enabled' => (int) $request->input('amlbot_enabled', 0),
-                'amlbot_api_key' => trim((string) $request->amlbot_api_key),
+                'sumsub_enabled' => $request->input('sumsub_enabled', 0),
+                'sumsub_app_token' => trim((string) $request->sumsub_app_token),
+                'sumsub_secret_key' => trim((string) $request->sumsub_secret_key),
+                'sumsub_base_url' => $this->normalizeSumsubBaseUrl((string) ($request->sumsub_base_url ?: 'https://api.sumsub.com')),
+                'sumsub_level_name' => trim((string) $request->sumsub_level_name),
+                'sumsub_websdk_url' => trim((string) ($request->sumsub_websdk_url ?: 'https://static.sumsub.com/idensic/static/sns-websdk-builder.js')),
+                'didit_enabled' => $request->input('didit_enabled', 0),
+                'didit_api_key' => trim((string) $request->didit_api_key),
+                'didit_webhook_secret' => trim((string) $request->didit_webhook_secret),
+                'didit_base_url' => $this->normalizeDiditBaseUrl((string) ($request->didit_base_url ?: 'https://verification.didit.me')),
+                'didit_workflow_id' => trim((string) $request->didit_workflow_id),
             ]);
-
-            // Sync API key to config cache so AmlBotService picks it up immediately
-            config(['exchange_pipeline.aml.api_key' => trim((string) $request->amlbot_api_key)]);
 
             Artisan::call('optimize:clear');
 
-            return back()->with('success', 'Настройки провайдера KYC / AML успешно обновлены');
+            return back()->with('success', 'KYC provider settings updated successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
+    }
+
+    private function normalizeSumsubBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = trim($baseUrl);
+        if ($baseUrl === '') {
+            return 'https://api.sumsub.com';
+        }
+
+        $parts = parse_url($baseUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return 'https://api.sumsub.com';
+        }
+
+        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
+    }
+
+    private function normalizeDiditBaseUrl(string $baseUrl): string
+    {
+        $baseUrl = trim($baseUrl);
+        if ($baseUrl === '') {
+            return 'https://verification.didit.me';
+        }
+
+        $parts = parse_url($baseUrl);
+        if (!is_array($parts) || empty($parts['host'])) {
+            return 'https://verification.didit.me';
+        }
+
+        $scheme = !empty($parts['scheme']) ? strtolower($parts['scheme']) : 'https';
+        $host = $parts['host'];
+        $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+        return rtrim(sprintf('%s://%s%s', $scheme, $host, $port), '/');
     }
 
     public function announcement(Request $request)
@@ -369,7 +423,7 @@ class BasicControlController extends Controller
             ]);
             $fillData = $request->only($announcement->getFillable());
             $announcement->fill($fillData)->save();
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Updated Successfully');
         }
     }
 }

@@ -110,7 +110,7 @@
                             <div class="profile-cover-img-wrapper">
                                 <img id="profileCoverImg" class="profile-cover-img"
                                      src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                     alt="Описание изображения">
+                                     alt="Image Description">
                             </div>
                         </div>
 
@@ -125,10 +125,10 @@
                                     <div class="col-sm-9">
                                         <div class="input-group input-group-sm-vertical">
                                             <input type="text" class="form-control" name="firstName" id="firstNameLabel"
-                                                   placeholder="Имя" aria-label="Имя"
+                                                   placeholder="First name" aria-label="First name"
                                                    value="{{ old('firstName', $user->firstname) }}" autocomplete="off">
                                             <input type="text" class="form-control" name="lastName" id="lastNameLabel"
-                                                   placeholder="Фамилия" aria-label="Фамилия"
+                                                   placeholder="Last name" aria-label="Last name"
                                                    value="{{ old('lastName', $user->lastname) }}" autocomplete="off">
                                         </div>
                                         @error('firstName')
@@ -136,99 +136,6 @@
                                         @enderror
                                         @error('lastName')
                                         <span class="invalid-feedback d-inline">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-                                </div>
-
-
-                                <div class="row mb-4">
-                                    <label for="phoneLabel"
-                                           class="col-sm-3 col-form-label form-label">@lang('Phone')</label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="js-input-mask form-control" name="phone"
-                                               id="phoneLabel" placeholder="Phone"
-                                               aria-label="Phone" value="{{ old('phone', $user->phone) }}"
-                                               autocomplete="off">
-                                        @error('phone')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-                                </div>
-
-                                <div class="row mb-4">
-                                    <label for="locationLabel"
-                                           class="col-sm-3 col-form-label form-label">@lang('Country')</label>
-                                    <div class="col-sm-9">
-                                        <div class="tom-select-custom mb-4">
-                                            <select class="js-select form-select" id="locationLabel" name="country">
-                                                @forelse($allCountry as $country)
-                                                    <option value="{{ $country['name'] }}"
-                                                            {{ $country['name'] == $user->country ? 'selected' : '' }}
-                                                            data-option-template='<span class="d-flex align-items-center"><img class="avatar avatar-xss avatar-circle me-2" src="{{ asset($country['flag']) }}" alt="Флаг Афганистана" /><span class="text-truncate">{{ $country['name'] }}</span></span>'>
-                                                        @lang($country['name'])
-                                                    </option>
-                                                @empty
-                                                @endforelse
-                                            </select>
-                                            @error('country')
-                                            <span class="invalid-feedback d-block">{{ $message }}</span>
-                                            @enderror
-                                        </div>
-
-                                        <div class="mb-3">
-                                            <div class="input-group input-group-sm-vertical">
-                                                <input type="text" class="form-control" name="city" id="cityLabel"
-                                                       placeholder="City" aria-label="City"
-                                                       value="{{ old('city', $user->city) }}" autocomplete="off">
-                                                <input type="text" class="form-control" name="state" id="stateLabel"
-                                                       placeholder="State" aria-label="State"
-                                                       value="{{ old('state', $user->state) }}">
-
-                                                <input type="text" class="js-input-mask form-control" name="zipCode"
-                                                       id="zipCodeLabel" placeholder="Индекс" aria-label="Индекс"
-                                                       value="{{ old('zipCode', $user->zip_code) }}" autocomplete="off">
-                                            </div>
-                                            @error('city')
-                                            <span class="invalid-feedback d-inline">{{ $message }}</span>
-                                            @enderror
-                                            @error('state')
-                                            <span class="invalid-feedback d-inline">{{ $message }}</span>
-                                            @enderror
-
-                                            @error('zipCode')
-                                            <span class="invalid-feedback d-block">{{ $message }}</span>
-                                            @enderror
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row mb-4">
-                                    <label for="addressLine1Label" class="col-sm-3 col-form-label form-label">
-                                        @lang('Address line 1')</label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="form-control" name="address"
-                                               id="addressLine1Label" placeholder="Адрес 1"
-                                               aria-label="Your address"
-                                               value="{{ old('address', $user->address) }}" autocomplete="off">
-                                        @error('address')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
-                                        @enderror
-                                    </div>
-
-                                </div>
-
-
-                                <div class="row mb-4">
-                                    <label for="addressLine2Label" class="col-sm-3 col-form-label form-label">
-                                        @lang('Address line 2')
-                                        <span class="form-label-secondary">(@lang("Optional"))</span></label>
-                                    <div class="col-sm-9">
-                                        <input type="text" class="form-control" name="addressTwo"
-                                               id="addressLine2Label" placeholder="Адрес 2"
-                                               aria-label="Адрес 2"
-                                               value="{{ old('addressTwo', $user->address_two) }}" autocomplete="off">
-                                        @error('addressTwo')
-                                        <span class="invalid-feedback d-block">{{ $message }}</span>
                                         @enderror
                                     </div>
                                 </div>

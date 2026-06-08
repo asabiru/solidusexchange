@@ -34,9 +34,6 @@ use App\Http\Controllers\Admin\SubscriberController;
 use App\Http\Controllers\Admin\Trader\DashboardController as TraderDashboardController;
 use App\Http\Controllers\Admin\Trader\SellController as TraderSellController;
 use App\Http\Controllers\Admin\TraderManagementController;
-use App\Http\Controllers\Admin\SupportCabinetController;
-use App\Http\Controllers\Admin\TelegramBotController;
-use App\Http\Controllers\Admin\SupportAgentController;
 
 /*
 |--------------------------------------------------------------------------
@@ -51,10 +48,6 @@ use App\Http\Controllers\Admin\SupportAgentController;
 
 
 Route::get('clear', function () {
-    $secret = config('app.scheduler_secret');
-    if (!$secret || request()->query('secret') !== $secret) {
-        abort(403, 'Unauthorized');
-    }
     Illuminate\Support\Facades\Artisan::call('optimize:clear');
     $output = Illuminate\Support\Facades\Artisan::output();
     return view('artisan_output', ['output' => $output]);
@@ -62,27 +55,17 @@ Route::get('clear', function () {
 
 
 Route::get('queue-work', function () {
-    $secret = config('app.scheduler_secret');
-    if (!$secret || request()->query('secret') !== $secret) {
-        abort(403, 'Unauthorized');
-    }
     return Illuminate\Support\Facades\Artisan::call('queue:work', ['--stop-when-empty' => true]);
 })->name('queue.work');
 
 Route::get('schedule-run', function () {
-    $secret = config('app.scheduler_secret');
-    if (!$secret || request()->query('secret') !== $secret) {
-        abort(403, 'Unauthorized');
-    }
     return Illuminate\Support\Facades\Artisan::call('schedule:run');
 })->name('schedule:run');
 
 
 Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
-    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])
-        ->middleware(['auth:admin', 'throttle:two-fa'])
-        ->name('twoFaCheck');
+    Route::any('two-fa/check', [BasicControlController::class, 'twoFaCheck'])->name('twoFaCheck');
 
     Route::get('/themeMode/{themeType?}', function ($themeType = 'true') {
         session()->put('themeMode', $themeType);
@@ -91,10 +74,10 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
     /*== Authentication Routes ==*/
     Route::get('/', [LoginController::class, 'showLoginForm'])->name('login')->middleware('guest:admin');
-    Route::post('login', [LoginController::class, 'login'])->middleware('throttle:admin-login')->name('login.submit');
+    Route::post('login', [LoginController::class, 'login'])->name('login.submit');
     Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request')
         ->middleware('guest:admin');
-    Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->middleware('throttle:password-reset')->name('password.email');
+    Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
     Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])
         ->name('password.reset')->middleware('guest:admin');
     Route::post('password/reset', [ResetPasswordController::class, 'reset'])
@@ -145,6 +128,9 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
 
             /* ===== ADMIN SOCIALITE ===== */
             Route::get('socialite', [AdminSocialiteController::class, 'index'])->name('socialite.index');
+            Route::match(['get', 'post'], 'google-config', [AdminSocialiteController::class, 'googleConfig'])->name('google.control');
+            Route::match(['get', 'post'], 'facebook-config', [AdminSocialiteController::class, 'facebookConfig'])->name('facebook.control');
+            Route::match(['get', 'post'], 'github-config', [AdminSocialiteController::class, 'githubConfig'])->name('github.control');
             Route::match(['get', 'post'], 'telegram-config', [AdminSocialiteController::class, 'telegramConfig'])->name('telegram.control');
 
             /* ===== STORAGE ===== */
@@ -393,35 +379,6 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
                 Route::post('{utr}/send', 'send')->name('send');
                 Route::post('{utr}/cancel', 'cancel')->name('cancel');
             });
-        });
-
-        Route::middleware('adminRole:support,admin')->prefix('support')->as('support.')->group(function () {
-            Route::get('dashboard', [SupportCabinetController::class, 'dashboard'])->name('dashboard');
-            Route::get('tickets/{status?}', [SupportCabinetController::class, 'tickets'])->name('tickets');
-            Route::post('tickets-search/{status}', [SupportCabinetController::class, 'ticketSearch'])->name('tickets.search');
-            Route::get('ticket/{id}', [SupportCabinetController::class, 'ticketView'])->name('ticket.view');
-            Route::put('ticket/{id}/reply', [SupportCabinetController::class, 'ticketReplySend'])->name('ticket.reply');
-            Route::put('ticket/{id}/close', [SupportCabinetController::class, 'ticketClose'])->name('ticket.close');
-        });
-
-        Route::middleware('adminRole:admin')->prefix('telegram-bots')->as('telegram.bots.')->group(function () {
-            Route::get('/', [TelegramBotController::class, 'index'])->name('index');
-            Route::get('create', [TelegramBotController::class, 'create'])->name('create');
-            Route::post('store', [TelegramBotController::class, 'store'])->name('store');
-            Route::get('edit/{id}', [TelegramBotController::class, 'edit'])->name('edit');
-            Route::put('update/{id}', [TelegramBotController::class, 'update'])->name('update');
-            Route::delete('destroy/{id}', [TelegramBotController::class, 'destroy'])->name('destroy');
-            Route::get('webhook/{id}', [TelegramBotController::class, 'setWebhook'])->name('webhook');
-            Route::get('info/{id}', [TelegramBotController::class, 'getInfo'])->name('info');
-        });
-
-        Route::middleware('adminRole:admin')->prefix('support-agents')->as('support.agents.')->group(function () {
-            Route::get('/', [SupportAgentController::class, 'index'])->name('index');
-            Route::get('create', [SupportAgentController::class, 'create'])->name('create');
-            Route::post('store', [SupportAgentController::class, 'store'])->name('store');
-            Route::get('edit/{id}', [SupportAgentController::class, 'edit'])->name('edit');
-            Route::put('update/{id}', [SupportAgentController::class, 'update'])->name('update');
-            Route::delete('destroy/{id}', [SupportAgentController::class, 'destroy'])->name('destroy');
         });
     });
 

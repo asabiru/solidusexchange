@@ -199,38 +199,24 @@ class UsersController extends Controller
         $request->validate([
             'firstName' => 'required|string|min:2|max:100',
             'lastName' => 'required|string|min:2|max:100',
-            'phone' => 'required|unique:users,phone,' . $id,
-            'country' => 'required|string|min:2|max:100',
-            'city' => 'required|string|min:2|max:100',
-            'state' => 'required|string|min:2|max:100',
-            'address' => 'required|string|min:2|max:100',
-            'addressTwo' => 'required|string|min:2',
-            'zipCode' => 'required|string|min:2|max:100',
             'status' => 'nullable|integer|in:0,1',
             'language_id' => Rule::in($languages),
         ]);
 
 
         $user = User::where('id', $id)->firstOr(function () {
-            throw new \Exception('Пользователь не найден!');
+            throw new \Exception('User not found!');
         });
 
         try {
             $user->update([
                 'firstname' => $request->firstName,
                 'lastname' => $request->lastName,
-                'phone' => $request->phone,
                 'language_id' => $request->language_id,
-                'address' => $request->address,
-                'address_two' => $request->addressTwo,
-                'city' => $request->city,
-                'state' => $request->state,
-                'zip_code' => $request->zipCode,
-                'country' => $request->country,
                 'status' => $request->status
             ]);
 
-            return back()->with('success', 'Основная информация успешно обновлена.');
+            return back()->with('success', 'Basic Information Updated Successfully.');
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
         }
@@ -245,14 +231,14 @@ class UsersController extends Controller
 
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
 
             $user->update([
                 'password' => bcrypt($request->newPassword)
             ]);
 
-            return back()->with('success', 'Пароль успешно обновлён.');
+            return back()->with('success', 'Password Updated Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -267,14 +253,14 @@ class UsersController extends Controller
 
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
 
             $user->update([
                 'email' => $request->new_email,
             ]);
 
-            return back()->with('success', 'Email успешно обновлён.');
+            return back()->with('success', 'Email Updated Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -292,14 +278,14 @@ class UsersController extends Controller
 
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
 
             $user->update([
                 'username' => $request->username,
             ]);
 
-            return back()->with('success', 'Имя пользователя успешно обновлено.');
+            return back()->with('success', 'Username Updated Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -322,7 +308,7 @@ class UsersController extends Controller
 
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
 
             $user->update([
@@ -332,7 +318,7 @@ class UsersController extends Controller
                 'sms_verification' => $request->sms_verification,
             ]);
 
-            return back()->with('success', 'Настройки успешно обновлены.');
+            return back()->with('success', 'Preferences Updated Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -345,13 +331,13 @@ class UsersController extends Controller
     {
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
             $user->update([
                 'two_fa_verify' => ($request->two_fa_security == 1) ? 0 : 1
             ]);
 
-            return back()->with('success', 'Двухфакторная защита успешно обновлена.');
+            return back()->with('success', 'Two Fa Security Updated Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -362,10 +348,10 @@ class UsersController extends Controller
     {
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден!');
+                throw new \Exception('User not found!');
             });
             UserAllRecordDeleteJob::dispatchSync($user);
-            return redirect()->route('admin.users')->with('success', 'Аккаунт пользователя успешно удалён.');
+            return redirect()->route('admin.users')->with('success', 'User Account Deleted Successfully.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -380,58 +366,38 @@ class UsersController extends Controller
 
     public function userStore(Request $request)
     {
-        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
-            'firstName'  => 'required|string|min:2|max:255',
-            'lastName'   => 'required|string|min:2|max:255',
-            'username'   => 'required|string|unique:users,username|min:2|max:255',
-            'email'      => 'required|email|unique:users,email|min:2|max:255',
-            'password'   => 'required|string|min:6|confirmed',
-            'phone'      => 'nullable|string|max:20',
-            'country'    => 'nullable|string|max:255',
-            'city'       => 'nullable|string|max:255',
-            'state'      => 'nullable|string|max:255',
-            'zipCode'    => 'nullable|string|max:20',
-            'addressOne' => 'nullable|string',
-            'addressTwo' => 'nullable|string',
-            'status'     => 'nullable|integer|in:0,1',
-        ]);
 
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'firstName' => 'required|string|min:2|max:255',
+            'lastName' => 'required|string|min:2|max:255',
+            'username' => 'required|string|unique:users,username|min:2|max:255',
+            'email' => 'required|email:rfc,dns|unique:users,email|min:2|max:255',
+            'status' => 'nullable|integer|in:0,1',
+        ]);
         if ($validator->fails()) {
             return back()->withErrors($validator)->withInput();
         }
 
         try {
             $response = User::create([
-                'firstname'    => $request->firstName,
-                'lastname'     => $request->lastName,
-                'username'     => $request->username,
-                'email'        => $request->email,
-                'password'     => $request->password,
-                'phone'        => $request->phone,
-                'address_one'  => $request->addressOne,
-                'address_two'  => $request->addressTwo,
-                'city'         => $request->city,
-                'state'        => $request->state,
-                'zip_code'     => $request->zipCode,
-                'country'      => $request->country,
-                'image'        => null,
+                'firstname' => $request->firstName,
+                'lastname' => $request->lastName,
+                'username' => $request->username,
+                'email' => $request->email,
+                'language_id' => $request->language_id,
+                'image' => null,
                 'image_driver' => 'local',
-                'status'       => $request->status ?? 1,
-                'email_verification' => 1,
-                'sms_verification'   => 1,
-                'two_fa'             => 0,
-                'two_fa_verify'      => 1,
+                'status' => $request->status
             ]);
 
             if (!$response) {
-                throw new Exception('Что-то пошло не так, пожалуйста, попробуйте снова.');
+                throw new Exception('Something went wrong, Please try again.');
             }
 
-            return redirect()->route('admin.user.create.success.message', $response->id)
-                ->with('success', 'Пользователь успешно создан');
+            return redirect()->route('admin.user.create.success.message', $response->id)->with('success', 'User created successfully');
 
         } catch (\Exception $exp) {
-            return back()->with('error', $exp->getMessage())->withInput();
+            return back()->with('error', $exp->getMessage());
         }
     }
 
@@ -705,7 +671,7 @@ class UsersController extends Controller
     {
         try {
             $data['user'] = User::where('id', $id)->firstOr(function () {
-                throw new Exception('Пользователь не найден.');
+                throw new Exception('No User found.');
             });
             return view('admin.user_management.user_kyc', $data);
         } catch (Exception $exception) {
@@ -789,14 +755,14 @@ class UsersController extends Controller
     {
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден.');
+                throw new \Exception('No User found.');
             });
 
             $user->update([
                 'status' => 0
             ]);
 
-            return back()->with('success', 'Профиль успешно заблокирован');
+            return back()->with('success', 'Block Profile Successfully');
         } catch (\Exception $exception) {
             return back()->with('error', $exception->getMessage());
         }
@@ -811,7 +777,7 @@ class UsersController extends Controller
     {
         try {
             $user = User::where('id', $id)->firstOr(function () {
-                throw new \Exception('Пользователь не найден.');
+                throw new \Exception('No User found.');
             });
             return view('admin.user_management.send_mail_form', compact('user'));
         } catch (\Exception $exception) {
@@ -843,7 +809,7 @@ class UsersController extends Controller
                 }
             }
 
-            return back()->with('success', 'Email успешно отправлен');
+            return back()->with('success', 'Email Sent Successfully');
 
         } catch (\Exception $exception) {
             return back()->with('error', $exception->getMessage());

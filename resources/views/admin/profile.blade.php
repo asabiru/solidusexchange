@@ -33,7 +33,7 @@
                                 <div class="profile-cover-img-wrapper">
                                     <img id="profileCoverImg" class="profile-cover-img"
                                          src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                         alt="Описание изображения">
+                                         alt="Image Description">
                                 </div>
                             </div>
 
@@ -41,7 +41,7 @@
                                    for="editAvatarUploaderModal">
                                 <img id="editAvatarImgModal" class="avatar-img"
                                      src="{{ getFile($admin->image_driver, $admin->image) }}"
-                                     alt="Описание изображения">
+                                     alt="Image Description">
                                 <input type="file" class="js-file-attach avatar-uploader-input"
                                        id="editAvatarUploaderModal"
                                        name="image"
@@ -222,10 +222,10 @@
                                                 <div class="mb-1">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-email-at.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="default">
+                                                         alt="Image Description" data-hs-theme-appearance="default">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-email-at-light.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                         alt="Image Description" data-hs-theme-appearance="dark">
                                                 </div>
                                                 @lang("Email")
                                             </th>
@@ -234,10 +234,10 @@
                                                 <div class="mb-1">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-message.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="default">
+                                                         alt="Image Description" data-hs-theme-appearance="default">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-message.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                         alt="Image Description" data-hs-theme-appearance="dark">
                                                 </div>
                                                 @lang("SMS")
                                             </th>
@@ -246,10 +246,10 @@
                                                 <div class="mb-1">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-phone.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="default">
+                                                         alt="Image Description" data-hs-theme-appearance="default">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-phone-light.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                         alt="Image Description" data-hs-theme-appearance="dark">
                                                 </div>
                                                 @lang("In-App")
                                             </th>
@@ -258,10 +258,10 @@
                                                 <div class="mb-1">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-globe.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="default">
+                                                         alt="Image Description" data-hs-theme-appearance="default">
                                                     <img class="avatar avatar-xs"
                                                          src="{{ asset("assets/admin/img/oc-globe-light.svg") }}"
-                                                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                         alt="Image Description" data-hs-theme-appearance="dark">
                                                 </div>
                                                 @lang("Push")
                                             </th>
@@ -323,8 +323,8 @@
                                         @empty
                                         <tr>
                                             <div class="text-center p-4">
-                                                <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Описание изображения" data-hs-theme-appearance="default">
-                                                <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}" alt="Image Description" data-hs-theme-appearance="default">
+                                                <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description" data-hs-theme-appearance="dark">
                                                 <p class="mb-0">@lang("No data to show")</p>
                                             </div>
                                         </tr>

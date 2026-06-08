@@ -72,7 +72,7 @@ class PaymentMethodController extends Controller
 
 
         $gateway = Gateway::where('id', $id)->firstOr(function () {
-            throw new Exception('Способ оплаты не найден');
+            throw new Exception('No payment method found');
         });
 
         $parameters = [];
@@ -111,7 +111,7 @@ class PaymentMethodController extends Controller
                     $driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Изображение не удалось загрузить.');
+                return back()->with('error', 'Image could not be uploaded.');
             }
         }
 
@@ -130,9 +130,9 @@ class PaymentMethodController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception('Неожиданная ошибка! Пожалуйста, попробуйте снова.');
+                throw new \Exception('Unexpected error! Please try again.');
             }
-            return back()->with('success', 'Данные шлюза обновлены.');
+            return back()->with('success', 'Gateway data has been updated.');
 
         } catch (\Exception $exp) {
             return back()->with('error', $exp->getMessage());
@@ -147,7 +147,7 @@ class PaymentMethodController extends Controller
             $gateway->update([
                 'status' => $gateway->status == 1 ? 0 : 1
             ]);
-            return back()->with('success', 'Статус шлюза успешно обновлён.');
+            return back()->with('success', 'Gateway status updated successfully.');
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
         }

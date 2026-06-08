@@ -79,7 +79,7 @@
                                                                    class="js-flatpickr form-control flatpickr-custom @error($name.'.'.$language->id) is-invalid @enderror"
                                                                    name="{{ $name }}[{{ $language->id }}]"
                                                                    value="{{ old($name.'.'.$language->id) }}"
-                                                                   placeholder="Выберите даты"
+                                                                   placeholder="Select dates"
                                                                    data-hs-flatpickr-options='{
                                                                      "dateFormat": "d/m/Y",
                                                                      "enableTime": false
@@ -160,12 +160,12 @@
                                                                 <img id="contentImg{{$name}}"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ asset("assets/admin/img/oc-browse-file.svg") }}"
-                                                                     alt="Описание изображения"
+                                                                     alt="Image Description"
                                                                      data-hs-theme-appearance="default">
                                                                 <img id="contentImg{{$name}}"
                                                                      class="avatar avatar-xl avatar-4x3 avatar-centered h-100 mb-2"
                                                                      src="{{ asset("assets/admin/img/oc-browse-file-light.svg") }}"
-                                                                     alt="Описание изображения"
+                                                                     alt="Image Description"
                                                                      data-hs-theme-appearance="dark">
                                                                 <span
                                                                     class="d-block">@lang("Browse your file here")</span>

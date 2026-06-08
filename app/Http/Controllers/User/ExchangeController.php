@@ -14,6 +14,7 @@ use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use App\Traits\SendNotification;
 use Carbon\Carbon;
+use Facades\App\Services\BasicService;
 use Illuminate\Http\Request;
 use RuntimeException;
 
@@ -52,11 +53,11 @@ class ExchangeController extends Controller
         $sendAmount = (float)$request->exchangeSendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -90,15 +91,15 @@ class ExchangeController extends Controller
             $rateType = in_array($request->rate_type, ['floating', 'fixed'], true) ? $request->rate_type : 'floating';
 
             if ($sendCurrency->min_send > $sendAmount) {
-                return back()->withInput()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
             }
 
             if ($sendCurrency->max_send < $sendAmount) {
-                return back()->withInput()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
             if (!$request->destination_wallet) {
-                return back()->withInput()->with('error', 'Требуется адрес кошелька назначения');
+                return back()->withInput()->with('error', 'Destination wallet address is required');
             }
 
             $quoteService = app(ExchangeQuoteService::class);
@@ -111,28 +112,10 @@ class ExchangeController extends Controller
                 return back()->withInput()->with('error', $exception->getMessage());
             }
 
-            $walletScreening = app(\App\Services\ExchangePipeline\ExchangeAmlService::class)->screenWalletAddress(
-                (string) $request->destination_wallet,
-                (string) $getCurrency->code,
-                [
-                    'screenable' => $exchangeRequest,
-                    'direction' => 'destination',
-                    'amount' => (float) ($quote['final_amount'] ?? 0),
-                ]
-            );
-
-            if (($walletScreening['status'] ?? 'pending') === 'rejected') {
-                return back()->withInput()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening. Please use another address or contact support.');
-            }
-
             $quoteService->applyToExchange($exchangeRequest, $quote, $rateType);
             $exchangeRequest->status = 1;
             $exchangeRequest->destination_wallet = $request->destination_wallet;
             $exchangeRequest->save();
-
-            if (($walletScreening['status'] ?? null) === 'pending') {
-                session()->flash('warning', $walletScreening['notes'] ?? 'Destination wallet requires manual AML review before payout.');
-            }
 
             return redirect()->route('exchangeProcessingOverview', $exchangeRequest->utr);
         }
@@ -154,7 +137,7 @@ class ExchangeController extends Controller
                     app(ExchangeSettlementService::class)->prepareIncomingDeposit($exchangeRequest);
                     $exchangeRequest = $exchangeRequest->fresh();
                 } catch (RuntimeException $exception) {
-                    return back()->with('error', 'Не удалось сгенерировать адрес. Пожалуйста, свяжитесь с администрацией.');
+                    return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
                 }
             }
 
@@ -165,11 +148,11 @@ class ExchangeController extends Controller
 
             $cryptoMethod = $exchangeRequest->cryptoMethod;
 
-            if (!$cryptoMethod) {
-                $cryptoMethod = CryptoMethod::where('status', 1)->first();
+            if (!$cryptoMethod && blank($exchangeRequest->deposit_provider)) {
+                $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
             }
 
-            if (!$exchangeRequest->crypto_method_id && $cryptoMethod) {
+            if (!$exchangeRequest->crypto_method_id && $cryptoMethod && blank($exchangeRequest->deposit_provider)) {
                 $exchangeRequest->crypto_method_id = $cryptoMethod->id;
                 $exchangeRequest->save();
             }
@@ -177,14 +160,17 @@ class ExchangeController extends Controller
             $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual';
             return view($this->theme . 'user.exchange.init-payment', $data, compact('exchangeRequest'));
         } elseif ($request->method() == 'POST') {
-            $exchangeRequest->execution_route = 'manual_review';
-            $exchangeRequest->execution_notes = 'User marked a manual deposit as sent. Awaiting admin confirmation and AML review.';
-            $exchangeRequest->routed_at = now();
+            $exchangeRequest->status = 2;
             $exchangeRequest->save();
 
+            $amount = getBaseAmount($exchangeRequest->send_amount, optional($exchangeRequest->sendCurrency)->code, 'crypto');
+            $charge = getBaseAmount($exchangeRequest->service_fee + $exchangeRequest->network_fee, optional($exchangeRequest->getCurrency)->code, 'crypto');
+
+            BasicService::makeTransaction($amount, $charge, '-', 'Manual Crypto Deposit For Exchange',
+                $exchangeRequest->id, ExchangeRequest::class, $exchangeRequest->user_id, $exchangeRequest->send_amount, optional($exchangeRequest->sendCurrency)->code);
+
             $this->sendAdminNotification($exchangeRequest, 'exchange');
-            return redirect()->route('tracking', ['trx_id' => $exchangeRequest->utr])
-                ->with('success', 'Уведомление об оплате получено. Мы подтвердим депозит после ручной проверки.');
+            return redirect()->route('exchangeFinal', $exchangeRequest->utr);
         }
     }
 
@@ -213,11 +199,11 @@ class ExchangeController extends Controller
         $sendAmount = (float)$request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
         }
 
         try {

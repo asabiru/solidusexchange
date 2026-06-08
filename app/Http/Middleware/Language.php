@@ -30,20 +30,20 @@ class Language
         if (session()->has('lang')) {
             return session('lang');
         }
-
         try {
             DB::connection()->getPdo();
-            $language = $this->languageModelQuery()?->where('status', 1)->where('default_status', 1)->first();
+
+            $languageQuery = $this->languageModelQuery();
+
+            $language = clone ($languageQuery)->where('status', 1)->where('default_status', 1)->first();
             if (!$language) {
-                $language = $this->languageModelQuery()?->where('status', 1)->first();
+                $language = clone ($languageQuery)->where('status', 1)->first();
             }
 
             return $language ? $language->short_name : 'en';
         } catch (\Exception $exception) {
-            return 'en';
-        }
 
-        return 'en';
+        }
     }
 
     public function getDirection()
@@ -54,17 +54,15 @@ class Language
 
         try {
             DB::connection()->getPdo();
-            $language = $this->languageModelQuery()?->where('status', 1)->where('default_status', 1)->first();
+            $languageQuery = $this->languageModelQuery();
+            $language = $languageQuery->where('status', 1)->where('default_status', 1)->first();
             if (!$language) {
-                $language = $this->languageModelQuery()?->where('status', 1)->first();
+                $language =  $languageQuery->where('status', 1)->first();
             }
-
             return $language ? $language->rtl : 0;
         } catch (\Exception $exception) {
-            return 0;
-        }
 
-        return 0;
+        }
     }
 
 
@@ -72,10 +70,9 @@ class Language
     {
         try {
             DB::connection()->getPdo();
-
             return LanguageModel::query();
         } catch (\Exception $exception) {
-            return null;
+
         }
     }
 }

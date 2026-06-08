@@ -63,7 +63,7 @@ return [
         'kyc_provider' => [
             'route' => 'admin.kyc.provider.config',
             'icon' => 'fa-light fa-id-card',
-            'short_description' => 'KYC / AML provider settings for AMLBot (KYC identity verification and KYT wallet screening).',
+            'short_description' => 'KYC provider settings such as Sumsub API credentials, default level, SDK and webhook readiness.',
         ],
         'translate_api' => [
             'route' => 'admin.translate.api.setting',
@@ -114,10 +114,25 @@ return [
         ],
     ],
     'Socialite' => [
+        'google-control' => [
+            'route' => 'admin.google.control',
+            'icon' => 'fab fa-google',
+            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
+        ],
+        'facebook-control' => [
+            'route' => 'admin.facebook.control',
+            'icon' => 'fab fa-facebook-f',
+            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
+        ],
+        'github-control' => [
+            'route' => 'admin.github.control',
+            'icon' => 'fab fa-github',
+            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
+        ],
         'telegram-control' => [
             'route' => 'admin.telegram.control',
             'icon' => 'fab fa-telegram-plane',
-            'short_description' => 'Telegram login settings for automatic user authorization.',
+            'short_description' => 'Socialite login your customers,they\'ll love you for it.',
         ],
     ],
     'in-app-notification' => [
@@ -175,3 +190,4 @@ return [
         ]
     ],
 ];
+

@@ -88,7 +88,7 @@ class ManualGatewayController extends Controller
                     $driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('alert', 'Изображение не удалось загрузить.');
+                return back()->with('alert', 'Image could not be uploaded.');
             }
         }
 
@@ -110,10 +110,10 @@ class ManualGatewayController extends Controller
         ]);
 
         if (!$response) {
-            throw new \Exception('Неожиданная ошибка! Пожалуйста, попробуйте снова.');
+            throw new \Exception('Unexpected error! Please try again.');
         }
 
-        return back()->with('success', 'Данные шлюза успешно добавлены.');
+        return back()->with('success', 'Gateway data has been add successfully.');
 
     }
 
@@ -121,7 +121,7 @@ class ManualGatewayController extends Controller
     {
         $data['basicControl'] = basicControl();
         $data['method'] = Gateway::where('id', $id)->firstOr(function () {
-            throw new Exception("Недопустимый запрос шлюзов");
+            throw new Exception("Invalid Gateways Request");
         });
         return view('admin.payment_methods.manual.edit', $data);
     }
@@ -169,11 +169,11 @@ class ManualGatewayController extends Controller
 
 
         $gateway = Gateway::where('id', $id)->firstOr(function () {
-            throw new Exception("Недопустимый запрос шлюзов");
+            throw new Exception("Invalid Gateways Request");
         });
 
         if (1000 > $gateway->id) {
-            return back()->with('error', 'Недопустимый запрос шлюзов');
+            return back()->with('error', 'Invalid Gateways Request');
         }
 
 
@@ -199,7 +199,7 @@ class ManualGatewayController extends Controller
                     $driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('alert', 'Изображение не удалось загрузить.');
+                return back()->with('alert', 'Image could not be uploaded.');
             }
         }
 
@@ -219,10 +219,10 @@ class ManualGatewayController extends Controller
         ]);
 
         if (!$response) {
-            throw new Exception('Неожиданная ошибка! Пожалуйста, попробуйте снова.');
+            throw new Exception('Unexpected error! Please try again.');
         }
 
-        return back()->with('success', 'Данные шлюза обновлены.');
+        return back()->with('success', 'Gateway data has been updated.');
 
     }
 

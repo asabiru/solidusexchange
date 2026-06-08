@@ -229,11 +229,11 @@ class FiatCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
+                    return back()->withInput()->with('error', 'Image could not be uploaded');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Фиатная валюта успешно создана');
+            return back()->with('success', 'Fiat Currency Created Successfully');
         }
     }
 
@@ -255,11 +255,11 @@ class FiatCurrencyController extends Controller
                         $fillData['driver'] = $image['driver'];
                     }
                 } catch (\Exception $e) {
-                    return back()->withInput()->with('error', 'Изображение не удалось загрузить');
+                    return back()->withInput()->with('error', 'Image could not be uploaded');
                 }
             }
             $currency->fill($fillData)->save();
-            return back()->with('success', 'Фиатная валюта успешно обновлена');
+            return back()->with('success', 'Fiat Currency Updated Successfully');
         }
     }
 
@@ -280,7 +280,7 @@ class FiatCurrencyController extends Controller
         try {
             $currency = FiatCurrency::findOrFail($id)->delete();
             $this->fileDelete($currency->driver, $currency->image);
-            return back()->with('success', 'Успешно удалено');
+            return back()->with('success', 'Deleted Successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

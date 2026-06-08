@@ -53,7 +53,7 @@ class VerificationController extends Controller
                 $this->verifyToMail($user, 'VERIFICATION_CODE', [
                     'code' => $user->verify_code
                 ]);
-                session()->flash('success', 'Код подтверждения email отправлен');
+                session()->flash('success', 'Email verification code has been sent');
             }
             $page_title = 'Email Verification';
             $template = ContentDetails::whereHas('content', function ($query) {
@@ -69,7 +69,7 @@ class VerificationController extends Controller
                 $this->verifyToSms($user, 'VERIFICATION_CODE', [
                     'code' => $user->verify_code
                 ]);
-                session()->flash('success', 'Код подтверждения SMS отправлен');
+                session()->flash('success', 'SMS verification code has been sent');
             }
             $page_title = 'SMS Verification';
             $template = ContentDetails::whereHas('content', function ($query) {
@@ -112,12 +112,12 @@ class VerificationController extends Controller
                 'code' => $user->verify_code
             ]);
 
-            return back()->with('success', 'Код подтверждения email отправлен');
+            return back()->with('success', 'Email verification code has been sent');
         } elseif ($type === 'mobile') {
             $this->verifyToSms($user, 'VERIFICATION_CODE', [
                 'code' => $user->verify_code
             ]);
-            return back()->with('success', 'Код подтверждения SMS отправлен');
+            return back()->with('success', 'SMS verification code has been sent');
         } else {
             throw ValidationException::withMessages(['error' => 'Sending Failed']);
         }
@@ -203,7 +203,7 @@ class VerificationController extends Controller
             return $kycRedirect;
         }
 
-        $redirect = redirect()->route('user.dashboard');
+        $redirect = redirect()->to(url('/'));
 
         return $successMessage ? $redirect->with('success', $successMessage) : $redirect;
     }

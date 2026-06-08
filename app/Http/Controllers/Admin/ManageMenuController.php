@@ -35,9 +35,9 @@ class ManageMenuController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception('Что-то пошло не так, пожалуйста, попробуйте снова');
+                throw new \Exception('Something went something, Please try again');
             }
-            return back()->with('success', 'Меню шапки успешно сохранено.');
+            return back()->with('success', 'Header menu saved successfully.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -56,9 +56,9 @@ class ManageMenuController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception('Что-то пошло не так, пожалуйста, попробуйте снова');
+                throw new \Exception('Something went something, Please try again');
             }
-            return back()->with('success', 'Меню подвала успешно сохранено.');
+            return back()->with('success', 'Footer menu saved successfully.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -86,10 +86,10 @@ class ManageMenuController extends Controller
             ]);
 
             if (!$pageForMenu) {
-                return back()->with('error', 'Ошибка при сохранении пользовательской ссылки');
+                return back()->with('error', 'Something went wrong, when storing custom link data');
             }
 
-            return back()->with('success', 'Пользовательская ссылка добавлена в меню.');
+            return back()->with('success', 'Custom link added to the menu.');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -115,7 +115,7 @@ class ManageMenuController extends Controller
         ]);
 
         $customPage->delete();
-        return back()->with('success', 'Пользовательская ссылка удалена из меню.');
+        return back()->with('success', 'Custom link deleted from the menu.');
     }
 
 }

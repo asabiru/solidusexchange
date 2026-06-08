@@ -80,7 +80,7 @@
 		}
 		.cmn-btn:hover, a.cmn-btn:hover { filter:brightness(1.05); transform:translateY(-1px);
 			box-shadow:0 14px 36px rgba(232,201,160,.28); color:#0b0608 !important; }
-	
+
 		/* Instruction / coming-soon page */
 		.sc-info-icon { display:flex; justify-content:center; margin-bottom:24px;
 			color:var(--sc-gold); opacity:.6; filter:drop-shadow(0 0 16px rgba(232,201,160,.25)); }

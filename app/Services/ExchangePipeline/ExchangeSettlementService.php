@@ -63,14 +63,6 @@ class ExchangeSettlementService
     {
         $configuredProvider = (string)config('exchange_pipeline.deposit_provider', 'active_crypto_method');
 
-        if ($configuredProvider === 'custodial') {
-            $cryptoMethod = CryptoMethod::where('code', 'custodial')->first();
-            if (!$cryptoMethod) {
-                throw new RuntimeException('Custodial crypto method is not configured. Run migration 2026_05_27_160000.');
-            }
-            return ['custodial', $cryptoMethod];
-        }
-
         if ($configuredProvider === 'treasury_wallet') {
             return ['treasury_wallet', null];
         }

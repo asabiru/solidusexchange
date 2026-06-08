@@ -27,10 +27,10 @@
                         <div class="flex-shrink-0">
                             <img class="avatar avatar-xl"
                                  src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                                 alt="Описание изображения" data-hs-theme-appearance="default">
+                                 alt="Image Description" data-hs-theme-appearance="default">
                             <img class="avatar avatar-xl"
                                  src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                                 alt="Описание изображения" data-hs-theme-appearance="dark">
+                                 alt="Image Description" data-hs-theme-appearance="dark">
                         </div>
 
                         <div class="flex-grow-1 ms-3">
@@ -180,12 +180,12 @@
                                     <div class="col-sm-12 col-md-6">
                                         <div class="color_setting">
                                             <label for="primaryColorLabel"
-                                                   class="form-label">@lang('Основной цвет')</label>
+                                                   class="form-label">@lang('Primary Color')</label>
                                             <input type="color"
                                                    class="form-control color-form-input @error('primary_color') is-invalid @enderror"
                                                    name="primary_color"
                                                    id="primaryColorLabel"
-                                                   placeholder="Основной цвет" aria-label="Основной цвет"
+                                                   placeholder="Primary Color" aria-label="Primary Color"
                                                    value="{{ old('primary_color',$basicControl->primary_color) }}">
                                             @error('primary_color')
                                             <span class="invalid-feedback">{{ $message }}</span>

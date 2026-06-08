@@ -67,30 +67,4 @@ return [
     'rapira' => [
         'market_rates_url' => env('RAPIRA_MARKET_RATES_URL', 'https://api.rapira.net/open/market/rates'),
     ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Tinkoff Business API (SBP QR Payments)
-    |--------------------------------------------------------------------------
-    */
-    'tinkoff' => [
-        'terminal_key' => env('TINKOFF_TERMINAL_KEY', ''),
-        'api_key'      => env('TINKOFF_API_KEY', ''),
-        'password'     => env('TINKOFF_PASSWORD', ''),  // For webhook token verification
-        'base_url'     => env('TINKOFF_BASE_URL', 'https://securepay.tinkoff.ru/v2'),
-        'inn'          => env('TINKOFF_INN', ''),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | SBP (Система Быстрых Платежей) — Static QR Fallback
-    |--------------------------------------------------------------------------
-    */
-    'sbp' => [
-        'bank_id'        => env('SBP_BANK_ID', 'TINKOFF'),
-        'account_number' => env('SBP_ACCOUNT_NUMBER', ''),
-        'recipient_name' => env('SBP_RECIPIENT_NAME', ''),
-        'inn'            => env('SBP_INN', ''),
-        'qr_ttl_minutes' => (int) env('SBP_QR_TTL_MINUTES', 30),
-    ],
 ];

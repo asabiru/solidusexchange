@@ -107,14 +107,9 @@ class Admin extends Authenticatable
         return ($this->role ?? 'admin') === 'trader';
     }
 
-    public function isSupport(): bool
-    {
-        return ($this->role ?? 'admin') === 'support';
-    }
-
     public function isAdmin(): bool
     {
-        return ($this->role ?? 'admin') === 'admin';
+        return !$this->isTrader();
     }
 
     public function hasRecentSession(): bool

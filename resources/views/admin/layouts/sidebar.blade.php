@@ -1,27 +1,7 @@
 <!-- Navbar Vertical -->
-<style>
-    .js-navbar-vertical-aside,
-    .js-navbar-vertical-aside .navbar-vertical-container,
-    .js-navbar-vertical-aside .navbar-vertical-content,
-    .js-navbar-vertical-aside .navbar-vertical-footer-offset,
-    .js-navbar-vertical-aside .nav-collapse {
-        max-width: 100%;
-        overflow-x: hidden;
-    }
-
-    .js-navbar-vertical-aside .nav-link,
-    .js-navbar-vertical-aside .nav-link-title {
-        min-width: 0;
-    }
-
-    .js-navbar-vertical-aside .nav-link-title {
-        white-space: normal;
-    }
-</style>
 <aside
     class="js-navbar-vertical-aside navbar navbar-vertical-aside navbar-vertical navbar-vertical-fixed navbar-expand-xl navbar-vertical-aside-initialized
-    {{in_array(session()->get('themeMode'), [null, 'auto'] )?  'navbar-dark bg-dark ' : 'navbar-light bg-white'}}"
-    style="overflow-x: hidden; max-width: 100vw;">
+    {{in_array(session()->get('themeMode'), [null, 'auto'] )?  'navbar-dark bg-dark ' : 'navbar-light bg-white'}}">
     <div class="navbar-vertical-container">
         <div class="navbar-vertical-footer-offset">
             <!-- Logo -->
@@ -71,36 +51,6 @@
                     @php
                         $adminUser = auth()->guard('admin')->user();
                     @endphp
-                    @if($adminUser && $adminUser->isSupport())
-                        <div class="nav-item">
-                            <a class="nav-link {{ menuActive(['admin.support.dashboard']) }}"
-                               href="{{ route('admin.support.dashboard') }}">
-                                <i class="bi-headset nav-icon"></i>
-                                <span class="nav-link-title">@lang("Support Dashboard")</span>
-                            </a>
-                        </div>
-
-                        <span class="dropdown-header mt-3">@lang('Tickets')</span>
-                        <small class="bi-three-dots nav-subtitle-replacer"></small>
-                        <div class="nav-item">
-                            <a class="nav-link {{ menuActive(['admin.support.tickets']) }}"
-                               href="{{ route('admin.support.tickets') }}">
-                                <i class="bi-ticket nav-icon"></i>
-                                <span class="nav-link-title">@lang("All Tickets")</span>
-                            </a>
-                        </div>
-
-                        <span class="dropdown-header mt-3">@lang('Account')</span>
-                        <small class="bi-three-dots nav-subtitle-replacer"></small>
-                        <div class="nav-item">
-                            <a class="nav-link {{ menuActive(['admin.profile']) }}"
-                               href="{{ route('admin.profile') }}">
-                                <i class="bi-person nav-icon"></i>
-                                <span class="nav-link-title">@lang("Profile")</span>
-                            </a>
-                        </div>
-                    @endif
-
                     @if($adminUser && $adminUser->isTrader())
                         <div class="nav-item">
                             <a class="nav-link {{ menuActive(['admin.trader.dashboard']) }}"
@@ -112,7 +62,7 @@
 
                         <span class="dropdown-header mt-3">@lang('Manual Deals')</span>
                         <small class="bi-three-dots nav-subtitle-replacer"></small>
-                        <div class="nav-item">
+                        <div class="nav-item" {{ menuActive(['admin.trader.sells.index','admin.trader.sells.show'], 3) }}>
                             <a class="nav-link dropdown-toggle collapsed" href="#navbarTraderSellMenu"
                                role="button"
                                data-bs-toggle="collapse" data-bs-target="#navbarTraderSellMenu"
@@ -154,7 +104,7 @@
                         </div>
                     @endif
 
-                    @if($adminUser && $adminUser->isAdmin())
+                    @if(!$adminUser || !$adminUser->isTrader())
 
                     <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.dashboard']) }}"
@@ -187,50 +137,24 @@
                     <span class="dropdown-header mt-3">@lang('API Setting')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.cryptoMethodList','admin.cryptoMethodEdit','admin.cryptoMethodSetAddress','admin.exchangeWalletIndex','admin.exchangeWalletCreate','admin.exchangeWalletEdit']) }}"
+                           href="{{ route('admin.cryptoMethodList') }}" data-placement="left">
+                            <i class="fa-light fas fa-cogs nav-icon"></i>
+                            <span class="nav-link-title">@lang("Crypto Methods")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.exchangeWalletIndex','admin.exchangeWalletCreate','admin.exchangeWalletEdit']) }}"
+                           href="{{ route('admin.exchangeWalletIndex') }}" data-placement="left">
+                            <i class="bi-wallet2 nav-icon"></i>
+                            <span class="nav-link-title">@lang("Exchange Wallets")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
                         <a class="nav-link {{ menuActive(['admin.exchangePayoutIndex']) }}"
                            href="{{ route('admin.exchangePayoutIndex') }}" data-placement="left">
                             <i class="bi-cash-stack nav-icon"></i>
                             <span class="nav-link-title">@lang("Exchange Payouts")</span>
-                        </a>
-                    </div>
-
-                    <span class="dropdown-header mt-3">@lang('Custodial & AML')</span>
-                    <small class="bi-three-dots nav-subtitle-replacer"></small>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.custodialWalletIndex','admin.custodialWalletList','admin.custodialDepositIndex','admin.custodialDepositList','admin.custodialScanNow']) }}"
-                           href="{{ route('admin.custodialWalletIndex') }}" data-placement="left">
-                            <i class="bi-wallet nav-icon"></i>
-                            <span class="nav-link-title">@lang("Custodial Wallets")</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.custodialDepositIndex','admin.custodialDepositList']) }}"
-                           href="{{ route('admin.custodialDepositIndex') }}" data-placement="left">
-                            <i class="bi-arrow-down-circle nav-icon"></i>
-                            <span class="nav-link-title">@lang("Deposits")</span>
-                        </a>
-                    </div>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.custodialWithdrawals','admin.custodialWithdrawalList','admin.custodialWithdrawalCreate']) }}"
-                           href="{{ route('admin.custodialWithdrawals') }}" data-placement="left">
-                            <i class="bi-arrow-up-right nav-icon"></i>
-                            <span class="nav-link-title">@lang("Withdrawals")</span>
-                        </a>
-                    </div>
-
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.sbpIndex','admin.sbpList','admin.sbpSettings']) }}"
-                           href="{{ route('admin.sbpIndex') }}" data-placement="left">
-                            <i class="bi-qr-code nav-icon"></i>
-                            <span class="nav-link-title">@lang("SBP QR")</span>
-                        </a>
-                    </div>
-
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.pricingSettings']) }}"
-                           href="{{ route('admin.pricingSettings') }}" data-placement="left">
-                            <i class="bi-calculator nav-icon"></i>
-                            <span class="nav-link-title">@lang("Ценообразование")</span>
                         </a>
                     </div>
 
@@ -338,6 +262,21 @@
                         </a>
                     </div>
 
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.payment.log']) }}"
+                           href="{{ route('admin.payment.log') }}" data-placement="left">
+                            <i class="bi bi-credit-card-2-front nav-icon"></i>
+                            <span class="nav-link-title">@lang("Payment Log")</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.payment.pending']) }}"
+                           href="{{ route('admin.payment.pending') }}" data-placement="left">
+                            <i class="bi bi-cash nav-icon"></i>
+                            <span class="nav-link-title">@lang("Payment Request")</span>
+                        </a>
+                    </div>
+
                     <span class="dropdown-header mt-3"> @lang("Ticket Panel")</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
@@ -366,6 +305,16 @@
                         </div>
                     </div>
 
+                    <span class="dropdown-header mt-3">@lang('Subscribers')</span>
+                    <small class="bi-three-dots nav-subtitle-replacer"></small>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.subscriber.index','admin.subscriber.mail']) }}"
+                           href="{{ route('admin.subscriber.index') }}" data-placement="left">
+                            <i class="fa-light fa-mail-bulk nav-icon"></i>
+                            <span class="nav-link-title">@lang("Subscriber")</span>
+                        </a>
+                    </div>
+
                     <span class="dropdown-header mt-3"> @lang('Kyc Management')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
@@ -376,7 +325,7 @@
                         </a>
                     </div>
 
-                    <div class="nav-item">
+                    <div class="nav-item" {{ menuActive(['admin.kyc.list'], 3) }}>
                         <a class="nav-link dropdown-toggle collapsed" href="#navbarVerticalKycRequestMenu"
                            role="button"
                            data-bs-toggle="collapse" data-bs-target="#navbarVerticalKycRequestMenu"
@@ -387,8 +336,7 @@
                         </a>
                         <div id="navbarVerticalKycRequestMenu"
                              class="nav-collapse collapse {{ menuActive(['admin.kyc.list'], 2) }}"
-                             data-bs-parent="#navbarVerticalKycRequestMenu"
-                             style="overflow-x: hidden;">
+                             data-bs-parent="#navbarVerticalKycRequestMenu">
                             <a class="nav-link {{ Request::is('admin/kyc/pending') ? 'active' : '' }}"
                                href="{{ route('admin.kyc.list', 'pending') }}">
                                 @lang('Pending KYC')
@@ -437,13 +385,6 @@
                         </a>
                     </div>
 
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.support.agents.index','admin.support.agents.create','admin.support.agents.edit']) }}"
-                           href="{{ route('admin.support.agents.index') }}" data-placement="left">
-                            <i class="bi-headset nav-icon"></i>
-                            <span class="nav-link-title">@lang('Support Agents')</span>
-                        </a>
-                    </div>
 
                     <span class="dropdown-header mt-3"> @lang('SETTINGS PANEL')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
@@ -453,6 +394,69 @@
                             <i class="bi bi-gear nav-icon"></i>
                             <span class="nav-link-title">@lang('Control Panel')</span>
                         </a>
+                    </div>
+
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.announcement']) }}"
+                           href="{{ route('admin.announcement') }}" data-placement="left">
+                            <i class="fal fa-bullhorn nav-icon"></i>
+                            <span class="nav-link-title">@lang('Announcement')</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.coinAnnounceList','admin.coinAnnounceCreate','admin.coinAnnounceEdit']) }}"
+                           href="{{ route('admin.coinAnnounceList') }}" data-placement="left">
+                            <i class="fal fa-scroll nav-icon"></i>
+                            <span class="nav-link-title">@lang('Coin Announce')</span>
+                        </a>
+                    </div>
+
+                    <div
+                        class="nav-item {{ menuActive(['admin.payment.methods', 'admin.deposit.manual.index',
+                         'admin.fiatSendGatewayIndex'.'admin.fiatSendGatewayCreate','admin.fiatSendGatewayEdit'], 3) }}">
+                        <a class="nav-link dropdown-toggle"
+                           href="#navbarVerticalGatewayMenu"
+                           role="button"
+                           data-bs-toggle="collapse"
+                           data-bs-target="#navbarVerticalGatewayMenu"
+                           aria-expanded="false"
+                           aria-controls="navbarVerticalGatewayMenu">
+                            <i class="bi-briefcase nav-icon"></i>
+                            <span class="nav-link-title">@lang('Payment Setting')</span>
+                        </a>
+                        <div id="navbarVerticalGatewayMenu"
+                             class="nav-collapse collapse {{ menuActive(['admin.payment.methods', 'admin.deposit.manual.index',
+                             'admin.fiatSendGatewayIndex','admin.fiatSendGatewayCreate','admin.fiatSendGatewayEdit'], 2) }}"
+                             data-bs-parent="#navbarVerticalGatewayMenu">
+                            <a class="nav-link {{ menuActive(['admin.payment.methods']) }}"
+                               href="{{ route('admin.payment.methods') }}">@lang('Payment Gateway')</a>
+                            <a class="nav-link {{ menuActive(['admin.deposit.manual.index']) }}"
+                               href="{{ route('admin.deposit.manual.index') }}">@lang('Manual Gateway')</a>
+
+                            <a class="nav-link {{ menuActive(['admin.fiatSendGatewayIndex']) }}"
+                               href="{{ route('admin.fiatSendGatewayIndex') }}">@lang('Fiat Send Gateway')</a>
+                        </div>
+                    </div>
+
+
+                    <span class="dropdown-header mt-3">@lang("Themes Settings")</span>
+                    <small class="bi-three-dots nav-subtitle-replacer"></small>
+                    <div id="navbarVerticalThemeMenu">
+                        <div class="nav-item">
+                            <a class="nav-link {{ menuActive(['admin.page.index']) }}"
+                               href="{{ route('admin.page.index', basicControl()->theme) }}"
+                               data-placement="left">
+                                <i class="fa-light fa-list nav-icon"></i>
+                                <span class="nav-link-title">@lang('Pages')</span>
+                            </a>
+                        </div>
+
+                        <div class="nav-item">
+                            <a class="nav-link" href="{{ route('admin.manage.menu') }}" data-placement="left">
+                                <i class="bi-folder2-open nav-icon"></i>
+                                <span class="nav-link-title">@lang('Manage Menu')</span>
+                            </a>
+                        </div>
                     </div>
 
                     @php
@@ -501,13 +505,6 @@
 
                     <span class="dropdown-header mt-4"> @lang('Application Panel')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
-                    <div class="nav-item">
-                        <a class="nav-link {{ menuActive(['admin.telegram.bots.*']) }}"
-                           href="{{ route('admin.telegram.bots.index') }}" data-placement="left">
-                            <i class="fab fa-telegram nav-icon"></i>
-                            <span class="nav-link-title">@lang('Telegram Bots')</span>
-                        </a>
-                    </div>
                     <div class="nav-item">
                         <a class="nav-link"
                            href="{{ route('clear') }}" data-placement="left">

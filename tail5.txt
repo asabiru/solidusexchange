@@ -1,0 +1,5 @@
+2026-06-02 20:21:52.303 | WARNING  | sniper:_snipe:1269 - User 7880526629 MISSED: 1149.0 RUB | 400 | wire=1331.03ms own=0.86ms e2e=1331.89ms | {"error":"InvalidStatus"}
+2026-06-02 20:21:58.554 | WARNING  | sniper:stop:798 - Sniper stopped for 7880526629: Перезагрузка/Остановка
+2026-06-02 20:21:58.565 | WARNING  | sniper:_monitor_payments:965 - Monitor error for 7880526629: Connector is closed.
+2026-06-02 20:21:59.824 | INFO     | __main__:_freeze_startup_heap:1284 - GC frozen (0 objects perm-gen)
+2026-06-02 20:21:59.826 | INFO     | __main__:on_startup:1251 - Восстанавливаем 0 снайперов...

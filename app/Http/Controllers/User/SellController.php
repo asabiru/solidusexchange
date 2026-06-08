@@ -9,12 +9,12 @@ use App\Models\CryptoMethod;
 use App\Models\FiatCurrency;
 use App\Models\FiatSendGateway;
 use App\Models\SellRequest;
-use App\Services\Custodial\CustodialWalletService;
 use App\Services\Sell\TraderAssignmentService;
 use App\Services\TradeQuote\SellQuoteService;
 use App\Traits\CalculateFees;
 use App\Traits\CryptoWalletGenerate;
 use Carbon\Carbon;
+use Facades\App\Services\BasicService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Str;
@@ -33,38 +33,15 @@ class SellController extends Controller
     public function getSellCurrency()
     {
         $sendCurrencies = CryptoCurrency::where('status', 1)->orderBy('sort_by', 'ASC')->get();
-        $fiatCurrencies = FiatCurrency::query()->active()->visibleInSell()->sorted()->get()
-            ->load(['sellGateways.fiatSendGateway']);
+        $baseFiats = FiatCurrency::query()
+            ->with('fiatSendGateway')
+            ->active()
+            ->visibleInSell()
+            ->where('code', strtoupper((string) (basicControl()->base_currency ?: 'RUB')))
+            ->sorted()
+            ->get();
 
-        $getCurrencies = [];
-        foreach ($fiatCurrencies as $currency) {
-            $gateways = $currency->sellGateways;
-            if ($gateways->isEmpty()) {
-                $getCurrencies[] = [
-                    'id' => $currency->id,
-                    'code' => $currency->code,
-                    'name' => $currency->name,
-                    'image' => $currency->image,
-                    'image_path' => $currency->image_path,
-                    'min_send' => $currency->min_send,
-                    'max_send' => $currency->max_send,
-                ];
-            } else {
-                foreach ($gateways as $gw) {
-                    $gateway = $gw->fiatSendGateway;
-                    $getCurrencies[] = [
-                        'id' => $currency->id,
-                        'gateway_id' => $gateway?->id ?? $gw->fiat_send_gateway_id,
-                        'code' => $currency->code,
-                        'name' => ($gateway?->name ?? 'Unknown') . ' — ' . $currency->name,
-                        'image' => $gateway?->image ?? $currency->image,
-                        'image_path' => $gateway?->image_path ?? $currency->image_path,
-                        'min_send' => $currency->min_send,
-                        'max_send' => $currency->max_send,
-                    ];
-                }
-            }
-        }
+        $getCurrencies = $this->expandFiatIntoSellGateways($baseFiats);
 
         return response()->json([
             'sendCurrencies' => $sendCurrencies,
@@ -75,60 +52,17 @@ class SellController extends Controller
         ]);
     }
 
-    public function publicSellRequest(SellStoreRequest $request)
-    {
-        // If user is authenticated, use the normal sellRequest
-        if (auth()->check()) {
-            return $this->sellRequest($request);
-        }
-
-        // For non-authenticated users, create request and redirect to login
-        $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
-        $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
-
-        if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
-        }
-
-        if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
-        }
-
-        try {
-            $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
-        } catch (RuntimeException $exception) {
-            return back()->withInput()->with('error', $exception->getMessage());
-        }
-
-        $sellRequest = SellRequest::create([
-            'user_id' => null,
-            'send_currency_id' => $quote['send_currency_id'],
-            'get_currency_id' => $quote['get_currency_id'],
-            'send_amount' => $quote['send_amount'],
-            'get_amount' => $quote['get_amount'],
-            'exchange_rate' => $quote['exchange_rate'],
-            'processing_fee' => $quote['processing_fee'],
-            'final_amount' => $quote['final_amount'],
-            'utr' => uniqid('S'),
-            'fiat_send_gateway_id' => $request->payment_method ?? null,
-        ]);
-
-        // Store request data in session and redirect to login
-        session(['pending_sell_utr' => $sellRequest->utr]);
-        return redirect()->route('login')->with('info', 'Пожалуйста, войдите для продолжения продажи');
-    }
-
     public function sellRequest(SellStoreRequest $request)
     {
         $sendCurrency = CryptoCurrency::where('status', 1)->findOrFail($request->exchangeSendCurrency);
         $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
         if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-            return back()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
         }
 
         if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-            return back()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+            return back()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
         }
 
         try {
@@ -147,7 +81,6 @@ class SellController extends Controller
             'processing_fee' => $quote['processing_fee'],
             'final_amount' => $quote['final_amount'],
             'utr' => uniqid('S'),
-            'fiat_send_gateway_id' => $request->payment_method ?? null,
         ]);
 
         return redirect()->route('sellProcessing', $sellRequest->utr);
@@ -163,11 +96,11 @@ class SellController extends Controller
             $getCurrency = FiatCurrency::query()->active()->visibleInSell()->findOrFail($request->exchangeGetCurrency);
 
             if ($sendCurrency->min_send > $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code);
             }
 
             if ($sendCurrency->max_send < $request->exchangeSendAmount) {
-                return back()->withInput()->with('error', 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
+                return back()->withInput()->with('error', 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code);
             }
 
             $fiatSendGateway = $this->resolveSellGateway($getCurrency, (int) $request->payment_method);
@@ -211,6 +144,7 @@ class SellController extends Controller
                     }
                 }
             }
+            $this->rememberPhoneFromExchangeFields($reqField);
 
             try {
                 $quote = $this->sellQuoteService->build($sendCurrency, $getCurrency, (float) $request->exchangeSendAmount);
@@ -237,6 +171,29 @@ class SellController extends Controller
         }
     }
 
+    private function rememberPhoneFromExchangeFields(array $fields): void
+    {
+        $user = auth()->user();
+        if (!$user || $user->phone) {
+            return;
+        }
+
+        foreach ($fields as $key => $field) {
+            $haystack = mb_strtolower(trim($key . ' ' . ($field['field_name'] ?? '') . ' ' . ($field['field_label'] ?? '')));
+            if (!str_contains($haystack, 'phone') && !str_contains($haystack, 'телефон')) {
+                continue;
+            }
+
+            $phone = preg_replace('/[^\d+]/', '', (string) ($field['field_value'] ?? ''));
+            if (mb_strlen($phone) >= 10) {
+                $user->phone = $phone;
+                $user->save();
+            }
+
+            return;
+        }
+    }
+
     public function sellProcessingOverview($utr)
     {
         $sellRequest = SellRequest::where(['status' => 1, 'utr' => $utr])->firstOrFail();
@@ -248,35 +205,11 @@ class SellController extends Controller
         $sellRequest = SellRequest::where(['status' => 1, 'utr' => $utr])->firstOrFail();
         if ($request->method() == 'GET') {
             if (!$sellRequest->admin_wallet) {
-                // Try custodial wallet system first
-                try {
-                    $custodialService = app(CustodialWalletService::class);
-                    $custodialWallet = $custodialService->getOrCreateWallet($sellRequest->sendCurrency->code);
-                    $sellRequest->admin_wallet = $custodialWallet->address;
-
-                    // Link custodial wallet to this sell request
-                    $custodialWallet->update([
-                        'assigned_exchange_id' => $sellRequest->id,
-                        'assigned_at' => now(),
-                    ]);
-
-                    // Create a pending deposit record to track incoming crypto
-                    \App\Models\CustodialDeposit::create([
-                        'custodial_wallet_id' => $custodialWallet->id,
-                        'currency_code' => $sellRequest->sendCurrency->code,
-                        'amount' => 0,
-                        'status' => 'pending',
-                        'sell_request_id' => $sellRequest->id,
-                        'detected_at' => null,
-                    ]);
-                } catch (\Throwable $e) {
-                    // Fallback to legacy crypto method
-                    $response = $this->getCryptoWallet($sellRequest->sendCurrency->code, 'sell', ['identifier' => $sellRequest->utr]);
-                    if (!$response['status']) {
-                        return back()->with('error', 'Не удалось сгенерировать адрес. Пожалуйста, свяжитесь с администрацией.');
-                    }
-                    $sellRequest->admin_wallet = $response['message'];
+                $response = $this->getCryptoWallet($sellRequest->sendCurrency->code, 'sell', ['identifier' => $sellRequest->utr]);
+                if (!$response['status']) {
+                    return back()->with('error', 'Unable to generate an address. Please contact the administration for assistance.');
                 }
+                $sellRequest->admin_wallet = $response['message'];
                 $sellRequest->save();
             }
 
@@ -285,67 +218,40 @@ class SellController extends Controller
                 $sellRequest->save();
             }
 
-            $cryptoMethod = CryptoMethod::where('status', 1)->first();
+            $cryptoMethod = CryptoMethod::select(['id', 'code', 'status'])->where('status', 1)->firstOrFail();
 
-            if (!$sellRequest->crypto_method_id && $cryptoMethod) {
+            if (!$sellRequest->crypto_method_id) {
                 $sellRequest->crypto_method_id = $cryptoMethod->id;
                 $sellRequest->save();
             }
 
-            $hasCustodialTracking = \App\Models\CustodialDeposit::where('sell_request_id', $sellRequest->id)->exists();
-            $data['isButtonShow'] = optional($cryptoMethod)->code == 'manual' && !$hasCustodialTracking;
+            $data['isButtonShow'] = $cryptoMethod->code == 'manual';
             return view($this->theme . 'user.sell.init-payment', $data, compact('sellRequest'));
         } elseif ($request->method() == 'POST') {
-            if (\App\Models\CustodialDeposit::where('sell_request_id', $sellRequest->id)->exists()) {
-                return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
-                    ->with('success', 'Ваш адрес депозита отслеживается автоматически. Мы обновим сделку после подтверждения блокчейном.');
+            $sellRequest->status = 2;
+            $sellRequest->save();
+
+            try {
+                app(TraderAssignmentService::class)->assignForSell($sellRequest->fresh(['fiatSendGateway']));
+            } catch (\Throwable $exception) {
+                report($exception);
             }
 
+            $amount = getBaseAmount($sellRequest->send_amount, optional($sellRequest->sendCurrency)->code, 'crypto');
+            $charge = getBaseAmount($sellRequest->processing_fee, optional($sellRequest->getCurrency)->code, 'fiat');
+
+            BasicService::makeTransaction($amount, $charge, '-', 'Crypto Deposit For Sell',
+                $sellRequest->id, SellRequest::class, $sellRequest->user_id, $sellRequest->send_amount, optional($sellRequest->sendCurrency)->code);
+
             $this->sendAdminNotification($sellRequest, 'sell');
-            return redirect()->route('tracking', ['trx_id' => $sellRequest->utr])
-                ->with('success', 'Уведомление об оплате получено. Мы подтвердим депозит после ручной проверки.');
+            return redirect()->route('sellFinal', $sellRequest->utr);
         }
     }
 
     public function sellFinal($utr)
     {
         $sellRequest = SellRequest::where(['status' => 2, 'utr' => $utr])->firstOrFail();
-
-        // If the fiat gateway is SBP QR, generate a payment QR
-        $sbpPayment = null;
-        $fiatGateway = $sellRequest->fiatSendGateway;
-        if ($fiatGateway && $fiatGateway->driver === 'sbp_qr') {
-            try {
-                $sbpService = app(\App\Services\Sbp\SbpQrService::class);
-                $amount = $sellRequest->final_amount;
-
-                $sbpResult = $sbpService->createPayment((float) $amount, "Выплата по заявке #{$sellRequest->utr}");
-
-                $sbpPayment = \App\Models\SbpPayment::create([
-                    'order_id'           => $sellRequest->utr,
-                    'provider_payment_id' => $sbpResult['payment_id'] ?? null,
-                    'provider'           => $sbpResult['provider'] ?? 'static_qr',
-                    'amount'             => $amount,
-                    'currency_code'      => 'RUB',
-                    'qr_url'             => $sbpResult['qr_url'] ?? null,
-                    'qr_payload'         => $sbpResult['qr_payload'] ?? null,
-                    'status'             => 'pending',
-                    'purpose'            => "Выплата по заявке #{$sellRequest->utr}",
-                    'expires_at'         => now()->addMinutes(config('services.sbp.qr_ttl_minutes', 30)),
-                    'payable_type'       => SellRequest::class,
-                    'payable_id'         => $sellRequest->id,
-                ]);
-
-                // Generate QR SVG for display
-                $qrSvg = $sbpService->generateQrSvg($sbpResult['qr_payload'] ?? $sbpResult['qr_url'] ?? '');
-                $sbpPayment->qr_svg = $qrSvg;
-
-            } catch (\Throwable $e) {
-                \Illuminate\Support\Facades\Log::error('SBP QR generation failed: ' . $e->getMessage());
-            }
-        }
-
-        return view($this->theme . 'user.sell.final', compact('sellRequest', 'sbpPayment'));
+        return view($this->theme . 'user.sell.final', compact('sellRequest'));
     }
 
     public function sellAutoRate(Request $request)
@@ -361,11 +267,11 @@ class SellController extends Controller
         $sendAmount = (float) $request->sendAmount;
 
         if ($sendCurrency->min_send > $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Минимум: ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Min is ' . $sendCurrency->min_send . ' ' . $sendCurrency->code], 422);
         }
 
         if ($sendCurrency->max_send < $sendAmount) {
-            return response()->json(['status' => false, 'message' => 'Максимум: ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
+            return response()->json(['status' => false, 'message' => 'Max is ' . $sendCurrency->max_send . ' ' . $sendCurrency->code], 422);
         }
 
         try {
@@ -408,15 +314,8 @@ class SellController extends Controller
     {
         $query = FiatSendGateway::query()->where('status', 1);
 
-        if ($currency) {
-            $sellGatewayIds = $currency->sellGateways()->pluck('fiat_send_gateway_id')->filter()->toArray();
-            if (!empty($sellGatewayIds)) {
-                return $query->whereIn('id', $sellGatewayIds);
-            }
-
-            if ($currency->fiat_send_gateway_id) {
-                return $query->where('id', $currency->fiat_send_gateway_id);
-            }
+        if ($currency && $currency->fiat_send_gateway_id) {
+            return $query->where('id', $currency->fiat_send_gateway_id);
         }
 
         if ($currency) {
@@ -504,7 +403,36 @@ class SellController extends Controller
             'sendCurrencyCode' => $quote['send_currency_code'],
             'getCurrencyCode' => $quote['get_currency_code'],
             'rateSource' => $quote['rate_source'],
-            'receiveReadonly' => false,
         ];
     }
+
+    private function expandFiatIntoSellGateways($baseFiats): array
+    {
+        $gateways = FiatSendGateway::query()->where('status', 1)->orderBy('id', 'ASC')->orderBy('name', 'ASC')->get();
+
+        if ($gateways->isEmpty()) {
+            return $baseFiats->toArray();
+        }
+
+        $baseFiat = $baseFiats->first();
+        if (!$baseFiat) {
+            return [];
+        }
+
+        $methods = [];
+        foreach ($gateways as $gw) {
+            $entry = $baseFiat->toArray();
+            $entry['gateway_id'] = $gw->id;
+            $entry['method_name'] = $gw->name;
+            $entry['method_image_path'] = $gw->image_path;
+            $entry['buy_method_name'] = $gw->name;
+            $entry['buy_method_image_path'] = $gw->image_path;
+            $entry['sell_method_name'] = $gw->name;
+            $entry['sell_method_image_path'] = $gw->image_path;
+            $methods[] = $entry;
+        }
+
+        return $methods;
+    }
+
 }

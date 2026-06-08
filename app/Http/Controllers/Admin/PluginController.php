@@ -38,7 +38,7 @@ class PluginController extends Controller
                 "tawk_status" => $request->status
             ]);
 
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Successfully Updated');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -66,7 +66,7 @@ class PluginController extends Controller
                 "fb_messenger_status" => $request->fb_messenger_status
             ]);
 
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Successfully Updated');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -114,7 +114,7 @@ class PluginController extends Controller
             Artisan::call('config:clear');
             Artisan::call('cache:clear');
 
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Successfully Updated');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -145,7 +145,7 @@ class PluginController extends Controller
                 "analytic_status" => $request->analytic_status,
             ]);
 
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Successfully Updated');
 
         } catch (\Exception $e) {
             return back()->withErrors($e->getMessage());
@@ -173,7 +173,7 @@ class PluginController extends Controller
             $basicControl->reCaptcha_status_registration = $request->user_registration_recaptcha;
             $basicControl->save();
 
-            return back()->with('success', 'Успешно обновлено');
+            return back()->with('success', 'Successfully Updated');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -197,7 +197,7 @@ class PluginController extends Controller
 
             return response([
                 'success' => true,
-                'message' => "reCAPTCHA успешно обновлён"
+                'message' => "Recaptcha Updated Successfully"
             ]);
         } catch (\Exception $e) {
             return response([

@@ -30,26 +30,6 @@ class RouteServiceProvider extends ServiceProvider
             return Limit::perMinute(60)->by($request->user()?->id ?: $request->ip());
         });
 
-        // User login: 5 attempts per minute per IP
-        RateLimiter::for('login', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip());
-        });
-
-        // Admin login: 3 attempts per minute per IP (stricter)
-        RateLimiter::for('admin-login', function (Request $request) {
-            return Limit::perMinute(3)->by($request->ip());
-        });
-
-        // 2FA verification: 5 attempts per minute per IP
-        RateLimiter::for('two-fa', function (Request $request) {
-            return Limit::perMinute(5)->by($request->ip());
-        });
-
-        // Password reset: 2 requests per minute per IP
-        RateLimiter::for('password-reset', function (Request $request) {
-            return Limit::perMinute(2)->by($request->ip());
-        });
-
         $this->routes(function () {
             Route::middleware('api')
                 ->prefix('api')

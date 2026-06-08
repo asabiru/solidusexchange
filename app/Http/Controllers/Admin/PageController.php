@@ -79,7 +79,7 @@ class PageController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception("Что-то пошло не так, пожалуйста, попробуйте снова");
+                throw new \Exception("Something went wrong, Please Try again");
             }
 
             $response->details()->create([
@@ -89,7 +89,7 @@ class PageController extends Controller
                 'sections' => $sections,
             ]);
 
-            return redirect()->route('admin.page.index', $theme)->with('success', 'Страница успешно сохранена');
+            return redirect()->route('admin.page.index', $theme)->with('success', 'Page Saved Successfully');
         } catch (Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -147,7 +147,7 @@ class PageController extends Controller
             ]);
 
             if (!$response) {
-                throw new \Exception("Что-то пошло не так, пожалуйста, попробуйте снова");
+                throw new \Exception("Something went wrong, Please Try again");
             }
 
             $page->details()->updateOrCreate([
@@ -160,7 +160,7 @@ class PageController extends Controller
                 ]
             );
 
-            return redirect()->route('admin.page.index', $theme)->with('success', 'Страница успешно обновлена');
+            return redirect()->route('admin.page.index', $theme)->with('success', 'Page Updated Successfully');
 
         } catch (Exception $e) {
             if (isset($breadCrumbImage, $breadCrumbImageDriver))
@@ -174,7 +174,7 @@ class PageController extends Controller
     {
         try {
             $page = Page::where('id', $id)->firstOr(function () {
-                throw new \Exception('Что-то пошло не так, пожалуйста, попробуйте снова');
+                throw new \Exception('Something went wrong, Please try again');
             });
 
 
@@ -191,7 +191,7 @@ class PageController extends Controller
             $page->delete();
             $page->details()->delete();
 
-            return back()->with('success', 'Страница успешно удалена');
+            return back()->with('success', 'Page deleted successfully');
 
         } catch (\Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -224,7 +224,7 @@ class PageController extends Controller
 
         throw_if(!$response, 'Something went wrong, Try again');
 
-        return back()->with('success',  'Blog Страница успешно обновлена.');
+        return back()->with('success',  'Blog Page Updated Successfully.');
     }
 
     public function updateSlug(Request $request)
@@ -248,7 +248,7 @@ class PageController extends Controller
         $page = Page::find($pageId);
 
         if (!$page) {
-            return back()->with("error", "Страница не найдена");
+            return back()->with("error", "Page not found");
         }
 
         $page->update([
@@ -267,7 +267,7 @@ class PageController extends Controller
             $data['page'] = Page::where('id', $id)
                 ->select('id', 'name', 'page_title', 'meta_title', 'meta_keywords', 'meta_description', 'og_description', 'meta_robots', 'meta_image', 'meta_image_driver')
                 ->firstOr(function () {
-                    throw new \Exception('Страница недоступна.');
+                    throw new \Exception('Page is not available.');
                 });
             return view("admin.frontend_management.page.seo", $data);
         } catch (\Exception $exception) {
@@ -293,7 +293,7 @@ class PageController extends Controller
             $page = Page::where('id', $id)
                 ->select('id', 'name', 'page_title', 'meta_title', 'meta_keywords', 'meta_description', 'og_description', 'meta_robots', 'meta_image', 'meta_image_driver')
                 ->firstOr(function () {
-                    throw new \Exception('Страница недоступна.');
+                    throw new \Exception('Page is not available.');
                 });
 
             if ($request->hasFile('meta_image')) {
@@ -315,7 +315,7 @@ class PageController extends Controller
                 'meta_image_driver' => $metaImage['driver'] ?? $page->meta_image_driver,
             ]);
             throw_if(!$response, 'Something went wrong, While updating insert data.');
-            return back()->with('success', 'SEO страницы обновлено.');
+            return back()->with('success', 'Page Seo has been updated.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

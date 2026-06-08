@@ -52,20 +52,6 @@ class BybitClient
         ]);
     }
 
-    public function withdrawAsset(string $coin, string $chain, string $address, float $amount, ?string $tag = null): array
-    {
-        $payload = array_filter([
-            'coin' => strtoupper($coin),
-            'chain' => strtoupper($chain),
-            'address' => $address,
-            'amount' => $this->formatNumber($amount, 16),
-            'tag' => $tag,
-            'forceChain' => 1,
-        ], static fn($value) => $value !== null && $value !== '');
-
-        return $this->privateRequest('POST', '/v5/asset/withdraw/create', $payload);
-    }
-
     public function waitForClosedOrder(string $symbol, string $orderId, int $attempts = 8, int $sleepMilliseconds = 500): array
     {
         $lastOrder = null;

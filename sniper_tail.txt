@@ -1,0 +1,80 @@
+2026-06-02 19:31:16.144 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:31:16.145 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2f7cc1d5c296e2c5f6ef — conns dead or reconnecting
+2026-06-02 19:31:16.355 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 500.0 RUB | 400 | wire=1156.60ms own=0.57ms e2e=1157.18ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:18.123 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:31:18.199 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f806c0184fea330994f | 434.52 RUB | parse=0.03ms sched=0.06ms pre_post=0.09ms
+2026-06-02 19:31:18.712 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2f806c0184fea330994f 434.52₽ wire=511.87ms own=0.33ms
+2026-06-02 19:31:18.963 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 434.52 RUB | 400 | wire=557.01ms own=0.56ms e2e=557.57ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:19.900 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f8111b904950f34cb93 | 100.00 RUB | parse=0.04ms sched=0.06ms pre_post=0.10ms
+2026-06-02 19:31:20.327 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2f8111b904950f34cb93 100.0₽ wire=426.48ms own=0.40ms
+2026-06-02 19:31:20.364 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 100.0 RUB | 400 | wire=335.84ms own=0.73ms e2e=336.57ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:23.447 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:31:24.026 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f87c58104c306f2f1f8 | 140.00 RUB | parse=0.02ms sched=0.04ms pre_post=0.07ms
+2026-06-02 19:31:24.465 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2f87c58104c306f2f1f8 140.0₽ wire=437.65ms own=0.33ms
+2026-06-02 19:31:24.522 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 140.0 RUB | 400 | wire=395.50ms own=0.36ms e2e=395.86ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:27.008 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629
+2026-06-02 19:31:28.162 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:31:29.722 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f8b2e31df3ae6324507 | 1020.00 RUB | parse=0.02ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:31:30.722 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:31:30.722 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2f8b2e31df3ae6324507 — conns dead or reconnecting
+2026-06-02 19:31:31.360 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 1020.0 RUB | 400 | wire=1191.49ms own=0.55ms e2e=1192.04ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:42.774 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f9a11b904950f34d9f6 | 1261.00 RUB | parse=0.03ms sched=0.04ms pre_post=0.07ms
+2026-06-02 19:31:43.776 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:31:43.776 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2f9a11b904950f34d9f6 — conns dead or reconnecting
+2026-06-02 19:31:44.185 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629
+2026-06-02 19:31:44.939 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:31:45.673 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f9b51828fd2d0dc1b15 | 892.79 RUB | parse=0.03ms sched=0.05ms pre_post=0.08ms
+2026-06-02 19:31:45.688 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 1261.0 RUB | 400 | wire=2771.58ms own=0.63ms e2e=2772.22ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:46.638 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2f9b51828fd2d0dc1b15 892.79₽ wire=964.50ms own=0.35ms
+2026-06-02 19:31:47.215 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 892.79 RUB | 400 | wire=1372.82ms own=0.65ms e2e=1373.47ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:47.472 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f9411b904950f34d6e7 | 399.00 RUB | parse=0.03ms sched=0.05ms pre_post=0.08ms
+2026-06-02 19:31:47.531 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2f9dd6642e32c5828b09 | 100.00 RUB | parse=0.02ms sched=0.03ms pre_post=0.04ms
+2026-06-02 19:31:47.531 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: readuntil() called while another coroutine is already waiting for incoming data
+2026-06-02 19:31:47.531 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2f9dd6642e32c5828b09 — conns dead or reconnecting
+2026-06-02 19:31:48.057 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2f9411b904950f34d6e7 399.0₽ wire=584.83ms own=0.32ms
+2026-06-02 19:31:48.095 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 100.0 RUB | 400 | wire=544.63ms own=0.24ms e2e=544.87ms | {"error":"InvalidStatus"}
+2026-06-02 19:31:48.131 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 399.0 RUB | 429 | wire=272.01ms own=0.63ms e2e=272.64ms | {"error":"TooManyRequests","message":"Rate limit exceeded. Please try again late
+2026-06-02 19:31:50.382 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:31:52.710 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:31:59.431 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2fa2c58104c306f3015f | 156.00 RUB | parse=0.02ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:31:59.893 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f2fa2c58104c306f3015f 156.0₽ wire=460.73ms own=0.37ms
+2026-06-02 19:31:59.893 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 156.0 RUB | 400 | wire=355.11ms own=0.39ms e2e=355.51ms | {"error":"InvalidStatus"}
+2026-06-02 19:32:16.591 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:32:19.033 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:32:23.487 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629
+2026-06-02 19:32:30.481 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2fc99d2082a244ad19b4 | 789.00 RUB | parse=0.02ms sched=0.04ms pre_post=0.06ms
+2026-06-02 19:32:31.482 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:32:31.483 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2fc99d2082a244ad19b4 — conns dead or reconnecting
+2026-06-02 19:32:32.671 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 789.0 RUB | 400 | wire=1584.04ms own=0.65ms e2e=1584.69ms | {"error":"InvalidStatus"}
+2026-06-02 19:32:34.093 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:32:34.226 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:32:36.905 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2fc96c0184fea330c099 | 1230.00 RUB | parse=0.03ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:32:37.907 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:32:37.907 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2fc96c0184fea330c099 — conns dead or reconnecting
+2026-06-02 19:32:39.564 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 1230.0 RUB | 400 | wire=1910.41ms own=0.40ms e2e=1910.81ms | {"error":"InvalidStatus"}
+2026-06-02 19:32:48.137 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2fd9354e6f0ebfc3b214 | 800.00 RUB | parse=0.02ms sched=0.04ms pre_post=0.07ms
+2026-06-02 19:32:49.138 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:32:49.139 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2fd9354e6f0ebfc3b214 — conns dead or reconnecting
+2026-06-02 19:32:49.616 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 800.0 RUB | 400 | wire=1297.09ms own=0.33ms e2e=1297.42ms | {"error":"InvalidStatus"}
+2026-06-02 19:32:51.709 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629
+2026-06-02 19:32:53.073 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2fe09d2082a244ad268c | 5000.00 RUB | parse=0.03ms sched=0.13ms pre_post=0.15ms
+2026-06-02 19:32:53.302 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:32:53.467 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:32:54.074 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:32:54.074 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2fe09d2082a244ad268c — conns dead or reconnecting
+2026-06-02 19:32:55.998 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 5000.0 RUB | 400 | wire=2282.25ms own=0.75ms e2e=2283.00ms | {"error":"InvalidStatus"}
+2026-06-02 19:33:16.774 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629
+2026-06-02 19:33:19.019 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f2ffcfad4f3ff981ebf5c | 509.94 RUB | parse=0.02ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:33:20.020 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:33:20.020 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f2ffcfad4f3ff981ebf5c — conns dead or reconnecting
+2026-06-02 19:33:20.752 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #2 connected for 7880526629
+2026-06-02 19:33:21.556 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 509.94 RUB | 400 | wire=1930.10ms own=0.93ms e2e=1931.02ms | {"error":"InvalidStatus"}
+2026-06-02 19:33:23.226 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #3 connected for 7880526629
+2026-06-02 19:33:26.546 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f300072ab9ebd18b85680 | 199.00 RUB | parse=0.02ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:33:27.145 | INFO     | sniper:_snipe:1167 - TURBO miss 6a1f300072ab9ebd18b85680 199.0₽ wire=598.63ms own=0.36ms
+2026-06-02 19:33:27.189 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 199.0 RUB | 400 | wire=584.94ms own=0.39ms e2e=585.33ms | {"error":"InvalidStatus"}
+2026-06-02 19:33:31.298 | INFO     | sniper:_snipe:1132 - TAKE: 6a1f30059d2082a244ad3b58 | 1631.00 RUB | parse=0.02ms sched=0.05ms pre_post=0.07ms
+2026-06-02 19:33:32.300 | WARNING  | sniper:_shot:369 - TurboTaker shot #0 error: 
+2026-06-02 19:33:32.300 | WARNING  | sniper:_snipe:1174 - TURBO skip 6a1f30059d2082a244ad3b58 — conns dead or reconnecting
+2026-06-02 19:33:33.093 | WARNING  | sniper:_snipe:1266 - User 7880526629 MISSED: 1631.0 RUB | 400 | wire=1642.02ms own=0.58ms e2e=1642.60ms | {"error":"InvalidStatus"}
+2026-06-02 19:33:34.340 | INFO     | sniper:_run_ws_loop:1406 - WebSocket #1 connected for 7880526629

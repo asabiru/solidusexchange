@@ -23,10 +23,10 @@
                 <div class="flex-shrink-0">
                     <img class="avatar avatar-xl"
                          src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                         alt="Описание изображения" data-hs-theme-appearance="default">
+                         alt="Image Description" data-hs-theme-appearance="default">
                     <img class="avatar avatar-xl"
                          src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                         alt="Image Description" data-hs-theme-appearance="dark">
                 </div>
 
                 <div class="flex-grow-1 ms-3">
@@ -71,7 +71,7 @@
                                                         <div class="avatar avatar-circle">
                                                             <img class="avatar-img"
                                                                  src="{{ getFile($method->driver, $method->image) }}"
-                                                                 alt="Описание изображения">
+                                                                 alt="Image Description">
                                                         </div>
                                                     </div>
                                                     <div class="flex-grow-1 ms-3">
@@ -155,7 +155,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
 
-                <form action="{{ route('admin.fiatSendGatewayStatus') }}" method="POST">
+                <form action="{{ route('admin.fiatSendGatewayStatusChange') }}" method="POST">
                     @csrf
                     <input type="hidden" name="id">
                     <div class="modal-body">

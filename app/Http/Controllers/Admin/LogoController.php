@@ -35,7 +35,7 @@ class LogoController extends Controller
                     $basicControl->logo_driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Логотип не удалось загрузить.');
+                return back()->with('error', 'Logo could not be uploaded.');
             }
         }
 
@@ -47,7 +47,7 @@ class LogoController extends Controller
                     $basicControl->dark_logo_driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Dark Логотип не удалось загрузить.');
+                return back()->with('error', 'Dark Logo could not be uploaded.');
             }
         }
 
@@ -59,7 +59,7 @@ class LogoController extends Controller
                     $basicControl->favicon_driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Фавикон не удалось загрузить.');
+                return back()->with('error', 'Favicon could not be uploaded.');
             }
         }
 
@@ -71,7 +71,7 @@ class LogoController extends Controller
                     $basicControl->admin_logo_driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Admin Логотип не удалось загрузить.');
+                return back()->with('error', 'Admin Logo could not be uploaded.');
             }
         }
 
@@ -83,12 +83,12 @@ class LogoController extends Controller
                     $basicControl->admin_dark_mode_logo_driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Admin Логотип не удалось загрузить.');
+                return back()->with('error', 'Admin Logo could not be uploaded.');
             }
         }
 
         $basicControl->save();
-        return back()->with('success', 'Логотип, фавикон и хлебные крошки обновлены.');
+        return back()->with('success', 'Logo, favicon and breadcrumb has been updated.');
 
     }
 

@@ -79,7 +79,7 @@ class SmsConfigController extends Controller
 
             ]);
 
-            return back()->with('success', 'Настройки SMS успешно обновлены.');
+            return back()->with('success', 'SMS Configuration has been updated successfully.');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
@@ -129,7 +129,7 @@ class SmsConfigController extends Controller
         $basicControl->sms_verification = $request->sms_verification;
         $basicControl->save();
 
-        return back()->with('success', 'Настройки SMS успешно обновлены.');
+        return back()->with('success', 'SMS Configuration has been updated successfully.');
     }
 
     public function smsSetAsDefault($method)
@@ -140,7 +140,7 @@ class SmsConfigController extends Controller
             ];
             BasicService::setEnv($env);
 
-            return back()->with('success', 'Способ SMS по умолчанию успешно установлен.');
+            return back()->with('success', 'SMS method set as default successfully.');
 
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());

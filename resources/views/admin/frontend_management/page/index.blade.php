@@ -50,11 +50,11 @@
                                 <div class="text-center p-4">
                                     <img class="dataTables-image mb-3"
                                          src="{{ asset("assets/admin/img/oc-error.svg") }}"
-                                         alt="Описание изображения"
+                                         alt="Image Description"
                                          data-hs-theme-appearance="default">
                                     <img class="dataTables-image mb-3"
                                          src="{{ asset("assets/admin/img/oc-error-light.svg") }}"
-                                         alt="Описание изображения" data-hs-theme-appearance="dark">
+                                         alt="Image Description" data-hs-theme-appearance="dark">
                                     <p class="mb-0">@lang("No data to show")</p>
                                 </div>
                             </div>
@@ -180,10 +180,10 @@
                                             <div class="text-center p-4">
                                                 <img class="dataTables-image mb-3"
                                                      src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                                     alt="Описание изображения" data-hs-theme-appearance="default">
+                                                     alt="Image Description" data-hs-theme-appearance="default">
                                                 <img class="dataTables-image mb-3"
                                                      src="{{ asset('assets/admin/img/oc-error-light.svg') }}"
-                                                     alt="Описание изображения" data-hs-theme-appearance="dark">
+                                                     alt="Image Description" data-hs-theme-appearance="dark">
                                                 <p class="mb-0">@lang("No data to show")</p>
                                             </div>
                                         </tr>

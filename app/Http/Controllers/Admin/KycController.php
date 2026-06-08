@@ -34,7 +34,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,amlbot',
+            'provider' => 'required|in:manual,sumsub,didit',
         ];
 
         if ($request->provider === 'manual') {
@@ -70,6 +70,13 @@ class KycController extends Controller
             }
 
             $providerSettings = [];
+            if ($request->provider === 'sumsub') {
+                $providerSettings['level_name'] = trim((string) $request->sumsub_level_name);
+            } elseif ($request->provider === 'didit') {
+                $providerSettings['workflow_id'] = trim((string) $request->didit_workflow_id);
+            } elseif ($request->provider === 'didit') {
+                $providerSettings['workflow_id'] = trim((string) $request->didit_workflow_id);
+            }
 
             $kyc = Kyc::create([
                 'name' => $request->name,
@@ -81,10 +88,10 @@ class KycController extends Controller
             ]);
 
             if (!$kyc) {
-                throw new Exception('что-то пошло не так, пожалуйста, попробуйте снова');
+                throw new Exception('something went wrong, Please try again');
             }
 
-            return back()->with('success', 'KYC успешно сохранено');
+            return back()->with('success', 'KYC Store successfully');
 
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -95,7 +102,7 @@ class KycController extends Controller
     {
         try {
             $data['kyc'] = Kyc::where('id', $id)->firstOr(function () {
-                throw new Exception('KYC не найдено.');
+                throw new Exception('No KYC found.');
             });
 
             return view('admin.kyc.edit', $data);
@@ -111,7 +118,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,amlbot',
+            'provider' => 'required|in:manual,sumsub,didit',
         ];
 
         if ($request->provider === 'manual') {
@@ -148,9 +155,12 @@ class KycController extends Controller
             }
 
             $providerSettings = [];
+            if ($request->provider === 'sumsub') {
+                $providerSettings['level_name'] = trim((string) $request->sumsub_level_name);
+            }
 
             $kyc = Kyc::where('id', $id)->firstOr(function () {
-                throw new Exception('KYC не найдено.');
+                throw new Exception('No KYC found.');
             });
 
             $kyc->update([
@@ -163,10 +173,10 @@ class KycController extends Controller
             ]);
 
             if (!$kyc) {
-                throw new Exception('Что-то пошло не так');
+                throw new Exception('Something went wrong');
             }
 
-            return back()->with('success', 'KYC успешно обновлено');
+            return back()->with('success', 'KYC updated successfully');
 
         } catch (Exception $exception) {
             return back()->with('error', $exception->getMessage());
@@ -293,7 +303,7 @@ class KycController extends Controller
     {
         try {
             $data['userKyc'] = UserKyc::with('user')->where('id', $id)->firstOr(function () {
-                throw new Exception('KYC не найдено.');
+                throw new Exception('No KYC found.');
             });
             return view('admin.kyc.view', $data);
         } catch (Exception $exception) {

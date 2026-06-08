@@ -8,6 +8,13 @@
         $popularCryptos = collect();
     }
     $baseCurrency = strtoupper(basicControl()->base_currency ?? 'RUB');
+    $referenceUsdt = \App\Models\CryptoCurrency::where('status', 1)
+        ->orderBy('sort_by', 'asc')
+        ->get()
+        ->first(function ($currency) {
+            return strtoupper((string) $currency->normalized_code) === 'USDT' && (float) $currency->usd_rate > 0;
+        });
+    $usdtUsdRate = $referenceUsdt ? (float) $referenceUsdt->usd_rate : 1.0;
     $networkBadgeLabel = function (?string $code): string {
         if (!$code || !str_contains($code, '_')) {
             return '';
@@ -50,11 +57,17 @@
                     $isStablecoin = $crypto->is_stablecoin;
                     $displayPrice = $isStablecoin
                         ? number_format((float)($crypto->rate ?? $crypto->usd_rate), 2, '.', ' ')
-                        : formatCryptoRate((float)($crypto->usd_rate ?? $crypto->rate));
-                    $priceCurrency = $isStablecoin ? $baseCurrency : 'USD';
+                        : number_format(((float)($crypto->usd_rate ?? $crypto->rate)) / max($usdtUsdRate, 0.00000001), 2, '.', ' ');
+                    $priceCurrency = $isStablecoin ? $baseCurrency : 'USDT';
                     $change24h = $crypto->change_24h;
                     $isPositive = $change24h !== null && $change24h >= 0;
                     $sparkline = $crypto->sparkline_7d;
+                    if (is_string($sparkline)) {
+                        $sparkline = json_decode($sparkline, true);
+                    }
+                    if (!is_array($sparkline)) {
+                        $sparkline = null;
+                    }
                 @endphp
             <div class="crypto-card">
                 <div class="crypto-header">

@@ -175,34 +175,6 @@
                                                 @enderror
                                             </div>
 
-                                            <div class="mb-3">
-                                                <label class="form-label">@lang('Маржа (чистая прибыль), % — зашивается в курс')</label>
-                                                <div class="row g-2">
-                                                    <div class="col-4">
-                                                        <div class="input-group">
-                                                            <span class="input-group-text">@lang('Покупка')</span>
-                                                            <input type="number" step="0.0001" min="0" class="form-control" name="buy_margin_percent"
-                                                                   value="{{ $currency->buy_margin_percent }}" placeholder="2" autocomplete="off">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <div class="input-group">
-                                                            <span class="input-group-text">@lang('Продажа')</span>
-                                                            <input type="number" step="0.0001" min="0" class="form-control" name="sell_margin_percent"
-                                                                   value="{{ $currency->sell_margin_percent }}" placeholder="2" autocomplete="off">
-                                                        </div>
-                                                    </div>
-                                                    <div class="col-4">
-                                                        <div class="input-group">
-                                                            <span class="input-group-text">@lang('Обмен')</span>
-                                                            <input type="number" step="0.0001" min="0" class="form-control" name="exchange_margin_percent"
-                                                                   value="{{ $currency->exchange_margin_percent }}" placeholder="2" autocomplete="off">
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <small class="text-muted">@lang('Это ваша чистая прибыль по направлению. Все прочие расходы (AML/KYC, НСПК, налог, сеть) учитываются автоматически и уже включены в курс.')</small>
-                                            </div>
-
                                         </div>
                                         <div class="col-md-6">
                                             <div class="mb-3">
@@ -259,66 +231,6 @@
                                                 <span class="invalid-feedback d-block">{{ $message }}</span>
                                                 @enderror
                                             </label>
-
-                                            <label class="row form-check form-switch my-4"
-                                                   for="show_on_homepage">
-                                            <span class="col-8 col-sm-9 ms-0">
-                                              <span class="d-block text-dark">@lang("Show on Homepage")</span>
-                                              <span
-                                                  class="d-block fs-5">@lang("Display this currency in the rates table and popular cryptos sections on the homepage.")</span>
-                                            </span>
-                                                <span class="col-4 col-sm-3 text-end">
-                                                    <input type="hidden" value="0" name="show_on_homepage"/>
-                                                    <input
-                                                        class="form-check-input @error('show_on_homepage') is-invalid @enderror"
-                                                        type="checkbox" name="show_on_homepage"
-                                                        id="show_on_homepage" value="1"
-                                                        {{old('show_on_homepage', $currency->show_on_homepage ? '1' : '0') == '1' ? 'checked':''}}>
-                                                </span>
-                                                @error('show_on_homepage')
-                                                <span class="invalid-feedback d-block">{{ $message }}</span>
-                                                @enderror
-                                            </label>
-
-                                            <label class="row form-check form-switch my-4"
-                                                   for="show_in_reserves">
-                                            <span class="col-8 col-sm-9 ms-0">
-                                              <span class="d-block text-dark">@lang("Show in Reserves")</span>
-                                              <span
-                                                  class="d-block fs-5">@lang("Display this currency in the reserves section on the homepage with its reserve amount.")</span>
-                                            </span>
-                                                <span class="col-4 col-sm-3 text-end">
-                                                    <input type="hidden" value="0" name="show_in_reserves"/>
-                                                    <input
-                                                        class="form-check-input @error('show_in_reserves') is-invalid @enderror"
-                                                        type="checkbox" name="show_in_reserves"
-                                                        id="show_in_reserves" value="1"
-                                                        {{old('show_in_reserves', $currency->show_in_reserves ? '1' : '0') == '1' ? 'checked':''}}>
-                                                </span>
-                                                @error('show_in_reserves')
-                                                <span class="invalid-feedback d-block">{{ $message }}</span>
-                                                @enderror
-                                            </label>
-
-                                            <div class="mb-3">
-                                                <label class="form-label"
-                                                       for="reserve_amount">@lang('Reserve Amount')</label>
-                                                <div class="input-group">
-                                                    <input type="number" step="0.00000001" class="form-control" name="reserve_amount"
-                                                           value="{{$currency->reserve_amount}}"
-                                                           placeholder="0.00"
-                                                           aria-label="@lang('reserve_amount')"
-                                                           autocomplete="off">
-                                                    <span class="input-group-text showCodeLabel"
-                                                          id="basic-addon2">{{$currency->code}}</span>
-                                                </div>
-                                                @error('reserve_amount')
-                                                <span class="invalid-feedback d-block">{{ $message }}</span>
-                                                @enderror
-                                                <small class="text-body d-block mt-2">
-                                                    @lang('The amount of this currency available in reserves. USD value is calculated automatically from the current rate.')
-                                                </small>
-                                            </div>
 
                                             <div class="mb-3">
                                                 <label class="form-label">@lang('Choose Image')</label>

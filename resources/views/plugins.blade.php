@@ -18,12 +18,8 @@
 <!--End of Google analytic Script-->
 
 
-@php
-    $skipCommunicationWidgets = $skipCommunicationWidgets ?? false;
-@endphp
-
 <!--Start of Tawk.to Script-->
-@if(!$skipCommunicationWidgets && basicControl()->tawk_status)
+@if(basicControl()->tawk_status)
     <script type="text/javascript">
         // $(document).ready(function () {
         var Tawk_SRC = 'https://embed.tawk.to/' + "{{ trim(basicControl()->tawk_id) }}";
@@ -42,7 +38,7 @@
 
 
 <!--start of Facebook Messenger Script-->
-@if(!$skipCommunicationWidgets && basicControl()->fb_messenger_status)
+@if(basicControl()->fb_messenger_status)
     <div id="fb-root"></div>
     <script>
         "use strict";
@@ -76,12 +72,6 @@
     root.style.setProperty('--btn-hover-bg', '{{'#6e6eff'}}');
     root.style.setProperty('--btn-bg1', '{{basicControl()->primary_color??'#00d095'}}');
 
-    if (localStorage.getItem('dark-theme') == null) {
-        root.style.setProperty('--loader-color', "{{basicControl()->default_mode == 1 ?'#021711':'#F3F4F6' }}");
-    } else if (localStorage.getItem('dark-theme') == 1) {
-        root.style.setProperty('--loader-color', "#021711");
-    } else {
-        root.style.setProperty('--loader-color', "#F3F4F6");
-    }
+    root.style.setProperty('--loader-color', "#021711");
 
 </script>

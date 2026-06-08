@@ -16,13 +16,8 @@ class VerifyAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $admin = Auth::guard('admin')->user();
-
-        if (!$admin) {
-            return redirect()->route('admin.login');
-        }
-
-        if ((int) $admin->two_fa === 0 || (int) $admin->two_fa_verify === 1) {
+        $admin = Auth::user();
+        if ($admin->two_fa_verify) {
             return $next($request);
         }
 

@@ -25,8 +25,8 @@ class EnsureUserHasService
             }
         }
         if ($request->expectsJson()) {
-            return response()->json(['status' => 'error', 'message' => 'Чтобы получить доступ к этой функции, обновите ваш текущий тариф']);
+            return response()->json(['status' => 'error', 'message' => 'To unlock access to this feature, kindly upgrade your current plan']);
         }
-        return back()->with('warning', 'Чтобы получить доступ к этой функции, обновите ваш текущий тариф.');
+        return back()->with('warning', 'To unlock access to this feature, kindly upgrade your current plan.');
     }
 }

@@ -78,7 +78,7 @@ class LoginController extends Controller
             return $this->sendLoginResponse($request);
         } else {
             return redirect()->route('admin.login')
-                ->with('error', 'Email и пароль неверны.');
+                ->with('error', 'Email-Address And Password Are Wrong.');
         }
 
     }
@@ -150,12 +150,11 @@ class LoginController extends Controller
     {
         if ($user->status == 0) {
             $this->guard()->logout();
-            return redirect()->route('admin.login')->with('error', 'Вы заблокированы в этом приложении. Пожалуйста, свяжитесь с администратором.');
+            return redirect()->route('admin.login')->with('error', 'You are banned from this application. Please contact with system Administrator.');
         }
-
         $user->last_login = Carbon::now();
-        $user->two_fa_verify = ($user->two_fa == 1) ? 0 : 1;
         $user->save();
+
 
         if (config('demo.IS_DEMO')){
             $checkUser =  \App\Models\User::first();
@@ -167,10 +166,6 @@ class LoginController extends Controller
             $checkUser->save();
         }
 
-
-        if ((int) $user->two_fa === 1 && (int) $user->two_fa_verify === 0) {
-            return redirect()->route('admin.twoFaCheck');
-        }
 
         return redirect()->intended(
             $user->isTrader()

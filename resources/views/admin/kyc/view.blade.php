@@ -113,7 +113,7 @@
                                         </li>
                                     @endif
                                 @endforeach
-                                    @if($userKyc->reason && $userKyc->provider === 'manual')
+                                    @if($userKyc->reason && $userKyc->provider !== 'sumsub')
                                         <li class="list-group-item">
                                             <div class="d-flex justify-content-between align-items-center">
                                                 <h5>@lang("Rejected Reason")</h5>
@@ -147,10 +147,10 @@
                         <div class="card-body card-body-height text-center">
                             <img class="avatar avatar-xxl mb-3"
                                  src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                 alt="Описание изображения" data-hs-theme-appearance="default"/>
+                                 alt="Image Description" data-hs-theme-appearance="default"/>
                             <img class="avatar avatar-xxl mb-3"
                                  src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                 alt="Описание изображения" data-hs-theme-appearance="dark"/>
+                                 alt="Image Description" data-hs-theme-appearance="dark"/>
                             <p class="card-text">@lang('No data to show')</p>
                         </div>
                     @endif

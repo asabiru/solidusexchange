@@ -81,7 +81,15 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     });
 
     Route::post('/telegram/webhook/{token}', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
-    Route::get('/telegram/mini-app', [TelegramMiniAppController::class, 'index'])->name('telegram.miniapp.index');
+    Route::match(['get', 'post'], '/telegram/mini-app', [TelegramMiniAppController::class, 'launch'])->name('telegram.mini-app');
+    Route::post('/telegram/mini-app/quote', [TelegramMiniAppController::class, 'quote'])->name('telegram.mini-app.quote');
+    Route::post('/telegram/mini-app/request', [TelegramMiniAppController::class, 'storeRequest'])->name('telegram.mini-app.request');
+    Route::match(['get', 'post'], '/telegram/mini-app/stats', [TelegramMiniAppController::class, 'stats'])->name('telegram.mini-app.stats');
+    Route::post('/telegram/mini-app/email/send', [TelegramMiniAppController::class, 'sendEmailCode'])->name('telegram.mini-app.email.send');
+    Route::post('/telegram/mini-app/email/verify', [TelegramMiniAppController::class, 'verifyEmailCode'])->name('telegram.mini-app.email.verify');
+    Route::match(['get', 'post'], '/telegram/mini-app/kyc', [TelegramMiniAppController::class, 'kyc'])->name('telegram.mini-app.kyc');
+    Route::post('/telegram/mini-app/kyc/submit', [TelegramMiniAppController::class, 'submitKyc'])->name('telegram.mini-app.kyc.submit');
+    Route::get('/telegram/mini-app/page/{slug}', [TelegramMiniAppController::class, 'pageContent'])->name('telegram.mini-app.page');
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
         $candidateSlugs = collect(array_merge([$slug], $fallbackSlugs))
@@ -162,6 +170,8 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
             Route::match(['get', 'post'], 'profile', 'index')->name('profile');
             Route::match(['get', 'post'], 'change-password', 'changePassword')->name('change.password');
             Route::match(['get', 'post'], 'notification', 'notification')->name('notification');
+            Route::get('telegram/link', 'telegramLink')->name('telegram.link');
+            Route::post('telegram/unlink', 'telegramUnlink')->name('telegram.unlink');
         });
 
         // TWO-FACTOR SECURITY
@@ -284,4 +294,3 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
-

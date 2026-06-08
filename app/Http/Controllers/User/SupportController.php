@@ -59,7 +59,7 @@ class SupportController extends Controller
                     $file = $request->file('attachments.' . $i);
                     $supportFile = $this->fileUpload($file, config('filelocation.ticket.path'),null,null,'webp',60);
                     if (empty($supportFile['path'])) {
-                        throw new \Exception('Файл не удалось загрузить.');
+                        throw new \Exception('File could not be uploaded.');
                     }
                     $this->saveAttachment($message, $supportFile['path'], $supportFile['driver']);
                 }
@@ -83,12 +83,12 @@ class SupportController extends Controller
         $this->adminFirebasePushNotification('SUPPORT_TICKET_CREATE', $msg, $firebaseAction);
         $this->adminMail('SUPPORT_TICKET_CREATE', $msg);
 
-        return redirect()->route('user.ticket.list')->with('success', 'Ваш тикет в ожидании');
+        return redirect()->route('user.ticket.list')->with('success', 'Your Ticket has been pending');
     }
 
     public function view($ticketId)
     {
-        $ticket = SupportTicket::where('ticket', $ticketId)->where('user_id', auth()->id())->latest()->with('messages')->firstOrFail();
+        $ticket = SupportTicket::where('ticket', $ticketId)->latest()->with('messages')->firstOrFail();
         $admin = Admin::first();
         $user = Auth::user();
         return view($this->theme . 'user.support.view', compact('ticket', 'user', 'admin'));
@@ -97,7 +97,7 @@ class SupportController extends Controller
     public function reply(Request $request, $id)
     {
 
-        $ticket = SupportTicket::where('id', $id)->where('user_id', auth()->id())->firstOrFail();
+        $ticket = SupportTicket::findOrFail($id);
         $message = new SupportTicketMessage();
 
         if ($request->replayTicket == 1) {
@@ -139,7 +139,7 @@ class SupportController extends Controller
                         $file = $request->file('attachments.' . $i);
                         $supportFile = $this->fileUpload($file, config('filelocation.ticket.path'),null,null,'webp',60);
                         if (empty($supportFile['path'])) {
-                            throw new \Exception('Файл не удалось загрузить.');
+                            throw new \Exception('File could not be uploaded.');
                         }
                         $this->saveAttachment($message, $supportFile['path'], $supportFile['driver']);
                     }
@@ -158,13 +158,13 @@ class SupportController extends Controller
             ];
             $this->adminPushNotification('SUPPORT_TICKET_CREATE', $msg, $action);
 
-            return back()->with('success', 'На тикет дан ответ');
+            return back()->with('success', 'Ticket has been replied');
         } elseif ($request->replayTicket == 2) {
             $ticket->status = 3;
             $ticket->last_reply = Carbon::now();
             $ticket->save();
 
-            return back()->with('success', 'Тикет закрыт');
+            return back()->with('success', 'Ticket has been closed');
         }
         return back();
     }
@@ -173,17 +173,11 @@ class SupportController extends Controller
     public function download($ticket_id)
     {
         $attachment = SupportTicketAttachment::with('supportMessage', 'supportMessage.ticket')->findOrFail(decrypt($ticket_id));
-
-        if (optional(optional($attachment->supportMessage)->ticket)->user_id !== auth()->id()) {
-            abort(403);
-        }
-
         $file = $attachment->file;
         $full_path = getFile($attachment->driver, $file);
-        $mimeType = @mime_content_type($full_path) ?: 'application/octet-stream';
-        $title = slug($attachment->supportMessage->ticket->subject) . '-' . basename($file);
-        header('Content-Disposition: attachment; filename="' . $title . '"');
-        header("Content-Type: " . $mimeType);
+        $title = slug($attachment->supportMessage->ticket->subject) . '-' . $file;
+        header('Content-Disposition: attachment; filename="' . $title);
+        header("Content-Type: " . $full_path);
         return readfile($full_path);
     }
 
@@ -248,7 +242,7 @@ class SupportController extends Controller
         ]);
 
         if (!$attachment) {
-            throw new \Exception('Что-то пошло не так');
+            throw new \Exception('Something went wrong');
         }
     }
 }

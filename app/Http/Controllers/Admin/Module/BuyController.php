@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin\Module;
 
 use App\Http\Controllers\Controller;
 use App\Models\BuyRequest;
-use App\Services\ExchangePipeline\ExchangeAmlService;
 use App\Traits\SendNotification;
 use Carbon\Carbon;
 use Facades\App\Services\BasicService;
@@ -14,11 +13,6 @@ use Yajra\DataTables\Facades\DataTables;
 class BuyController extends Controller
 {
     use SendNotification;
-
-    public function __construct(
-        private readonly ExchangeAmlService $amlService,
-    ) {
-    }
 
     public function buyList(Request $request)
     {
@@ -177,7 +171,7 @@ class BuyController extends Controller
     public function buyDelete($id)
     {
         BuyRequest::findOrFail($id)->delete($id);
-        return back()->with('success', 'Покупка крипты успешно удалена');
+        return back()->with('success', 'Buy Crypto Deleted Successfully');
     }
 
     public function buyMultipleDelete(Request $request)
@@ -198,51 +192,17 @@ class BuyController extends Controller
     public function buyView(Request $request)
     {
         $buy = BuyRequest::findOrFail($request->id);
-        $walletDecision = $this->amlService->latestWalletDecision($buy, $buy->destination_wallet);
-        $walletDecisionState = $this->amlService->walletDecisionState($walletDecision);
-
-        return view('admin.buy.details', compact('buy', 'walletDecision', 'walletDecisionState'));
-    }
-
-    public function approveWalletAml($id)
-    {
-        $buy = BuyRequest::findOrFail($id);
-        $this->amlService->approveWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
-
-        return back()->with('success', 'Кошелёк назначения одобрен после админской проверки.');
-    }
-
-    public function rejectWalletAml($id)
-    {
-        $buy = BuyRequest::findOrFail($id);
-        $this->amlService->rejectWalletAddress($buy, (string) $buy->destination_wallet, (string) optional($buy->getCurrency)->code);
-
-        return back()->with('success', 'Кошелёк назначения заблокирован после админской проверки.');
+        return view('admin.buy.details', compact('buy'));
     }
 
     public function buySend(Request $request, $utr)
     {
         $buy = BuyRequest::where(['status' => 2, 'utr' => $utr])->latest()->firstOrFail();
-
-        $walletScreening = app(\App\Services\ExchangePipeline\ExchangeAmlService::class)->screenWalletAddress(
-            (string) $buy->destination_wallet,
-            (string) optional($buy->getCurrency)->code,
-            [
-                'screenable' => $buy,
-                'direction' => 'destination',
-                'amount' => (float) $buy->final_amount,
-            ]
-        );
-
-        if (($walletScreening['status'] ?? 'pending') !== 'approved') {
-            return back()->with('error', $walletScreening['notes'] ?? 'Destination wallet failed AML screening.');
-        }
-
         if ($request->btnValue == 'automatic' && optional($buy->cryptoMethod)->is_automatic) {
             $methodObj = 'Facades\\App\\Services\\CryptoMethod\\' . optional($buy->cryptoMethod)->code . '\\Service';
             $data = $methodObj::withdrawCrypto($buy, $buy->final_amount, optional($buy->getCurrency)->code, $buy->destination_wallet, 'exchange');
             if (!$data) {
-                return back()->with('error', 'Автоматическая отправка криптовалюты не удалось выполнить.');
+                return back()->with('error', 'The automatic cryptocurrency send could not be executed.');
             }
         }
         $buy->status = 3;
@@ -253,7 +213,7 @@ class BuyController extends Controller
             $buy->id, BuyRequest::class, $buy->user_id, $buy->final_amount, optional($buy->getCurrency)->code);
 
         $this->sendUserNotification($buy, 'userBuy', 'BUY_COMPLETE');
-        return back()->with('success', 'Обмен успешно завершён');
+        return back()->with('success', 'Exchange Complete Successfully');
     }
 
     public function buyCancel($utr)
@@ -262,7 +222,7 @@ class BuyController extends Controller
         $buy->status = 5;
         $buy->save();
         $this->sendUserNotification($buy, 'userBuy', 'BUY_CANCEL');
-        return back()->with('success', 'Обмен успешно отменён');
+        return back()->with('success', 'Exchange Cancel Successfully');
     }
 
 }

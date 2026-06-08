@@ -11,7 +11,8 @@ use App\Models\Kyc;
 use App\Models\SellRequest;
 use App\Models\Transaction;
 use App\Models\UserKyc;
-use App\Services\Kyc\AmlBotKycService;
+use App\Services\Kyc\DiditKycService;
+use App\Services\Kyc\SumsubKycService;
 use App\Services\Kyc\UserKycManager;
 use App\Traits\Upload;
 use Carbon\Carbon;
@@ -333,8 +334,8 @@ class HomeController extends Controller
     public function kycVerificationSubmit(Request $request, $id, UserKycManager $userKycManager)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
-        if (($kyc->provider ?? 'manual') === 'amlbot') {
-            return back()->with('error', 'Этот метод верификации запускается через виджет AMLBot.');
+        if (in_array(($kyc->provider ?? 'manual'), ['sumsub', 'didit'], true)) {
+            return back()->with('error', 'This verification method is started through the provider widget.');
         }
         try {
             $params = $kyc->input_form;
@@ -403,7 +404,7 @@ class HomeController extends Controller
                 $userKycManager->refreshUserVerificationStatus(auth()->user()->fresh());
             }
 
-            return back()->with('success', 'KYC успешно отправлено');
+            return back()->with('success', 'KYC Sent Successfully');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
@@ -416,21 +417,33 @@ class HomeController extends Controller
         return view($this->theme . 'user.kyc.verification-center', $data);
     }
 
-    public function kycAmlBotSession(Request $request, $id, AmlBotKycService $amlBotKycService)
+    public function kycAmlBotSession(Request $request, $id, SumsubKycService $sumsubKycService, DiditKycService $diditKycService)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
 
         try {
-            $session = $amlBotKycService->startSession(auth()->user(), $kyc);
+            if (($kyc->provider ?? 'manual') === 'didit') {
+                $session = $diditKycService->startSession(auth()->user(), $kyc, route('user.verification.center'));
+
+                return response()->json([
+                    'status' => 'ok',
+                    'iframe_url' => $session['url'],
+                    'session_id' => $session['session_id'],
+                ]);
+            }
+
+            $session = $sumsubKycService->startSession(auth()->user(), $kyc);
 
             return response()->json([
-                'status'      => 'ok',
-                'token'       => $session['token'],
-                'iframe_url'  => $session['iframe_url'],
+                'status' => 'ok',
+                'token' => $session['token'],
+                'iframe_url' => $session['websdk_url'],
+                'websdk_url' => $session['websdk_url'],
+                'applicant_id' => $session['applicant_id'],
             ]);
         } catch (\Throwable $exception) {
             return response()->json([
-                'status'  => 'error',
+                'status' => 'error',
                 'message' => $exception->getMessage(),
             ], 422);
         }

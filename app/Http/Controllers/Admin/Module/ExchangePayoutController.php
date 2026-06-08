@@ -74,7 +74,7 @@ class ExchangePayoutController extends Controller
             $this->sendUserNotification($exchange, 'userExchange', 'EXCHANGE_COMPLETE');
         }
 
-        return back()->with('success', 'Выплата обмена помечена как успешно отправленная.');
+        return back()->with('success', 'Exchange payout marked as sent successfully.');
     }
 
     public function markFailed(Request $request, $id)
@@ -96,6 +96,6 @@ class ExchangePayoutController extends Controller
             $payout->exchangeRequest->save();
         }
 
-        return back()->with('warning', 'Выплата обмена помечена как неудачная.');
+        return back()->with('warning', 'Exchange payout marked as failed.');
     }
 }

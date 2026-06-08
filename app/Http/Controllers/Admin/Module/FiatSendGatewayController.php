@@ -63,7 +63,7 @@ class FiatSendGatewayController extends Controller
                     $driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('alert', 'Изображение не удалось загрузить.');
+                return back()->with('alert', 'Image could not be uploaded.');
             }
         }
 
@@ -81,10 +81,10 @@ class FiatSendGatewayController extends Controller
         ]);
 
         if (!$response) {
-            throw new \Exception('Неожиданная ошибка! Пожалуйста, попробуйте снова.');
+            throw new \Exception('Unexpected error! Please try again.');
         }
 
-        return back()->with('success', 'Данные шлюза успешно добавлены.');
+        return back()->with('success', 'Gateway data has been add successfully.');
 
     }
 
@@ -92,7 +92,7 @@ class FiatSendGatewayController extends Controller
     {
         $data['basicControl'] = basicControl();
         $data['method'] = FiatSendGateway::where('id', $id)->firstOr(function () {
-            throw new \Exception("Недопустимый запрос шлюзов");
+            throw new \Exception("Invalid Gateways Request");
         });
         $data['fiatCurrencies'] = FiatCurrency::select(['id', 'status', 'sort_by', 'code'])
             ->where('status', 1)->orderBy('sort_by', 'ASC')->get();
@@ -118,7 +118,7 @@ class FiatSendGatewayController extends Controller
 
 
         $gateway = FiatSendGateway::where('id', $id)->firstOr(function () {
-            throw new \Exception("Недопустимый запрос шлюзов");
+            throw new \Exception("Invalid Gateways Request");
         });
 
 
@@ -144,7 +144,7 @@ class FiatSendGatewayController extends Controller
                     $driver = $image['driver'];
                 }
             } catch (\Exception $exp) {
-                return back()->with('alert', 'Изображение не удалось загрузить.');
+                return back()->with('alert', 'Image could not be uploaded.');
             }
         }
 
@@ -161,10 +161,10 @@ class FiatSendGatewayController extends Controller
         ]);
 
         if (!$response) {
-            throw new \Exception('Неожиданная ошибка! Пожалуйста, попробуйте снова.');
+            throw new \Exception('Unexpected error! Please try again.');
         }
 
-        return back()->with('success', 'Данные шлюза обновлены.');
+        return back()->with('success', 'Gateway data has been updated.');
     }
 
     public function statusChange(Request $request)
@@ -174,7 +174,7 @@ class FiatSendGatewayController extends Controller
             $gateway->update([
                 'status' => $gateway->status == 1 ? 0 : 1
             ]);
-            return back()->with('success', 'Статус шлюза успешно обновлён.');
+            return back()->with('success', 'Gateway status updated successfully.');
         } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }

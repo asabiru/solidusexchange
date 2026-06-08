@@ -14,10 +14,10 @@
                     <div class="flex-shrink-0">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Описание изображения" data-hs-theme-appearance="default">
+                             alt="Image Description" data-hs-theme-appearance="default">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Описание изображения" data-hs-theme-appearance="dark">
+                             alt="Image Description" data-hs-theme-appearance="dark">
                     </div>
 
                     <div class="flex-grow-1 ms-3">
@@ -40,10 +40,10 @@
                     <div class="flex-shrink-0">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone.svg') }}"
-                             alt="Описание изображения" data-hs-theme-appearance="default">
+                             alt="Image Description" data-hs-theme-appearance="default">
                         <img class="avatar avatar-xl"
                              src="{{ asset('assets/admin/img/oc-megaphone-light.svg') }}"
-                             alt="Описание изображения" data-hs-theme-appearance="dark">
+                             alt="Image Description" data-hs-theme-appearance="dark">
                     </div>
 
                     <div class="flex-grow-1 ms-3">
@@ -154,9 +154,9 @@
                         <tr>
                             <div class="text-center p-4">
                                 <img class="dataTables-image mb-3" src="{{ asset('assets/admin/img/oc-error.svg') }}"
-                                     alt="Описание изображения" data-hs-theme-appearance="default">
+                                     alt="Image Description" data-hs-theme-appearance="default">
                                 <img class="dataTables-image mb-3"
-                                     src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Описание изображения"
+                                     src="{{ asset('assets/admin/img/oc-error-light.svg') }}" alt="Image Description"
                                      data-hs-theme-appearance="dark">
                                 <p class="mb-0">@lang("No data to show")</p>
                             </div>
@@ -189,22 +189,11 @@
                                     <i>@lang('**To sending emails and manage records automatically you need to setup cron job in your server. Make sure your job is running properly. We insist to set the cron job time as minimum as possible.**')</i>
                                 </p>
                             </div>
-
-                            @php
-                                $cronSecret = (string) config('app.scheduler_secret');
-                                $queueWorkUrl = $cronSecret !== ''
-                                    ? route('queue.work', ['secret' => $cronSecret])
-                                    : route('queue.work');
-                                $scheduleRunUrl = $cronSecret !== ''
-                                    ? route('schedule:run', ['secret' => $cronSecret])
-                                    : route('schedule:run');
-                            @endphp
-
                             <div class="col-md-12 form-group">
                                 <label><strong>@lang('Command for Email')</strong></label>
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control copyText"
-                                           value="curl -fsS '{{ $queueWorkUrl }}'" disabled>
+                                           value="curl -s {{ route('queue.work') }}" disabled>
                                     <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
                                             id="button-addon2">
                                         <i class="fas fa-copy"></i></button>
@@ -215,7 +204,7 @@
                                 <label><strong>@lang('Command for Cron Job')</strong></label>
                                 <div class="input-group mb-3">
                                     <input type="text" class="form-control copyText"
-                                           value="curl -fsS '{{ $scheduleRunUrl }}'"
+                                           value="curl -s {{ route('schedule:run') }}"
                                            disabled>
                                     <button class="input-group-text bg-primary btn btn-primary text-white copy-btn"
                                             id="button-addon2">

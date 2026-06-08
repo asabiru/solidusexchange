@@ -31,7 +31,7 @@ class GoogleApiSettingController extends Controller
                     $file_driver = 'local';
                 }
             } catch (\Exception $exp) {
-                return back()->with('error', 'Файл не удалось загрузить.');
+                return back()->with('error', 'File could not be uploaded.');
             }
         }
 
@@ -44,7 +44,7 @@ class GoogleApiSettingController extends Controller
             throw  new \Exception('Something went wrong');
         }
 
-        return back()->with('success', 'Файл успешно загружен.');
+        return back()->with('success', 'File uploaded successfully.');
 
     }
 }

@@ -6,9 +6,9 @@
         @if(count($userLoginInfo) == 0)
             <div class="card-body ">
                 <img class="avatar avatar-xxl mb-3" src="{{asset('assets/admin/img/oc-error.svg')}}"
-                     alt="Описание изображения" data-hs-theme-appearance="default">
+                     alt="Image Description" data-hs-theme-appearance="default">
                 <img class="avatar avatar-xxl mb-3" src="{{asset('assets/admin/img/oc-error-light.svg')}}"
-                     alt="Описание изображения" data-hs-theme-appearance="dark">
+                     alt="Image Description" data-hs-theme-appearance="dark">
                 <p class="card-text">@lang("No data to show")</p>
             </div>
         @else
@@ -33,7 +33,7 @@
                         <td class="align-items-center">
                             <img class="avatar avatar-xss me-2"
                                  src="{{ asset("assets/admin/img/browser/".browserIcon($userLogin->browser).".svg") }}"
-                                 alt="Описание изображения"> {{ $userLogin->browser }} on {{ $userLogin->os }}
+                                 alt="Image Description"> {{ $userLogin->browser }} on {{ $userLogin->os }}
                         </td>
                         <td>
                             <i class="{{deviceIcon($userLogin->get_device)}} fs-3 me-2"></i> {{ $userLogin->get_device }}

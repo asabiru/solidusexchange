@@ -38,7 +38,7 @@ class NotificationTemplateController extends Controller
 
             BasicService::setEnv($env);
 
-            return back()->with('success', 'Email успешно обновлено');
+            return back()->with('success', 'Email Updated Successfully');
 
         }
     }
@@ -54,7 +54,7 @@ class NotificationTemplateController extends Controller
         try {
             $data['languages'] = Language::get();
             $data["template"] = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $templateKey = $data["template"]->template_key;
@@ -92,7 +92,7 @@ class NotificationTemplateController extends Controller
         try {
 
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $status = [];
@@ -122,7 +122,7 @@ class NotificationTemplateController extends Controller
 
             throw_if(!$response, 'Something went wrong. Please try again later.');
 
-            return back()->with('success', 'Шаблон email успешно обновлён.')->withInput($request->all());
+            return back()->with('success', 'Email template has been updated successfully.')->withInput($request->all());
 
         } catch (\Exception $exception) {
             return back()->with('alert', $exception->getMessage())->withInput($request->all());
@@ -141,7 +141,7 @@ class NotificationTemplateController extends Controller
         try {
             $languages = Language::get();
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $templateKey = $template->template_key;
@@ -179,7 +179,7 @@ class NotificationTemplateController extends Controller
         try {
 
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $status = [];
@@ -206,7 +206,7 @@ class NotificationTemplateController extends Controller
 
             throw_if(!$response, 'Something went wrong. Please try again later.');
 
-            return back()->with('success', 'Шаблон SMS успешно обновлён.')->withInput($request->all());
+            return back()->with('success', 'SMS template has been updated successfully.')->withInput($request->all());
 
         } catch (\Exception $exception) {
             return back()->with('alert', $exception->getMessage())->withInput($request->all());
@@ -226,7 +226,7 @@ class NotificationTemplateController extends Controller
             $languages = Language::get();
 
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $templateKey = $template->template_key;
@@ -262,7 +262,7 @@ class NotificationTemplateController extends Controller
 
         try {
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $status = [];
@@ -290,7 +290,7 @@ class NotificationTemplateController extends Controller
 
             throw_if(!$response, 'Something went wrong. Please try again later.');
 
-            return back()->with('success', 'Шаблон внутренних уведомлений успешно обновлён.')->withInput($request->all());
+            return back()->with('success', 'In App Notification template has been updated successfully.')->withInput($request->all());
 
         } catch (\Exception $exception) {
             return back()->with('alert', $exception->getMessage())->withInput($request->all());
@@ -309,7 +309,7 @@ class NotificationTemplateController extends Controller
             $languages = Language::get();
 
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $templateKey = $template->template_key;
@@ -346,7 +346,7 @@ class NotificationTemplateController extends Controller
 
         try {
             $template = NotificationTemplate::where('id', $id)->firstOr(function () {
-                throw new \Exception('Шаблон не найден.');
+                throw new \Exception('No template found.');
             });
 
             $status = [];
@@ -374,7 +374,7 @@ class NotificationTemplateController extends Controller
 
             throw_if(!$response, 'Something went wrong. Please try again later.');
 
-            return back()->with('success', 'Шаблон push-уведомлений успешно обновлён.')->withInput($request->all());
+            return back()->with('success', 'Push Notification template has been updated successfully.')->withInput($request->all());
         } catch (\Exception $exception) {
             return back()->with('alert', $exception->getMessage())->withInput($request->all());
         }
