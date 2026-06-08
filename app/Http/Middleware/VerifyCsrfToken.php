@@ -21,5 +21,6 @@ class VerifyCsrfToken extends Middleware
         'auth/telegram-miniapp',
         'telegram/mini-app',
         'telegram/mini-app/*',
+        'api/tatum/webhook',
     ];
 }

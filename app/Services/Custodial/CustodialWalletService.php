@@ -5,6 +5,7 @@ namespace App\Services\Custodial;
 use App\Models\CustodialWallet;
 use App\Models\ExchangeRequest;
 use App\Models\SellRequest;
+use App\Services\Tatum\TatumNotificationService;
 use App\Traits\CryptoWalletGenerate;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -13,10 +14,27 @@ use RuntimeException;
 class CustodialWalletService
 {
     private HdWalletService $hdWallet;
+    private ?TatumNotificationService $tatum;
 
-    public function __construct(HdWalletService $hdWallet)
+    public function __construct(HdWalletService $hdWallet, ?TatumNotificationService $tatum = null)
     {
         $this->hdWallet = $hdWallet;
+        $this->tatum    = $tatum;
+    }
+
+    /**
+     * Subscribe wallet to Tatum notifications if API key is configured.
+     */
+    private function subscribeToTatum(CustodialWallet $wallet): void
+    {
+        if ($this->tatum && !empty(config('tatum.api_key'))) {
+            try {
+                $this->tatum->subscribeWallet($wallet);
+            } catch (\Throwable $e) {
+                // Non-fatal: log and continue — deposit polling is still the fallback
+                Log::warning("Tatum subscription failed for wallet {$wallet->id}: " . $e->getMessage());
+            }
+        }
     }
 
     /**
@@ -44,6 +62,9 @@ class CustodialWalletService
             $wallet->assigned_exchange_id = $exchange->id;
             $wallet->assigned_at = now();
             $wallet->save();
+
+            // Subscribe to Tatum notifications for deposit monitoring
+            $this->subscribeToTatum($wallet);
 
             return $wallet;
         });
@@ -77,6 +98,9 @@ class CustodialWalletService
             $wallet->assigned_exchange_id = $sellRequest->id;
             $wallet->assigned_at = now();
             $wallet->save();
+
+            // Subscribe to Tatum notifications for deposit monitoring
+            $this->subscribeToTatum($wallet);
 
             return $wallet;
         });

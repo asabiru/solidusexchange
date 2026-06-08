@@ -506,6 +506,13 @@
                     <span class="dropdown-header mt-4"> @lang('Application Panel')</span>
                     <small class="bi-three-dots nav-subtitle-replacer"></small>
                     <div class="nav-item">
+                        <a class="nav-link {{ menuActive(['admin.tatum.settings']) }}"
+                           href="{{ route('admin.tatum.settings') }}" data-placement="left">
+                            <i class="bi-currency-bitcoin nav-icon"></i>
+                            <span class="nav-link-title">Tatum.io Gateway</span>
+                        </a>
+                    </div>
+                    <div class="nav-item">
                         <a class="nav-link"
                            href="{{ route('clear') }}" data-placement="left">
                             <i class="fas fa-sync nav-icon"></i>

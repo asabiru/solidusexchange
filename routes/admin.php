@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\TatumController;
 use App\Http\Controllers\Admin\Auth\ForgotPasswordController;
 use App\Http\Controllers\Admin\Auth\LoginController;
 use App\Http\Controllers\Admin\Auth\ResetPasswordController;
@@ -379,6 +380,14 @@ Route::group(['prefix' => 'admin', 'as' => 'admin.'], function () {
                 Route::post('{utr}/send', 'send')->name('send');
                 Route::post('{utr}/cancel', 'cancel')->name('cancel');
             });
+        });
+
+        // Tatum.io Crypto Gateway
+        Route::middleware('adminRole:admin')->prefix('tatum')->as('tatum.')->group(function () {
+            Route::get('settings', [TatumController::class, 'settings'])->name('settings');
+            Route::post('settings', [TatumController::class, 'saveSettings'])->name('settings.save');
+            Route::get('test', [TatumController::class, 'testConnection'])->name('test');
+            Route::delete('subscription/{id}', [TatumController::class, 'unsubscribe'])->name('unsubscribe');
         });
     });
 
