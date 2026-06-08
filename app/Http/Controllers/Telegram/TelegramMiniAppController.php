@@ -551,4 +551,10 @@ class TelegramMiniAppController extends Controller
         return hash_equals((string) $user->verify_code, trim($code));
     }
 
+    private function defaultFiatCode(): string
+    {
+        return strtoupper((string) (basicControl()->base_currency ?: 'RUB'));
+    }
+
+
 }
