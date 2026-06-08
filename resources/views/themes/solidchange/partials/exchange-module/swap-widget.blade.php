@@ -190,7 +190,9 @@
 document.addEventListener('DOMContentLoaded', function() {
     const tabButtons = document.querySelectorAll('.tab-button');
     // Use global currentMode so displayHeroSelectorTitle can access it
-    window._swapCurrentMode = window._swapCurrentMode || 'exchange';
+    // Initialize _swapCurrentMode from blade default tab
+    var _defaultTabInit = '{{  }}';
+    window._swapCurrentMode = window._swapCurrentMode || _defaultTabInit || 'exchange';
     let currentMode = window._swapCurrentMode;
 
     tabButtons.forEach(button => {
@@ -244,6 +246,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Init the correct tab
     var _initTab = '{{ $swapDefaultTab }}';
     if (_initTab !== 'exchange') {
+        // Pre-set _swapCurrentMode BEFORE currencies load so displayHeroSelectorTitle uses correct tab
+        window._swapCurrentMode = _initTab;
+        currentMode = _initTab;
+        if (typeof activeTab !== 'undefined') { activeTab = _initTab; }
         var _btn = document.querySelector('[data-tab="' + _initTab + '"]');
         if (_btn) _btn.dispatchEvent(new Event('click'));
     } else {
@@ -382,8 +388,9 @@ function updateHeroSelectedIcon(side, currency) {
 function updateHeroModalTitles() {
     const sendTitle = document.querySelector('#calculator-modal .modal-title');
     const getTitle = document.querySelector('#calculator-modal2 .modal-title');
-    if (sendTitle) sendTitle.textContent = typeof activeTab !== 'undefined' && activeTab === 'buy' ? 'Выберите способ оплаты' : 'Выберите валюту';
-    if (getTitle) getTitle.textContent = typeof activeTab !== 'undefined' && activeTab === 'sell' ? 'Выберите способ получения' : 'Выберите валюту';
+    const _curMode = window._swapCurrentMode || (typeof activeTab !== 'undefined' ? activeTab : 'exchange');
+    if (sendTitle) sendTitle.textContent = _curMode === 'buy' ? 'Выберите способ оплаты' : 'Выберите валюту';
+    if (getTitle) getTitle.textContent = _curMode === 'sell' ? 'Выберите способ получения' : 'Выберите валюту';
 }
 
 function getNetworkBadgeLabel(code) {
