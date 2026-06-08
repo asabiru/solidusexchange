@@ -311,10 +311,11 @@ function heroMethodTitle(currency, key, fallback) {
 }
 
 function displayHeroSelectorTitle(currency, side) {
-    // Determine current tab from either activeTab (exchange-js) or _swapCurrentMode (swap-widget)
-    const _tab = (typeof activeTab !== 'undefined' && activeTab !== 'exchange' ? activeTab : null)
-               || window._swapCurrentMode
-               || 'exchange';
+    // Prefer _swapCurrentMode (set from defaultTab) over activeTab (defaults to 'exchange')
+    const _swm = window._swapCurrentMode || 'exchange';
+    const _atab = (typeof activeTab !== 'undefined' ? activeTab : 'exchange');
+    // Use _swapCurrentMode if it's meaningful (buy/sell), else use activeTab
+    const _tab = (_swm !== 'exchange') ? _swm : (_atab !== 'exchange' ? _atab : 'exchange');
 
     if (_tab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
         return heroMethodTitle(currency, 'buy_method_name', 'Банковская карта / СБП');
@@ -333,8 +334,9 @@ function displayHeroSelectorTitle(currency, side) {
 }
 
 function displayHeroSelectorSubtitle(currency, side) {
-    const _tab = (typeof activeTab !== 'undefined' && activeTab !== 'exchange' ? activeTab : null)
-               || window._swapCurrentMode || 'exchange';
+    const _swm = window._swapCurrentMode || 'exchange';
+    const _atab = (typeof activeTab !== 'undefined' ? activeTab : 'exchange');
+    const _tab = (_swm !== 'exchange') ? _swm : (_atab !== 'exchange' ? _atab : 'exchange');
     if (_tab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
         return 'RUB • оплата';
     }
@@ -345,10 +347,13 @@ function displayHeroSelectorSubtitle(currency, side) {
 }
 
 function displayHeroSelectorImage(currency, side) {
-    if (typeof activeTab !== 'undefined' && activeTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
+    const _imgSwm = window._swapCurrentMode || 'exchange';
+    const _imgAtab = (typeof activeTab !== 'undefined' ? activeTab : 'exchange');
+    const _imgTab = (_imgSwm !== 'exchange') ? _imgSwm : (_imgAtab !== 'exchange' ? _imgAtab : 'exchange');
+    if (_imgTab === 'buy' && side === 'send' && isHeroRubMethod(currency)) {
         return currency.buy_method_image_path || '';
     }
-    if (typeof activeTab !== 'undefined' && activeTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
+    if (_imgTab === 'sell' && side === 'get' && isHeroRubMethod(currency)) {
         return currency.sell_method_image_path || '';
     }
     return currency?.image_path || currency?.image;
