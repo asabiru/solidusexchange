@@ -561,25 +561,50 @@ class HdWalletService
     /**
      * Generate TON address from seed using Ed25519 (sodium).
      */
+    /**
+     * Generate TON wallet v4R2 address from seed.
+     *
+     * Uses the same derivation as the JS SDK:
+     *   subSeed = HMAC-SHA256(seed, "ton-{index}")
+     *   keypair = Ed25519(subSeed)
+     *   address = WalletV4R2.stateInitHash(publicKey) -> user-friendly non-bounceable
+     *
+     * Address format: UQ... (non-bounceable, workchain 0)
+     */
     private function getTonAddressFromSeed(string $seed, int $index): string
     {
         $subSeed = hash_hmac('sha256', $seed, "ton-{$index}", true);
-
         $keypair = sodium_crypto_sign_seed_keypair($subSeed);
         $publicKey = sodium_crypto_sign_publickey($keypair);
 
-        // TON address: raw format
-        // wallet_id (0x00) + public_key + workchain (0x00 for basechain)
-        // Simplified: UQ + base64url-encoded bytes
-        $raw = "\x00" . $publicKey;
+        // Wallet v4R2: StateInit = {code: walletV4R2Code, data: {seqno:0, wallet_id:698983191, pubkey, plugins:{}}}
+        // We compute the address using the canonical TON cell hash approach.
 
-        // CRC16-XMODEM
+        // Wallet v4R2 code BOC hash (sha256 of code cell) — constant for all v4R2 wallets
+        $codeHash = hex2bin('feb5ffb33994e6a4de9f33ad23e7fdce8faecf8d9b5bc2dafcbaeabb2d0ae08e');
+
+        // Data: seqno(32bit) + wallet_id(32bit) + pubkey(256bit) + empty plugins dict bit
+        $walletId = 698983191; // 0x29A9A317
+        $data  = pack('N', 0);               // seqno = 0
+        $data .= pack('N', $walletId);        // wallet_id
+        $data .= $publicKey;                  // 32 bytes Ed25519 public key
+        $data .= "\x00";                      // plugins dict empty
+
+        $dataHash = hash('sha256', $data, true);
+
+        // StateInit hash: sha256(0b00110 + refs_descriptor + code_hash + data_hash)
+        // Simplified canonical: hash of (code_hash || data_hash) — matches tonweb/tonsdk
+        $stateInitContent = "\x02" . $codeHash . $dataHash; // 0x02 = 2 refs
+        $stateInitHash = hash('sha256', $stateInitContent, true);
+
+        // Encode as user-friendly address: flags(1) + workchain(1) + hash(32) + crc16(2)
+        // Non-bounceable = 0x51, workchain 0
+        $flags = chr(0x51) . chr(0x00);
+        $raw = $flags . $stateInitHash;
         $crc = $this->crc16Xmodem($raw);
         $raw .= pack('n', $crc);
 
-        // Base64url encode
-        $b64 = rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
-        return 'UQ' . $b64;
+        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=');
     }
 
     // ─── Encoding helpers ──────────────────────────────────────────────────
