@@ -212,24 +212,24 @@ class TatumService
     /**
      * Resolve internal currency code → Tatum chain identifier.
      */
-    public function resolveChain(string $currencyCode): string
+    public function resolveChain(string $currencyCode): ?string
     {
         $isTestnet = (bool) config('tatum.testnet', false);
         $code = strtoupper(trim($currencyCode));
 
         if ($isTestnet) {
             $testnetChains = config('tatum.chains_testnet', []);
-            if (isset($testnetChains[$code])) {
-                return $testnetChains[$code];
+            if (array_key_exists($code, $testnetChains)) {
+                return $testnetChains[$code]; // may be null = unsupported
             }
         }
 
         $chains = config('tatum.chains', []);
-        if (isset($chains[$code])) {
-            return $chains[$code];
+        if (array_key_exists($code, $chains)) {
+            return $chains[$code]; // may be null = unsupported
         }
 
-        throw new RuntimeException("Tatum: no chain mapping for currency '{$currencyCode}'");
+        return null;
     }
 
     /**

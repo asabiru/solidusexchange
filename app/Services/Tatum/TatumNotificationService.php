@@ -45,6 +45,11 @@ class TatumNotificationService
         try {
             $chain = $this->tatum->resolveChain($currencyCode);
 
+            if ($chain === null) {
+                Log::info("Tatum: {$currencyCode} not supported by Tatum notifications — skipping, will use own polling");
+                return [];
+            }
+
             // 1. Native coin subscription (also needed for gas fee detection on token chains)
             $nativeSub = $this->tatum->subscribeAddress($address, $chain, $webhookUrl);
             $subscriptions[] = TatumSubscription::create([

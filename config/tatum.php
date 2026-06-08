@@ -46,21 +46,32 @@ return [
     |--------------------------------------------------------------------------
     | Maps internal currency codes → Tatum chain identifiers
     */
-    // Mainnet chain identifiers
+    /*
+    | Verified chain IDs for Tatum Notifications API v4.
+    | Tested against: POST /v4/subscription INCOMING_NATIVE_TX
+    */
     'chains' => [
+        // ✅ Fully supported (notifications + balance)
         'BTC'         => 'bitcoin-mainnet',
-        'LTC'         => 'litecoin-mainnet',
+        'LTC'         => 'litecoin-core-mainnet',
         'ETH'         => 'ethereum-mainnet',
         'BNB'         => 'bsc-mainnet',
         'TRX'         => 'tron-mainnet',
         'SOL'         => 'solana-mainnet',
-        'TON'         => 'ton-mainnet',
         'MATIC'       => 'polygon-mainnet',
-        'XRP'         => 'xrp-mainnet',
+        'XRP'         => 'ripple-mainnet',
+        'DOGE'        => 'doge-mainnet',
+        'BCH'         => 'bch-mainnet',
+        'ARB'         => 'arb-one-mainnet',
+        'OP'          => 'optimism-mainnet',
+        'BASE'        => 'base-mainnet',
+        'AVAX'        => 'avax-mainnet',
+        'FTM'         => 'fantom-mainnet',
+
+        // Token chains (same as native)
         'USDT'        => 'ethereum-mainnet',
         'USDT_TRC20'  => 'tron-mainnet',
         'USDT_BSC'    => 'bsc-mainnet',
-        'USDT_TON'    => 'ton-mainnet',
         'USDT_SOL'    => 'solana-mainnet',
         'USDT_MATIC'  => 'polygon-mainnet',
         'USDC'        => 'ethereum-mainnet',
@@ -68,16 +79,21 @@ return [
         'USDC_SOL'    => 'solana-mainnet',
         'SHIB'        => 'ethereum-mainnet',
         'PEPE'        => 'ethereum-mainnet',
-        'ARB'         => 'arbitrum-one-mainnet',
-        'OP'          => 'optimism-mainnet',
+
+        // TON: not supported by Tatum notifications v4 — use own polling
+        'TON'         => null,
+        'USDT_TON'    => null,
     ],
 
     // Testnet chain identifiers (used when TATUM_TESTNET=true)
     'chains_testnet' => [
-        'BTC'         => 'bitcoin-mainnet',     // no separate testnet in v4 data API
+        'BTC'         => 'bitcoin-testnet',
         'ETH'         => 'ethereum-holesky',
         'BNB'         => 'bsc-testnet',
         'MATIC'       => 'polygon-amoy',
+        'SOL'         => 'solana-devnet',
+        'TRX'         => 'tron-testnet',
+        'LTC'         => 'litecoin-core-testnet',
         'USDT'        => 'ethereum-holesky',
         'USDT_BSC'    => 'bsc-testnet',
         'USDT_MATIC'  => 'polygon-amoy',
