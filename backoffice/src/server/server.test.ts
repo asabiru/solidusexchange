@@ -44,6 +44,10 @@ describe("backoffice BFF", () => {
   });
 
   it("fails closed when no operator session exists", async () => {
+    const status = await fetch(`${baseUrl}/bff/auth/status`);
+    assert.equal(status.status, 200);
+    assert.deepEqual(await status.json(), { authenticated: false });
+
     const response = await fetch(`${baseUrl}/bff/api/dashboard`);
     assert.equal(response.status, 401);
     assert.deepEqual(await response.json(), { error: "operator_session_required" });
@@ -51,6 +55,11 @@ describe("backoffice BFF", () => {
 
   it("serves signed read-only data after a server-issued session", async () => {
     const cookie = await devSession("compliance-lead");
+    const status = await fetch(`${baseUrl}/bff/auth/status`, {
+      headers: { cookie }
+    });
+    assert.deepEqual(await status.json(), { authenticated: true });
+
     const response = await fetch(`${baseUrl}/bff/api/dashboard`, {
       headers: { cookie }
     });
