@@ -2,7 +2,9 @@ export type Capability =
   | "dashboard:read"
   | "customers:read"
   | "approvals:read"
-  | "approvals:review";
+  | "approvals:review"
+  | "approvals:preview"
+  | "audit:read";
 
 export type OperatorRole =
   | "compliance-lead"
@@ -28,7 +30,9 @@ export const roleProfiles: readonly RoleProfile[] = [
       "dashboard:read",
       "customers:read",
       "approvals:read",
-      "approvals:review"
+      "approvals:review",
+      "approvals:preview",
+      "audit:read"
     ]
   },
   {
@@ -50,7 +54,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     label: "Auditor · read-only",
     operator: "Антон Белый",
     initials: "АБ",
-    capabilities: ["dashboard:read", "customers:read", "approvals:read"]
+    capabilities: ["dashboard:read", "customers:read", "approvals:read", "audit:read"]
   }
 ];
 

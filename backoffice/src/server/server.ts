@@ -11,6 +11,12 @@ import {
 } from "./oidc.js";
 import { ExpiringStore, type OperatorSession, type PendingLogin } from "./session.js";
 import { ResponseSigner } from "./signing.js";
+import {
+  approvalCommandDigest,
+  buildApprovalPreview,
+  buildAuditChain,
+  verifyAuditChain
+} from "./controls.js";
 
 const sessionCookie = "solidchange_bo_session";
 const validRoles = new Set<OperatorRole>([
@@ -84,6 +90,8 @@ export function createBackofficeServer(config: ServerConfig) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
   const sessions = new ExpiringStore<OperatorSession>();
   const signer = new ResponseSigner();
+  const audit = buildAuditChain(demoRepository.auditSource());
+  if (!verifyAuditChain(audit)) throw new Error("Synthetic audit chain is invalid");
 
   function setSessionCookie(response: ServerResponse, session: OperatorSession): void {
     const secure = config.allowedOrigins.every((origin) => origin.startsWith("https://"));
@@ -293,7 +301,76 @@ export function createBackofficeServer(config: ServerConfig) {
 
       if (request.method === "GET" && path === "/bff/api/approvals") {
         if (!authorized(request, response, "approvals:read")) return;
-        signed(response, "approvals", { approvals: demoRepository.approvals() });
+        signed(response, "approvals", {
+          approvals: demoRepository.approvals().map((approval) => ({
+            ...approval,
+            commandDigest: approvalCommandDigest(approval)
+          }))
+        });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/audit") {
+        if (!authorized(request, response, "audit:read")) return;
+        const head = audit.at(-1);
+        signed(response, "audit", {
+          events: audit,
+          chain: {
+            verified: true,
+            length: audit.length,
+            headHash: head?.hash ?? ""
+          }
+        });
+        return;
+      }
+
+      const previewMatch = path.match(/^\/bff\/api\/approvals\/([^/]+)\/preview$/);
+      if (request.method === "POST" && previewMatch) {
+        if (!exactOrigin(request, config)) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "approvals:preview");
+        if (!session) return;
+        let approvalId: string;
+        try {
+          approvalId = decodeURIComponent(previewMatch[1]);
+        } catch {
+          json(response, 400, { error: "invalid_approval_id" });
+          return;
+        }
+        if (!/^APV-\d{6}$/.test(approvalId)) {
+          json(response, 400, { error: "invalid_approval_id" });
+          return;
+        }
+        const approval = demoRepository.approvals().find((item) => item.id === approvalId);
+        if (!approval) {
+          json(response, 404, { error: "approval_not_found" });
+          return;
+        }
+        let body: unknown;
+        try {
+          body = await readJson(request);
+        } catch {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const commandDigest = body && typeof body === "object" && "commandDigest" in body
+          ? body.commandDigest
+          : undefined;
+        if (typeof commandDigest !== "string") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        if (commandDigest !== approvalCommandDigest(approval)) {
+          json(response, 409, { error: "approval_version_mismatch" });
+          return;
+        }
+        signed(
+          response,
+          `approval-preview:${approval.id}`,
+          buildApprovalPreview(approval, session.subject, audit)
+        );
         return;
       }
 

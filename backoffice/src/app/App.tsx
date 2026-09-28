@@ -4,19 +4,22 @@ import {
   ApiError,
   createDevSession,
   getApprovals,
+  getAudit,
   getAuthStatus,
   getCustomers,
   getDashboard,
   getHealth,
   getSession,
   logout,
+  previewApproval,
   type ApprovalsPayload,
+  type AuditPayload,
   type CustomersPayload,
   type DashboardPayload,
   type HealthPayload,
   type SessionPayload
 } from "../data/client";
-import type { ApprovalRow, Tone } from "../data/demo";
+import type { ApprovalPreview, ApprovalSummary, Tone } from "../data/demo";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 
@@ -149,14 +152,27 @@ function ApprovalsView({
   data: ApprovalsPayload;
 }) {
   const approvals = data.approvals;
-  const [selected, setSelected] = useState<ApprovalRow>(approvals[0]);
-  const mayReview = capabilities.includes("approvals:review");
+  const [selected, setSelected] = useState<ApprovalSummary>(approvals[0]);
+  const [preview, setPreview] = useState<ApprovalPreview>();
+  const [previewState, setPreviewState] = useState<"idle" | "loading" | "failed">("idle");
+  const mayPreview = capabilities.includes("approvals:preview");
+
+  async function loadPreview() {
+    setPreview(undefined);
+    setPreviewState("loading");
+    try {
+      setPreview(await previewApproval(selected.id, selected.commandDigest));
+      setPreviewState("idle");
+    } catch {
+      setPreviewState("failed");
+    }
+  }
 
   return (
     <>
       <PageHeading
         title="Approval inbox"
-        description="Evidence review only · command execution отсутствует в foundation slice"
+        description="Signed evidence и side-effect-free command preview · execution отсутствует"
       />
       <section className="grid approval-grid">
         <article className="panel">
@@ -170,7 +186,19 @@ function ApprovalsView({
               <tbody>
                 {approvals.map((approval) => (
                   <tr key={approval.id} data-selected={approval.id === selected.id}>
-                    <td><button className="table-link" type="button" onClick={() => setSelected(approval)}>{approval.id}</button></td>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        onClick={() => {
+                          setSelected(approval);
+                          setPreview(undefined);
+                          setPreviewState("idle");
+                        }}
+                      >
+                        {approval.id}
+                      </button>
+                    </td>
                     <td>{approval.action}<small className="cell-note">{approval.maker}</small></td>
                     <td className="numeric">{approval.exposure}</td>
                     <td>{approval.evidence}</td>
@@ -191,20 +219,135 @@ function ApprovalsView({
             <div><dt>Maker</dt><dd>{selected.maker}</dd></div>
             <div><dt>Exposure</dt><dd>{selected.exposure}</dd></div>
             <div><dt>Evidence readiness</dt><dd>{selected.evidence}</dd></div>
-            <div><dt>Command state</dt><dd>Unavailable</dd></div>
+            <div><dt>Required approvers</dt><dd>{selected.completedApprovals} / {selected.requiredApprovals}</dd></div>
           </dl>
-          <div className="safe-action">
-            <strong>Protected action boundary</strong>
-            <p>Step-up MFA, second approver, immutable audit envelope and idempotent command API are required before enablement.</p>
+          <div className="evidence-list">
+            {selected.evidenceItems.map((item) => (
+              <div key={item.id}>
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.digest}</small>
+                </span>
+                <Status tone={item.status === "ready" ? "success" : "danger"}>{item.status}</Status>
+              </div>
+            ))}
           </div>
-          <button className="button primary" type="button" disabled={!mayReview || !runtime.commandsEnabled}>
-            Подтвердить действие
+          <div className="safe-action">
+            <strong>Preview не выполняет команду</strong>
+            <p>Сервер проверит maker-checker, evidence, step-up MFA и audit anchor, но command client отсутствует.</p>
+          </div>
+          <button
+            className="button primary"
+            type="button"
+            disabled={!mayPreview || previewState === "loading"}
+            onClick={() => void loadPreview()}
+          >
+            {previewState === "loading" ? "Формируем preview…" : "Сформировать безопасный preview"}
           </button>
           <small className="disabled-reason">
-            {!mayReview ? "Роль не имеет approvals:review." : "Command client намеренно отсутствует."}
+            {!mayPreview
+              ? "Роль не имеет approvals:preview."
+              : "Финансовая команда не создаётся и не отправляется."}
           </small>
+          {previewState === "failed" && (
+            <div className="preview-error">Preview отклонён BFF или устарел.</div>
+          )}
+          {preview && <ApprovalPreviewPanel preview={preview} />}
         </aside>
       </section>
+    </>
+  );
+}
+
+function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) {
+  const blockerLabels: Readonly<Record<string, string>> = {
+    maker_cannot_approve: "Maker не может быть approver",
+    evidence_incomplete: "Evidence неполный",
+    step_up_mfa_required: "Требуется step-up MFA",
+    approvals_incomplete: "Недостаточно approvers",
+    command_client_absent: "Command client отсутствует"
+  };
+  return (
+    <section className="preview-panel" aria-label="Результат command preview">
+      <header>
+        <div><strong>Policy preview</strong><small>{preview.command.digest.slice(0, 16)}…</small></div>
+        <Status tone="warning">Blocked</Status>
+      </header>
+      <dl className="preview-checks">
+        <div>
+          <dt>Maker-checker</dt>
+          <dd><Status tone={preview.policy.independentApprover ? "success" : "danger"}>
+            {preview.policy.independentApprover ? "independent" : "conflict"}
+          </Status></dd>
+        </div>
+        <div><dt>Step-up MFA</dt><dd><Status tone="warning">{preview.policy.stepUpMfa}</Status></dd></div>
+        <div><dt>Evidence</dt><dd>{preview.evidence.ready} / {preview.evidence.total}</dd></div>
+        <div><dt>Audit anchor</dt><dd>#{preview.auditAnchor.sequence} · {preview.auditAnchor.hash.slice(0, 10)}…</dd></div>
+      </dl>
+      <ul>
+        {preview.policy.blockers.map((blocker) => (
+          <li key={blocker}>{blockerLabels[blocker] ?? blocker}</li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function AuditView({ data }: { data: AuditPayload }) {
+  return (
+    <>
+      <PageHeading
+        title="Audit trail"
+        description="Signed read-only envelope · SHA-256 hash chain · synthetic dev evidence"
+      />
+      <section className="audit-summary">
+        <article className="metric">
+          <div><span>Chain integrity</span><i data-tone="success" /></div>
+          <strong>{data.chain.verified ? "Verified" : "Invalid"}</strong>
+          <small>{data.chain.length} immutable events</small>
+        </article>
+        <article className="metric audit-head">
+          <div><span>Head hash</span><i data-tone="info" /></div>
+          <strong>{data.chain.headHash.slice(0, 16)}…</strong>
+          <small>Bound to the latest event</small>
+        </article>
+      </section>
+      <article className="panel">
+        <header className="panel-heading">
+          <div><h2>Append-only events</h2><p>Previous hash связывает каждую запись с предшествующей</p></div>
+          <Status tone="success">Verified chain</Status>
+        </header>
+        <TableShell label="Audit trail">
+          <table>
+            <thead>
+              <tr>
+                <th>Seq</th>
+                <th>Event</th>
+                <th>Actor</th>
+                <th>Resource</th>
+                <th>Outcome</th>
+                <th>Evidence</th>
+                <th>Previous hash</th>
+                <th>Hash</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.events.map((event) => (
+                <tr key={event.eventId}>
+                  <td className="numeric">#{event.sequence}</td>
+                  <td>{event.action}<small className="cell-note">{event.occurredAt}</small></td>
+                  <td>{event.actor}</td>
+                  <td>{event.resource}</td>
+                  <td><Status tone={event.tone}>{event.outcome}</Status></td>
+                  <td className="hash-cell">{event.evidenceDigest}</td>
+                  <td className="hash-cell">{event.previousHash.slice(0, 14)}…</td>
+                  <td className="hash-cell">{event.hash.slice(0, 14)}…</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableShell>
+      </article>
     </>
   );
 }
@@ -239,6 +382,7 @@ interface WorkspaceData {
   dashboard: DashboardPayload;
   customers: CustomersPayload;
   approvals?: ApprovalsPayload;
+  audit?: AuditPayload;
 }
 
 type AccessState =
@@ -362,15 +506,16 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, approvals] = await Promise.all([
+      const [dashboard, customers, approvals, audit] = await Promise.all([
         getDashboard(),
         getCustomers(),
-        hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined)
+        hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined),
+        hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined)
       ]);
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, approvals }
+        data: { session, dashboard, customers, approvals, audit }
       });
     } catch (error) {
       setAccess({
@@ -474,7 +619,7 @@ export function App() {
         </nav>
         <div className="session-note">
           <strong>Protected workspace</strong>
-          <span>Server session · signed queries · no command clients</span>
+          <span>Signed queries · audit chain · preview only</span>
         </div>
       </aside>
 
@@ -534,6 +679,7 @@ export function App() {
               data={access.data.approvals}
             />
           )}
+          {screen === "audit" && access.data.audit && <AuditView data={access.data.audit} />}
           {!activeItem.implemented && <PlaceholderView item={activeItem} />}
         </main>
       </div>
