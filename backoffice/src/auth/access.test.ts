@@ -10,14 +10,25 @@ describe("operator access", () => {
   it("keeps support away from approvals", () => {
     assert.equal(can("support-l1", "approvals:read"), false);
     assert.equal(can("support-l1", "approvals:review"), false);
+    assert.equal(can("support-l1", "approvals:preview"), false);
+    assert.equal(can("support-l1", "audit:read"), false);
   });
 
   it("keeps the auditor read-only", () => {
     assert.equal(can("auditor", "approvals:read"), true);
     assert.equal(can("auditor", "approvals:review"), false);
+    assert.equal(can("auditor", "approvals:preview"), false);
+    assert.equal(can("auditor", "audit:read"), true);
+  });
+
+  it("keeps AML investigators away from the system audit trail", () => {
+    assert.equal(can("aml-investigator", "approvals:read"), true);
+    assert.equal(can("aml-investigator", "audit:read"), false);
   });
 
   it("allows compliance to review approval evidence", () => {
     assert.equal(can("compliance-lead", "approvals:review"), true);
+    assert.equal(can("compliance-lead", "approvals:preview"), true);
+    assert.equal(can("compliance-lead", "audit:read"), true);
   });
 });

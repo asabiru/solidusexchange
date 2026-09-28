@@ -1,6 +1,8 @@
 import type { Capability, OperatorRole } from "../auth/access";
 import type {
-  ApprovalRow,
+  ApprovalPreview,
+  ApprovalSummary,
+  AuditEvent,
   CustomerRow,
   Metric,
   QueueRow
@@ -43,7 +45,16 @@ export interface CustomersPayload {
 }
 
 export interface ApprovalsPayload {
-  approvals: readonly ApprovalRow[];
+  approvals: readonly ApprovalSummary[];
+}
+
+export interface AuditPayload {
+  events: readonly AuditEvent[];
+  chain: {
+    verified: boolean;
+    length: number;
+    headHash: string;
+  };
 }
 
 export interface HealthPayload {
@@ -138,6 +149,24 @@ async function getSigned<T>(path: string, resource: string): Promise<T> {
   return verifyEnvelope(await response.json() as SignedEnvelope<T>, resource);
 }
 
+async function postSigned<T>(
+  path: string,
+  resource: string,
+  body: Readonly<Record<string, unknown>>
+): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+  if (!response.ok) throw new ApiError(response.status, `Backoffice API rejected ${path}`);
+  return verifyEnvelope(await response.json() as SignedEnvelope<T>, resource);
+}
+
 export async function getHealth(): Promise<HealthPayload> {
   const response = await fetch("/bff/healthz", {
     credentials: "same-origin",
@@ -170,6 +199,18 @@ export function getCustomers(): Promise<CustomersPayload> {
 
 export function getApprovals(): Promise<ApprovalsPayload> {
   return getSigned("/bff/api/approvals", "approvals");
+}
+
+export function getAudit(): Promise<AuditPayload> {
+  return getSigned("/bff/api/audit", "audit");
+}
+
+export function previewApproval(
+  approvalId: string,
+  commandDigest: string
+): Promise<ApprovalPreview> {
+  const path = `/bff/api/approvals/${encodeURIComponent(approvalId)}/preview`;
+  return postSigned(path, `approval-preview:${approvalId}`, { commandDigest });
 }
 
 export async function createDevSession(role: OperatorRole): Promise<void> {

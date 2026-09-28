@@ -10,9 +10,13 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
 - Read-only API envelopes are signed with an ephemeral Ed25519 key and bound to their resource.
+- Audit events form an immutable in-memory SHA-256 chain returned through a signed read-only envelope.
+- Approval command previews are digest-bound, same-origin, capability-gated and side-effect-free.
+- Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up MFA status.
+- Every preview remains non-executable because no protected command client exists.
 - No financial, custody, KYC, AML, provider or customer command client exists.
 - Navigation and actions are deny-by-default through explicit role capabilities.
-- Approve, export and privileged controls are disabled until authenticated command APIs, step-up MFA and maker-checker enforcement exist.
+- Approve, export and privileged execution controls remain disabled.
 - The customer application, legacy admin routes and operator frontend do not share browser storage or frontend bundles.
 
 ## Commands
@@ -60,9 +64,9 @@ BACKOFFICE_SESSION_TTL_SECONDS
 {"solidchange-compliance":"compliance-lead","solidchange-support":"support-l1"}
 ```
 
-The startup-generated signing key is intentionally dev-only. A later production slice must define durable key custody, rotation and independent client trust before these signatures can serve as production evidence.
+The startup-generated signing key and synthetic in-memory audit chain are intentionally dev-only. A later production slice must define durable append-only storage, independent trust, key custody and rotation before these records can serve as production evidence.
 
 ## Next slices
 
-1. Immutable audit envelope and protected command preview.
-2. Step-up MFA and independent approver policy.
+1. Customers, KYC and AML case workflows.
+2. Durable audit storage and a real step-up MFA provider.

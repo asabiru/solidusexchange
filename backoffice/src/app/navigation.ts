@@ -62,7 +62,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "incidents", label: "Incidents", group: "System", implemented: false },
   { id: "resilience", label: "Resilience", group: "System", implemented: false },
   { id: "admin", label: "Administration", group: "System", implemented: false },
-  { id: "audit", label: "Audit trail", group: "System", implemented: false }
+  { id: "audit", label: "Audit trail", group: "System", capability: "audit:read", implemented: true }
 ];
 
 export const navigationGroups = [...new Set(navigation.map((item) => item.group))];
