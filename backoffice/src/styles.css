@@ -301,6 +301,11 @@ button {
   font-size: 9px;
 }
 
+.role small {
+  color: rgb(var(--muted));
+  font-size: 9px;
+}
+
 main {
   padding: 22px;
 }
@@ -649,6 +654,87 @@ tbody tr[data-selected="true"] {
 .button:disabled {
   opacity: .45;
   cursor: not-allowed;
+}
+
+.access-shell {
+  --accent: 59, 95, 246;
+  --danger: 201, 63, 69;
+  --success: 35, 145, 97;
+  --warning: 202, 126, 22;
+  --surface: 255, 255, 255;
+  --subtle: 247, 249, 252;
+  --text: 24, 35, 56;
+  --muted: 103, 117, 140;
+  --border: 218, 225, 235;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  color: rgb(var(--text));
+  background: #edf1f7;
+}
+
+.access-card {
+  width: min(440px, 100%);
+  padding: 26px;
+  border: 1px solid rgb(var(--border));
+  border-radius: 18px;
+  background: rgb(var(--surface));
+  box-shadow: 0 22px 55px rgba(22, 33, 54, .12);
+}
+
+.access-brand {
+  padding: 0 0 22px;
+}
+
+.access-subtitle {
+  color: rgb(var(--muted));
+}
+
+.access-title {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: -.035em;
+}
+
+.access-copy {
+  margin: 9px 0 18px;
+  color: rgb(var(--muted));
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.access-action {
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+}
+
+.access-button {
+  width: 100%;
+  margin: 0;
+}
+
+.dev-login {
+  display: grid;
+  gap: 12px;
+  padding-top: 6px;
+}
+
+.dev-login label {
+  display: grid;
+  gap: 6px;
+  color: rgb(var(--muted));
+  font-size: 10px;
+}
+
+.dev-role-select {
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid rgb(var(--border));
+  border-radius: 9px;
+  color: rgb(var(--text));
+  background: rgb(var(--subtle));
 }
 
 .disabled-reason {

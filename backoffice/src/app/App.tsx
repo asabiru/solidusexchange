@@ -1,6 +1,21 @@
-import { useEffect, useMemo, useState } from "react";
-import { can, findRole, roleProfiles, type OperatorRole } from "../auth/access";
-import { demoRepository, type ApprovalRow, type Tone } from "../data/demo";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { roleProfiles, type Capability, type OperatorRole } from "../auth/access";
+import {
+  ApiError,
+  createDevSession,
+  getApprovals,
+  getCustomers,
+  getDashboard,
+  getHealth,
+  getSession,
+  logout,
+  type ApprovalsPayload,
+  type CustomersPayload,
+  type DashboardPayload,
+  type HealthPayload,
+  type SessionPayload
+} from "../data/client";
+import type { ApprovalRow, Tone } from "../data/demo";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 
@@ -21,10 +36,7 @@ function TableShell({ children, label }: { children: React.ReactNode; label: str
   return <section className="table-scroll" aria-label={label}>{children}</section>;
 }
 
-function DashboardView() {
-  const metrics = demoRepository.metrics();
-  const queues = demoRepository.queues();
-
+function DashboardView({ data }: { data: DashboardPayload }) {
   return (
     <>
       <PageHeading
@@ -32,7 +44,7 @@ function DashboardView() {
         description="Синтетическая dev-only сводка · команды и live-провайдеры отключены"
       />
       <section className="metrics" aria-label="Операционные показатели">
-        {metrics.map((metric) => (
+        {data.metrics.map((metric) => (
           <article className="metric" key={metric.label}>
             <div><span>{metric.label}</span><i data-tone={metric.tone} /></div>
             <strong>{metric.value}</strong>
@@ -49,7 +61,7 @@ function DashboardView() {
             <table>
               <thead><tr><th>Очередь</th><th>Критично</th><th>Всего</th><th>Старейшая</th><th>SLA</th></tr></thead>
               <tbody>
-                {queues.map((row) => (
+                {data.queues.map((row) => (
                   <tr key={row.queue}>
                     <td><button className="table-link" type="button">{row.queue}</button></td>
                     <td>{row.critical}</td>
@@ -78,15 +90,15 @@ function DashboardView() {
   );
 }
 
-function CustomersView({ query }: { query: string }) {
+function CustomersView({ query, data }: { query: string; data: CustomersPayload }) {
   const customers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
-    if (!normalized) return demoRepository.customers();
-    return demoRepository.customers().filter((customer) =>
+    if (!normalized) return data.customers;
+    return data.customers.filter((customer) =>
       [customer.id, customer.name, customer.country, customer.nextAction]
         .some((value) => value.toLocaleLowerCase("ru").includes(normalized))
     );
-  }, [query]);
+  }, [data.customers, query]);
 
   return (
     <>
@@ -128,10 +140,16 @@ function CustomersView({ query }: { query: string }) {
   );
 }
 
-function ApprovalsView({ role }: { role: OperatorRole }) {
-  const approvals = demoRepository.approvals();
+function ApprovalsView({
+  capabilities,
+  data
+}: {
+  capabilities: readonly Capability[];
+  data: ApprovalsPayload;
+}) {
+  const approvals = data.approvals;
   const [selected, setSelected] = useState<ApprovalRow>(approvals[0]);
-  const mayReview = can(role, "approvals:review");
+  const mayReview = capabilities.includes("approvals:review");
 
   return (
     <>
@@ -215,15 +233,179 @@ function PageHeading({ title, description }: { title: string; description: strin
   );
 }
 
-export function App() {
+interface WorkspaceData {
+  session: SessionPayload;
+  dashboard: DashboardPayload;
+  customers: CustomersPayload;
+  approvals?: ApprovalsPayload;
+}
+
+type AccessState =
+  | { status: "loading" }
+  | { status: "signed-out"; health: HealthPayload }
+  | { status: "failed"; message: string }
+  | { status: "ready"; health: HealthPayload; data: WorkspaceData };
+
+function hasCapability(session: SessionPayload, capability: Capability): boolean {
+  return session.operator.capabilities.includes(capability);
+}
+
+function AccessGate({
+  state,
+  onDevLogin
+}: {
+  state: Exclude<AccessState, { status: "ready" }>;
+  onDevLogin: (role: OperatorRole) => Promise<void>;
+}) {
   const [role, setRole] = useState<OperatorRole>("compliance-lead");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submitDevLogin() {
+    setSubmitting(true);
+    try {
+      await onDevLogin(role);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="access-shell">
+      <section className="access-card">
+        <div className="brand access-brand">
+          <span>SC</span>
+          <div>
+            <strong>SolidChange</strong>
+            <small className="access-subtitle">Operator backoffice</small>
+          </div>
+        </div>
+        {state.status === "loading" && (
+          <>
+            <h1 className="access-title">Проверяем операторскую сессию</h1>
+            <p className="access-copy">Доступ fail-closed: интерфейс не загрузит данные без BFF и подписанного ответа.</p>
+            <Status tone="info">Session check</Status>
+          </>
+        )}
+        {state.status === "failed" && (
+          <>
+            <h1 className="access-title">Backoffice недоступен</h1>
+            <p className="access-copy">{state.message}</p>
+            <Status tone="danger">Fail closed</Status>
+          </>
+        )}
+        {state.status === "signed-out" && (
+          <>
+            <h1 className="access-title">Вход для оператора</h1>
+            <p className="access-copy">OIDC/SSO токены обрабатываются только BFF и не передаются в браузерное приложение.</p>
+            {state.health.oidcConfigured && (
+              <a className="button primary access-action access-button" href="/bff/auth/login">Войти через SSO</a>
+            )}
+            {state.health.devLoginEnabled && (
+              <div className="dev-login">
+                <label>
+                  <span>Dev-only роль</span>
+                  <select
+                    className="dev-role-select"
+                    value={role}
+                    onChange={(event) => setRole(event.target.value as OperatorRole)}
+                  >
+                    {roleProfiles.map((candidate) => (
+                      <option value={candidate.id} key={candidate.id}>{candidate.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  className="button primary access-button"
+                  type="button"
+                  disabled={submitting}
+                  onClick={submitDevLogin}
+                >
+                  Открыть synthetic workspace
+                </button>
+              </div>
+            )}
+            {!state.health.oidcConfigured && !state.health.devLoginEnabled && (
+              <Status tone="warning">OIDC not configured</Status>
+            )}
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
+export function App() {
+  const [access, setAccess] = useState<AccessState>({ status: "loading" });
   const [screen, setScreen] = useState<ScreenId>(initialScreen);
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState<Theme>(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   );
   const [density, setDensity] = useState<Density>("compact");
-  const profile = findRole(role) ?? roleProfiles[0];
+
+  const loadWorkspace = useCallback(async () => {
+    try {
+      const health = await getHealth();
+      let session: SessionPayload;
+      try {
+        session = await getSession();
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          setAccess({ status: "signed-out", health });
+          return;
+        }
+        throw error;
+      }
+
+      const [dashboard, customers, approvals] = await Promise.all([
+        getDashboard(),
+        getCustomers(),
+        hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined)
+      ]);
+      setAccess({
+        status: "ready",
+        health,
+        data: { session, dashboard, customers, approvals }
+      });
+    } catch (error) {
+      setAccess({
+        status: "failed",
+        message: error instanceof Error ? error.message : "Не удалось проверить границу доступа"
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadWorkspace();
+  }, [loadWorkspace]);
+
+  async function switchDevRole(role: OperatorRole) {
+    setAccess({ status: "loading" });
+    try {
+      await createDevSession(role);
+      await loadWorkspace();
+    } catch (error) {
+      setAccess({
+        status: "failed",
+        message: error instanceof Error ? error.message : "Dev-only session rejected"
+      });
+    }
+  }
+
+  async function endSession() {
+    setAccess({ status: "loading" });
+    try {
+      await logout();
+      setScreen("dashboard");
+      window.history.replaceState(null, "", "#dashboard");
+      await loadWorkspace();
+    } catch (error) {
+      setAccess({
+        status: "failed",
+        message: error instanceof Error ? error.message : "Не удалось завершить сессию"
+      });
+    }
+  }
 
   useEffect(() => {
     const onHashChange = () => setScreen(initialScreen());
@@ -232,15 +414,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (access.status !== "ready") return;
     const active = navigation.find((item) => item.id === screen);
-    if (active?.capability && !can(role, active.capability)) {
+    if (active?.capability && !hasCapability(access.data.session, active.capability)) {
       setScreen("dashboard");
       window.history.replaceState(null, "", "#dashboard");
     }
-  }, [role, screen]);
+  }, [access, screen]);
+
+  if (access.status !== "ready") {
+    return <AccessGate state={access} onDevLogin={switchDevRole} />;
+  }
+
+  const { session } = access.data;
+  const profile = session.operator;
 
   function selectScreen(item: NavigationItem) {
-    if (item.capability && !can(role, item.capability)) return;
+    if (item.capability && !hasCapability(session, item.capability)) return;
     setScreen(item.id);
     window.history.replaceState(null, "", `#${item.id}`);
   }
@@ -256,7 +446,9 @@ export function App() {
             <div className="nav-group" key={group}>
               <p>{group}</p>
               {navigation.filter((item) => item.group === group).map((item) => {
-                const denied = Boolean(item.capability && !can(role, item.capability));
+                const denied = Boolean(
+                  item.capability && !hasCapability(session, item.capability)
+                );
                 return (
                   <button
                     key={item.id}
@@ -275,7 +467,10 @@ export function App() {
             </div>
           ))}
         </nav>
-        <div className="session-note"><strong>Protected workspace</strong><span>Separate origin · SSO pending · no command clients</span></div>
+        <div className="session-note">
+          <strong>Protected workspace</strong>
+          <span>Server session · signed queries · no command clients</span>
+        </div>
       </aside>
 
       <div className="workspace">
@@ -299,18 +494,41 @@ export function App() {
             {theme === "light" ? "◐" : "◑"}
           </button>
           <span className="avatar" aria-hidden="true">{profile.initials}</span>
-          <label className="role">
-            <span>{profile.operator}</span>
-            <select value={role} onChange={(event) => setRole(event.target.value as OperatorRole)} aria-label="Демонстрационная роль">
-              {roleProfiles.map((candidate) => <option value={candidate.id} key={candidate.id}>{candidate.label}</option>)}
-            </select>
-          </label>
+          {access.health.devLoginEnabled ? (
+            <label className="role">
+              <span>{profile.name}</span>
+              <select
+                value={profile.role}
+                onChange={(event) => void switchDevRole(event.target.value as OperatorRole)}
+                aria-label="Dev-only серверная роль"
+              >
+                {roleProfiles.map((candidate) => (
+                  <option value={candidate.id} key={candidate.id}>{candidate.label}</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <div className="role">
+              <span>{profile.name}</span>
+              <small>{profile.label}</small>
+            </div>
+          )}
+          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию">
+            ↪
+          </button>
         </header>
 
         <main>
-          {screen === "dashboard" && <DashboardView />}
-          {screen === "customers" && <CustomersView query={query} />}
-          {screen === "approvals" && <ApprovalsView role={role} />}
+          {screen === "dashboard" && <DashboardView data={access.data.dashboard} />}
+          {screen === "customers" && (
+            <CustomersView query={query} data={access.data.customers} />
+          )}
+          {screen === "approvals" && access.data.approvals && (
+            <ApprovalsView
+              capabilities={session.operator.capabilities}
+              data={access.data.approvals}
+            />
+          )}
           {!activeItem.implemented && <PlaceholderView item={activeItem} />}
         </main>
       </div>

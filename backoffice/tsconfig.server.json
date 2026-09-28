@@ -9,12 +9,15 @@
       "node"
     ],
     "rootDir": "src",
-    "outDir": ".test-dist"
+    "outDir": ".server-dist",
+    "noEmit": false
   },
   "include": [
     "src/auth/access.ts",
-    "src/auth/access.test.ts",
     "src/data/demo.ts",
     "src/server/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/*.test.ts"
   ]
 }
