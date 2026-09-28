@@ -1,0 +1,29 @@
+{
+  "name": "@solidchange/backoffice",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18 <25"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "biome lint src vite.config.ts",
+    "typecheck": "tsc -b --pretty false",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js"
+  },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@types/node": "24.3.0",
+    "@vitejs/plugin-react": "5.0.2",
+    "@biomejs/biome": "2.2.4",
+    "typescript": "5.9.2",
+    "vite": "7.3.6"
+  }
+}
