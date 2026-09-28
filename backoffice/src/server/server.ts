@@ -299,6 +299,18 @@ export function createBackofficeServer(config: ServerConfig) {
         return;
       }
 
+      if (request.method === "GET" && path === "/bff/api/kyc") {
+        if (!authorized(request, response, "kyc:read")) return;
+        signed(response, "kyc-cases", { cases: demoRepository.kycCases() });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/aml") {
+        if (!authorized(request, response, "aml:read")) return;
+        signed(response, "aml-cases", { cases: demoRepository.amlCases() });
+        return;
+      }
+
       if (request.method === "GET" && path === "/bff/api/approvals") {
         if (!authorized(request, response, "approvals:read")) return;
         signed(response, "approvals", {

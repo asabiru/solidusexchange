@@ -1,6 +1,8 @@
 export type Capability =
   | "dashboard:read"
   | "customers:read"
+  | "kyc:read"
+  | "aml:read"
   | "approvals:read"
   | "approvals:review"
   | "approvals:preview"
@@ -29,6 +31,8 @@ export const roleProfiles: readonly RoleProfile[] = [
     capabilities: [
       "dashboard:read",
       "customers:read",
+      "kyc:read",
+      "aml:read",
       "approvals:read",
       "approvals:review",
       "approvals:preview",
@@ -47,14 +51,27 @@ export const roleProfiles: readonly RoleProfile[] = [
     label: "AML investigator",
     operator: "Роман Юдин",
     initials: "РЮ",
-    capabilities: ["dashboard:read", "customers:read", "approvals:read"]
+    capabilities: [
+      "dashboard:read",
+      "customers:read",
+      "kyc:read",
+      "aml:read",
+      "approvals:read"
+    ]
   },
   {
     id: "auditor",
     label: "Auditor · read-only",
     operator: "Антон Белый",
     initials: "АБ",
-    capabilities: ["dashboard:read", "customers:read", "approvals:read", "audit:read"]
+    capabilities: [
+      "dashboard:read",
+      "customers:read",
+      "kyc:read",
+      "aml:read",
+      "approvals:read",
+      "audit:read"
+    ]
   }
 ];
 

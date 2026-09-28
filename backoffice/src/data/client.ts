@@ -1,9 +1,11 @@
 import type { Capability, OperatorRole } from "../auth/access";
 import type {
+  AmlCase,
   ApprovalPreview,
   ApprovalSummary,
   AuditEvent,
   CustomerRow,
+  KycCase,
   Metric,
   QueueRow
 } from "./demo";
@@ -42,6 +44,14 @@ export interface DashboardPayload {
 
 export interface CustomersPayload {
   customers: readonly CustomerRow[];
+}
+
+export interface KycPayload {
+  cases: readonly KycCase[];
+}
+
+export interface AmlPayload {
+  cases: readonly AmlCase[];
 }
 
 export interface ApprovalsPayload {
@@ -195,6 +205,14 @@ export function getDashboard(): Promise<DashboardPayload> {
 
 export function getCustomers(): Promise<CustomersPayload> {
   return getSigned("/bff/api/customers", "customers");
+}
+
+export function getKycCases(): Promise<KycPayload> {
+  return getSigned("/bff/api/kyc", "kyc-cases");
+}
+
+export function getAmlCases(): Promise<AmlPayload> {
+  return getSigned("/bff/api/aml", "aml-cases");
 }
 
 export function getApprovals(): Promise<ApprovalsPayload> {
