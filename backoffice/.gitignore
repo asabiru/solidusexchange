@@ -1,4 +1,6 @@
 .test-dist/
+.server-dist/
+.vite/
 dist/
 *.tsbuildinfo
 vite.config.d.ts

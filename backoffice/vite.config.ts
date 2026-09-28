@@ -9,6 +9,9 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 4173,
-    strictPort: true
+    strictPort: true,
+    proxy: {
+      "/bff": "http://127.0.0.1:4174"
+    }
   }
 });

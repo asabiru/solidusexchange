@@ -8,6 +8,6 @@ if (configuredMode !== "dev-dry-run") {
 
 export const runtime = {
   mode: configuredMode as RuntimeMode,
-  dataSource: "synthetic",
+  dataSource: "signed BFF · synthetic",
   commandsEnabled: false
 } as const;
