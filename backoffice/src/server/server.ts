@@ -178,6 +178,11 @@ export function createBackofficeServer(config: ServerConfig) {
         return;
       }
 
+      if (request.method === "GET" && path === "/bff/auth/status") {
+        json(response, 200, { authenticated: Boolean(currentSession(request)) });
+        return;
+      }
+
       if (request.method === "GET" && path === "/bff/auth/callback") {
         if (!config.oidc) {
           json(response, 503, { error: "oidc_not_configured" });

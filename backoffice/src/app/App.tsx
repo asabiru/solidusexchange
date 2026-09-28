@@ -4,6 +4,7 @@ import {
   ApiError,
   createDevSession,
   getApprovals,
+  getAuthStatus,
   getCustomers,
   getDashboard,
   getHealth,
@@ -345,7 +346,11 @@ export function App() {
 
   const loadWorkspace = useCallback(async () => {
     try {
-      const health = await getHealth();
+      const [health, authStatus] = await Promise.all([getHealth(), getAuthStatus()]);
+      if (!authStatus.authenticated) {
+        setAccess({ status: "signed-out", health });
+        return;
+      }
       let session: SessionPayload;
       try {
         session = await getSession();

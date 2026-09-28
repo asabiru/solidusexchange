@@ -54,6 +54,10 @@ export interface HealthPayload {
   commandsEnabled: false;
 }
 
+export interface AuthStatusPayload {
+  authenticated: boolean;
+}
+
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -141,6 +145,15 @@ export async function getHealth(): Promise<HealthPayload> {
   });
   if (!response.ok) throw new ApiError(response.status, "Backoffice BFF unavailable");
   return await response.json() as HealthPayload;
+}
+
+export async function getAuthStatus(): Promise<AuthStatusPayload> {
+  const response = await fetch("/bff/auth/status", {
+    credentials: "same-origin",
+    headers: { accept: "application/json" }
+  });
+  if (!response.ok) throw new ApiError(response.status, "Session status unavailable");
+  return await response.json() as AuthStatusPayload;
 }
 
 export function getSession(): Promise<SessionPayload> {
