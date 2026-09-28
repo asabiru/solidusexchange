@@ -1,0 +1,52 @@
+name: Backoffice CI
+
+on:
+  pull_request:
+    paths:
+      - "backoffice/**"
+      - ".github/workflows/backoffice-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "backoffice/**"
+      - ".github/workflows/backoffice-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backoffice
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: backoffice/package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
