@@ -15,6 +15,7 @@ The new regulated core uses an append-only double-entry ledger as the only sourc
 
 - Every financial effect is represented by a journal with at least two entries.
 - Total debits equal total credits in each asset and legal-entity boundary.
+- An acceptance seal binds the immutable command digest to the final entry count.
 - Balances are projections rebuilt from entries, never mutable source fields.
 - Holds/reservations are modeled explicitly and do not silently change settled balances.
 - Corrections use reversal and correcting journals.
@@ -32,10 +33,11 @@ Only the ledger posting service may persist journals and entries. Controllers, p
 
 ## Required controls
 
-- Database transaction around journal acceptance and outbox event.
+- Database transaction around journal acceptance, idempotency, outbox event and acceptance seal.
+- Database rejection of every entry insert after the acceptance seal.
 - Uniqueness on external operation and idempotency keys.
-- Integer/minor-unit or asset-scale-safe numeric representation.
-- Chart-of-accounts and posting-rule versioning.
+- Integer/minor-unit or asset-scale-safe numeric representation with one cross-runtime precision rule.
+- Chart-of-accounts and posting-rule versioning, with rule, actor and entry-pattern binding enforced in the database.
 - Immutable actor, correlation, policy and source evidence.
 - Trial balance and projection rebuild tests.
 - Reconciliation breaks and suspense accounts with accountable review.

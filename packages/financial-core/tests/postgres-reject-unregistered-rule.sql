@@ -1,0 +1,41 @@
+\set ON_ERROR_STOP on
+
+INSERT INTO financial_core.ledger_journals (
+  journal_id,
+  journal_type,
+  legal_entity_id,
+  idempotency_key,
+  command_digest,
+  correlation_id,
+  causation_id,
+  effective_at,
+  accepted_at,
+  actor_type,
+  actor_id,
+  authorization_reference,
+  policy_version,
+  posting_rule_version,
+  source_type,
+  source_reference,
+  evidence_digest,
+  created_at
+) VALUES (
+  '13000000-0000-4000-8000-000000000013',
+  'UNREGISTERED_BALANCED_RULE',
+  'solidchange-dev',
+  'postgres-rule-demo-001',
+  repeat('1', 64),
+  '14000000-0000-4000-8000-000000000014',
+  NULL,
+  '2026-09-25T10:35:00.000Z',
+  '2026-09-25T10:35:01.000Z',
+  'OPERATOR',
+  'unregistered-rule-test',
+  'policy-decision-demo-004',
+  'ledger-dev-policy-v1',
+  'not-in-registry-v1',
+  'synthetic-test',
+  'postgres-rule-source-001',
+  repeat('2', 64),
+  '2026-09-25T10:35:01.000Z'
+);

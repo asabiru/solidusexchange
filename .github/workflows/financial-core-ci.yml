@@ -5,6 +5,8 @@ on:
     paths:
       - "packages/financial-core/**"
       - "Documentation/regulated-core/finance-ledger-approval-pack.md"
+      - "Documentation/regulated-core/adr/0002-ledger-is-financial-source-of-truth.md"
+      - "Documentation/regulated-core/decision-register.md"
       - ".github/workflows/financial-core-ci.yml"
   push:
     branches:
@@ -12,6 +14,8 @@ on:
     paths:
       - "packages/financial-core/**"
       - "Documentation/regulated-core/finance-ledger-approval-pack.md"
+      - "Documentation/regulated-core/adr/0002-ledger-is-financial-source-of-truth.md"
+      - "Documentation/regulated-core/decision-register.md"
       - ".github/workflows/financial-core-ci.yml"
 
 permissions:
@@ -41,10 +45,12 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.19.0
           cache: npm
@@ -77,40 +83,44 @@ jobs:
           -v "$PWD:/workspace:ro" -w /workspace
           postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
           psql -h 127.0.0.1 -U ledger_test -d ledger_test
-          -v ON_ERROR_STOP=1 -f tests/postgres-smoke.sql
+          -v ON_ERROR_STOP=1
+          -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)"
+          -f tests/postgres-smoke.sql
 
-      - name: Verify one-entry journal is rejected
-        run: |
-          set +e
-          output="$(docker run --rm --network host \
-            -e PGPASSWORD=ledger_test \
-            -v "$PWD:/workspace:ro" -w /workspace \
-            postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
-            psql -h 127.0.0.1 -U ledger_test -d ledger_test \
-            -v ON_ERROR_STOP=1 -f tests/postgres-reject-incomplete.sql 2>&1)"
-          status=$?
-          set -e
-          printf '%s\n' "$output"
-          if [ "$status" -eq 0 ]; then
-            echo "One-entry journal unexpectedly committed."
-            exit 1
-          fi
-          printf '%s\n' "$output" | grep -F "requires at least two entries"
+      - name: Verify accepted precision boundary
+        run: >-
+          docker run --rm --network host
+          -e PGPASSWORD=ledger_test
+          -v "$PWD:/workspace:ro" -w /workspace
+          postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+          psql -h 127.0.0.1 -U ledger_test -d ledger_test
+          -v ON_ERROR_STOP=1 -f tests/postgres-precision-boundary.sql
 
-      - name: Verify unbalanced journal is rejected
+      - name: Verify rejected PostgreSQL boundaries
         run: |
-          set +e
-          output="$(docker run --rm --network host \
-            -e PGPASSWORD=ledger_test \
-            -v "$PWD:/workspace:ro" -w /workspace \
-            postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
-            psql -h 127.0.0.1 -U ledger_test -d ledger_test \
-            -v ON_ERROR_STOP=1 -f tests/postgres-reject-unbalanced.sql 2>&1)"
-          status=$?
-          set -e
-          printf '%s\n' "$output"
-          if [ "$status" -eq 0 ]; then
-            echo "Unbalanced journal unexpectedly committed."
-            exit 1
-          fi
-          printf '%s\n' "$output" | grep -F "is not balanced per asset"
+          while IFS='|' read -r fixture expected; do
+            set +e
+            output="$(docker run --rm --network host \
+              -e PGPASSWORD=ledger_test \
+              -v "$PWD:/workspace:ro" -w /workspace \
+              postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+              psql -h 127.0.0.1 -U ledger_test -d ledger_test \
+              -v ON_ERROR_STOP=1 -f "$fixture" 2>&1)"
+            status=$?
+            set -e
+            printf '%s\n' "$output"
+            if [ "$status" -eq 0 ]; then
+              echo "$fixture unexpectedly committed."
+              exit 1
+            fi
+            printf '%s\n' "$output" | grep -F "$expected"
+          done <<'EOF'
+          tests/postgres-reject-incomplete.sql|requires at least two entries
+          tests/postgres-reject-unbalanced.sql|is not balanced per asset
+          tests/postgres-reject-late-entry.sql|is sealed
+          tests/postgres-reject-unregistered-rule.sql|ledger_journals_posting_rule_fk
+          tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule
+          tests/postgres-reject-rule-pattern.sql|entries violate its posting rule
+          tests/postgres-reject-precision.sql|amount exceeds ledger precision limit
+          tests/postgres-reject-nonfinite.sql|amount must be finite
+          EOF

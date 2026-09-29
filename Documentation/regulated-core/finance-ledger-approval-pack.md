@@ -19,12 +19,12 @@
 | Область | Проверяемое решение | Evidence |
 |---|---|---|
 | Chart of accounts | Классы, normal side, owner scope и обязательные категории подходят как foundation | `packages/financial-core/chart-of-accounts.json` |
-| Posting-rule boundary | Command обязан ссылаться на зарегистрированную пару `journal_type` + `posting_rule_version`; текущий registry содержит только synthetic test rule | `packages/financial-core/posting-rules.json` |
+| Posting-rule boundary | Command обязан ссылаться на зарегистрированную пару `journal_type` + `posting_rule_version`; actor и per-asset pattern проверяются runtime и PostgreSQL registry | `posting-rules.json`, migration `0003` и rejection fixtures |
 | Double entry | Каждый journal имеет 2–1000 entries и балансируется независимо по asset | JS tests и PostgreSQL rejection fixtures |
 | Legal entity | Journal и все accounts/entries находятся внутри одной legal entity | Runtime validation и composite foreign keys |
-| Precision | Суммы используют canonical decimal strings / PostgreSQL `NUMERIC`, scale 0–18 и limit 78 digits | Amount tests, schema constraints и triggers |
+| Precision | Суммы используют canonical decimal strings / PostgreSQL `NUMERIC`, scale 0–18 и limit 78 whole-plus-fraction digits с учётом сохранённых fractional zeros | JS boundary tests, SQL boundary/rejection fixtures и migration `0003` |
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
-| Evidence | Actor, authorization, policy, source digest, correlation и immutable outbox связаны с journal | Posting command, migration и smoke test |
+| Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal | Posting command, migrations и smoke/rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
 
@@ -55,13 +55,16 @@ npm run verify
 
 PostgreSQL evidence должно дополнительно подтвердить:
 
-1. обе migrations применяются последовательно;
+1. все migrations применяются последовательно;
 2. balanced synthetic journal принимается;
 3. one-entry и unbalanced journals отклоняются;
-4. `ledger_account_projections` совпадает с immutable entries;
-5. `ledger_trial_balance.difference = 0` и `balanced = true`;
-6. update/delete immutable records отклоняются;
-7. views работают как `security_invoker` и не дают `PUBLIC` privileges.
+4. balanced append после acceptance seal отклоняется;
+5. unregistered rule, запрещённый actor и неверный entry pattern отклоняются;
+6. JS и PostgreSQL одинаково принимают 78-digit boundary и отклоняют превышение;
+7. `ledger_account_projections` совпадает с immutable entries;
+8. `ledger_trial_balance.difference = 0` и `balanced = true`;
+9. update/delete immutable records отклоняются;
+10. views работают как `security_invoker` и не дают `PUBLIC` privileges.
 
 ## Approval effect
 

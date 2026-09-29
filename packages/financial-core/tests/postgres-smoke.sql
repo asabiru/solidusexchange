@@ -1,4 +1,9 @@
 \set ON_ERROR_STOP on
+\if :{?command_vector_json}
+\else
+  \echo 'command_vector_json psql variable is required'
+  SELECT 1 / 0;
+\endif
 
 INSERT INTO financial_core.ledger_assets (
   asset_code,
@@ -6,13 +11,14 @@ INSERT INTO financial_core.ledger_assets (
   enabled_for_posting,
   evidence_reference,
   created_at
-) VALUES (
-  'TUSD',
-  2,
+)
+SELECT
+  vector.value #>> '{asset,code}',
+  (vector.value #>> '{asset,scale}')::SMALLINT,
   TRUE,
   'synthetic-asset-approval-demo',
   '2026-09-25T10:00:00.000Z'
-);
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector;
 
 INSERT INTO financial_core.account_definitions (
   chart_version,
@@ -45,6 +51,9 @@ INSERT INTO financial_core.account_definitions (
     '2026-09-25T10:00:00.000Z'
   );
 
+WITH vector AS (
+  SELECT :'command_vector_json'::JSONB AS value
+)
 INSERT INTO financial_core.ledger_accounts (
   account_id,
   chart_version,
@@ -59,7 +68,7 @@ INSERT INTO financial_core.ledger_accounts (
     1,
     'TREASURY_ASSET',
     'solidchange-dev',
-    'TUSD',
+    (SELECT value #>> '{asset,code}' FROM vector),
     'treasury-demo',
     '2026-09-25T10:00:00.000Z'
   ),
@@ -68,7 +77,7 @@ INSERT INTO financial_core.ledger_accounts (
     1,
     'PROVIDER_PAYABLE_LIABILITY',
     'solidchange-dev',
-    'TUSD',
+    (SELECT value #>> '{asset,code}' FROM vector),
     'provider-demo',
     '2026-09-25T10:00:00.000Z'
   );
@@ -94,26 +103,27 @@ INSERT INTO financial_core.ledger_journals (
   source_reference,
   evidence_digest,
   created_at
-) VALUES (
-  '70000000-0000-4000-8000-000000000007',
-  'SYNTHETIC_PROVIDER_POSITION',
-  'solidchange-dev',
-  'postgres-smoke-demo-001',
-  repeat('a', 64),
-  '80000000-0000-4000-8000-000000000008',
-  NULL,
-  '2026-09-25T10:15:00.000Z',
+)
+SELECT
+  (vector.value #>> '{command,journal_id}')::UUID,
+  vector.value #>> '{command,journal_type}',
+  vector.value #>> '{command,legal_entity_id}',
+  vector.value #>> '{command,idempotency_key}',
+  vector.value #>> '{expected_digest}',
+  (vector.value #>> '{command,correlation_id}')::UUID,
+  NULLIF(vector.value #>> '{command,causation_id}', '')::UUID,
+  (vector.value #>> '{command,effective_at}')::TIMESTAMPTZ,
   '2026-09-25T10:15:01.000Z',
-  'SERVICE',
-  'financial-core-postgres-test',
-  'policy-decision-demo-001',
-  'ledger-dev-policy-v1',
-  'synthetic-provider-position-v1',
-  'synthetic-test',
-  'postgres-smoke-source-001',
-  repeat('b', 64),
+  vector.value #>> '{command,actor,type}',
+  vector.value #>> '{command,actor,id}',
+  vector.value #>> '{command,authorization_reference}',
+  vector.value #>> '{command,policy_version}',
+  vector.value #>> '{command,posting_rule_version}',
+  vector.value #>> '{command,source,type}',
+  vector.value #>> '{command,source,reference}',
+  vector.value #>> '{command,source,evidence_digest}',
   '2026-09-25T10:15:01.000Z'
-);
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector;
 
 INSERT INTO financial_core.ledger_entries (
   entry_id,
@@ -125,29 +135,21 @@ INSERT INTO financial_core.ledger_entries (
   side,
   amount,
   created_at
-) VALUES
-  (
-    '90000000-0000-4000-8000-000000000009',
-    '70000000-0000-4000-8000-000000000007',
-    1,
-    '10000000-0000-4000-8000-000000000001',
-    'solidchange-dev',
-    'TUSD',
-    'DEBIT',
-    25.50,
-    '2026-09-25T10:15:01.000Z'
-  ),
-  (
-    'a0000000-0000-4000-8000-00000000000a',
-    '70000000-0000-4000-8000-000000000007',
-    2,
-    '20000000-0000-4000-8000-000000000002',
-    'solidchange-dev',
-    'TUSD',
-    'CREDIT',
-    25.50,
-    '2026-09-25T10:15:01.000Z'
-  );
+)
+SELECT
+  (entry.value ->> 'entry_id')::UUID,
+  (vector.value #>> '{command,journal_id}')::UUID,
+  entry.ordinality::SMALLINT,
+  (entry.value ->> 'account_id')::UUID,
+  vector.value #>> '{command,legal_entity_id}',
+  entry.value ->> 'asset_code',
+  entry.value ->> 'side',
+  (entry.value ->> 'amount')::NUMERIC,
+  '2026-09-25T10:15:01.000Z'
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector
+CROSS JOIN LATERAL jsonb_array_elements(
+  vector.value #> '{command,entries}'
+) WITH ORDINALITY AS entry(value, ordinality);
 
 INSERT INTO financial_core.ledger_idempotency_registry (
   legal_entity_id,
@@ -155,13 +157,14 @@ INSERT INTO financial_core.ledger_idempotency_registry (
   command_digest,
   journal_id,
   first_seen_at
-) VALUES (
-  'solidchange-dev',
-  'postgres-smoke-demo-001',
-  repeat('a', 64),
-  '70000000-0000-4000-8000-000000000007',
+)
+SELECT
+  vector.value #>> '{command,legal_entity_id}',
+  vector.value #>> '{command,idempotency_key}',
+  vector.value #>> '{expected_digest}',
+  (vector.value #>> '{command,journal_id}')::UUID,
   '2026-09-25T10:15:01.000Z'
-);
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector;
 
 INSERT INTO financial_core.ledger_outbox_events (
   outbox_id,
@@ -169,18 +172,32 @@ INSERT INTO financial_core.ledger_outbox_events (
   event_type,
   payload,
   created_at
-) VALUES (
+)
+SELECT
   'b0000000-0000-4000-8000-00000000000b',
-  '70000000-0000-4000-8000-000000000007',
+  (vector.value #>> '{command,journal_id}')::UUID,
   'internal.ledger.journal-accepted.v1',
   jsonb_build_object(
     'journal_id',
-    '70000000-0000-4000-8000-000000000007',
+    vector.value #>> '{command,journal_id}',
     'command_digest',
-    repeat('a', 64)
+    vector.value #>> '{expected_digest}'
   ),
   '2026-09-25T10:15:01.000Z'
-);
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector;
+
+INSERT INTO financial_core.ledger_journal_seals (
+  journal_id,
+  command_digest,
+  entry_count,
+  sealed_at
+)
+SELECT
+  (vector.value #>> '{command,journal_id}')::UUID,
+  vector.value #>> '{expected_digest}',
+  jsonb_array_length(vector.value #> '{command,entries}')::SMALLINT,
+  '2026-09-25T10:15:01.000Z'
+FROM (SELECT :'command_vector_json'::JSONB AS value) AS vector;
 
 COMMIT;
 
@@ -210,7 +227,7 @@ BEGIN
     INTO debit_total, credit_total, difference, is_balanced
     FROM financial_core.ledger_trial_balance AS trial
    WHERE trial.legal_entity_id = 'solidchange-dev'
-     AND trial.asset_code = 'TUSD';
+     AND trial.asset_code = 'TUSDT';
 
   IF
     debit_total <> 25.50
@@ -250,6 +267,18 @@ $$;
 
 DO $$
 BEGIN
+  BEGIN
+    DELETE FROM financial_core.ledger_entries
+     WHERE entry_id = '90000000-0000-4000-8000-000000000009';
+    RAISE EXCEPTION 'append-only deletion unexpectedly succeeded';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN NULL;
+  END;
+END;
+$$;
+
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
       FROM pg_class
@@ -270,11 +299,25 @@ BEGIN
       ) AS privilege
      WHERE relation.oid IN (
        'financial_core.ledger_account_projections'::REGCLASS,
-       'financial_core.ledger_trial_balance'::REGCLASS
+       'financial_core.ledger_trial_balance'::REGCLASS,
+       'financial_core.posting_rule_registry'::REGCLASS,
+       'financial_core.ledger_journal_seals'::REGCLASS
      )
        AND privilege.grantee = 0
   ) THEN
-    RAISE EXCEPTION 'PUBLIC privilege exists on ledger verification view';
+    RAISE EXCEPTION 'PUBLIC privilege exists on protected ledger relation';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM financial_core.posting_rule_registry
+     WHERE journal_type = 'SYNTHETIC_PROVIDER_POSITION'
+       AND posting_rule_version = 'synthetic-provider-position-v1'
+       AND allowed_actor_types = ARRAY['SERVICE']
+       AND production_execution_enabled = FALSE
+       AND runtime_boundary = 'dev-dry-run'
+  ) THEN
+    RAISE EXCEPTION 'synthetic posting rule is not database-bound';
   END IF;
 END;
 $$;
