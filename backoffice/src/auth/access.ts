@@ -6,6 +6,7 @@ export type Capability =
   | "approvals:read"
   | "approvals:review"
   | "approvals:preview"
+  | "approvals:step-up"
   | "audit:read"
   | "audit:export";
 
@@ -37,6 +38,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "approvals:read",
       "approvals:review",
       "approvals:preview",
+      "approvals:step-up",
       "audit:read",
       "audit:export"
     ]

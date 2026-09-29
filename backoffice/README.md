@@ -9,14 +9,17 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - OIDC uses Authorization Code with PKCE; OIDC tokens remain in the BFF.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
-- Read-only API envelopes are signed with an ephemeral Ed25519 key and bound to their resource.
+- Read-only API envelopes are signed with versioned ephemeral Ed25519 keys and bound to their resource, key ID and key version.
+- New envelopes use the active signing key; bounded retired keys remain verification-only during automatic development rotation.
 - Audit events form a verified SHA-256 chain behind an async store contract.
 - PostgreSQL mode verifies schema version and the complete chain before the BFF listens.
 - PostgreSQL events reject update, delete and truncate; appends are serialized and stale heads fail closed.
 - Audit reads, approval anchors and signed evidence exports use a newly verified store snapshot.
 - Memory mode remains an explicit non-durable local default and is labelled as such in health/UI.
 - Approval command previews are digest-bound, same-origin, capability-gated and side-effect-free.
-- Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up MFA status.
+- Synthetic step-up challenges bind session, subject, approval, command digest and audit head, expire, limit attempts and issue a one-time preview grant.
+- Challenge codes are stored only as hashes; the dev code is returned solely to make the synthetic browser flow testable.
+- Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up status.
 - Customers 360, KYC/KYB and AML/KYT screens expose synthetic risk, screening, evidence and linked-approval records.
 - Customer-risk endpoints are separately capability-gated; Support L1 is denied KYC and AML case access.
 - KYC, sanctions, PEP and KYT records contain no raw identity documents or provider payloads.
@@ -76,6 +79,25 @@ Replace `backoffice_runtime` with the deployment role. It must not receive `UPDA
 
 `BACKOFFICE_AUDIT_RETENTION_DAYS` records a minimum retention boundary on every append. Slice 5A does not provide deletion or cleanup. The default is a development baseline, not a legal retention determination for a live deployment.
 
+## Step-up and signing lifecycle
+
+The built-in provider is deliberately `synthetic-dev`. It returns the verification code in the signed challenge response, so it is not MFA and must not be used as an authentication factor. It exists to verify challenge binding, expiry, attempt limits, one-time grants and replay rejection without connecting a production identity provider.
+
+```text
+BACKOFFICE_STEP_UP_CHALLENGE_TTL_SECONDS=300
+BACKOFFICE_STEP_UP_GRANT_TTL_SECONDS=60
+BACKOFFICE_STEP_UP_MAX_ATTEMPTS=3
+```
+
+Response signing uses a process-local Ed25519 key ring. The active key rotates automatically; old public keys remain available only for the configured bounded overlap.
+
+```text
+BACKOFFICE_SIGNING_ROTATION_SECONDS=900
+BACKOFFICE_SIGNING_RETAINED_KEYS=2
+```
+
+Private signing material is never returned by the keyset endpoint. A production deployment requires a separately approved MFA provider, production IdP policy, KMS/HSM-backed signer, durable key version registry, rotation runbook and independently validated recovery procedure.
+
 ## OIDC configuration
 
 Configure all required values together; partial OIDC configuration fails startup:
@@ -102,6 +124,11 @@ BACKOFFICE_SESSION_TTL_SECONDS
 BACKOFFICE_AUDIT_STORAGE
 BACKOFFICE_AUDIT_DATABASE_URL
 BACKOFFICE_AUDIT_RETENTION_DAYS
+BACKOFFICE_STEP_UP_CHALLENGE_TTL_SECONDS
+BACKOFFICE_STEP_UP_GRANT_TTL_SECONDS
+BACKOFFICE_STEP_UP_MAX_ATTEMPTS
+BACKOFFICE_SIGNING_ROTATION_SECONDS
+BACKOFFICE_SIGNING_RETAINED_KEYS
 ```
 
 `BACKOFFICE_OIDC_ROLE_MAP_JSON` maps external groups to the explicit operator-role allowlist. Example:
@@ -110,10 +137,10 @@ BACKOFFICE_AUDIT_RETENTION_DAYS
 {"solidchange-compliance":"compliance-lead","solidchange-support":"support-l1"}
 ```
 
-The startup-generated signing key and synthetic seed data remain intentionally dev-only. PostgreSQL persistence alone does not make the evidence production-ready; independent trust, key custody, rotation, backup/restore validation and approved retention policy remain required.
+The process-local key ring, synthetic step-up provider and seed data remain intentionally dev-only. PostgreSQL persistence alone does not make the evidence production-ready; independent trust, key custody, provider assurance, backup/restore validation and approved retention policy remain required.
 
 ## Next slices
 
-1. Slice 5B: step-up MFA challenge lifecycle, replay protection and signing-key lifecycle.
-2. Investigations/Fraud workflows.
-3. Provider adapter contracts and operator commands, only after separate security and regulatory approval.
+1. Investigations/Fraud workflows.
+2. Provider adapter contracts and operator commands, only after separate security and regulatory approval.
+3. Production MFA and KMS/HSM integration, only after separate security, infrastructure and Owner/CTO approval.

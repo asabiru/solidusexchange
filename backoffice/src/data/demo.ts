@@ -150,7 +150,7 @@ export interface ApprovalPreview {
     independentApprover: boolean;
     requiredApprovals: number;
     completedApprovals: number;
-    stepUpMfa: "required" | "not-required";
+    stepUpMfa: "required" | "verified" | "not-required";
     commandClient: "absent";
     executable: false;
     blockers: readonly string[];

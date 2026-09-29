@@ -18,6 +18,19 @@ export interface AuditConfig {
   databaseUrl?: string;
 }
 
+export interface StepUpConfig {
+  provider: "synthetic-dev";
+  challengeTtlSeconds: number;
+  grantTtlSeconds: number;
+  maxAttempts: number;
+}
+
+export interface SigningConfig {
+  backend: "ephemeral-dev";
+  rotationSeconds: number;
+  retainedVerificationKeys: number;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -25,6 +38,8 @@ export interface ServerConfig {
   allowDevLogin: boolean;
   sessionTtlSeconds: number;
   audit: AuditConfig;
+  stepUp: StepUpConfig;
+  signing: SigningConfig;
   oidc?: OidcConfig;
 }
 
@@ -115,6 +130,51 @@ function loadAuditConfig(): AuditConfig {
   return { storage, retentionDays, databaseUrl };
 }
 
+function integerSetting(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be between ${minimum} and ${maximum}`);
+  }
+  return value;
+}
+
+function loadStepUpConfig(): StepUpConfig {
+  return {
+    provider: "synthetic-dev",
+    challengeTtlSeconds: integerSetting(
+      "BACKOFFICE_STEP_UP_CHALLENGE_TTL_SECONDS",
+      300,
+      30,
+      900
+    ),
+    grantTtlSeconds: integerSetting(
+      "BACKOFFICE_STEP_UP_GRANT_TTL_SECONDS",
+      60,
+      15,
+      300
+    ),
+    maxAttempts: integerSetting("BACKOFFICE_STEP_UP_MAX_ATTEMPTS", 3, 1, 5)
+  };
+}
+
+function loadSigningConfig(): SigningConfig {
+  return {
+    backend: "ephemeral-dev",
+    rotationSeconds: integerSetting(
+      "BACKOFFICE_SIGNING_ROTATION_SECONDS",
+      900,
+      60,
+      86_400
+    ),
+    retainedVerificationKeys: integerSetting(
+      "BACKOFFICE_SIGNING_RETAINED_KEYS",
+      2,
+      1,
+      5
+    )
+  };
+}
+
 export function loadServerConfig(): ServerConfig {
   if ((process.env.BACKOFFICE_MODE ?? "dev-dry-run") !== "dev-dry-run") {
     throw new Error("Backoffice BFF refuses to start outside dev-dry-run mode");
@@ -155,6 +215,8 @@ export function loadServerConfig(): ServerConfig {
     allowDevLogin: process.env.BACKOFFICE_ALLOW_DEV_LOGIN === "true",
     sessionTtlSeconds,
     audit: loadAuditConfig(),
+    stepUp: loadStepUpConfig(),
+    signing: loadSigningConfig(),
     oidc: loadOidcConfig()
   };
 }

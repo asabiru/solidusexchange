@@ -10,7 +10,10 @@ import {
   verifyIdToken
 } from "./oidc.js";
 import { ExpiringStore, type OperatorSession, type PendingLogin } from "./session.js";
-import { ResponseSigner } from "./signing.js";
+import {
+  EphemeralSigningKeyProvider,
+  ResponseSigner
+} from "./signing.js";
 import {
   AuditUnavailableError,
   AuditStoreError,
@@ -21,6 +24,10 @@ import {
   approvalCommandDigest,
   buildApprovalPreview
 } from "./controls.js";
+import {
+  StepUpRejectedError,
+  SyntheticStepUpService
+} from "./step-up.js";
 
 const sessionCookie = "solidchange_bo_session";
 const validRoles = new Set<OperatorRole>([
@@ -99,11 +106,15 @@ function defaultAuditStore(config: ServerConfig): AuditStore {
 
 export function createBackofficeServer(
   config: ServerConfig,
-  auditStore: AuditStore = defaultAuditStore(config)
+  auditStore: AuditStore = defaultAuditStore(config),
+  injectedSigningKeys?: EphemeralSigningKeyProvider
 ) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
   const sessions = new ExpiringStore<OperatorSession>();
-  const signer = new ResponseSigner();
+  const signingKeys = injectedSigningKeys
+    ?? new EphemeralSigningKeyProvider(config.signing.retainedVerificationKeys);
+  const signer = new ResponseSigner(signingKeys);
+  const stepUp = new SyntheticStepUpService(config.stepUp);
 
   function setSessionCookie(response: ServerResponse, session: OperatorSession): void {
     const secure = config.allowedOrigins.every((origin) => origin.startsWith("https://"));
@@ -165,7 +176,13 @@ export function createBackofficeServer(
     return session;
   }
 
-  return createServer(async (request, response) => {
+  const rotationTimer = setInterval(
+    () => signingKeys.rotate(),
+    config.signing.rotationSeconds * 1_000
+  );
+  rotationTimer.unref();
+
+  const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
       const path = url.pathname;
@@ -182,6 +199,18 @@ export function createBackofficeServer(
             durable: audit.status.durable,
             retentionDays: audit.status.retentionDays,
             verified: audit.status.verified
+          },
+          stepUp: {
+            provider: config.stepUp.provider,
+            challengeTtlSeconds: config.stepUp.challengeTtlSeconds,
+            maxAttempts: config.stepUp.maxAttempts,
+            productionReady: false
+          },
+          signing: {
+            backend: signer.publicKeyset().backend,
+            rotationSeconds: config.signing.rotationSeconds,
+            retainedVerificationKeys: config.signing.retainedVerificationKeys,
+            productionReady: false
           },
           commandsEnabled: false
         });
@@ -276,7 +305,13 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/signing-key") {
-        json(response, 200, { keyId: signer.keyId, publicJwk: signer.publicJwk });
+        const key = signer.currentPublicKey();
+        json(response, 200, { keyId: key.keyId, publicJwk: key.publicJwk });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/signing-keys") {
+        json(response, 200, signer.publicKeyset());
         return;
       }
 
@@ -368,6 +403,129 @@ export function createBackofficeServer(
         return;
       }
 
+      const challengeMatch = path.match(
+        /^\/bff\/api\/approvals\/([^/]+)\/step-up\/challenges$/
+      );
+      if (request.method === "POST" && challengeMatch) {
+        if (!exactOrigin(request, config)) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "approvals:step-up");
+        if (!session) return;
+        let approvalId: string;
+        try {
+          approvalId = decodeURIComponent(challengeMatch[1]);
+        } catch {
+          json(response, 400, { error: "invalid_approval_id" });
+          return;
+        }
+        if (!/^APV-\d{6}$/.test(approvalId)) {
+          json(response, 400, { error: "invalid_approval_id" });
+          return;
+        }
+        const approval = demoRepository.approvals().find((item) => item.id === approvalId);
+        if (!approval) {
+          json(response, 404, { error: "approval_not_found" });
+          return;
+        }
+        if (!approval.stepUpRequired) {
+          json(response, 409, { error: "step_up_not_required" });
+          return;
+        }
+        let body: unknown;
+        try {
+          body = await readJson(request);
+        } catch {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const commandDigest = body && typeof body === "object" && "commandDigest" in body
+          ? body.commandDigest
+          : undefined;
+        if (typeof commandDigest !== "string") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        if (commandDigest !== approvalCommandDigest(approval)) {
+          json(response, 409, { error: "approval_version_mismatch" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        signed(response, `step-up-challenge:${approval.id}`, stepUp.begin({
+          sessionId: session.id,
+          subject: session.subject,
+          approvalId: approval.id,
+          commandDigest,
+          auditHeadHash: audit.status.headHash
+        }));
+        return;
+      }
+
+      const verificationMatch = path.match(
+        /^\/bff\/api\/approvals\/([^/]+)\/step-up\/challenges\/([^/]+)\/verify$/
+      );
+      if (request.method === "POST" && verificationMatch) {
+        if (!exactOrigin(request, config)) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "approvals:step-up");
+        if (!session) return;
+        let approvalId: string;
+        let challengeId: string;
+        try {
+          approvalId = decodeURIComponent(verificationMatch[1]);
+          challengeId = decodeURIComponent(verificationMatch[2]);
+        } catch {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        if (!/^APV-\d{6}$/.test(approvalId) || !/^[A-Za-z0-9_-]{32,}$/.test(challengeId)) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const approval = demoRepository.approvals().find((item) => item.id === approvalId);
+        if (!approval) {
+          json(response, 404, { error: "approval_not_found" });
+          return;
+        }
+        let body: unknown;
+        try {
+          body = await readJson(request);
+        } catch {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const commandDigest = body && typeof body === "object" && "commandDigest" in body
+          ? body.commandDigest
+          : undefined;
+        const code = body && typeof body === "object" && "code" in body
+          ? body.code
+          : undefined;
+        if (typeof commandDigest !== "string" || typeof code !== "string" || !/^\d{6}$/.test(code)) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        if (commandDigest !== approvalCommandDigest(approval)) {
+          json(response, 409, { error: "approval_version_mismatch" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        signed(
+          response,
+          `step-up-verification:${approval.id}`,
+          stepUp.verify(challengeId, code, {
+            sessionId: session.id,
+            subject: session.subject,
+            approvalId: approval.id,
+            commandDigest,
+            auditHeadHash: audit.status.headHash
+          })
+        );
+        return;
+      }
+
       const previewMatch = path.match(/^\/bff\/api\/approvals\/([^/]+)\/preview$/);
       if (request.method === "POST" && previewMatch) {
         if (!exactOrigin(request, config)) {
@@ -402,7 +560,14 @@ export function createBackofficeServer(
         const commandDigest = body && typeof body === "object" && "commandDigest" in body
           ? body.commandDigest
           : undefined;
+        const stepUpGrant = body && typeof body === "object" && "stepUpGrant" in body
+          ? body.stepUpGrant
+          : undefined;
         if (typeof commandDigest !== "string") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        if (stepUpGrant !== undefined && typeof stepUpGrant !== "string") {
           json(response, 400, { error: "invalid_request" });
           return;
         }
@@ -410,13 +575,30 @@ export function createBackofficeServer(
           json(response, 409, { error: "approval_version_mismatch" });
           return;
         }
+        const audit = await auditStore.snapshot();
+        let stepUpVerified = false;
+        if (stepUpGrant !== undefined) {
+          if (!approval.stepUpRequired) {
+            json(response, 409, { error: "step_up_not_required" });
+            return;
+          }
+          stepUp.consume(stepUpGrant, {
+            sessionId: session.id,
+            subject: session.subject,
+            approvalId: approval.id,
+            commandDigest,
+            auditHeadHash: audit.status.headHash
+          });
+          stepUpVerified = true;
+        }
         signed(
           response,
           `approval-preview:${approval.id}`,
           buildApprovalPreview(
             approval,
             session.subject,
-            (await auditStore.snapshot()).events
+            audit.events,
+            stepUpVerified
           )
         );
         return;
@@ -428,7 +610,17 @@ export function createBackofficeServer(
         json(response, 503, { error: "audit_integrity_unavailable" });
         return;
       }
+      if (error instanceof StepUpRejectedError) {
+        json(response, 409, {
+          error: "step_up_rejected",
+          state: error.state,
+          attemptsRemaining: error.attemptsRemaining
+        });
+        return;
+      }
       json(response, 500, { error: "request_failed" });
     }
   });
+  server.once("close", () => clearInterval(rotationTimer));
+  return server;
 }

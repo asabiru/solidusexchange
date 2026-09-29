@@ -57,4 +57,15 @@ describe("protected control contracts", () => {
     assert.equal(preview.evidence.ready < preview.evidence.total, true);
     assert.equal(preview.policy.executable, false);
   });
+
+  it("accepts a bound step-up proof without enabling command execution", () => {
+    const audit = buildAuditChain(demoRepository.auditSource());
+    const approval = demoRepository.approvals().find((item) => item.id === "APV-843910");
+    assert.ok(approval);
+    const preview = buildApprovalPreview(approval, "dev:compliance-lead", audit, true);
+    assert.equal(preview.policy.stepUpMfa, "verified");
+    assert.equal(preview.policy.blockers.includes("step_up_mfa_required"), false);
+    assert.equal(preview.policy.blockers.includes("command_client_absent"), true);
+    assert.equal(preview.policy.executable, false);
+  });
 });

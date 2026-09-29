@@ -11,7 +11,9 @@ import type {
 } from "./demo";
 
 export interface SignedEnvelope<T> {
+  signatureVersion: 1;
   keyId: string;
+  keyVersion: number;
   issuedAt: string;
   requestId: string;
   resource: string;
@@ -21,7 +23,17 @@ export interface SignedEnvelope<T> {
 
 interface SigningKey {
   keyId: string;
+  version: number;
+  algorithm: "Ed25519";
+  status: "active" | "retired";
   publicJwk: JsonWebKey;
+}
+
+interface SigningKeyset {
+  formatVersion: 1;
+  backend: "ephemeral-dev";
+  activeKeyId: string;
+  keys: readonly SigningKey[];
 }
 
 export interface SessionPayload {
@@ -93,7 +105,34 @@ export interface HealthPayload {
     retentionDays: number;
     verified: boolean;
   };
+  stepUp: {
+    provider: "synthetic-dev";
+    challengeTtlSeconds: number;
+    maxAttempts: number;
+    productionReady: false;
+  };
+  signing: {
+    backend: "ephemeral-dev";
+    rotationSeconds: number;
+    retainedVerificationKeys: number;
+    productionReady: false;
+  };
   commandsEnabled: false;
+}
+
+export interface StepUpChallengePayload {
+  challengeVersion: 1;
+  challengeId: string;
+  provider: "synthetic-dev";
+  expiresAt: string;
+  attemptsRemaining: number;
+  devVerificationCode: string;
+}
+
+export interface StepUpVerificationPayload {
+  grant: string;
+  provider: "synthetic-dev";
+  expiresAt: string;
 }
 
 export interface AuthStatusPayload {
@@ -101,12 +140,18 @@ export interface AuthStatusPayload {
 }
 
 export class ApiError extends Error {
-  constructor(readonly status: number, message: string) {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+    readonly state?: string,
+    readonly attemptsRemaining?: number
+  ) {
     super(message);
   }
 }
 
-let signingKeyPromise: Promise<SigningKey> | undefined;
+let signingKeysetPromise: Promise<SigningKeyset> | undefined;
 
 function bytes(value: Uint8Array): ArrayBuffer {
   return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
@@ -121,6 +166,9 @@ function decodeBase64Url(value: string): ArrayBuffer {
 
 function canonicalMessage<T>(envelope: SignedEnvelope<T>): ArrayBuffer {
   return bytes(new TextEncoder().encode(JSON.stringify({
+    signatureVersion: envelope.signatureVersion,
+    keyId: envelope.keyId,
+    keyVersion: envelope.keyVersion,
     issuedAt: envelope.issuedAt,
     requestId: envelope.requestId,
     resource: envelope.resource,
@@ -128,25 +176,46 @@ function canonicalMessage<T>(envelope: SignedEnvelope<T>): ArrayBuffer {
   })));
 }
 
-async function signingKey(forceRefresh = false): Promise<SigningKey> {
-  if (forceRefresh) signingKeyPromise = undefined;
-  signingKeyPromise ??= fetch("/bff/api/signing-key", {
+async function signingKeyset(forceRefresh = false): Promise<SigningKeyset> {
+  if (forceRefresh) signingKeysetPromise = undefined;
+  signingKeysetPromise ??= fetch("/bff/api/signing-keys", {
     credentials: "same-origin",
     headers: { accept: "application/json" }
   }).then(async (response) => {
-    if (!response.ok) throw new ApiError(response.status, "Signing key unavailable");
-    return await response.json() as SigningKey;
+    if (!response.ok) throw new ApiError(response.status, "Signing keys unavailable");
+    const keyset = await response.json() as SigningKeyset;
+    if (
+      keyset.formatVersion !== 1
+      || keyset.backend !== "ephemeral-dev"
+      || typeof keyset.activeKeyId !== "string"
+      || !Array.isArray(keyset.keys)
+      || keyset.keys.filter((key) => key.status === "active").length !== 1
+    ) throw new Error("Backoffice signing keyset is invalid");
+    return keyset;
   });
-  return signingKeyPromise;
+  return signingKeysetPromise;
 }
 
 async function verifyEnvelope<T>(
   envelope: SignedEnvelope<T>,
   expectedResource: string
 ): Promise<T> {
-  let key = await signingKey();
-  if (envelope.keyId !== key.keyId) key = await signingKey(true);
-  if (envelope.keyId !== key.keyId) throw new Error("Backoffice response key mismatch");
+  if (envelope.signatureVersion !== 1) {
+    throw new Error("Backoffice response signature version is unsupported");
+  }
+  let keys = await signingKeyset();
+  let key = keys.keys.find((candidate) => candidate.keyId === envelope.keyId);
+  if (!key) {
+    keys = await signingKeyset(true);
+    key = keys.keys.find((candidate) => candidate.keyId === envelope.keyId);
+  }
+  if (
+    !key
+    || key.version !== envelope.keyVersion
+    || key.algorithm !== "Ed25519"
+    || (key.status !== "active" && key.status !== "retired")
+    || (key.status === "active") !== (key.keyId === keys.activeKeyId)
+  ) throw new Error("Backoffice response key mismatch");
   if (envelope.resource !== expectedResource) {
     throw new Error("Backoffice response resource mismatch");
   }
@@ -194,7 +263,25 @@ async function postSigned<T>(
     },
     body: JSON.stringify(body)
   });
-  if (!response.ok) throw new ApiError(response.status, `Backoffice API rejected ${path}`);
+  if (!response.ok) {
+    let detail: {
+      error?: string;
+      state?: string;
+      attemptsRemaining?: number;
+    } = {};
+    try {
+      detail = await response.json() as typeof detail;
+    } catch {
+      detail = {};
+    }
+    throw new ApiError(
+      response.status,
+      `Backoffice API rejected ${path}`,
+      detail.error,
+      detail.state,
+      detail.attemptsRemaining
+    );
+  }
   return verifyEnvelope(await response.json() as SignedEnvelope<T>, resource);
 }
 
@@ -257,10 +344,41 @@ export async function getAuditExport(): Promise<SignedEnvelope<AuditExportPayloa
 
 export function previewApproval(
   approvalId: string,
-  commandDigest: string
+  commandDigest: string,
+  stepUpGrant?: string
 ): Promise<ApprovalPreview> {
   const path = `/bff/api/approvals/${encodeURIComponent(approvalId)}/preview`;
-  return postSigned(path, `approval-preview:${approvalId}`, { commandDigest });
+  return postSigned(path, `approval-preview:${approvalId}`, {
+    commandDigest,
+    ...(stepUpGrant ? { stepUpGrant } : {})
+  });
+}
+
+export function createStepUpChallenge(
+  approvalId: string,
+  commandDigest: string
+): Promise<StepUpChallengePayload> {
+  const encodedApproval = encodeURIComponent(approvalId);
+  return postSigned(
+    `/bff/api/approvals/${encodedApproval}/step-up/challenges`,
+    `step-up-challenge:${approvalId}`,
+    { commandDigest }
+  );
+}
+
+export function verifyStepUpChallenge(
+  approvalId: string,
+  commandDigest: string,
+  challengeId: string,
+  code: string
+): Promise<StepUpVerificationPayload> {
+  const encodedApproval = encodeURIComponent(approvalId);
+  const encodedChallenge = encodeURIComponent(challengeId);
+  return postSigned(
+    `/bff/api/approvals/${encodedApproval}/step-up/challenges/${encodedChallenge}/verify`,
+    `step-up-verification:${approvalId}`,
+    { commandDigest, code }
+  );
 }
 
 export async function createDevSession(role: OperatorRole): Promise<void> {

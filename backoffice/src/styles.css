@@ -752,6 +752,100 @@ tbody tr[data-selected="true"] {
   line-height: 1.5;
 }
 
+.step-up-panel {
+  display: grid;
+  gap: 10px;
+  margin: 0 12px 12px;
+  padding: 11px;
+  border: 1px solid rgba(var(--warning), .3);
+  border-radius: 10px;
+  background: rgba(var(--warning), .05);
+}
+
+.step-up-panel > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.step-up-panel > header strong,
+.step-up-panel > header small {
+  display: block;
+}
+
+.step-up-panel > header strong {
+  font-size: 10px;
+}
+
+.step-up-panel > header small,
+.dev-code small,
+.step-up-input span,
+.step-up-result {
+  color: rgb(var(--muted));
+  font-size: 8px;
+}
+
+.step-up-panel > header small {
+  margin-top: 3px;
+}
+
+.dev-code {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: center;
+  padding: 9px;
+  border-radius: 8px;
+  background: rgb(var(--subtle));
+}
+
+.dev-code span {
+  color: rgb(var(--muted));
+  font-size: 8px;
+}
+
+.dev-code strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  letter-spacing: .14em;
+}
+
+.dev-code small {
+  grid-column: 1 / -1;
+}
+
+.step-up-input {
+  display: grid;
+  gap: 5px;
+}
+
+.step-up-input input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgb(var(--border));
+  border-radius: 8px;
+  color: rgb(var(--text));
+  background: rgb(var(--surface));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .12em;
+}
+
+.button.step-up-button {
+  width: 100%;
+  margin: 0;
+}
+
+.step-up-result {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.step-up-result[data-state="failed"] {
+  color: rgb(var(--danger));
+}
+
 .button {
   min-height: 36px;
   margin: 0 12px;
