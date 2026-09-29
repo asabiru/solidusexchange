@@ -28,6 +28,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
+| `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
 | `tests/postgres-reject-unbalanced.sql` | Database rejection test for an unbalanced journal |
 | `tests/postgres-reject-late-entry.sql` | Database rejection test for post-acceptance entry insertion |
@@ -47,7 +48,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 8. Journal acceptance, idempotency registration, immutable outbox creation and sealing form one database transaction.
 9. Balance views are derived projections; no mutable balance column exists.
 10. Update and delete operations on financial-core records fail closed.
-11. A committed acceptance seal prevents later entries from being appended to the journal.
+11. A committed acceptance seal prevents later entries from being appended, including an entry transaction that overlaps journal acceptance.
 12. JavaScript and PostgreSQL both enforce the registered `journal_type` + `posting_rule_version`, allowed actor and exact per-asset entry pattern.
 13. Projection snapshots and trial balance are deterministically rebuilt from immutable entries.
 
@@ -67,7 +68,7 @@ The future posting service must use one transaction:
 6. insert the acceptance seal with the command digest and final entry count;
 7. commit after deferred database invariants pass.
 
-The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. The migration grants no runtime writer. A future environment-specific role must receive the minimum explicit permissions only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event.
+The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. An entry statement that overlaps creation of its parent journal waits for the foreign key and fails closed because that statement cannot adopt the concurrently committed parent. Any entry statement started after acceptance sees the seal and is rejected by the append trigger. The migrations grant no runtime writer. A future environment-specific role must receive the minimum explicit permissions only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event.
 
 ## Local verification
 
@@ -97,9 +98,16 @@ docker exec -i solidchange-ledger-test \
   psql -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 \
   -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)" \
   < tests/postgres-smoke.sql
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+bash tests/postgres-concurrency.sh
 ```
 
-The `postgres-reject-*` fixtures must exit non-zero because completeness, sealing, precision and posting-rule constraints reject them.
+The concurrency regression begins a balanced late-entry statement while the parent journal acceptance transaction is still open. That statement must fail its foreign key after waiting for acceptance, and a fresh post-acceptance statement must fail against the committed seal. The final journal must retain only its original entries and one seal. The `postgres-reject-*` fixtures must exit non-zero because completeness, sealing, precision and posting-rule constraints reject them.
 
 ## Finance approval gate
 
