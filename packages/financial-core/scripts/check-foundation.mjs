@@ -82,6 +82,7 @@ assert(
 const migration = read("migrations/0001_ledger_foundation.sql");
 const verificationMigration = read("migrations/0002_ledger_verification_views.sql");
 const acceptanceMigration = read("migrations/0003_ledger_acceptance_seal.sql");
+const migrations = `${migration}\n${verificationMigration}\n${acceptanceMigration}`;
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -124,6 +125,10 @@ assert(
 assert(
   !/\bINSERT INTO financial_core\.ledger_assets\b/i.test(migration),
   "Migration must not enable or seed production assets"
+);
+assert(
+  !migrations.includes("GRANT INSERT ON TABLE"),
+  "Migrations must not provision a runtime writer"
 );
 assert(
   !/\bbalance\b/i.test(tableBody(migration, "ledger_accounts")),
@@ -225,10 +230,28 @@ for (const [fixture, evidence] of [
   ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"],
   ["tests/postgres-reject-nonfinite.sql", "ARRAY['Infinity', '-Infinity']"],
   ["tests/postgres-concurrency.sh", "concurrent-late-entry-ok"],
-  ["tests/postgres-concurrency.sh", "pg_try_advisory_lock"]
+  ["tests/postgres-concurrency.sh", "pg_try_advisory_lock"],
+  ["tests/runtime-writer-grants.sql", "REVOKE ALL PRIVILEGES ON ALL TABLES"],
+  ["tests/runtime-writer-grants.sql", "GRANT INSERT ON TABLE"],
+  ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
+  ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
+  ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
+assert(
+  ![
+    "GRANT ALL",
+    "GRANT UPDATE",
+    "GRANT DELETE",
+    "GRANT TRUNCATE",
+    "GRANT REFERENCES",
+    "GRANT TRIGGER",
+    "GRANT CREATE",
+    "GRANT EXECUTE"
+  ].some((grant) => read("tests/runtime-writer-grants.sql").includes(grant)),
+  "Runtime writer profile contains a forbidden grant"
+);
 const commandDigestVector = readJson("tests/command-digest-vector.json");
 const computedCommandDigest = createHash("sha256")
   .update(JSON.stringify(canonicalize(commandDigestVector.command)))
@@ -293,6 +316,7 @@ for (const required of [
   "tests/postgres-reject-precision.sql",
   "tests/postgres-reject-nonfinite.sql",
   "tests/postgres-concurrency.sh",
+  "tests/postgres-runtime-privileges.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
