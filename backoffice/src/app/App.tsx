@@ -11,7 +11,9 @@ import {
   getAuthStatus,
   getCustomers,
   getDashboard,
+  getFraudAlerts,
   getHealth,
+  getInvestigations,
   getKycCases,
   getSession,
   logout,
@@ -22,7 +24,9 @@ import {
   type AuditPayload,
   type CustomersPayload,
   type DashboardPayload,
+  type FraudPayload,
   type HealthPayload,
+  type InvestigationsPayload,
   type KycPayload,
   type SessionPayload,
   type StepUpChallengePayload
@@ -32,6 +36,8 @@ import type {
   ApprovalPreview,
   ApprovalSummary,
   EvidenceItem,
+  FraudAlert,
+  InvestigationCase,
   KycCase,
   Tone,
   WorkflowCheck
@@ -411,6 +417,226 @@ function AmlCaseDetail({ item }: { item: AmlCase }) {
       <div className="safe-action">
         <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
         <p>Sanctions, PEP and KYT outcomes are synthetic; disposition and restriction commands are not installed.</p>
+      </div>
+    </aside>
+  );
+}
+
+function LinkedRecords({ values }: { values: readonly string[] }) {
+  return (
+    <div className="linked-records">
+      {values.map((value) => <span key={value}>{value}</span>)}
+    </div>
+  );
+}
+
+function InvestigationsView({
+  query,
+  data
+}: {
+  query: string;
+  data: InvestigationsPayload;
+}) {
+  const cases = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return data.cases;
+    return data.cases.filter((item) =>
+      [
+        item.id,
+        item.customerId,
+        item.subject,
+        item.category,
+        item.priority,
+        item.state,
+        item.owner,
+        ...item.relatedAlertIds,
+        ...item.relatedCaseIds
+      ].some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [data.cases, query]);
+  const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? "");
+  const selected = cases.find((item) => item.id === selectedId) ?? cases[0];
+
+  return (
+    <>
+      <PageHeading
+        title="Investigations"
+        description="Cross-control case timeline · evidence links · no enforcement or customer mutation"
+      />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>Investigation cases</h2><p>{cases.length} synthetic cases · signed read-only projection</p></div>
+            <Status tone="warning">Decision gated</Status>
+          </header>
+          <TableShell label="Investigation cases">
+            <table>
+              <thead><tr><th>Case</th><th>Subject</th><th>Category</th><th>Priority</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <tbody>
+                {cases.map((item) => (
+                  <tr key={item.id} data-selected={item.id === selected?.id}>
+                    <td>
+                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                        {item.id}
+                      </button>
+                      <small className="cell-note">{item.state}</small>
+                    </td>
+                    <td>{item.subject}<small className="cell-note">{item.customerId}</small></td>
+                    <td>{item.category}</td>
+                    <td><Status tone={item.tone}>{item.priority}</Status></td>
+                    <td className="numeric">{item.exposure}</td>
+                    <td>{item.sla}</td>
+                  </tr>
+                ))}
+                {!cases.length && (
+                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {selected && <InvestigationDetail item={selected} />}
+      </section>
+    </>
+  );
+}
+
+function InvestigationDetail({ item }: { item: InvestigationCase }) {
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.subject} · {item.category}</p></div>
+        <Status tone={item.tone}>{item.state}</Status>
+      </header>
+      <div className="case-summary">
+        <strong>{item.priority} priority</strong>
+        <p>{item.summary}</p>
+      </div>
+      <dl className="detail-list">
+        <div><dt>Owner</dt><dd>{item.owner}</dd></div>
+        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
+        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">Related records</h3>
+      <LinkedRecords values={[...item.relatedAlertIds, ...item.relatedCaseIds]} />
+      <h3 className="detail-section-title">Hypotheses</h3>
+      <ul className="factor-list">
+        {item.hypotheses.map((hypothesis) => <li key={hypothesis}>{hypothesis}</li>)}
+      </ul>
+      <h3 className="detail-section-title">Timeline</h3>
+      <div className="timeline-list">
+        {item.timeline.map((event) => (
+          <div key={event.id}>
+            <span />
+            <div>
+              <strong>{event.action}</strong>
+              <small>{event.occurredAt} · {event.actor}</small>
+              <p>{event.outcome}</p>
+              <code>{event.evidenceDigest}</code>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 className="detail-section-title">Evidence</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <div className="safe-action">
+        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
+        <p>Escalation and restriction commands are absent; the case exposes only signed evidence, hypotheses and immutable audit references.</p>
+      </div>
+    </aside>
+  );
+}
+
+function FraudView({ query, data }: { query: string; data: FraudPayload }) {
+  const alerts = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return data.alerts;
+    return data.alerts.filter((item) =>
+      [
+        item.id,
+        item.customerId,
+        item.subject,
+        item.scenario,
+        item.channel,
+        item.severity,
+        item.state,
+        item.linkedInvestigationId ?? ""
+      ].some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [data.alerts, query]);
+  const [selectedId, setSelectedId] = useState(data.alerts[0]?.id ?? "");
+  const selected = alerts.find((item) => item.id === selectedId) ?? alerts[0];
+
+  return (
+    <>
+      <PageHeading
+        title="Fraud controls"
+        description="Detection signals in monitor-only mode · no blocking, freezing or customer mutation"
+      />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>Fraud alerts</h2><p>{alerts.length} synthetic alerts · control engine disconnected</p></div>
+            <Status tone="info">Monitor-only</Status>
+          </header>
+          <TableShell label="Fraud alerts">
+            <table>
+              <thead><tr><th>Alert</th><th>Subject</th><th>Scenario</th><th>Score</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <tbody>
+                {alerts.map((item) => (
+                  <tr key={item.id} data-selected={item.id === selected?.id}>
+                    <td>
+                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                        {item.id}
+                      </button>
+                      <small className="cell-note">{item.channel} · {item.state}</small>
+                    </td>
+                    <td>{item.subject}<small className="cell-note">{item.customerId}</small></td>
+                    <td>{item.scenario}</td>
+                    <td><Status tone={item.tone}>{item.score} · {item.severity}</Status></td>
+                    <td className="numeric">{item.exposure}</td>
+                    <td>{item.sla}</td>
+                  </tr>
+                ))}
+                {!alerts.length && (
+                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {selected && <FraudDetail item={selected} />}
+      </section>
+    </>
+  );
+}
+
+function FraudDetail({ item }: { item: FraudAlert }) {
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.subject} · {item.channel}</p></div>
+        <Status tone={item.tone}>{item.severity}</Status>
+      </header>
+      <div className="risk-score">
+        <span>Fraud score</span>
+        <strong>{item.score}</strong>
+        <p>{item.scenario} · detected {item.detectedAt}</p>
+      </div>
+      <dl className="detail-list">
+        <div><dt>Control mode</dt><dd><Status tone="info">{item.controlMode}</Status></dd></div>
+        <div><dt>Linked investigation</dt><dd>{item.linkedInvestigationId ?? "Not opened"}</dd></div>
+        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
+        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">Signals</h3>
+      <WorkflowChecks checks={item.signals} />
+      <h3 className="detail-section-title">Evidence</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <div className="safe-action">
+        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "No protected decision requested"}</strong>
+        <p>Rules are observable only. Blocking, freezing, notification and provider actions are not installed in this slice.</p>
       </div>
     </aside>
   );
@@ -851,6 +1077,8 @@ interface WorkspaceData {
   customers: CustomersPayload;
   kyc?: KycPayload;
   aml?: AmlPayload;
+  investigations?: InvestigationsPayload;
+  fraud?: FraudPayload;
   approvals?: ApprovalsPayload;
   audit?: AuditPayload;
 }
@@ -976,18 +1204,20 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, kyc, aml, approvals, audit] = await Promise.all([
+      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
+        hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
+        hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
         hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined),
         hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined)
       ]);
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, kyc, aml, approvals, audit }
+        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit }
       });
     } catch (error) {
       setAccess({
@@ -1150,6 +1380,12 @@ export function App() {
           )}
           {screen === "aml" && access.data.aml && (
             <AmlView query={query} data={access.data.aml} />
+          )}
+          {screen === "investigations" && access.data.investigations && (
+            <InvestigationsView query={query} data={access.data.investigations} />
+          )}
+          {screen === "fraud" && access.data.fraud && (
+            <FraudView query={query} data={access.data.fraud} />
           )}
           {screen === "approvals" && access.data.approvals && (
             <ApprovalsView
