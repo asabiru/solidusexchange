@@ -188,6 +188,8 @@ DO $$
 DECLARE
   debit_total NUMERIC;
   credit_total NUMERIC;
+  difference NUMERIC;
+  is_balanced BOOLEAN;
 BEGIN
   SELECT
     sum(amount) FILTER (WHERE side = 'DEBIT'),
@@ -198,6 +200,37 @@ BEGIN
 
   IF debit_total <> 25.50 OR credit_total <> 25.50 THEN
     RAISE EXCEPTION 'unexpected accepted journal totals';
+  END IF;
+
+  SELECT
+    trial.debit_total,
+    trial.credit_total,
+    trial.difference,
+    trial.balanced
+    INTO debit_total, credit_total, difference, is_balanced
+    FROM financial_core.ledger_trial_balance AS trial
+   WHERE trial.legal_entity_id = 'solidchange-dev'
+     AND trial.asset_code = 'TUSD';
+
+  IF
+    debit_total <> 25.50
+    OR credit_total <> 25.50
+    OR difference <> 0
+    OR is_balanced IS NOT TRUE
+  THEN
+    RAISE EXCEPTION 'unexpected trial balance';
+  END IF;
+
+  SELECT
+    projection.debit_total,
+    projection.credit_total,
+    projection.normal_balance
+    INTO debit_total, credit_total, difference
+    FROM financial_core.ledger_account_projections AS projection
+   WHERE projection.account_id = '10000000-0000-4000-8000-000000000001';
+
+  IF debit_total <> 25.50 OR credit_total <> 0 OR difference <> 25.50 THEN
+    RAISE EXCEPTION 'unexpected account projection';
   END IF;
 END;
 $$;
@@ -212,5 +245,36 @@ BEGIN
   EXCEPTION
     WHEN SQLSTATE '55000' THEN NULL;
   END;
+END;
+$$;
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+      FROM pg_class
+     WHERE oid IN (
+       'financial_core.ledger_account_projections'::REGCLASS,
+       'financial_core.ledger_trial_balance'::REGCLASS
+     )
+       AND NOT ('security_invoker=true' = ANY(COALESCE(reloptions, ARRAY[]::TEXT[])))
+  ) THEN
+    RAISE EXCEPTION 'ledger verification view is not security-invoker';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+      FROM pg_class AS relation
+      CROSS JOIN LATERAL aclexplode(
+        COALESCE(relation.relacl, acldefault('r', relation.relowner))
+      ) AS privilege
+     WHERE relation.oid IN (
+       'financial_core.ledger_account_projections'::REGCLASS,
+       'financial_core.ledger_trial_balance'::REGCLASS
+     )
+       AND privilege.grantee = 0
+  ) THEN
+    RAISE EXCEPTION 'PUBLIC privilege exists on ledger verification view';
+  END IF;
 END;
 $$;

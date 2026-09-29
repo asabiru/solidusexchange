@@ -8,11 +8,13 @@ import { formatAmount, parseAmount } from "../src/amount.mjs";
 import {
   LedgerError,
   createInMemoryLedger,
-  validateChart
+  validateChart,
+  validatePostingRules
 } from "../src/ledger.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const chart = JSON.parse(readFileSync(join(root, "chart-of-accounts.json"), "utf8"));
+const postingRules = JSON.parse(readFileSync(join(root, "posting-rules.json"), "utf8"));
 const accounts = [
   {
     account_id: "10000000-0000-4000-8000-000000000001",
@@ -73,6 +75,7 @@ function createLedger() {
     accounts,
     assets,
     chart,
+    postingRules,
     clock: () => "2026-09-25T10:15:01.000Z"
   });
 }
@@ -124,6 +127,7 @@ function expectLedgerError(action, code) {
 
 test("chart remains draft, dev-only and complete", () => {
   assert.equal(validateChart(chart), true);
+  assert.equal(validatePostingRules(postingRules, chart), true);
   assert.equal(chart.account_definitions.length, 8);
   expectLedgerError(
     () => validateChart({ ...chart, production_override: true }),
@@ -162,6 +166,64 @@ test("posting accepts a balanced journal and derives projections", () => {
     credit_total: "25.500000",
     normal_balance: "25.500000"
   });
+});
+
+test("trial balance and projection rebuilds are deterministic", () => {
+  const ledger = createLedger();
+  ledger.post(
+    command({
+      entries: [
+        ...command().entries,
+        {
+          entry_id: "b0000000-0000-4000-8000-00000000000b",
+          account_id: "50000000-0000-4000-8000-000000000005",
+          asset_code: "TBTC",
+          side: "DEBIT",
+          amount: "0.01000000"
+        },
+        {
+          entry_id: "c0000000-0000-4000-8000-00000000000c",
+          account_id: "60000000-0000-4000-8000-000000000006",
+          asset_code: "TBTC",
+          side: "CREDIT",
+          amount: "0.01000000"
+        }
+      ]
+    })
+  );
+
+  assert.deepEqual(ledger.getTrialBalance(), [
+    {
+      legal_entity_id: "solidchange-dev",
+      asset_code: "TBTC",
+      journal_count: 1,
+      entry_count: 2,
+      debit_total: "0.01000000",
+      credit_total: "0.01000000",
+      difference: "0.00000000",
+      balanced: true
+    },
+    {
+      legal_entity_id: "solidchange-dev",
+      asset_code: "TUSDT",
+      journal_count: 1,
+      entry_count: 2,
+      debit_total: "25.500000",
+      credit_total: "25.500000",
+      difference: "0.000000",
+      balanced: true
+    }
+  ]);
+
+  const first = ledger.rebuildProjectionSnapshot();
+  const second = ledger.rebuildProjectionSnapshot();
+  assert.deepEqual(second, first);
+  assert.match(first.snapshot_digest, /^[0-9a-f]{64}$/);
+  assert.equal(first.as_of_journal_count, 1);
+  assert.deepEqual(
+    first.projections.map((projection) => projection.account_id),
+    accounts.map((account) => account.account_id).sort()
+  );
 });
 
 test("returned journals cannot mutate accepted ledger state", () => {
@@ -294,6 +356,37 @@ test("unsupported actors and hidden command fields are rejected", () => {
   expectLedgerError(
     () => ledger.post(command({ effective_at: "0" })),
     "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ posting_rule_version: "unregistered-rule-v1" })),
+    "LEDGER_POSTING_RULE_NOT_FOUND"
+  );
+  expectLedgerError(
+    () =>
+      ledger.post(
+        command({
+          actor: {
+            type: "OPERATOR",
+            id: "operator-finance-reviewer"
+          }
+        })
+      ),
+    "LEDGER_POSTING_RULE_VIOLATION"
+  );
+  expectLedgerError(
+    () =>
+      ledger.post(
+        command({
+          entries: [
+            command().entries[0],
+            {
+              ...command().entries[1],
+              account_id: "30000000-0000-4000-8000-000000000003"
+            }
+          ]
+        })
+      ),
+    "LEDGER_POSTING_RULE_VIOLATION"
   );
   expectLedgerError(
     () => ledger.post(command({ entries: Array(1001).fill(command().entries[0]) })),
