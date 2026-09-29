@@ -82,7 +82,13 @@ assert(
 const migration = read("migrations/0001_ledger_foundation.sql");
 const verificationMigration = read("migrations/0002_ledger_verification_views.sql");
 const acceptanceMigration = read("migrations/0003_ledger_acceptance_seal.sql");
-const migrations = `${migration}\n${verificationMigration}\n${acceptanceMigration}`;
+const truncationMigration = read("migrations/0004_ledger_truncate_guard.sql");
+const migrations = [
+  migration,
+  verificationMigration,
+  acceptanceMigration,
+  truncationMigration
+].join("\n");
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -115,6 +121,24 @@ for (const table of [
   assert(
     migration.includes(`BEFORE UPDATE OR DELETE ON financial_core.${table}`),
     `${table} is missing append-only protection`
+  );
+}
+for (const table of [
+  "account_definitions",
+  "ledger_accounts",
+  "ledger_assets",
+  "ledger_entries",
+  "ledger_idempotency_registry",
+  "ledger_journal_seals",
+  "ledger_journals",
+  "ledger_outbox_delivery_attempts",
+  "ledger_outbox_events",
+  "posting_rule_registry",
+  "schema_migrations"
+]) {
+  assert(
+    truncationMigration.includes(`BEFORE TRUNCATE ON financial_core.${table}`),
+    `${table} is missing owner-level truncation protection`
   );
 }
 
@@ -243,7 +267,9 @@ for (const [fixture, evidence] of [
   ["tests/runtime-writer-grants.sql", "GRANT INSERT ON TABLE"],
   ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
-  ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"]
+  ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"],
+  ["tests/postgres-owner-truncate-guard.sh", "TRUNCATE TABLE"],
+  ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
@@ -327,6 +353,7 @@ for (const required of [
   "tests/postgres-posting-rule-registry.sh",
   "tests/postgres-concurrency.sh",
   "tests/postgres-runtime-privileges.sh",
+  "tests/postgres-owner-truncate-guard.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);

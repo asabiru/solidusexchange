@@ -25,12 +25,14 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0001_ledger_foundation.sql` | Initial PostgreSQL schema and database invariants |
 | `migrations/0002_ledger_verification_views.sql` | Security-invoker account projection and trial-balance views |
 | `migrations/0003_ledger_acceptance_seal.sql` | Journal sealing, database posting-rule binding and precision alignment |
+| `migrations/0004_ledger_truncate_guard.sql` | Owner-level truncation denial for append-only financial tables |
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
 | `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
+| `tests/postgres-owner-truncate-guard.sh` | Migration-owner truncation denial regression |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -51,7 +53,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 7. The accepted journal stores actor, authorization, policy, posting-rule, correlation and evidence references.
 8. Journal acceptance, idempotency registration, immutable outbox creation and sealing form one database transaction.
 9. Balance views are derived projections; no mutable balance column exists.
-10. Update and delete operations on financial-core records fail closed.
+10. Update, delete and owner-level truncate operations on financial-core records fail closed.
 11. A committed acceptance seal prevents later entries from being appended, including an entry transaction that overlaps journal acceptance.
 12. JavaScript and PostgreSQL both enforce the registered `journal_type` + `posting_rule_version`, allowed actor and exact per-asset entry pattern.
 13. Projection snapshots and trial balance are deterministically rebuilt from immutable entries.
@@ -107,6 +109,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-owner-truncate-guard.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-chart-of-accounts.sh
 
 docker exec -i solidchange-ledger-test \
@@ -142,6 +152,8 @@ bash tests/postgres-runtime-privileges.sh
 The concurrency regression begins a balanced late-entry statement while the parent journal acceptance transaction is still open. That statement must fail its foreign key after waiting for acceptance, and a fresh post-acceptance statement must fail against the committed seal. The final journal must retain only its original entries and one seal. The `postgres-reject-*` fixtures must exit non-zero because completeness, sealing, precision and posting-rule constraints reject them.
 
 The chart regression loads every canonical definition through the real PostgreSQL constraints, exports all persisted policy fields in deterministic C-collation order and rolls the transaction back. Strict equality proves schema compatibility without provisioning chart configuration in migrations or changing runtime state.
+
+The owner truncation regression exercises every append-only configuration and ledger table with the migration owner. Each `TRUNCATE ... CASCADE` must fail through a statement-level trigger, proving that accidental bulk deletion is blocked independently of the future runtime role's denied grants.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
