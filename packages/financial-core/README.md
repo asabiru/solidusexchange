@@ -28,6 +28,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
+| `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
@@ -56,6 +57,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 13. Projection snapshots and trial balance are deterministically rebuilt from immutable entries.
 14. A future posting role must be a non-owner with explicit `SELECT`/`INSERT` grants only; `UPDATE`, `DELETE`, `TRUNCATE`, configuration writes and DDL remain denied.
 15. Every PostgreSQL posting-rule row must exactly match the canonical `posting-rules.json` policy fields.
+16. Every canonical chart definition must satisfy the PostgreSQL schema and survive an exact, deterministic round-trip.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -99,6 +101,14 @@ for migration in migrations/*.sql; do
     < "$migration"
 done
 
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-chart-of-accounts.sh
+
 docker exec -i solidchange-ledger-test \
   psql -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 \
   -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)" \
@@ -130,6 +140,8 @@ bash tests/postgres-runtime-privileges.sh
 ```
 
 The concurrency regression begins a balanced late-entry statement while the parent journal acceptance transaction is still open. That statement must fail its foreign key after waiting for acceptance, and a fresh post-acceptance statement must fail against the committed seal. The final journal must retain only its original entries and one seal. The `postgres-reject-*` fixtures must exit non-zero because completeness, sealing, precision and posting-rule constraints reject them.
+
+The chart regression loads every canonical definition through the real PostgreSQL constraints, exports all persisted policy fields in deterministic C-collation order and rolls the transaction back. Strict equality proves schema compatibility without provisioning chart configuration in migrations or changing runtime state.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
