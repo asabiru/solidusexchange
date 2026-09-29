@@ -1,0 +1,385 @@
+[
+  {
+    "event_id": "018f3f8a-0001-7000-8000-000000000001",
+    "event_type": "UserRegistered",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:00:00Z",
+    "producer": "identity",
+    "aggregate_type": "user",
+    "aggregate_id": "user_001",
+    "correlation_id": "018f3f8a-1000-7000-8000-000000000001",
+    "causation_id": null,
+    "idempotency_key": "registration-demo-001",
+    "actor": {
+      "type": "customer",
+      "subject": "user_001"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "user_id": "user_001",
+      "registration_channel": "web"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0002-7000-8000-000000000002",
+    "event_type": "KycSubmitted",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:01:00Z",
+    "producer": "customer-risk",
+    "aggregate_type": "kyc_case",
+    "aggregate_id": "kyc_001",
+    "correlation_id": "018f3f8a-1000-7000-8000-000000000001",
+    "causation_id": "018f3f8a-0001-7000-8000-000000000001",
+    "idempotency_key": "kyc-submit-demo-001",
+    "actor": {
+      "type": "customer",
+      "subject": "user_001"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "case_id": "kyc_001",
+      "user_id": "user_001",
+      "provider_reference": "provider_case_001",
+      "evidence_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0003-7000-8000-000000000003",
+    "event_type": "KycVerified",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:02:00Z",
+    "producer": "customer-risk",
+    "aggregate_type": "kyc_case",
+    "aggregate_id": "kyc_001",
+    "correlation_id": "018f3f8a-1000-7000-8000-000000000001",
+    "causation_id": "018f3f8a-0002-7000-8000-000000000002",
+    "idempotency_key": null,
+    "actor": {
+      "type": "operator",
+      "subject": "operator_001"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "case_id": "kyc_001",
+      "user_id": "user_001",
+      "decision": "approved",
+      "policy_version": "kyc-v1",
+      "evidence_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0004-7000-8000-000000000004",
+    "event_type": "WalletAddressAssigned",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:03:00Z",
+    "producer": "custody-orchestrator",
+    "aggregate_type": "wallet",
+    "aggregate_id": "wallet_001",
+    "correlation_id": "018f3f8a-1000-7000-8000-000000000001",
+    "causation_id": "018f3f8a-0003-7000-8000-000000000003",
+    "idempotency_key": "wallet-assign-demo-001",
+    "actor": {
+      "type": "service",
+      "subject": "custody_orchestrator"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "wallet_id": "wallet_001",
+      "user_id": "user_001",
+      "asset": "USDT",
+      "network": "TRON",
+      "address_reference": "address_ref_001",
+      "custody_account_id": "custody_account_001"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0005-7000-8000-000000000005",
+    "event_type": "DepositDetected",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:04:00Z",
+    "producer": "deposit-orchestrator",
+    "aggregate_type": "deposit",
+    "aggregate_id": "deposit_001",
+    "correlation_id": "018f3f8a-2000-7000-8000-000000000002",
+    "causation_id": null,
+    "idempotency_key": "deposit-observation-001",
+    "actor": {
+      "type": "provider",
+      "subject": "chain_indexer"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "deposit_id": "deposit_001",
+      "wallet_id": "wallet_001",
+      "asset": "USDT",
+      "network": "TRON",
+      "amount": "125.50",
+      "transaction_reference": "transaction_ref_001",
+      "observed_at": "2026-09-25T12:04:00Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0006-7000-8000-000000000006",
+    "event_type": "DepositConfirmed",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:05:00Z",
+    "producer": "deposit-orchestrator",
+    "aggregate_type": "deposit",
+    "aggregate_id": "deposit_001",
+    "correlation_id": "018f3f8a-2000-7000-8000-000000000002",
+    "causation_id": "018f3f8a-0005-7000-8000-000000000005",
+    "idempotency_key": null,
+    "actor": {
+      "type": "service",
+      "subject": "deposit_orchestrator"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "deposit_id": "deposit_001",
+      "confirmations": 20,
+      "confirmed_at": "2026-09-25T12:05:00Z",
+      "journal_id": null
+    }
+  },
+  {
+    "event_id": "018f3f8a-0007-7000-8000-000000000007",
+    "event_type": "QuoteCreated",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:06:00Z",
+    "producer": "pricing",
+    "aggregate_type": "quote",
+    "aggregate_id": "quote_001",
+    "correlation_id": "018f3f8a-3000-7000-8000-000000000003",
+    "causation_id": null,
+    "idempotency_key": "quote-request-demo-001",
+    "actor": {
+      "type": "customer",
+      "subject": "user_001"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "quote_id": "quote_001",
+      "user_id": "user_001",
+      "from_asset": "USDT",
+      "to_asset": "RUB",
+      "from_amount": "100.00",
+      "to_amount": "8900.00",
+      "fee_amount": "10.00",
+      "pricing_source": "pricing_simulator",
+      "expires_at": "2026-09-25T12:06:30Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0008-7000-8000-000000000008",
+    "event_type": "ExchangeOrderCreated",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:07:00Z",
+    "producer": "exchange",
+    "aggregate_type": "exchange_order",
+    "aggregate_id": "exchange_order_001",
+    "correlation_id": "018f3f8a-3000-7000-8000-000000000003",
+    "causation_id": "018f3f8a-0007-7000-8000-000000000007",
+    "idempotency_key": "exchange-order-demo-001",
+    "actor": {
+      "type": "customer",
+      "subject": "user_001"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "order_id": "exchange_order_001",
+      "quote_id": "quote_001",
+      "user_id": "user_001",
+      "status": "created"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0009-7000-8000-000000000009",
+    "event_type": "ExchangeSettled",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:08:00Z",
+    "producer": "settlement",
+    "aggregate_type": "exchange_order",
+    "aggregate_id": "exchange_order_001",
+    "correlation_id": "018f3f8a-3000-7000-8000-000000000003",
+    "causation_id": "018f3f8a-0008-7000-8000-000000000008",
+    "idempotency_key": null,
+    "actor": {
+      "type": "service",
+      "subject": "settlement_service"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "order_id": "exchange_order_001",
+      "journal_id": "journal_001",
+      "settled_at": "2026-09-25T12:08:00Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0010-7000-8000-000000000010",
+    "event_type": "WithdrawalRequested",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:09:00Z",
+    "producer": "withdrawals",
+    "aggregate_type": "withdrawal",
+    "aggregate_id": "withdrawal_001",
+    "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
+    "causation_id": null,
+    "idempotency_key": "withdrawal-request-demo-001",
+    "actor": {
+      "type": "customer",
+      "subject": "user_001"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "withdrawal_id": "withdrawal_001",
+      "user_id": "user_001",
+      "asset": "USDT",
+      "network": "TRON",
+      "amount": "25.00",
+      "destination_reference": "destination_ref_001"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0011-7000-8000-000000000011",
+    "event_type": "WithdrawalHeld",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:10:00Z",
+    "producer": "withdrawals",
+    "aggregate_type": "withdrawal",
+    "aggregate_id": "withdrawal_001",
+    "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
+    "causation_id": "018f3f8a-0010-7000-8000-000000000010",
+    "idempotency_key": null,
+    "actor": {
+      "type": "service",
+      "subject": "policy_engine"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "withdrawal_id": "withdrawal_001",
+      "hold_id": "hold_001",
+      "reason_code": "MANUAL_REVIEW_REQUIRED"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0012-7000-8000-000000000012",
+    "event_type": "WithdrawalApproved",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:11:00Z",
+    "producer": "approvals",
+    "aggregate_type": "withdrawal",
+    "aggregate_id": "withdrawal_001",
+    "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
+    "causation_id": "018f3f8a-0011-7000-8000-000000000011",
+    "idempotency_key": null,
+    "actor": {
+      "type": "operator",
+      "subject": "operator_002"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "withdrawal_id": "withdrawal_001",
+      "approval_id": "approval_001",
+      "approver_count": 2,
+      "evidence_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0013-7000-8000-000000000013",
+    "event_type": "WithdrawalBroadcast",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:12:00Z",
+    "producer": "custody-orchestrator",
+    "aggregate_type": "withdrawal",
+    "aggregate_id": "withdrawal_001",
+    "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
+    "causation_id": "018f3f8a-0012-7000-8000-000000000012",
+    "idempotency_key": "broadcast-demo-001",
+    "actor": {
+      "type": "service",
+      "subject": "custody_orchestrator"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "withdrawal_id": "withdrawal_001",
+      "transaction_reference": "transaction_ref_002",
+      "broadcast_at": "2026-09-25T12:12:00Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0014-7000-8000-000000000014",
+    "event_type": "PaymentConfirmed",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:13:00Z",
+    "producer": "payments",
+    "aggregate_type": "payment",
+    "aggregate_id": "payment_001",
+    "correlation_id": "018f3f8a-5000-7000-8000-000000000005",
+    "causation_id": null,
+    "idempotency_key": "provider-event-demo-001",
+    "actor": {
+      "type": "provider",
+      "subject": "payment_simulator"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "payment_id": "payment_001",
+      "provider_reference": "provider_payment_001",
+      "amount": "8900.00",
+      "currency": "RUB",
+      "confirmed_at": "2026-09-25T12:13:00Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0015-7000-8000-000000000015",
+    "event_type": "PaymentRefunded",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:14:00Z",
+    "producer": "payments",
+    "aggregate_type": "payment",
+    "aggregate_id": "payment_001",
+    "correlation_id": "018f3f8a-5000-7000-8000-000000000005",
+    "causation_id": "018f3f8a-0014-7000-8000-000000000014",
+    "idempotency_key": "refund-request-demo-001",
+    "actor": {
+      "type": "operator",
+      "subject": "operator_003"
+    },
+    "data_classification": "confidential",
+    "payload": {
+      "payment_id": "payment_001",
+      "refund_id": "refund_001",
+      "amount": "8900.00",
+      "currency": "RUB",
+      "journal_id": "journal_002",
+      "refunded_at": "2026-09-25T12:14:00Z"
+    }
+  },
+  {
+    "event_id": "018f3f8a-0016-7000-8000-000000000016",
+    "event_type": "AmlAlertCreated",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:15:00Z",
+    "producer": "aml",
+    "aggregate_type": "aml_alert",
+    "aggregate_id": "aml_alert_001",
+    "correlation_id": "018f3f8a-6000-7000-8000-000000000006",
+    "causation_id": "018f3f8a-0010-7000-8000-000000000010",
+    "idempotency_key": null,
+    "actor": {
+      "type": "service",
+      "subject": "aml_rules"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "alert_id": "aml_alert_001",
+      "user_id": "user_001",
+      "risk_score": 82,
+      "rule_codes": [
+        "HIGH_RISK_DESTINATION",
+        "VELOCITY_THRESHOLD"
+      ],
+      "case_id": "aml_case_001"
+    }
+  }
+]

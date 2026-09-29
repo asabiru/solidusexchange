@@ -1,0 +1,119 @@
+{
+  "catalog_version": 1,
+  "compatibility_policy": "additive-with-versioned-breaking-changes",
+  "execution_authority": false,
+  "events": [
+    {
+      "name": "UserRegistered",
+      "current_version": 1,
+      "aggregate_type": "user",
+      "owner": "identity",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "KycSubmitted",
+      "current_version": 1,
+      "aggregate_type": "kyc_case",
+      "owner": "customer-risk",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "KycVerified",
+      "current_version": 1,
+      "aggregate_type": "kyc_case",
+      "owner": "customer-risk",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "WalletAddressAssigned",
+      "current_version": 1,
+      "aggregate_type": "wallet",
+      "owner": "custody-orchestrator",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "DepositDetected",
+      "current_version": 1,
+      "aggregate_type": "deposit",
+      "owner": "deposit-orchestrator",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "DepositConfirmed",
+      "current_version": 1,
+      "aggregate_type": "deposit",
+      "owner": "deposit-orchestrator",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "QuoteCreated",
+      "current_version": 1,
+      "aggregate_type": "quote",
+      "owner": "pricing",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "ExchangeOrderCreated",
+      "current_version": 1,
+      "aggregate_type": "exchange_order",
+      "owner": "exchange",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "ExchangeSettled",
+      "current_version": 1,
+      "aggregate_type": "exchange_order",
+      "owner": "settlement",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "WithdrawalRequested",
+      "current_version": 1,
+      "aggregate_type": "withdrawal",
+      "owner": "withdrawals",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "WithdrawalHeld",
+      "current_version": 1,
+      "aggregate_type": "withdrawal",
+      "owner": "withdrawals",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "WithdrawalApproved",
+      "current_version": 1,
+      "aggregate_type": "withdrawal",
+      "owner": "approvals",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "WithdrawalBroadcast",
+      "current_version": 1,
+      "aggregate_type": "withdrawal",
+      "owner": "custody-orchestrator",
+      "data_classification": "highly-confidential"
+    },
+    {
+      "name": "PaymentConfirmed",
+      "current_version": 1,
+      "aggregate_type": "payment",
+      "owner": "payments",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "PaymentRefunded",
+      "current_version": 1,
+      "aggregate_type": "payment",
+      "owner": "payments",
+      "data_classification": "confidential"
+    },
+    {
+      "name": "AmlAlertCreated",
+      "current_version": 1,
+      "aggregate_type": "aml_alert",
+      "owner": "aml",
+      "data_classification": "highly-confidential"
+    }
+  ]
+}

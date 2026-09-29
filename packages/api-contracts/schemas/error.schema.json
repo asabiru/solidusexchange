@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.solidchange.invalid/schemas/error.schema.json",
+  "title": "SolidChange API Error",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "code",
+    "message",
+    "request_id",
+    "details"
+  ],
+  "properties": {
+    "code": {
+      "type": "string",
+      "enum": [
+        "AUTHENTICATION_REQUIRED",
+        "CAPABILITY_DENIED",
+        "IDEMPOTENCY_CONFLICT",
+        "INTERNAL_ERROR",
+        "OPERATION_REQUIRES_REVIEW",
+        "RATE_LIMITED",
+        "VALIDATION_FAILED",
+        "VERSION_UNSUPPORTED"
+      ]
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "details": {
+      "type": "object",
+      "description": "Client-safe structured context. It must not contain stack traces, secrets or raw provider responses."
+    }
+  }
+}

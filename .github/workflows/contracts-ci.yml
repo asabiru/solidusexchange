@@ -1,0 +1,43 @@
+name: API Contracts CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/api-contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/api-contracts/**"
+      - ".github/workflows/contracts-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/api-contracts
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: packages/api-contracts/package-lock.json
+
+      - name: Install locked package
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Validate contracts
+        run: npm test
