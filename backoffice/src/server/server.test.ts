@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
-import type { ApprovalRow } from "../data/demo.js";
+import { demoRepository, type ApprovalRow } from "../data/demo.js";
 import {
   AuditUnavailableError,
   type AuditStore
@@ -39,6 +39,17 @@ describe("backoffice BFF", () => {
       audit: {
         storage: "memory",
         retentionDays: 30
+      },
+      stepUp: {
+        provider: "synthetic-dev",
+        challengeTtlSeconds: 300,
+        grantTtlSeconds: 60,
+        maxAttempts: 3
+      },
+      signing: {
+        backend: "ephemeral-dev",
+        rotationSeconds: 900,
+        retainedVerificationKeys: 2
       }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -76,16 +87,37 @@ describe("backoffice BFF", () => {
     assert.equal(response.status, 200);
     const envelope = await response.json() as {
       keyId: string;
+      keyVersion: number;
       signature: string;
       resource: string;
       payload: { metrics: readonly unknown[]; queues: readonly unknown[] };
     };
-    assert.match(envelope.keyId, /^[a-f0-9]{16}$/);
+    assert.match(envelope.keyId, /^[a-f0-9]{32}$/);
     assert.ok(envelope.signature);
     assert.equal(envelope.resource, "dashboard");
     assert.equal(envelope.payload.metrics.length, 4);
     assert.equal(envelope.payload.queues.length, 4);
     assert.equal(response.headers.get("cache-control"), "no-store");
+
+    const signingKeysResponse = await fetch(`${baseUrl}/bff/api/signing-keys`);
+    assert.equal(signingKeysResponse.status, 200);
+    const signingKeys = await signingKeysResponse.json() as {
+      formatVersion: number;
+      backend: string;
+      activeKeyId: string;
+      keys: readonly {
+        keyId: string;
+        version: number;
+        status: string;
+        publicJwk: JsonWebKey;
+      }[];
+    };
+    assert.equal(signingKeys.formatVersion, 1);
+    assert.equal(signingKeys.backend, "ephemeral-dev");
+    assert.equal(signingKeys.activeKeyId, envelope.keyId);
+    assert.equal(signingKeys.keys[0].version, envelope.keyVersion);
+    assert.equal(signingKeys.keys[0].status, "active");
+    assert.equal("d" in signingKeys.keys[0].publicJwk, false);
   });
 
   it("enforces capabilities from the server session", async () => {
@@ -271,6 +303,226 @@ describe("backoffice BFF", () => {
     assert.equal(envelope.payload.auditAnchor.hash, auditEnvelope.payload.chain.headHash);
   });
 
+  it("binds synthetic step-up proof to one session and consumes it once", async () => {
+    const cookie = await devSession("compliance-lead");
+    const otherCookie = await devSession("compliance-lead");
+    const approvalsResponse = await fetch(`${baseUrl}/bff/api/approvals`, {
+      headers: { cookie }
+    });
+    const approvalsEnvelope = await approvalsResponse.json() as {
+      payload: { approvals: readonly (ApprovalRow & { commandDigest: string })[] };
+    };
+    const approval = approvalsEnvelope.payload.approvals.find(
+      (item) => item.id === "APV-843910"
+    );
+    assert.ok(approval);
+    const path = `${baseUrl}/bff/api/approvals/${approval.id}/step-up/challenges`;
+    const challengeResponse = await fetch(path, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({ commandDigest: approval.commandDigest })
+    });
+    assert.equal(challengeResponse.status, 200);
+    const challengeEnvelope = await challengeResponse.json() as {
+      resource: string;
+      payload: {
+        challengeVersion: number;
+        challengeId: string;
+        provider: string;
+        attemptsRemaining: number;
+        devVerificationCode: string;
+      };
+    };
+    assert.equal(challengeEnvelope.resource, `step-up-challenge:${approval.id}`);
+    assert.equal(challengeEnvelope.payload.challengeVersion, 1);
+    assert.equal(challengeEnvelope.payload.provider, "synthetic-dev");
+    assert.equal(challengeEnvelope.payload.attemptsRemaining, 3);
+    assert.match(challengeEnvelope.payload.devVerificationCode, /^\d{6}$/);
+
+    const verificationPath = `${path}/${challengeEnvelope.payload.challengeId}/verify`;
+    const wrongSession = await fetch(verificationPath, {
+      method: "POST",
+      headers: {
+        cookie: otherCookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        code: challengeEnvelope.payload.devVerificationCode
+      })
+    });
+    assert.equal(wrongSession.status, 409);
+    assert.deepEqual(await wrongSession.json(), {
+      error: "step_up_rejected",
+      state: "binding_mismatch"
+    });
+
+    const wrongCode = challengeEnvelope.payload.devVerificationCode === "999999"
+      ? "000000"
+      : "999999";
+    const retryable = await fetch(verificationPath, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        code: wrongCode
+      })
+    });
+    assert.equal(retryable.status, 409);
+    assert.deepEqual(await retryable.json(), {
+      error: "step_up_rejected",
+      state: "invalid_code",
+      attemptsRemaining: 2
+    });
+
+    const verificationResponse = await fetch(verificationPath, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        code: challengeEnvelope.payload.devVerificationCode
+      })
+    });
+    assert.equal(verificationResponse.status, 200);
+    const verificationEnvelope = await verificationResponse.json() as {
+      resource: string;
+      payload: { grant: string; provider: string };
+    };
+    assert.equal(verificationEnvelope.resource, `step-up-verification:${approval.id}`);
+    assert.equal(verificationEnvelope.payload.provider, "synthetic-dev");
+
+    const replayVerification = await fetch(verificationPath, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        code: challengeEnvelope.payload.devVerificationCode
+      })
+    });
+    assert.equal(replayVerification.status, 409);
+    assert.equal((await replayVerification.json() as { state: string }).state, "challenge_unavailable");
+
+    const previewPath = `${baseUrl}/bff/api/approvals/${approval.id}/preview`;
+    const verifiedPreview = await fetch(previewPath, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        stepUpGrant: verificationEnvelope.payload.grant
+      })
+    });
+    assert.equal(verifiedPreview.status, 200);
+    const verifiedEnvelope = await verifiedPreview.json() as {
+      payload: {
+        policy: {
+          stepUpMfa: string;
+          executable: boolean;
+          blockers: readonly string[];
+        };
+      };
+    };
+    assert.equal(verifiedEnvelope.payload.policy.stepUpMfa, "verified");
+    assert.equal(verifiedEnvelope.payload.policy.executable, false);
+    assert.equal(
+      verifiedEnvelope.payload.policy.blockers.includes("step_up_mfa_required"),
+      false
+    );
+    assert.equal(
+      verifiedEnvelope.payload.policy.blockers.includes("command_client_absent"),
+      true
+    );
+
+    const replayGrant = await fetch(previewPath, {
+      method: "POST",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+        origin
+      },
+      body: JSON.stringify({
+        commandDigest: approval.commandDigest,
+        stepUpGrant: verificationEnvelope.payload.grant
+      })
+    });
+    assert.equal(replayGrant.status, 409);
+    assert.equal((await replayGrant.json() as { state: string }).state, "grant_rejected");
+
+    const executionRoute = await fetch(
+      `${baseUrl}/bff/api/approvals/${approval.id}/execute`,
+      {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          origin
+        },
+        body: JSON.stringify({ commandDigest: approval.commandDigest })
+      }
+    );
+    assert.equal(executionRoute.status, 404);
+  });
+
+  it("denies step-up challenge creation to read-only roles and untrusted origins", async () => {
+    const auditorCookie = await devSession("auditor");
+    const complianceCookie = await devSession("compliance-lead");
+    const approval = demoRepository.approvals().find((item) => item.id === "APV-843910");
+    assert.ok(approval);
+    const path = `${baseUrl}/bff/api/approvals/${approval.id}/step-up/challenges`;
+    const [deniedRole, deniedOrigin, staleDigest] = await Promise.all([
+      fetch(path, {
+        method: "POST",
+        headers: {
+          cookie: auditorCookie,
+          "content-type": "application/json",
+          origin
+        },
+        body: JSON.stringify({ commandDigest: approvalCommandDigest(approval) })
+      }),
+      fetch(path, {
+        method: "POST",
+        headers: {
+          cookie: complianceCookie,
+          "content-type": "application/json",
+          origin: "https://untrusted.example"
+        },
+        body: JSON.stringify({ commandDigest: approvalCommandDigest(approval) })
+      }),
+      fetch(path, {
+        method: "POST",
+        headers: {
+          cookie: complianceCookie,
+          "content-type": "application/json",
+          origin
+        },
+        body: JSON.stringify({ commandDigest: "0".repeat(64) })
+      })
+    ]);
+    assert.equal(deniedRole.status, 403);
+    assert.equal(deniedOrigin.status, 403);
+    assert.equal(staleDigest.status, 409);
+  });
+
   it("denies approval preview to read-only roles", async () => {
     const cookie = await devSession("auditor");
     const response = await fetch(`${baseUrl}/bff/api/approvals/APV-843910/preview`, {
@@ -350,6 +602,17 @@ describe("audit fail-closed boundary", () => {
           storage: "postgresql",
           retentionDays: 2_555,
           databaseUrl: "postgresql://unused@127.0.0.1/unused"
+        },
+        stepUp: {
+          provider: "synthetic-dev",
+          challengeTtlSeconds: 300,
+          grantTtlSeconds: 60,
+          maxAttempts: 3
+        },
+        signing: {
+          backend: "ephemeral-dev",
+          rotationSeconds: 900,
+          retainedVerificationKeys: 2
         }
       }),
       AuditUnavailableError
@@ -376,6 +639,17 @@ describe("audit fail-closed boundary", () => {
         storage: "postgresql",
         retentionDays: 2_555,
         databaseUrl: "postgresql://unused@127.0.0.1/unused"
+      },
+      stepUp: {
+        provider: "synthetic-dev",
+        challengeTtlSeconds: 300,
+        grantTtlSeconds: 60,
+        maxAttempts: 3
+      },
+      signing: {
+        backend: "ephemeral-dev",
+        rotationSeconds: 900,
+        retainedVerificationKeys: 2
       }
     }, unavailable);
     await new Promise<void>((resolve) => isolated.listen(0, "127.0.0.1", resolve));

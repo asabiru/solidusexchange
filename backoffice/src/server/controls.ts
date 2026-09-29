@@ -75,7 +75,8 @@ export function approvalCommandDigest(approval: ApprovalRow): string {
 export function buildApprovalPreview(
   approval: ApprovalRow,
   reviewerSubject: string,
-  audit: readonly AuditEvent[]
+  audit: readonly AuditEvent[],
+  stepUpVerified = false
 ): ApprovalPreview {
   const independentApprover = reviewerSubject !== approval.makerSubject;
   const readyEvidence = approval.evidenceItems.filter((item) => item.status === "ready").length;
@@ -83,7 +84,7 @@ export function buildApprovalPreview(
   const blockers = [
     ...(independentApprover ? [] : ["maker_cannot_approve"]),
     ...(readyEvidence === approval.evidenceItems.length ? [] : ["evidence_incomplete"]),
-    ...(approval.stepUpRequired ? ["step_up_mfa_required"] : []),
+    ...(approval.stepUpRequired && !stepUpVerified ? ["step_up_mfa_required"] : []),
     ...(approval.completedApprovals >= approval.requiredApprovals ? [] : ["approvals_incomplete"]),
     "command_client_absent"
   ];
@@ -111,7 +112,9 @@ export function buildApprovalPreview(
       independentApprover,
       requiredApprovals: approval.requiredApprovals,
       completedApprovals: approval.completedApprovals,
-      stepUpMfa: approval.stepUpRequired ? "required" : "not-required",
+      stepUpMfa: approval.stepUpRequired
+        ? (stepUpVerified ? "verified" : "required")
+        : "not-required",
       commandClient: "absent",
       executable: false,
       blockers

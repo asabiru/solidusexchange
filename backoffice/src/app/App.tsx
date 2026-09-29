@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { roleProfiles, type Capability, type OperatorRole } from "../auth/access";
 import {
   ApiError,
+  createStepUpChallenge,
   createDevSession,
   getAmlCases,
   getApprovals,
@@ -15,6 +16,7 @@ import {
   getSession,
   logout,
   previewApproval,
+  verifyStepUpChallenge,
   type AmlPayload,
   type ApprovalsPayload,
   type AuditPayload,
@@ -22,7 +24,8 @@ import {
   type DashboardPayload,
   type HealthPayload,
   type KycPayload,
-  type SessionPayload
+  type SessionPayload,
+  type StepUpChallengePayload
 } from "../data/client";
 import type {
   AmlCase,
@@ -424,16 +427,89 @@ function ApprovalsView({
   const [selected, setSelected] = useState<ApprovalSummary>(approvals[0]);
   const [preview, setPreview] = useState<ApprovalPreview>();
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "failed">("idle");
+  const [challenge, setChallenge] = useState<StepUpChallengePayload>();
+  const [verificationCode, setVerificationCode] = useState("");
+  const [stepUpState, setStepUpState] = useState<
+    "idle" | "creating" | "challenge" | "retry" | "verifying" | "verified" | "failed" | "locked"
+  >("idle");
+  const operationVersion = useRef(0);
   const mayPreview = capabilities.includes("approvals:preview");
+  const mayStepUp = capabilities.includes("approvals:step-up");
 
   async function loadPreview() {
+    const version = ++operationVersion.current;
     setPreview(undefined);
     setPreviewState("loading");
+    setChallenge(undefined);
+    setVerificationCode("");
+    setStepUpState("idle");
     try {
-      setPreview(await previewApproval(selected.id, selected.commandDigest));
+      const nextPreview = await previewApproval(selected.id, selected.commandDigest);
+      if (version !== operationVersion.current) return;
+      setPreview(nextPreview);
       setPreviewState("idle");
     } catch {
+      if (version !== operationVersion.current) return;
       setPreviewState("failed");
+    }
+  }
+
+  async function startStepUp() {
+    const version = ++operationVersion.current;
+    setPreview(undefined);
+    setChallenge(undefined);
+    setVerificationCode("");
+    setStepUpState("creating");
+    try {
+      const created = await createStepUpChallenge(selected.id, selected.commandDigest);
+      if (version !== operationVersion.current) return;
+      setChallenge(created);
+      setStepUpState("challenge");
+    } catch {
+      if (version !== operationVersion.current) return;
+      setStepUpState("failed");
+    }
+  }
+
+  async function verifyStepUp() {
+    if (!challenge || !/^\d{6}$/.test(verificationCode)) return;
+    const version = ++operationVersion.current;
+    setStepUpState("verifying");
+    try {
+      const verification = await verifyStepUpChallenge(
+        selected.id,
+        selected.commandDigest,
+        challenge.challengeId,
+        verificationCode
+      );
+      if (version !== operationVersion.current) return;
+      const nextPreview = await previewApproval(
+        selected.id,
+        selected.commandDigest,
+        verification.grant
+      );
+      if (version !== operationVersion.current) return;
+      setPreview(nextPreview);
+      setChallenge(undefined);
+      setVerificationCode("");
+      setStepUpState("verified");
+    } catch (error) {
+      if (version !== operationVersion.current) return;
+      if (error instanceof ApiError && error.state === "invalid_code") {
+        setChallenge({
+          ...challenge,
+          attemptsRemaining: error.attemptsRemaining ?? challenge.attemptsRemaining
+        });
+        setStepUpState("retry");
+        return;
+      }
+      setChallenge(undefined);
+      setVerificationCode("");
+      setStepUpState(
+        error instanceof ApiError && error.state === "attempts_exhausted"
+          ? "locked"
+          : "failed"
+      );
     }
   }
 
@@ -460,9 +536,13 @@ function ApprovalsView({
                         className="table-link"
                         type="button"
                         onClick={() => {
+                          operationVersion.current += 1;
                           setSelected(approval);
                           setPreview(undefined);
                           setPreviewState("idle");
+                          setChallenge(undefined);
+                          setVerificationCode("");
+                          setStepUpState("idle");
                         }}
                       >
                         {approval.id}
@@ -505,6 +585,82 @@ function ApprovalsView({
             <strong>Preview не выполняет команду</strong>
             <p>Сервер проверит maker-checker, evidence, step-up MFA и audit anchor, но command client отсутствует.</p>
           </div>
+          {selected.stepUpRequired && (
+            <section className="step-up-panel" aria-label="Synthetic dev-only step-up">
+              <header>
+                <div>
+                  <strong>Synthetic step-up · dev-only</strong>
+                  <small>Не является production MFA или вторым фактором.</small>
+                </div>
+                <Status tone={stepUpState === "verified" ? "success" : "warning"}>
+                  {stepUpState === "verified" ? "verified" : "required"}
+                </Status>
+              </header>
+              {challenge ? (
+                <>
+                  <div className="dev-code">
+                    <span>Dev verification code</span>
+                    <strong>{challenge.devVerificationCode}</strong>
+                    <small>
+                      {challenge.attemptsRemaining} attempts · до{" "}
+                      {new Date(challenge.expiresAt).toLocaleTimeString("ru-RU")}
+                    </small>
+                  </div>
+                  <label className="step-up-input">
+                    <span>Введите 6-значный код</span>
+                    <input
+                      autoComplete="one-time-code"
+                      inputMode="numeric"
+                      maxLength={6}
+                      value={verificationCode}
+                      onChange={(event) => {
+                        setVerificationCode(event.target.value.replace(/\D/g, "").slice(0, 6));
+                      }}
+                    />
+                  </label>
+                  {stepUpState === "retry" && (
+                    <p className="step-up-result" data-state="failed">
+                      Код отклонён. Challenge остаётся активным до лимита попыток.
+                    </p>
+                  )}
+                  <button
+                    className="button step-up-button"
+                    type="button"
+                    disabled={stepUpState === "verifying" || verificationCode.length !== 6}
+                    onClick={() => void verifyStepUp()}
+                  >
+                    {stepUpState === "verifying"
+                      ? "Проверяем и формируем preview…"
+                      : "Проверить одноразовый код"}
+                  </button>
+                </>
+              ) : stepUpState === "verified" ? (
+                <p className="step-up-result">
+                  Одноразовый grant использован для этого preview и больше не принимается.
+                </p>
+              ) : (
+                <>
+                  {(stepUpState === "failed" || stepUpState === "locked") && (
+                    <p className="step-up-result" data-state="failed">
+                      {stepUpState === "locked"
+                        ? "Challenge заблокирован после исчерпания попыток."
+                        : "Challenge отклонён или устарел. Запустите новый."}
+                    </p>
+                  )}
+                  <button
+                    className="button step-up-button"
+                    type="button"
+                    disabled={!mayStepUp || stepUpState === "creating"}
+                    onClick={() => void startStepUp()}
+                  >
+                    {stepUpState === "creating"
+                      ? "Создаём challenge…"
+                      : "Начать synthetic step-up"}
+                  </button>
+                </>
+              )}
+            </section>
+          )}
           <button
             className="button primary"
             type="button"
@@ -549,7 +705,9 @@ function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) {
             {preview.policy.independentApprover ? "independent" : "conflict"}
           </Status></dd>
         </div>
-        <div><dt>Step-up MFA</dt><dd><Status tone="warning">{preview.policy.stepUpMfa}</Status></dd></div>
+        <div><dt>Step-up MFA</dt><dd><Status tone={preview.policy.stepUpMfa === "verified" ? "success" : "warning"}>
+          {preview.policy.stepUpMfa}
+        </Status></dd></div>
         <div><dt>Evidence</dt><dd>{preview.evidence.ready} / {preview.evidence.total}</dd></div>
         <div><dt>Audit anchor</dt><dd>#{preview.auditAnchor.sequence} · {preview.auditAnchor.hash.slice(0, 10)}…</dd></div>
       </dl>
