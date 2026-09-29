@@ -1,0 +1,546 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SolidChange Canonical API",
+    "version": "1.0.0-draft",
+    "description": "Contract-only foundation. It does not expose live providers, financial commands or production customer data."
+  },
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+  "servers": [
+    {
+      "url": "https://api.sandbox.invalid",
+      "description": "Non-routable contract placeholder"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Metadata",
+      "description": "Non-sensitive API contract metadata."
+    },
+    {
+      "name": "Customer",
+      "description": "Authenticated customer namespace. Financial commands are absent."
+    },
+    {
+      "name": "Operator",
+      "description": "Authenticated staff namespace with separate credentials and policy."
+    }
+  ],
+  "paths": {
+    "/api/v1/meta": {
+      "get": {
+        "operationId": "getApiMetadata",
+        "tags": [
+          "Metadata"
+        ],
+        "summary": "Describe the active API contract boundary",
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Contract metadata",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiMetadata"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/session": {
+      "get": {
+        "operationId": "getCustomerSession",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the authenticated customer session",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer session",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/capabilities": {
+      "get": {
+        "operationId": "getCustomerCapabilities",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read customer capabilities without executing commands",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer capabilities",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/operator/session": {
+      "get": {
+        "operationId": "getOperatorSession",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read the authenticated operator session",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator session",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/operator/capabilities": {
+      "get": {
+        "operationId": "getOperatorCapabilities",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read deny-by-default operator capabilities",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator capabilities",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "CustomerBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "OIDC access token",
+        "description": "Future customer identity token. Production issuer remains approval-gated."
+      },
+      "OperatorBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "OIDC access token",
+        "description": "Separate staff identity token. It must never be accepted as a customer credential."
+      }
+    },
+    "parameters": {
+      "RequestId": {
+        "name": "X-Request-Id",
+        "in": "header",
+        "required": true,
+        "description": "Caller-generated UUIDv7 correlation identifier.",
+        "schema": {
+          "$ref": "#/components/schemas/UuidV7"
+        }
+      },
+      "ClientVersion": {
+        "name": "X-Client-Version",
+        "in": "header",
+        "required": true,
+        "description": "Semantic or release version of the calling client.",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      },
+      "Platform": {
+        "name": "X-Platform",
+        "in": "header",
+        "required": true,
+        "description": "Calling application class.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "web",
+            "ios",
+            "android",
+            "telegram-mini-app",
+            "operator-web",
+            "service"
+          ]
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Required for future command requests. The key is scoped to actor, operation and canonical payload digest.",
+        "schema": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9._:-]+$"
+        }
+      }
+    },
+    "headers": {
+      "RequestId": {
+        "required": true,
+        "description": "Canonical request identifier echoed by the server.",
+        "schema": {
+          "$ref": "#/components/schemas/UuidV7"
+        }
+      },
+      "RetryAfter": {
+        "required": false,
+        "description": "Seconds until the caller may retry.",
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "schemas": {
+      "UuidV7": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "ApiMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "api_version",
+          "contract_version",
+          "runtime_boundary",
+          "financial_commands_enabled",
+          "production_providers_enabled"
+        ],
+        "properties": {
+          "api_version": {
+            "const": "v1"
+          },
+          "contract_version": {
+            "type": "string",
+            "const": "1.0.0-draft"
+          },
+          "runtime_boundary": {
+            "const": "contract-only"
+          },
+          "financial_commands_enabled": {
+            "const": false
+          },
+          "production_providers_enabled": {
+            "const": false
+          }
+        }
+      },
+      "SessionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "actor_type",
+          "scopes",
+          "expires_at"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "actor_type": {
+            "type": "string",
+            "enum": [
+              "customer",
+              "operator",
+              "service"
+            ]
+          },
+          "scopes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CapabilitiesView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "capabilities",
+          "commands_enabled"
+        ],
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "commands_enabled": {
+            "const": false
+          }
+        }
+      },
+      "Error": {
+        "$ref": "./schemas/error.schema.json"
+      }
+    },
+    "responses": {
+      "Unauthenticated": {
+        "description": "Authentication is required or expired.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The actor is authenticated but lacks the capability.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "The request exceeded an applicable rate or velocity policy.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/RetryAfter"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "A client-safe internal error without exception details.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-solidchange-runtime-boundary": "contract-only",
+  "x-solidchange-financial-commands-enabled": false,
+  "x-solidchange-production-providers-enabled": false,
+  "x-solidchange-planned-namespaces": {
+    "customer": [
+      "/api/v1/customer/auth",
+      "/api/v1/customer/kyc",
+      "/api/v1/customer/users",
+      "/api/v1/customer/wallets",
+      "/api/v1/customer/deposits",
+      "/api/v1/customer/withdrawals",
+      "/api/v1/customer/quotes",
+      "/api/v1/customer/exchange-orders",
+      "/api/v1/customer/payments",
+      "/api/v1/customer/cards",
+      "/api/v1/customer/notifications",
+      "/api/v1/customer/support"
+    ],
+    "operator": [
+      "/api/v1/operator/admin"
+    ]
+  }
+}
