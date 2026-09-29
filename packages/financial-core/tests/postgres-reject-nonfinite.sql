@@ -42,6 +42,45 @@ INSERT INTO financial_core.ledger_journals (
   '2026-09-25T10:50:01.000Z'
 );
 
+DO $$
+DECLARE
+  nonfinite_amount TEXT;
+BEGIN
+  FOREACH nonfinite_amount IN ARRAY ARRAY['Infinity', '-Infinity']
+  LOOP
+    BEGIN
+      INSERT INTO financial_core.ledger_entries (
+        entry_id,
+        journal_id,
+        sequence_number,
+        account_id,
+        legal_entity_id,
+        asset_code,
+        side,
+        amount,
+        created_at
+      ) VALUES (
+        '26000000-0000-4000-8000-000000000026',
+        '24000000-0000-4000-8000-000000000024',
+        1,
+        '10000000-0000-4000-8000-000000000001',
+        'solidchange-dev',
+        'TUSDT',
+        'DEBIT',
+        nonfinite_amount::NUMERIC,
+        '2026-09-25T10:50:01.000Z'
+      );
+      RAISE EXCEPTION 'non-finite amount % unexpectedly accepted', nonfinite_amount;
+    EXCEPTION
+      WHEN SQLSTATE '22003' THEN
+        IF SQLERRM <> 'amount must be finite' THEN
+          RAISE;
+        END IF;
+    END;
+  END LOOP;
+END;
+$$;
+
 INSERT INTO financial_core.ledger_entries (
   entry_id,
   journal_id,

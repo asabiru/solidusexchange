@@ -60,8 +60,8 @@ INSERT INTO financial_core.posting_rule_registry (
   'synthetic-test-only',
   ARRAY['SERVICE'],
   '[
-    {"definition_code": "PROVIDER_PAYABLE_LIABILITY", "side": "CREDIT"},
-    {"definition_code": "TREASURY_ASSET", "side": "DEBIT"}
+    {"definition_code": "TREASURY_ASSET", "side": "DEBIT"},
+    {"definition_code": "PROVIDER_PAYABLE_LIABILITY", "side": "CREDIT"}
   ]'::JSONB,
   'Exercise balanced posting and projection controls with synthetic assets only.',
   '2026-09-25T10:00:00.000Z'
@@ -184,6 +184,15 @@ BEGIN
     RAISE EXCEPTION 'journal % actor is not permitted by its posting rule', target_journal_id
       USING ERRCODE = '23514';
   END IF;
+
+  SELECT jsonb_agg(
+    rule_entry.value
+    ORDER BY
+      rule_entry.value ->> 'definition_code' COLLATE "C",
+      rule_entry.value ->> 'side' COLLATE "C"
+  )
+    INTO expected_entry_pattern
+    FROM jsonb_array_elements(expected_entry_pattern) AS rule_entry(value);
 
   SELECT count(*)
     INTO entry_count

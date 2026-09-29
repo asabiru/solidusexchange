@@ -2,7 +2,7 @@
 \if :{?command_vector_json}
 \else
   \echo 'command_vector_json psql variable is required'
-  \quit 3
+  SELECT 1 / 0;
 \endif
 
 INSERT INTO financial_core.ledger_assets (

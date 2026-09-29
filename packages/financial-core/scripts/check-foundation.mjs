@@ -181,6 +181,7 @@ for (const required of [
   "missing its immutable acceptance seal",
   "amount must be finite",
   "COLLATE \"C\"",
+  "jsonb_array_elements(expected_entry_pattern)",
   "NEW.amount::TEXT"
 ]) {
   assert(
@@ -221,7 +222,8 @@ for (const [fixture, evidence] of [
   ["tests/postgres-reject-rule-pattern.sql", "'CREDIT'"],
   ["tests/postgres-precision-boundary.sql", "repeat('9', 76)"],
   ["tests/postgres-reject-precision.sql", "repeat('9', 77)"],
-  ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"]
+  ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"],
+  ["tests/postgres-reject-nonfinite.sql", "ARRAY['Infinity', '-Infinity']"]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
@@ -243,6 +245,10 @@ assert(
   read("tests/ledger.test.mjs").includes("tests\", \"command-digest-vector.json") &&
     read("tests/postgres-smoke.sql").includes(":'command_vector_json'::JSONB"),
   "JavaScript and PostgreSQL evidence must consume the canonical command digest vector"
+);
+assert(
+  read("tests/postgres-smoke.sql").includes("SELECT 1 / 0"),
+  "PostgreSQL smoke must fail when the canonical command vector is missing"
 );
 
 const readme = read("README.md");
