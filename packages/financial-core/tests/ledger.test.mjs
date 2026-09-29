@@ -1,0 +1,302 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+import { formatAmount, parseAmount } from "../src/amount.mjs";
+import {
+  LedgerError,
+  createInMemoryLedger,
+  validateChart
+} from "../src/ledger.mjs";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const chart = JSON.parse(readFileSync(join(root, "chart-of-accounts.json"), "utf8"));
+const accounts = [
+  {
+    account_id: "10000000-0000-4000-8000-000000000001",
+    definition_code: "TREASURY_ASSET",
+    legal_entity_id: "solidchange-dev",
+    asset_code: "TUSDT",
+    owner_reference: "treasury-location-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  },
+  {
+    account_id: "20000000-0000-4000-8000-000000000002",
+    definition_code: "PROVIDER_PAYABLE_LIABILITY",
+    legal_entity_id: "solidchange-dev",
+    asset_code: "TUSDT",
+    owner_reference: "provider-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  },
+  {
+    account_id: "30000000-0000-4000-8000-000000000003",
+    definition_code: "CUSTOMER_SETTLED_LIABILITY",
+    legal_entity_id: "solidchange-dev",
+    asset_code: "TUSDT",
+    owner_reference: "customer-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  },
+  {
+    account_id: "40000000-0000-4000-8000-000000000004",
+    definition_code: "TREASURY_ASSET",
+    legal_entity_id: "other-entity-dev",
+    asset_code: "TUSDT",
+    owner_reference: "other-treasury-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  },
+  {
+    account_id: "50000000-0000-4000-8000-000000000005",
+    definition_code: "TREASURY_ASSET",
+    legal_entity_id: "solidchange-dev",
+    asset_code: "TBTC",
+    owner_reference: "btc-treasury-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  },
+  {
+    account_id: "60000000-0000-4000-8000-000000000006",
+    definition_code: "PROVIDER_PAYABLE_LIABILITY",
+    legal_entity_id: "solidchange-dev",
+    asset_code: "TBTC",
+    owner_reference: "btc-provider-demo",
+    created_at: "2026-09-25T10:00:00.000Z"
+  }
+];
+const assets = [
+  { code: "TUSDT", scale: 6 },
+  { code: "TBTC", scale: 8 }
+];
+
+function createLedger() {
+  return createInMemoryLedger({
+    accounts,
+    assets,
+    chart,
+    clock: () => "2026-09-25T10:15:01.000Z"
+  });
+}
+
+function command(overrides = {}) {
+  return {
+    journal_id: "70000000-0000-4000-8000-000000000007",
+    journal_type: "SYNTHETIC_PROVIDER_POSITION",
+    legal_entity_id: "solidchange-dev",
+    idempotency_key: "provider-position-demo-001",
+    correlation_id: "80000000-0000-4000-8000-000000000008",
+    causation_id: null,
+    effective_at: "2026-09-25T10:15:00.000Z",
+    actor: {
+      type: "SERVICE",
+      id: "financial-core-test"
+    },
+    authorization_reference: "policy-decision-demo-001",
+    policy_version: "ledger-dev-policy-v1",
+    posting_rule_version: "synthetic-provider-position-v1",
+    source: {
+      type: "synthetic-test",
+      reference: "provider-position-source-001",
+      evidence_digest: "a".repeat(64)
+    },
+    entries: [
+      {
+        entry_id: "90000000-0000-4000-8000-000000000009",
+        account_id: "10000000-0000-4000-8000-000000000001",
+        asset_code: "TUSDT",
+        side: "DEBIT",
+        amount: "25.500000"
+      },
+      {
+        entry_id: "a0000000-0000-4000-8000-00000000000a",
+        account_id: "20000000-0000-4000-8000-000000000002",
+        asset_code: "TUSDT",
+        side: "CREDIT",
+        amount: "25.500000"
+      }
+    ],
+    ...overrides
+  };
+}
+
+function expectLedgerError(action, code) {
+  assert.throws(action, (error) => error instanceof LedgerError && error.code === code);
+}
+
+test("chart remains draft, dev-only and complete", () => {
+  assert.equal(validateChart(chart), true);
+  assert.equal(chart.account_definitions.length, 8);
+  expectLedgerError(
+    () => validateChart({ ...chart, production_override: true }),
+    "LEDGER_VALIDATION_FAILED"
+  );
+});
+
+test("decimal conversion is exact and scale-aware", () => {
+  assert.equal(parseAmount("25.500000", 6), 25_500_000n);
+  assert.equal(formatAmount(25_500_000n, 6), "25.500000");
+  assert.equal(formatAmount(-125n, 2), "-1.25");
+  assert.throws(() => parseAmount("0.000001", 5), RangeError);
+  assert.throws(() => parseAmount("0", 6), RangeError);
+  assert.throws(() => parseAmount("1e6", 6), TypeError);
+});
+
+test("posting accepts a balanced journal and derives projections", () => {
+  const ledger = createLedger();
+  const accepted = ledger.post(command());
+
+  assert.match(accepted.command_digest, /^[0-9a-f]{64}$/);
+  assert.equal(accepted.accepted_at, "2026-09-25T10:15:01.000Z");
+  assert.deepEqual(ledger.getProjection(accounts[0].account_id), {
+    account_id: accounts[0].account_id,
+    asset_code: "TUSDT",
+    as_of_journal_count: 1,
+    debit_total: "25.500000",
+    credit_total: "0.000000",
+    normal_balance: "25.500000"
+  });
+  assert.deepEqual(ledger.getProjection(accounts[1].account_id), {
+    account_id: accounts[1].account_id,
+    asset_code: "TUSDT",
+    as_of_journal_count: 1,
+    debit_total: "0.000000",
+    credit_total: "25.500000",
+    normal_balance: "25.500000"
+  });
+});
+
+test("returned journals cannot mutate accepted ledger state", () => {
+  const ledger = createLedger();
+  const accepted = ledger.post(command());
+  accepted.entries[0].amount = "999.000000";
+
+  assert.equal(ledger.listJournals()[0].entries[0].amount, "25.500000");
+  assert.equal(ledger.getProjection(accounts[0].account_id).normal_balance, "25.500000");
+});
+
+test("exact idempotent replay returns the original accepted journal", () => {
+  const ledger = createLedger();
+  const first = ledger.post(command());
+  const replay = ledger.post(command());
+
+  assert.deepEqual(replay, first);
+  assert.equal(ledger.listJournals().length, 1);
+});
+
+test("idempotency key reuse with changed content fails closed", () => {
+  const ledger = createLedger();
+  ledger.post(command());
+  const changed = command({
+    source: {
+      type: "synthetic-test",
+      reference: "provider-position-source-002",
+      evidence_digest: "b".repeat(64)
+    }
+  });
+
+  expectLedgerError(() => ledger.post(changed), "LEDGER_IDEMPOTENCY_CONFLICT");
+});
+
+test("duplicate journal ID under another idempotency key is rejected", () => {
+  const ledger = createLedger();
+  ledger.post(command());
+  const duplicate = command({ idempotency_key: "provider-position-demo-002" });
+
+  expectLedgerError(() => ledger.post(duplicate), "LEDGER_DUPLICATE_JOURNAL");
+});
+
+test("unbalanced postings are rejected per asset", () => {
+  const ledger = createLedger();
+  const unbalanced = command({
+    entries: [
+      command().entries[0],
+      { ...command().entries[1], amount: "25.499999" }
+    ]
+  });
+
+  expectLedgerError(() => ledger.post(unbalanced), "LEDGER_UNBALANCED_JOURNAL");
+});
+
+test("a journal may contain multiple assets only when each asset balances", () => {
+  const ledger = createLedger();
+  const multiAsset = command({
+    entries: [
+      ...command().entries,
+      {
+        entry_id: "b0000000-0000-4000-8000-00000000000b",
+        account_id: "50000000-0000-4000-8000-000000000005",
+        asset_code: "TBTC",
+        side: "DEBIT",
+        amount: "0.01000000"
+      },
+      {
+        entry_id: "c0000000-0000-4000-8000-00000000000c",
+        account_id: "60000000-0000-4000-8000-000000000006",
+        asset_code: "TBTC",
+        side: "CREDIT",
+        amount: "0.01000000"
+      }
+    ]
+  });
+
+  assert.equal(ledger.post(multiAsset).entries.length, 4);
+});
+
+test("cross-entity entries are rejected", () => {
+  const ledger = createLedger();
+  const crossEntity = command({
+    entries: [
+      command().entries[0],
+      {
+        ...command().entries[1],
+        account_id: "40000000-0000-4000-8000-000000000004"
+      }
+    ]
+  });
+
+  expectLedgerError(() => ledger.post(crossEntity), "LEDGER_BOUNDARY_VIOLATION");
+});
+
+test("account asset and amount scale mismatches are rejected", () => {
+  const ledger = createLedger();
+  const wrongAsset = command({
+    entries: [
+      command().entries[0],
+      { ...command().entries[1], asset_code: "TBTC" }
+    ]
+  });
+  expectLedgerError(() => ledger.post(wrongAsset), "LEDGER_BOUNDARY_VIOLATION");
+
+  const excessiveScale = command({
+    entries: command().entries.map((entry) => ({ ...entry, amount: "1.0000001" }))
+  });
+  expectLedgerError(() => ledger.post(excessiveScale), "LEDGER_AMOUNT_INVALID");
+});
+
+test("unsupported actors and hidden command fields are rejected", () => {
+  const ledger = createLedger();
+  expectLedgerError(() => ledger.post(null), "LEDGER_VALIDATION_FAILED");
+  expectLedgerError(
+    () => ledger.post(command({ actor: { type: "AI_AGENT", id: "autonomous-agent" } })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post({ ...command(), direct_balance: "25.500000" }),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post({ ...command(), accepted_at: "2026-09-25T10:15:01.000Z" }),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ idempotency_key: "invalid\nkey-value" })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ effective_at: "0" })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ entries: Array(1001).fill(command().entries[0]) })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+});
