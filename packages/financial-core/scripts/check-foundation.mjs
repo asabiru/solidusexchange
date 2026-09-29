@@ -229,6 +229,10 @@ for (const [fixture, evidence] of [
   ["tests/postgres-reject-precision.sql", "repeat('9', 77)"],
   ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"],
   ["tests/postgres-reject-nonfinite.sql", "ARRAY['Infinity', '-Infinity']"],
+  ["tests/postgres-posting-rule-registry.sql", "jsonb_build_object"],
+  ["tests/postgres-posting-rule-registry.sql", "journal_type COLLATE \"C\""],
+  ["scripts/verify-postgres-rule-registry.mjs", "assert.deepStrictEqual"],
+  ["scripts/verify-postgres-rule-registry.mjs", "postgres-posting-rule-registry-ok"],
   ["tests/postgres-concurrency.sh", "concurrent-late-entry-ok"],
   ["tests/postgres-concurrency.sh", "pg_try_advisory_lock"],
   ["tests/runtime-writer-grants.sql", "REVOKE ALL PRIVILEGES ON ALL TABLES"],
@@ -315,6 +319,7 @@ for (const required of [
   "tests/postgres-reject-rule-pattern.sql",
   "tests/postgres-reject-precision.sql",
   "tests/postgres-reject-nonfinite.sql",
+  "tests/postgres-posting-rule-registry.sh",
   "tests/postgres-concurrency.sh",
   "tests/postgres-runtime-privileges.sh",
   "tests/command-digest-vector.json"
