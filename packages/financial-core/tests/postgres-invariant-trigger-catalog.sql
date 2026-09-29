@@ -39,6 +39,7 @@ WHERE relation_namespace.nspname = 'financial_core'
     'assert_journal_complete',
     'reject_sealed_journal_entry',
     'validate_account',
+    'validate_delivery_attempt_reference',
     'validate_entry_amount'
   )
   AND trigger.tgisinternal = FALSE;

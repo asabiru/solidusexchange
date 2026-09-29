@@ -28,6 +28,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0004_ledger_truncate_guard.sql` | Owner-level truncation denial for append-only financial tables |
 | `migrations/0005_ledger_trigger_replication_guard.sql` | Immutability triggers enforced in every PostgreSQL replication mode |
 | `migrations/0006_ledger_invariant_replication_guard.sql` | Insert and acceptance invariant triggers enforced in every replication mode |
+| `migrations/0007_ledger_replica_reference_guard.sql` | Critical foreign-key references mirrored by always-enabled user triggers |
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
@@ -38,6 +39,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger policy comparison |
 | `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
+| `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -66,6 +68,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 15. Every PostgreSQL posting-rule row must exactly match the canonical `posting-rules.json` policy fields.
 16. Every canonical chart definition must satisfy the PostgreSQL schema and survive an exact, deterministic round-trip.
 17. User-defined account, amount, seal and journal-completeness safeguards fail closed in every PostgreSQL replication mode.
+18. Account, asset, posting-rule, journal, ledger-account and outbox references remain fail closed when replica mode suppresses PostgreSQL's internal foreign-key triggers.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -160,6 +163,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-replica-reference-integrity.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-posting-rule-registry.sh
 
 PGHOST=127.0.0.1 \
@@ -187,9 +198,11 @@ The owner truncation regression exercises every append-only configuration and le
 
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
 
-The trigger-function catalog regression requires an exact match for all five installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
+The trigger-function catalog regression requires an exact match for all six installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
 
-The invariant-trigger catalog regression requires all eight user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode. PostgreSQL's internal replication semantics remain outside this dev-only evidence.
+The invariant-trigger catalog regression requires all nine user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
+
+The replica reference-integrity regression accounts for PostgreSQL suppressing internal foreign-key triggers in replica mode. Always-enabled user triggers mirror the critical acceptance references and reject missing account definitions, assets, posting rules, journals, matching ledger accounts and outbox events. This is synthetic database evidence, not approval to configure replication or production roles.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 

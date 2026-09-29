@@ -89,13 +89,17 @@ const replicationGuardMigration = read(
 const invariantReplicationGuardMigration = read(
   "migrations/0006_ledger_invariant_replication_guard.sql"
 );
+const replicaReferenceGuardMigration = read(
+  "migrations/0007_ledger_replica_reference_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
   acceptanceMigration,
   truncationMigration,
   replicationGuardMigration,
-  invariantReplicationGuardMigration
+  invariantReplicationGuardMigration,
+  replicaReferenceGuardMigration
 ].join("\n");
 for (const required of [
   "CREATE SCHEMA financial_core",
@@ -173,6 +177,22 @@ for (const trigger of [
   assert(
     invariantReplicationGuardMigration.includes(`ENABLE ALWAYS TRIGGER ${trigger}`),
     `${trigger} is not enforced in every replication mode`
+  );
+}
+for (const required of [
+  "account definition %/% does not exist",
+  "asset % does not exist",
+  "journal % does not exist",
+  "references missing posting rule",
+  "entries violate reference integrity",
+  "CREATE FUNCTION financial_core.validate_delivery_attempt_reference",
+  "outbox event % does not exist",
+  "ENABLE ALWAYS TRIGGER ledger_delivery_attempts_validate_outbox",
+  "REVOKE ALL ON FUNCTION financial_core.validate_delivery_attempt_reference() FROM PUBLIC"
+]) {
+  assert(
+    replicaReferenceGuardMigration.includes(required),
+    `Replica reference guard is missing ${required}`
   );
 }
 for (const table of [
@@ -370,6 +390,22 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-invariant-trigger-catalog.sh",
     "postgres-replica-mode-invariants-ok"
+  ],
+  [
+    "tests/postgres-replica-reference-integrity.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-replica-reference-integrity.sh",
+    "account definition 1/MISSING_DEFINITION does not exist"
+  ],
+  [
+    "tests/postgres-replica-reference-integrity.sh",
+    "entries violate reference integrity"
+  ],
+  [
+    "tests/postgres-replica-reference-integrity.sh",
+    "postgres-replica-mode-reference-integrity-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -458,6 +494,7 @@ for (const required of [
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
   "tests/postgres-invariant-trigger-catalog.sh",
+  "tests/postgres-replica-reference-integrity.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
