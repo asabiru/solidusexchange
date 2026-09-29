@@ -85,12 +85,85 @@ describe("backoffice BFF", () => {
     const allowed = await fetch(`${baseUrl}/bff/api/customers`, {
       headers: { cookie }
     });
-    const denied = await fetch(`${baseUrl}/bff/api/approvals`, {
-      headers: { cookie }
-    });
+    const [kyc, aml, approvals] = await Promise.all([
+      fetch(`${baseUrl}/bff/api/kyc`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/aml`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/approvals`, { headers: { cookie } })
+    ]);
     assert.equal(allowed.status, 200);
-    assert.equal(denied.status, 403);
-    assert.deepEqual(await denied.json(), { error: "capability_denied" });
+    assert.equal(kyc.status, 403);
+    assert.equal(aml.status, 403);
+    assert.equal(approvals.status, 403);
+    assert.deepEqual(await kyc.json(), { error: "capability_denied" });
+    assert.deepEqual(await aml.json(), { error: "capability_denied" });
+    assert.deepEqual(await approvals.json(), { error: "capability_denied" });
+  });
+
+  it("serves signed customer-risk workflows without mutation routes", async () => {
+    const cookie = await devSession("aml-investigator");
+    const [kycResponse, amlResponse, mutationResponse] = await Promise.all([
+      fetch(`${baseUrl}/bff/api/kyc`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/aml`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/aml`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          origin
+        },
+        body: JSON.stringify({ decision: "close" })
+      })
+    ]);
+    assert.equal(kycResponse.status, 200);
+    assert.equal(amlResponse.status, 200);
+    assert.equal(mutationResponse.status, 404);
+    assert.deepEqual(await mutationResponse.json(), { error: "not_found" });
+
+    const kycEnvelope = await kycResponse.json() as {
+      resource: string;
+      payload: {
+        cases: readonly {
+          id: string;
+          linkedApprovalId?: string;
+          evidenceItems: readonly { status: string; digest: string }[];
+          checks: readonly { status: string }[];
+        }[];
+      };
+    };
+    const amlEnvelope = await amlResponse.json() as {
+      resource: string;
+      payload: {
+        cases: readonly {
+          id: string;
+          linkedApprovalId?: string;
+          evidenceItems: readonly { status: string; digest: string }[];
+          screenings: readonly { status: string }[];
+        }[];
+      };
+    };
+    assert.equal(kycEnvelope.resource, "kyc-cases");
+    assert.equal(amlEnvelope.resource, "aml-cases");
+    assert.equal(kycEnvelope.payload.cases.length, 3);
+    assert.equal(amlEnvelope.payload.cases.length, 3);
+    assert.equal(kycEnvelope.payload.cases[0].linkedApprovalId, "APV-843899");
+    assert.equal(amlEnvelope.payload.cases[0].linkedApprovalId, "APV-843921");
+    assert.ok(kycEnvelope.payload.cases[0].evidenceItems.every((item) => item.digest.startsWith("sha256:")));
+    assert.ok(kycEnvelope.payload.cases[0].checks.some((item) => item.status === "review"));
+    assert.ok(amlEnvelope.payload.cases[0].evidenceItems.some((item) => item.status === "missing"));
+    assert.ok(amlEnvelope.payload.cases[0].screenings.some((item) => item.status === "match"));
+    assert.equal(kycResponse.headers.get("cache-control"), "no-store");
+  });
+
+  it("allows compliance, AML and audit roles to read customer-risk evidence", async () => {
+    for (const role of ["compliance-lead", "aml-investigator", "auditor"] as const) {
+      const cookie = await devSession(role);
+      const [kycResponse, amlResponse] = await Promise.all([
+        fetch(`${baseUrl}/bff/api/kyc`, { headers: { cookie } }),
+        fetch(`${baseUrl}/bff/api/aml`, { headers: { cookie } })
+      ]);
+      assert.equal(kycResponse.status, 200, `${role} should read KYC cases`);
+      assert.equal(amlResponse.status, 200, `${role} should read AML cases`);
+    }
   });
 
   it("serves a signed hash-chained audit view to audit roles", async () => {
@@ -108,7 +181,7 @@ describe("backoffice BFF", () => {
     };
     assert.equal(envelope.resource, "audit");
     assert.equal(envelope.payload.chain.verified, true);
-    assert.equal(envelope.payload.chain.length, 4);
+    assert.equal(envelope.payload.chain.length, 6);
     assert.equal(envelope.payload.events[0].previousHash, "0".repeat(64));
     assert.equal(envelope.payload.chain.headHash, envelope.payload.events.at(-1)?.hash);
   });

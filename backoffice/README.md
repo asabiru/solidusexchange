@@ -13,6 +13,9 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - Audit events form an immutable in-memory SHA-256 chain returned through a signed read-only envelope.
 - Approval command previews are digest-bound, same-origin, capability-gated and side-effect-free.
 - Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up MFA status.
+- Customers 360, KYC/KYB and AML/KYT screens expose synthetic risk, screening, evidence and linked-approval records.
+- Customer-risk endpoints are separately capability-gated; Support L1 is denied KYC and AML case access.
+- KYC, sanctions, PEP and KYT records contain no raw identity documents or provider payloads.
 - Every preview remains non-executable because no protected command client exists.
 - No financial, custody, KYC, AML, provider or customer command client exists.
 - Navigation and actions are deny-by-default through explicit role capabilities.
@@ -68,5 +71,5 @@ The startup-generated signing key and synthetic in-memory audit chain are intent
 
 ## Next slices
 
-1. Customers, KYC and AML case workflows.
-2. Durable audit storage and a real step-up MFA provider.
+1. Durable audit storage and a real step-up MFA provider.
+2. Provider adapter contracts and operator commands, only after separate security and regulatory approval.

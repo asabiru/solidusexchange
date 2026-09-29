@@ -3,23 +3,35 @@ import { roleProfiles, type Capability, type OperatorRole } from "../auth/access
 import {
   ApiError,
   createDevSession,
+  getAmlCases,
   getApprovals,
   getAudit,
   getAuthStatus,
   getCustomers,
   getDashboard,
   getHealth,
+  getKycCases,
   getSession,
   logout,
   previewApproval,
+  type AmlPayload,
   type ApprovalsPayload,
   type AuditPayload,
   type CustomersPayload,
   type DashboardPayload,
   type HealthPayload,
+  type KycPayload,
   type SessionPayload
 } from "../data/client";
-import type { ApprovalPreview, ApprovalSummary, Tone } from "../data/demo";
+import type {
+  AmlCase,
+  ApprovalPreview,
+  ApprovalSummary,
+  EvidenceItem,
+  KycCase,
+  Tone,
+  WorkflowCheck
+} from "../data/demo";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 
@@ -99,48 +111,304 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.customers;
     return data.customers.filter((customer) =>
-      [customer.id, customer.name, customer.country, customer.nextAction]
+      [
+        customer.id,
+        customer.name,
+        customer.country,
+        customer.segment,
+        customer.nextAction,
+        customer.kycCaseId
+      ]
         .some((value) => value.toLocaleLowerCase("ru").includes(normalized))
     );
   }, [data.customers, query]);
+  const [selectedId, setSelectedId] = useState(data.customers[0]?.id ?? "");
+  const selected = customers.find((customer) => customer.id === selectedId) ?? customers[0];
 
   return (
     <>
       <PageHeading
         title="Customers 360"
-        description="Read-only customer risk projection · документы и PII не загружаются"
+        description="Masked risk projection · case links only · документы и PII не загружаются"
       />
-      <article className="panel">
-        <header className="panel-heading">
-          <div><h2>Клиенты</h2><p>{customers.length} synthetic profiles</p></div>
-          <Status tone="info">Masked data</Status>
-        </header>
-        <TableShell label="Список клиентов">
-          <table>
-            <thead><tr><th>Клиент</th><th>KYC</th><th>Risk</th><th>30d volume</th><th>Next action</th></tr></thead>
-            <tbody>
-              {customers.map((customer, index) => (
-                <tr key={customer.id} data-selected={index === 0}>
-                  <td>
-                    <button className="person" type="button">
-                      <span>{customer.initials}</span>
-                      <span><strong>{customer.name}</strong><small>{customer.id} · {customer.country}</small></span>
-                    </button>
-                  </td>
-                  <td><Status tone={customer.kyc === "Verified" ? "success" : "warning"}>{customer.kyc}</Status></td>
-                  <td><Status tone={customer.tone}>{customer.risk}</Status></td>
-                  <td className="numeric">{customer.volume}</td>
-                  <td>{customer.nextAction}</td>
-                </tr>
-              ))}
-              {!customers.length && (
-                <tr><td colSpan={5}><div className="empty">Совпадений не найдено</div></td></tr>
-              )}
-            </tbody>
-          </table>
-        </TableShell>
-      </article>
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>Клиенты</h2><p>{customers.length} synthetic masked profiles</p></div>
+            <Status tone="info">No raw PII</Status>
+          </header>
+          <TableShell label="Список клиентов">
+            <table>
+              <thead><tr><th>Клиент</th><th>KYC / KYB</th><th>Risk</th><th>30d volume</th><th>Next action</th></tr></thead>
+              <tbody>
+                {customers.map((customer) => (
+                  <tr key={customer.id} data-selected={customer.id === selected?.id}>
+                    <td>
+                      <button
+                        className="person"
+                        type="button"
+                        onClick={() => setSelectedId(customer.id)}
+                      >
+                        <span>{customer.initials}</span>
+                        <span>
+                          <strong>{customer.name}</strong>
+                          <small>{customer.id} · {customer.country} · {customer.segment}</small>
+                        </span>
+                      </button>
+                    </td>
+                    <td><Status tone={customer.kyc === "Verified" ? "success" : "warning"}>{customer.kyc}</Status></td>
+                    <td><Status tone={customer.tone}>{customer.risk} · {customer.riskScore}</Status></td>
+                    <td className="numeric">{customer.volume}</td>
+                    <td>{customer.nextAction}</td>
+                  </tr>
+                ))}
+                {!customers.length && (
+                  <tr><td colSpan={5}><div className="empty">Совпадений не найдено</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {selected && (
+          <aside className="panel case-detail">
+            <header className="panel-heading">
+              <div><h2>{selected.name}</h2><p>{selected.id} · {selected.kind}</p></div>
+              <Status tone={selected.tone}>{selected.risk}</Status>
+            </header>
+            <div className="risk-score">
+              <span>Risk score</span>
+              <strong>{selected.riskScore}</strong>
+              <p>{selected.riskReason}</p>
+            </div>
+            <dl className="detail-list">
+              <div><dt>KYC / KYB case</dt><dd>{selected.kycCaseId}</dd></div>
+              <div><dt>Open AML cases</dt><dd>{selected.openAmlCases}</dd></div>
+              <div><dt>Restriction</dt><dd>{selected.restriction}</dd></div>
+              <div><dt>Last reviewed</dt><dd>{selected.lastReviewedAt}</dd></div>
+            </dl>
+            <div className="safe-action">
+              <strong>Read-only customer projection</strong>
+              <p>Документы, полные идентификаторы и provider payloads отсутствуют; решения связаны с отдельными case и approval records.</p>
+            </div>
+          </aside>
+        )}
+      </section>
     </>
+  );
+}
+
+function EvidenceList({ items }: { items: readonly EvidenceItem[] }) {
+  return (
+    <div className="evidence-list">
+      {items.map((item) => (
+        <div key={item.id}>
+          <span>
+            <strong>{item.label}</strong>
+            <small>{item.digest}</small>
+          </span>
+          <Status tone={item.status === "ready" ? "success" : "danger"}>{item.status}</Status>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function WorkflowChecks({ checks }: { checks: readonly WorkflowCheck[] }) {
+  return (
+    <div className="check-list">
+      {checks.map((check) => (
+        <div key={check.id}>
+          <span>
+            <strong>{check.label}</strong>
+            <small>{check.detail}</small>
+          </span>
+          <Status tone={check.tone}>{check.status}</Status>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function KycView({ query, data }: { query: string; data: KycPayload }) {
+  const cases = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return data.cases;
+    return data.cases.filter((item) =>
+      [
+        item.id,
+        item.customerId,
+        item.subject,
+        item.type,
+        item.status,
+        item.stage,
+        item.jurisdiction
+      ].some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [data.cases, query]);
+  const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? "");
+  const selected = cases.find((item) => item.id === selectedId) ?? cases[0];
+
+  return (
+    <>
+      <PageHeading
+        title="KYC / KYB"
+        description="Signed case projection · evidence readiness · approval-linked decisions"
+      />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no provider calls</p></div>
+            <Status tone="info">Read-only</Status>
+          </header>
+          <TableShell label="KYC и KYB cases">
+            <table>
+              <thead><tr><th>Case</th><th>Subject</th><th>Stage</th><th>Risk</th><th>SLA</th></tr></thead>
+              <tbody>
+                {cases.map((item) => (
+                  <tr key={item.id} data-selected={item.id === selected?.id}>
+                    <td>
+                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                        {item.id}
+                      </button>
+                      <small className="cell-note">{item.type} · {item.status}</small>
+                    </td>
+                    <td>{item.subject}<small className="cell-note">{item.customerId}</small></td>
+                    <td>{item.stage}</td>
+                    <td><Status tone={item.tone}>{item.riskRating} · {item.riskScore}</Status></td>
+                    <td>{item.sla}</td>
+                  </tr>
+                ))}
+                {!cases.length && (
+                  <tr><td colSpan={5}><div className="empty">Совпадений не найдено</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {selected && <KycCaseDetail item={selected} />}
+      </section>
+    </>
+  );
+}
+
+function KycCaseDetail({ item }: { item: KycCase }) {
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.subject} · {item.jurisdiction}</p></div>
+        <Status tone={item.tone}>{item.status}</Status>
+      </header>
+      <div className="risk-score">
+        <span>Risk score</span>
+        <strong>{item.riskScore}</strong>
+        <p>{item.stage} · owner: {item.owner}</p>
+      </div>
+      <dl className="detail-list">
+        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>SLA</dt><dd>{item.sla}</dd></div>
+        {item.uboSummary && <div><dt>UBO</dt><dd>{item.uboSummary}</dd></div>}
+        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">Evidence</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <h3 className="detail-section-title">Checks</h3>
+      <WorkflowChecks checks={item.checks} />
+      <div className="safe-action">
+        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
+        <p>Case decision cannot be executed here; this view exposes only signed evidence and policy references.</p>
+      </div>
+    </aside>
+  );
+}
+
+function AmlView({ query, data }: { query: string; data: AmlPayload }) {
+  const cases = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return data.cases;
+    return data.cases.filter((item) =>
+      [
+        item.id,
+        item.customerId,
+        item.subject,
+        item.source,
+        item.severity,
+        item.state
+      ].some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [data.cases, query]);
+  const [selectedId, setSelectedId] = useState(data.cases[0]?.id ?? "");
+  const selected = cases.find((item) => item.id === selectedId) ?? cases[0];
+
+  return (
+    <>
+      <PageHeading
+        title="AML / KYT"
+        description="Sanctions, PEP and KYT review · evidence-linked · no disposition mutation"
+      />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · provider payloads absent</p></div>
+            <Status tone="warning">Decision gated</Status>
+          </header>
+          <TableShell label="AML cases">
+            <table>
+              <thead><tr><th>Case</th><th>Subject</th><th>Source</th><th>Severity</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <tbody>
+                {cases.map((item) => (
+                  <tr key={item.id} data-selected={item.id === selected?.id}>
+                    <td>
+                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                        {item.id}
+                      </button>
+                      <small className="cell-note">{item.state}</small>
+                    </td>
+                    <td>{item.subject}<small className="cell-note">{item.customerId}</small></td>
+                    <td>{item.source}</td>
+                    <td><Status tone={item.tone}>{item.severity}</Status></td>
+                    <td className="numeric">{item.exposure}</td>
+                    <td>{item.sla}</td>
+                  </tr>
+                ))}
+                {!cases.length && (
+                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {selected && <AmlCaseDetail item={selected} />}
+      </section>
+    </>
+  );
+}
+
+function AmlCaseDetail({ item }: { item: AmlCase }) {
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.subject} · {item.source}</p></div>
+        <Status tone={item.tone}>{item.state}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>Owner</dt><dd>{item.owner}</dd></div>
+        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
+        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">Screening</h3>
+      <WorkflowChecks checks={item.screenings} />
+      <h3 className="detail-section-title">Risk factors</h3>
+      <ul className="factor-list">
+        {item.riskFactors.map((factor) => <li key={factor}>{factor}</li>)}
+      </ul>
+      <h3 className="detail-section-title">Evidence</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <div className="safe-action">
+        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
+        <p>Sanctions, PEP and KYT outcomes are synthetic; disposition and restriction commands are not installed.</p>
+      </div>
+    </aside>
   );
 }
 
@@ -381,6 +649,8 @@ interface WorkspaceData {
   session: SessionPayload;
   dashboard: DashboardPayload;
   customers: CustomersPayload;
+  kyc?: KycPayload;
+  aml?: AmlPayload;
   approvals?: ApprovalsPayload;
   audit?: AuditPayload;
 }
@@ -506,16 +776,18 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, approvals, audit] = await Promise.all([
+      const [dashboard, customers, kyc, aml, approvals, audit] = await Promise.all([
         getDashboard(),
         getCustomers(),
+        hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
+        hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined),
         hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined)
       ]);
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, approvals, audit }
+        data: { session, dashboard, customers, kyc, aml, approvals, audit }
       });
     } catch (error) {
       setAccess({
@@ -672,6 +944,12 @@ export function App() {
           {screen === "dashboard" && <DashboardView data={access.data.dashboard} />}
           {screen === "customers" && (
             <CustomersView query={query} data={access.data.customers} />
+          )}
+          {screen === "kyc" && access.data.kyc && (
+            <KycView query={query} data={access.data.kyc} />
+          )}
+          {screen === "aml" && access.data.aml && (
+            <AmlView query={query} data={access.data.aml} />
           )}
           {screen === "approvals" && access.data.approvals && (
             <ApprovalsView

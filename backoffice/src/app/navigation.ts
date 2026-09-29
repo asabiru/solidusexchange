@@ -39,8 +39,8 @@ export interface NavigationItem {
 export const navigation: readonly NavigationItem[] = [
   { id: "dashboard", label: "Operations center", group: "Workspace", capability: "dashboard:read", implemented: true },
   { id: "customers", label: "Customers 360", group: "Customer risk", capability: "customers:read", implemented: true },
-  { id: "kyc", label: "KYC / KYB", group: "Customer risk", implemented: false },
-  { id: "aml", label: "AML / KYT", group: "Customer risk", implemented: false },
+  { id: "kyc", label: "KYC / KYB", group: "Customer risk", capability: "kyc:read", implemented: true },
+  { id: "aml", label: "AML / KYT", group: "Customer risk", capability: "aml:read", implemented: true },
   { id: "investigations", label: "Investigations", group: "Customer risk", implemented: false },
   { id: "fraud", label: "Fraud controls", group: "Customer risk", implemented: false },
   { id: "operations", label: "Operations", group: "Money movement", implemented: false },
