@@ -86,12 +86,16 @@ const truncationMigration = read("migrations/0004_ledger_truncate_guard.sql");
 const replicationGuardMigration = read(
   "migrations/0005_ledger_trigger_replication_guard.sql"
 );
+const invariantReplicationGuardMigration = read(
+  "migrations/0006_ledger_invariant_replication_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
   acceptanceMigration,
   truncationMigration,
-  replicationGuardMigration
+  replicationGuardMigration,
+  invariantReplicationGuardMigration
 ].join("\n");
 for (const required of [
   "CREATE SCHEMA financial_core",
@@ -153,6 +157,21 @@ for (const trigger of [
 ]) {
   assert(
     replicationGuardMigration.includes(`ENABLE ALWAYS TRIGGER ${trigger}`),
+    `${trigger} is not enforced in every replication mode`
+  );
+}
+for (const trigger of [
+  "ledger_accounts_validate",
+  "ledger_entries_validate_amount",
+  "ledger_entries_reject_sealed_journal",
+  "ledger_journals_complete",
+  "ledger_entries_complete",
+  "ledger_idempotency_complete",
+  "ledger_outbox_complete",
+  "ledger_journal_seals_complete"
+]) {
+  assert(
+    invariantReplicationGuardMigration.includes(`ENABLE ALWAYS TRIGGER ${trigger}`),
     `${trigger} is not enforced in every replication mode`
   );
 }
@@ -334,6 +353,23 @@ for (const [fixture, evidence] of [
   [
     "scripts/verify-postgres-trigger-function-catalog.mjs",
     "postgres-trigger-function-catalog-ok"
+  ],
+  ["tests/postgres-invariant-trigger-catalog.sql", "pg_catalog.pg_trigger"],
+  [
+    "scripts/verify-postgres-invariant-trigger-catalog.mjs",
+    "assert.deepStrictEqual"
+  ],
+  [
+    "scripts/verify-postgres-invariant-trigger-catalog.mjs",
+    "postgres-invariant-trigger-catalog-ok"
+  ],
+  [
+    "tests/postgres-invariant-trigger-catalog.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-invariant-trigger-catalog.sh",
+    "postgres-replica-mode-invariants-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -421,6 +457,7 @@ for (const required of [
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
+  "tests/postgres-invariant-trigger-catalog.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
