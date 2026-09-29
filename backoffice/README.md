@@ -21,7 +21,10 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - Challenge codes are stored only as hashes; the dev code is returned solely to make the synthetic browser flow testable.
 - Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up status.
 - Customers 360, KYC/KYB and AML/KYT screens expose synthetic risk, screening, evidence and linked-approval records.
-- Customer-risk endpoints are separately capability-gated; Support L1 is denied KYC and AML case access.
+- Investigations correlate synthetic fraud alerts, customer-risk cases, evidence digests, immutable timeline events and linked approvals.
+- Fraud controls expose signed detection signals in `monitor-only` mode; no blocking, freezing, notification or provider action exists.
+- Customer-risk endpoints are separately capability-gated; Support L1 is denied KYC, AML, investigation and fraud access.
+- Fraud Investigator is a restricted role with customer, investigation, fraud and approval-read access only.
 - KYC, sanctions, PEP and KYT records contain no raw identity documents or provider payloads.
 - Every preview remains non-executable because no protected command client exists.
 - No financial, custody, KYC, AML, provider or customer command client exists.
@@ -141,6 +144,6 @@ The process-local key ring, synthetic step-up provider and seed data remain inte
 
 ## Next slices
 
-1. Investigations/Fraud workflows.
-2. Provider adapter contracts and operator commands, only after separate security and regulatory approval.
-3. Production MFA and KMS/HSM integration, only after separate security, infrastructure and Owner/CTO approval.
+1. Provider adapter contracts and operator commands, only after separate security and regulatory approval.
+2. Production MFA and KMS/HSM integration, only after separate security, infrastructure and Owner/CTO approval.
+3. Independently approved deployment, recovery and production data-governance controls.

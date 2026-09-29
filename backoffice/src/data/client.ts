@@ -5,6 +5,8 @@ import type {
   ApprovalSummary,
   AuditEvent,
   CustomerRow,
+  FraudAlert,
+  InvestigationCase,
   KycCase,
   Metric,
   QueueRow
@@ -64,6 +66,14 @@ export interface KycPayload {
 
 export interface AmlPayload {
   cases: readonly AmlCase[];
+}
+
+export interface InvestigationsPayload {
+  cases: readonly InvestigationCase[];
+}
+
+export interface FraudPayload {
+  alerts: readonly FraudAlert[];
 }
 
 export interface ApprovalsPayload {
@@ -321,6 +331,14 @@ export function getKycCases(): Promise<KycPayload> {
 
 export function getAmlCases(): Promise<AmlPayload> {
   return getSigned("/bff/api/aml", "aml-cases");
+}
+
+export function getInvestigations(): Promise<InvestigationsPayload> {
+  return getSigned("/bff/api/investigations", "investigations");
+}
+
+export function getFraudAlerts(): Promise<FraudPayload> {
+  return getSigned("/bff/api/fraud-alerts", "fraud-alerts");
 }
 
 export function getApprovals(): Promise<ApprovalsPayload> {

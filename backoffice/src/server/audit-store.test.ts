@@ -20,7 +20,7 @@ describe("audit store", () => {
     const store = new MemoryAuditStore(demoRepository.auditSource(), 30);
     const before = await store.snapshot();
     const appended = await store.append({
-      eventId: "AUD-000154",
+      eventId: "AUD-000156",
       occurredAt: "2026-09-29T10:30:00.000Z",
       actor: "service:test",
       action: "audit.tested",
@@ -29,8 +29,8 @@ describe("audit store", () => {
       evidenceDigest: "sha256:9c04304c88dd"
     }, before.status.headHash);
     const snapshot = await store.snapshot();
-    assert.equal(appended.sequence, 7);
-    assert.equal(snapshot.status.length, 7);
+    assert.equal(appended.sequence, 9);
+    assert.equal(snapshot.status.length, 9);
     assert.equal(verifyAuditChain(snapshot.events), true);
   });
 

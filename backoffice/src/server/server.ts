@@ -34,6 +34,7 @@ const validRoles = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
   "aml-investigator",
+  "fraud-investigator",
   "auditor"
 ]);
 
@@ -362,6 +363,22 @@ export function createBackofficeServer(
       if (request.method === "GET" && path === "/bff/api/aml") {
         if (!authorized(request, response, "aml:read")) return;
         signed(response, "aml-cases", { cases: demoRepository.amlCases() });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/investigations") {
+        if (!authorized(request, response, "investigations:read")) return;
+        signed(response, "investigations", {
+          cases: demoRepository.investigationCases()
+        });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/fraud-alerts") {
+        if (!authorized(request, response, "fraud:read")) return;
+        signed(response, "fraud-alerts", {
+          alerts: demoRepository.fraudAlerts()
+        });
         return;
       }
 

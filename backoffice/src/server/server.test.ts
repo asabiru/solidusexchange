@@ -125,17 +125,23 @@ describe("backoffice BFF", () => {
     const allowed = await fetch(`${baseUrl}/bff/api/customers`, {
       headers: { cookie }
     });
-    const [kyc, aml, approvals] = await Promise.all([
+    const [kyc, aml, investigations, fraud, approvals] = await Promise.all([
       fetch(`${baseUrl}/bff/api/kyc`, { headers: { cookie } }),
       fetch(`${baseUrl}/bff/api/aml`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/investigations`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/fraud-alerts`, { headers: { cookie } }),
       fetch(`${baseUrl}/bff/api/approvals`, { headers: { cookie } })
     ]);
     assert.equal(allowed.status, 200);
     assert.equal(kyc.status, 403);
     assert.equal(aml.status, 403);
+    assert.equal(investigations.status, 403);
+    assert.equal(fraud.status, 403);
     assert.equal(approvals.status, 403);
     assert.deepEqual(await kyc.json(), { error: "capability_denied" });
     assert.deepEqual(await aml.json(), { error: "capability_denied" });
+    assert.deepEqual(await investigations.json(), { error: "capability_denied" });
+    assert.deepEqual(await fraud.json(), { error: "capability_denied" });
     assert.deepEqual(await approvals.json(), { error: "capability_denied" });
   });
 
@@ -206,6 +212,94 @@ describe("backoffice BFF", () => {
     }
   });
 
+  it("serves signed investigations and fraud alerts without mutation routes", async () => {
+    const cookie = await devSession("fraud-investigator");
+    const [investigationsResponse, fraudResponse, mutationResponse] = await Promise.all([
+      fetch(`${baseUrl}/bff/api/investigations`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/fraud-alerts`, { headers: { cookie } }),
+      fetch(`${baseUrl}/bff/api/fraud-alerts`, {
+        method: "POST",
+        headers: {
+          cookie,
+          "content-type": "application/json",
+          origin
+        },
+        body: JSON.stringify({ decision: "block" })
+      })
+    ]);
+    assert.equal(investigationsResponse.status, 200);
+    assert.equal(fraudResponse.status, 200);
+    assert.equal(mutationResponse.status, 404);
+    assert.deepEqual(await mutationResponse.json(), { error: "not_found" });
+
+    const investigationsEnvelope = await investigationsResponse.json() as {
+      resource: string;
+      payload: {
+        cases: readonly {
+          id: string;
+          relatedAlertIds: readonly string[];
+          linkedApprovalId?: string;
+          auditEvidenceDigest: string;
+          timeline: readonly { evidenceDigest: string }[];
+          evidenceItems: readonly { digest: string; status: string }[];
+        }[];
+      };
+    };
+    const fraudEnvelope = await fraudResponse.json() as {
+      resource: string;
+      payload: {
+        alerts: readonly {
+          id: string;
+          controlMode: string;
+          linkedInvestigationId?: string;
+          signals: readonly { status: string }[];
+          evidenceItems: readonly { digest: string }[];
+        }[];
+      };
+    };
+    assert.equal(investigationsEnvelope.resource, "investigations");
+    assert.equal(fraudEnvelope.resource, "fraud-alerts");
+    assert.equal(investigationsEnvelope.payload.cases.length, 3);
+    assert.equal(fraudEnvelope.payload.alerts.length, 4);
+    const alertIds = new Set(fraudEnvelope.payload.alerts.map((alert) => alert.id));
+    assert.ok(investigationsEnvelope.payload.cases.every(
+      (item) => item.relatedAlertIds.every((alertId) => alertIds.has(alertId))
+    ));
+    assert.equal(investigationsEnvelope.payload.cases[0].linkedApprovalId, "APV-843921");
+    assert.ok(investigationsEnvelope.payload.cases[0].timeline.every(
+      (event) => event.evidenceDigest.startsWith("sha256:")
+    ));
+    assert.ok(investigationsEnvelope.payload.cases[0].evidenceItems.some(
+      (item) => item.status === "missing"
+    ));
+    assert.equal(fraudEnvelope.payload.alerts[0].controlMode, "monitor-only");
+    assert.equal(fraudEnvelope.payload.alerts[0].linkedInvestigationId, "INV-43018");
+    assert.ok(fraudEnvelope.payload.alerts[0].signals.some(
+      (signal) => signal.status === "match"
+    ));
+    assert.ok(fraudEnvelope.payload.alerts[0].evidenceItems.every(
+      (item) => item.digest.startsWith("sha256:")
+    ));
+    assert.equal(investigationsResponse.headers.get("cache-control"), "no-store");
+  });
+
+  it("allows compliance, AML, fraud and audit roles to read investigations", async () => {
+    for (const role of [
+      "compliance-lead",
+      "aml-investigator",
+      "fraud-investigator",
+      "auditor"
+    ] as const) {
+      const cookie = await devSession(role);
+      const [investigationsResponse, fraudResponse] = await Promise.all([
+        fetch(`${baseUrl}/bff/api/investigations`, { headers: { cookie } }),
+        fetch(`${baseUrl}/bff/api/fraud-alerts`, { headers: { cookie } })
+      ]);
+      assert.equal(investigationsResponse.status, 200, `${role} should read investigations`);
+      assert.equal(fraudResponse.status, 200, `${role} should read fraud alerts`);
+    }
+  });
+
   it("serves a signed hash-chained audit view to audit roles", async () => {
     const cookie = await devSession("auditor");
     const response = await fetch(`${baseUrl}/bff/api/audit`, {
@@ -215,15 +309,29 @@ describe("backoffice BFF", () => {
     const envelope = await response.json() as {
       resource: string;
       payload: {
-        events: readonly { sequence: number; hash: string; previousHash: string }[];
+        events: readonly {
+          sequence: number;
+          hash: string;
+          previousHash: string;
+          resource: string;
+          evidenceDigest: string;
+        }[];
         chain: { verified: boolean; length: number; headHash: string };
       };
     };
     assert.equal(envelope.resource, "audit");
     assert.equal(envelope.payload.chain.verified, true);
-    assert.equal(envelope.payload.chain.length, 6);
+    assert.equal(envelope.payload.chain.length, 8);
     assert.equal(envelope.payload.events[0].previousHash, "0".repeat(64));
     assert.equal(envelope.payload.chain.headHash, envelope.payload.events.at(-1)?.hash);
+    assert.ok(envelope.payload.events.some(
+      (event) => event.resource === "investigation:INV-43018"
+        && event.evidenceDigest === "sha256:4ac921a0e61f"
+    ));
+    assert.ok(envelope.payload.events.some(
+      (event) => event.resource === "fraud-alert:FRD-61084"
+        && event.evidenceDigest === "sha256:ac7f8c9321d4"
+    ));
 
     const exportResponse = await fetch(`${baseUrl}/bff/api/audit/export`, {
       headers: { cookie }

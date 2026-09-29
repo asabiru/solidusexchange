@@ -84,6 +84,58 @@ export interface AmlCase {
   auditEvidenceDigest: string;
 }
 
+export interface InvestigationTimelineEvent {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  outcome: string;
+  evidenceDigest: string;
+}
+
+export interface InvestigationCase {
+  id: string;
+  customerId: string;
+  subject: string;
+  category: "account-takeover" | "transaction-pattern" | "identity-link";
+  priority: "Critical" | "High" | "Medium";
+  state: "triage" | "investigating" | "escalated";
+  owner: string;
+  openedAt: string;
+  sla: string;
+  exposure: string;
+  summary: string;
+  tone: Tone;
+  relatedAlertIds: readonly string[];
+  relatedCaseIds: readonly string[];
+  hypotheses: readonly string[];
+  timeline: readonly InvestigationTimelineEvent[];
+  evidenceItems: readonly EvidenceItem[];
+  linkedApprovalId?: string;
+  auditEvidenceDigest: string;
+}
+
+export interface FraudAlert {
+  id: string;
+  customerId: string;
+  subject: string;
+  scenario: "Account takeover" | "Withdrawal velocity" | "Payment anomaly";
+  channel: "Web" | "Telegram Mini App" | "API";
+  score: number;
+  severity: "Critical" | "High" | "Medium";
+  state: "new" | "triage" | "investigating";
+  detectedAt: string;
+  sla: string;
+  exposure: string;
+  controlMode: "monitor-only";
+  tone: Tone;
+  signals: readonly WorkflowCheck[];
+  evidenceItems: readonly EvidenceItem[];
+  linkedInvestigationId?: string;
+  linkedApprovalId?: string;
+  auditEvidenceDigest: string;
+}
+
 export interface ApprovalRow {
   id: string;
   action: string;
@@ -167,6 +219,8 @@ export interface ReadonlyBackofficeRepository {
   customers(): readonly CustomerRow[];
   kycCases(): readonly KycCase[];
   amlCases(): readonly AmlCase[];
+  investigationCases(): readonly InvestigationCase[];
+  fraudAlerts(): readonly FraudAlert[];
   approvals(): readonly ApprovalRow[];
   auditSource(): readonly AuditSourceEvent[];
 }
@@ -443,6 +497,228 @@ const data = {
       auditEvidenceDigest: "sha256:b4f8cc3dab50"
     }
   ],
+  investigationCases: [
+    {
+      id: "INV-43018",
+      customerId: "CUS-10482",
+      subject: "Алина Миронова",
+      category: "transaction-pattern",
+      priority: "Critical",
+      state: "escalated",
+      owner: "Fraud investigations",
+      openedAt: "2026-09-28T12:36:42.000Z",
+      sla: "27 мин",
+      exposure: "2 450 000 ₽",
+      summary: "Rapid withdrawal sequence follows a new-device login and indirect high-risk wallet exposure.",
+      tone: "danger",
+      relatedAlertIds: ["FRD-61084", "FRD-61079"],
+      relatedCaseIds: ["AML-78041"],
+      hypotheses: [
+        "Account credentials may be compromised",
+        "Withdrawal beneficiary differs from established behavior"
+      ],
+      timeline: [
+        {
+          id: "timeline-1",
+          occurredAt: "2026-09-28T12:31:19.000Z",
+          actor: "service:fraud-monitor",
+          action: "fraud.alert_created",
+          outcome: "FRD-61084",
+          evidenceDigest: "sha256:ac7f8c9321d4"
+        },
+        {
+          id: "timeline-2",
+          occurredAt: "2026-09-28T12:36:42.000Z",
+          actor: "operator:fraud-04",
+          action: "investigation.opened",
+          outcome: "Escalated for cross-control review",
+          evidenceDigest: "sha256:4ac921a0e61f"
+        }
+      ],
+      evidenceItems: [
+        { id: "device", label: "Device change summary", status: "ready", digest: "sha256:ac7f8c9321d4" },
+        { id: "velocity", label: "Withdrawal velocity", status: "ready", digest: "sha256:930ac32dd029" },
+        { id: "contact", label: "Customer contact outcome", status: "missing", digest: "sha256:000000000000" }
+      ],
+      linkedApprovalId: "APV-843921",
+      auditEvidenceDigest: "sha256:4ac921a0e61f"
+    },
+    {
+      id: "INV-43014",
+      customerId: "CUS-10477",
+      subject: "Никита Серов",
+      category: "identity-link",
+      priority: "High",
+      state: "investigating",
+      owner: "AML investigations",
+      openedAt: "2026-09-28T10:31:09.000Z",
+      sla: "1 ч 22 мин",
+      exposure: "941 280 ₽",
+      summary: "Synthetic identity-link signal overlaps with unresolved PEP similarity and source-of-funds gap.",
+      tone: "warning",
+      relatedAlertIds: ["FRD-61072"],
+      relatedCaseIds: ["AML-78038", "KYC-220177"],
+      hypotheses: [
+        "Shared device may belong to the same household",
+        "Identity similarity requires independent evidence"
+      ],
+      timeline: [
+        {
+          id: "timeline-3",
+          occurredAt: "2026-09-28T10:22:41.000Z",
+          actor: "service:risk-correlation",
+          action: "identity.link_detected",
+          outcome: "Review required",
+          evidenceDigest: "sha256:3d42ce71a60b"
+        }
+      ],
+      evidenceItems: [
+        { id: "identity", label: "Identity correlation summary", status: "ready", digest: "sha256:3d42ce71a60b" },
+        { id: "device", label: "Shared device projection", status: "ready", digest: "sha256:4c720f1e1a94" },
+        { id: "sof", label: "Source of funds", status: "missing", digest: "sha256:000000000000" }
+      ],
+      auditEvidenceDigest: "sha256:3d42ce71a60b"
+    },
+    {
+      id: "INV-43009",
+      customerId: "CUS-10468",
+      subject: "София Романова",
+      category: "account-takeover",
+      priority: "Medium",
+      state: "triage",
+      owner: "Fraud queue",
+      openedAt: "2026-09-28T09:16:54.000Z",
+      sla: "3 ч 08 мин",
+      exposure: "420 000 ₽",
+      summary: "New browser fingerprint followed by a beneficiary change; no protected action was executed.",
+      tone: "info",
+      relatedAlertIds: ["FRD-61068"],
+      relatedCaseIds: ["AML-78031"],
+      hypotheses: ["Legitimate travel or browser reset", "Possible session takeover"],
+      timeline: [
+        {
+          id: "timeline-4",
+          occurredAt: "2026-09-28T09:16:54.000Z",
+          actor: "service:fraud-monitor",
+          action: "investigation.queued",
+          outcome: "Triage pending",
+          evidenceDigest: "sha256:e30371d8ce5f"
+        }
+      ],
+      evidenceItems: [
+        { id: "fingerprint", label: "Browser fingerprint summary", status: "ready", digest: "sha256:e30371d8ce5f" },
+        { id: "beneficiary", label: "Beneficiary change", status: "ready", digest: "sha256:25fd21018514" }
+      ],
+      auditEvidenceDigest: "sha256:e30371d8ce5f"
+    }
+  ],
+  fraudAlerts: [
+    {
+      id: "FRD-61084",
+      customerId: "CUS-10482",
+      subject: "Алина Миронова",
+      scenario: "Account takeover",
+      channel: "Web",
+      score: 96,
+      severity: "Critical",
+      state: "investigating",
+      detectedAt: "2026-09-28T12:31:19.000Z",
+      sla: "12 мин",
+      exposure: "2 450 000 ₽",
+      controlMode: "monitor-only",
+      tone: "danger",
+      signals: [
+        { id: "device", label: "New device", status: "match", detail: "First-seen browser fingerprint", tone: "danger" },
+        { id: "velocity", label: "Withdrawal velocity", status: "match", detail: "Three attempts within 11 minutes", tone: "danger" },
+        { id: "contact", label: "Customer confirmation", status: "unavailable", detail: "No contact outcome attached", tone: "warning" }
+      ],
+      evidenceItems: [
+        { id: "device", label: "Device change summary", status: "ready", digest: "sha256:ac7f8c9321d4" },
+        { id: "velocity", label: "Withdrawal velocity", status: "ready", digest: "sha256:930ac32dd029" },
+        { id: "contact", label: "Customer contact outcome", status: "missing", digest: "sha256:000000000000" }
+      ],
+      linkedInvestigationId: "INV-43018",
+      linkedApprovalId: "APV-843921",
+      auditEvidenceDigest: "sha256:ac7f8c9321d4"
+    },
+    {
+      id: "FRD-61079",
+      customerId: "CUS-10482",
+      subject: "Алина Миронова",
+      scenario: "Withdrawal velocity",
+      channel: "Telegram Mini App",
+      score: 88,
+      severity: "High",
+      state: "investigating",
+      detectedAt: "2026-09-28T12:28:08.000Z",
+      sla: "31 мин",
+      exposure: "2 450 000 ₽",
+      controlMode: "monitor-only",
+      tone: "danger",
+      signals: [
+        { id: "velocity", label: "Withdrawal velocity", status: "match", detail: "Behavior threshold exceeded", tone: "danger" },
+        { id: "session", label: "Session integrity", status: "review", detail: "Channel changed during sequence", tone: "warning" }
+      ],
+      evidenceItems: [
+        { id: "timeline", label: "Withdrawal timeline", status: "ready", digest: "sha256:91b688091631" },
+        { id: "session", label: "Session projection", status: "ready", digest: "sha256:38c20913fe6a" }
+      ],
+      linkedInvestigationId: "INV-43018",
+      auditEvidenceDigest: "sha256:91b688091631"
+    },
+    {
+      id: "FRD-61072",
+      customerId: "CUS-10477",
+      subject: "Никита Серов",
+      scenario: "Payment anomaly",
+      channel: "Web",
+      score: 79,
+      severity: "High",
+      state: "investigating",
+      detectedAt: "2026-09-28T10:22:41.000Z",
+      sla: "1 ч 05 мин",
+      exposure: "941 280 ₽",
+      controlMode: "monitor-only",
+      tone: "warning",
+      signals: [
+        { id: "identity", label: "Identity link", status: "match", detail: "Synthetic correlation threshold exceeded", tone: "danger" },
+        { id: "device", label: "Shared device", status: "review", detail: "Household relationship not established", tone: "warning" },
+        { id: "amount", label: "Amount deviation", status: "clear", detail: "Within customer baseline", tone: "success" }
+      ],
+      evidenceItems: [
+        { id: "identity", label: "Identity correlation summary", status: "ready", digest: "sha256:3d42ce71a60b" },
+        { id: "device", label: "Shared device projection", status: "ready", digest: "sha256:4c720f1e1a94" }
+      ],
+      linkedInvestigationId: "INV-43014",
+      auditEvidenceDigest: "sha256:3d42ce71a60b"
+    },
+    {
+      id: "FRD-61068",
+      customerId: "CUS-10468",
+      subject: "София Романова",
+      scenario: "Payment anomaly",
+      channel: "API",
+      score: 67,
+      severity: "Medium",
+      state: "triage",
+      detectedAt: "2026-09-28T09:13:37.000Z",
+      sla: "2 ч 44 мин",
+      exposure: "420 000 ₽",
+      controlMode: "monitor-only",
+      tone: "warning",
+      signals: [
+        { id: "beneficiary", label: "New beneficiary", status: "review", detail: "First-seen destination", tone: "warning" },
+        { id: "amount", label: "Amount deviation", status: "review", detail: "2.4× customer baseline", tone: "warning" },
+        { id: "device", label: "Device risk", status: "clear", detail: "Known API credential", tone: "success" }
+      ],
+      evidenceItems: [
+        { id: "beneficiary", label: "Beneficiary change", status: "ready", digest: "sha256:25fd21018514" },
+        { id: "baseline", label: "Behavior baseline", status: "ready", digest: "sha256:2ca33065b5aa" }
+      ],
+      linkedInvestigationId: "INV-43009",
+      auditEvidenceDigest: "sha256:25fd21018514"
+    }
+  ],
   approvals: [
     {
       id: "APV-843921",
@@ -638,6 +914,24 @@ const data = {
       resource: "aml-case:AML-78031",
       outcome: "reviewed",
       evidenceDigest: "sha256:b4f8cc3dab50"
+    },
+    {
+      eventId: "AUD-000154",
+      occurredAt: "2026-09-28T13:34:42.000Z",
+      actor: "operator:fraud-04",
+      action: "investigation.escalated",
+      resource: "investigation:INV-43018",
+      outcome: "reviewed",
+      evidenceDigest: "sha256:4ac921a0e61f"
+    },
+    {
+      eventId: "AUD-000155",
+      occurredAt: "2026-09-28T13:37:10.000Z",
+      actor: "service:fraud-monitor",
+      action: "fraud.alert_correlated",
+      resource: "fraud-alert:FRD-61084",
+      outcome: "recorded",
+      evidenceDigest: "sha256:ac7f8c9321d4"
     }
   ]
 } as const;
@@ -648,6 +942,8 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   customers: () => data.customers,
   kycCases: () => data.kycCases,
   amlCases: () => data.amlCases,
+  investigationCases: () => data.investigationCases,
+  fraudAlerts: () => data.fraudAlerts,
   approvals: () => data.approvals,
   auditSource: () => data.auditSource
 };

@@ -47,6 +47,7 @@ const roles = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
   "aml-investigator",
+  "fraud-investigator",
   "auditor"
 ]);
 

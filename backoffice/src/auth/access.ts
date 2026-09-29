@@ -3,6 +3,8 @@ export type Capability =
   | "customers:read"
   | "kyc:read"
   | "aml:read"
+  | "investigations:read"
+  | "fraud:read"
   | "approvals:read"
   | "approvals:review"
   | "approvals:preview"
@@ -14,6 +16,7 @@ export type OperatorRole =
   | "compliance-lead"
   | "support-l1"
   | "aml-investigator"
+  | "fraud-investigator"
   | "auditor";
 
 export interface RoleProfile {
@@ -35,6 +38,8 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "kyc:read",
       "aml:read",
+      "investigations:read",
+      "fraud:read",
       "approvals:read",
       "approvals:review",
       "approvals:preview",
@@ -60,6 +65,21 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "kyc:read",
       "aml:read",
+      "investigations:read",
+      "fraud:read",
+      "approvals:read"
+    ]
+  },
+  {
+    id: "fraud-investigator",
+    label: "Fraud investigator",
+    operator: "Елена Соколова",
+    initials: "ЕС",
+    capabilities: [
+      "dashboard:read",
+      "customers:read",
+      "investigations:read",
+      "fraud:read",
       "approvals:read"
     ]
   },
@@ -73,6 +93,8 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "kyc:read",
       "aml:read",
+      "investigations:read",
+      "fraud:read",
       "approvals:read",
       "audit:read",
       "audit:export"
