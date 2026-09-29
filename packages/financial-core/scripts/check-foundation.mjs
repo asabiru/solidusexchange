@@ -320,6 +320,20 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-immutability-catalog.sh",
     "postgres-replication-mode-immutability-ok"
+  ],
+  ["tests/postgres-trigger-function-catalog.sql", "procedure.prosrc"],
+  [
+    "tests/postgres-trigger-function-catalog.sql",
+    "pg_catalog.has_function_privilege"
+  ],
+  ["tests/postgres-trigger-function-catalog.sql", "pg_catalog.aclexplode"],
+  [
+    "scripts/verify-postgres-trigger-function-catalog.mjs",
+    "assert.deepStrictEqual"
+  ],
+  [
+    "scripts/verify-postgres-trigger-function-catalog.mjs",
+    "postgres-trigger-function-catalog-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -406,6 +420,7 @@ for (const required of [
   "tests/postgres-runtime-privileges.sh",
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
+  "tests/postgres-trigger-function-catalog.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
