@@ -22,24 +22,24 @@ INSERT INTO financial_core.ledger_journals (
   evidence_digest,
   created_at
 ) VALUES (
-  '21000000-0000-4000-8000-000000000021',
+  '24000000-0000-4000-8000-000000000024',
   'SYNTHETIC_PROVIDER_POSITION',
   'solidchange-dev',
-  'postgres-precision-demo-002',
-  repeat('5', 64),
-  '22000000-0000-4000-8000-000000000022',
+  'postgres-nonfinite-demo-001',
+  repeat('7', 64),
+  '25000000-0000-4000-8000-000000000025',
   NULL,
-  '2026-09-25T10:45:00.000Z',
-  '2026-09-25T10:45:01.000Z',
+  '2026-09-25T10:50:00.000Z',
+  '2026-09-25T10:50:01.000Z',
   'SERVICE',
   'financial-core-postgres-test',
-  'policy-decision-demo-006',
+  'policy-decision-demo-007',
   'ledger-dev-policy-v1',
   'synthetic-provider-position-v1',
   'synthetic-test',
-  'postgres-precision-source-002',
-  repeat('6', 64),
-  '2026-09-25T10:45:01.000Z'
+  'postgres-nonfinite-source-001',
+  repeat('8', 64),
+  '2026-09-25T10:50:01.000Z'
 );
 
 INSERT INTO financial_core.ledger_entries (
@@ -53,15 +53,15 @@ INSERT INTO financial_core.ledger_entries (
   amount,
   created_at
 ) VALUES (
-  '23000000-0000-4000-8000-000000000023',
-  '21000000-0000-4000-8000-000000000021',
+  '26000000-0000-4000-8000-000000000026',
+  '24000000-0000-4000-8000-000000000024',
   1,
   '10000000-0000-4000-8000-000000000001',
   'solidchange-dev',
   'TUSDT',
   'DEBIT',
-  (repeat('9', 77) || '.00')::NUMERIC,
-  '2026-09-25T10:45:01.000Z'
+  'NaN'::NUMERIC,
+  '2026-09-25T10:50:01.000Z'
 );
 
 COMMIT;

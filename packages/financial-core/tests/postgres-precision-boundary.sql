@@ -59,7 +59,7 @@ INSERT INTO financial_core.ledger_entries (
     1,
     '10000000-0000-4000-8000-000000000001',
     'solidchange-dev',
-    'TUSD',
+    'TUSDT',
     'DEBIT',
     (repeat('9', 76) || '.00')::NUMERIC,
     '2026-09-25T10:40:01.000Z'
@@ -70,7 +70,7 @@ INSERT INTO financial_core.ledger_entries (
     2,
     '20000000-0000-4000-8000-000000000002',
     'solidchange-dev',
-    'TUSD',
+    'TUSDT',
     'CREDIT',
     (repeat('9', 76) || '.00')::NUMERIC,
     '2026-09-25T10:40:01.000Z'

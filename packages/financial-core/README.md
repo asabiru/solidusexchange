@@ -25,6 +25,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0001_ledger_foundation.sql` | Initial PostgreSQL schema and database invariants |
 | `migrations/0002_ledger_verification_views.sql` | Security-invoker account projection and trial-balance views |
 | `migrations/0003_ledger_acceptance_seal.sql` | Journal sealing, database posting-rule binding and precision alignment |
+| `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -32,6 +33,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-reject-late-entry.sql` | Database rejection test for post-acceptance entry insertion |
 | `tests/postgres-reject-rule-*.sql` | Database posting-rule, actor and entry-pattern rejection tests |
 | `tests/postgres-precision-*.sql` | JavaScript/PostgreSQL 78-digit boundary evidence |
+| `tests/postgres-reject-nonfinite.sql` | Database rejection evidence for non-finite numeric values |
 
 ## Foundation invariants
 
@@ -39,7 +41,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 2. Debits equal credits independently for every asset in the journal.
 3. Every account and entry belongs to one legal-entity boundary.
 4. Monetary command values are canonical decimal strings; JavaScript numbers are not accepted.
-5. Asset scales are explicit and limited to 18 decimals; precision is limited to 78 whole-plus-fraction digits, including retained fractional zeros.
+5. Asset scales are explicit and limited to 18 decimals; finite entry precision is limited to 78 whole-plus-fraction digits, including retained fractional zeros.
 6. An idempotency key can replay only an identical command.
 7. The accepted journal stores actor, authorization, policy, posting-rule, correlation and evidence references.
 8. Journal acceptance, idempotency registration, immutable outbox creation and sealing form one database transaction.
@@ -49,7 +51,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 12. JavaScript and PostgreSQL both enforce the registered `journal_type` + `posting_rule_version`, allowed actor and exact per-asset entry pattern.
 13. Projection snapshots and trial balance are deterministically rebuilt from immutable entries.
 
-The canonical JavaScript command fixture and PostgreSQL smoke journal share the same SHA-256 command digest, so digest evidence is tied to one stable cross-runtime vector.
+The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
 The current posting-rule registry contains one `synthetic-test-only` rule. It is evidence for version binding and pattern enforcement, not approved production accounting.
 
@@ -93,6 +95,7 @@ done
 
 docker exec -i solidchange-ledger-test \
   psql -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 \
+  -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)" \
   < tests/postgres-smoke.sql
 ```
 

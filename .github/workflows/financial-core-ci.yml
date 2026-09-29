@@ -83,7 +83,9 @@ jobs:
           -v "$PWD:/workspace:ro" -w /workspace
           postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
           psql -h 127.0.0.1 -U ledger_test -d ledger_test
-          -v ON_ERROR_STOP=1 -f tests/postgres-smoke.sql
+          -v ON_ERROR_STOP=1
+          -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)"
+          -f tests/postgres-smoke.sql
 
       - name: Verify accepted precision boundary
         run: >-
@@ -120,4 +122,5 @@ jobs:
           tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule
           tests/postgres-reject-rule-pattern.sql|entries violate its posting rule
           tests/postgres-reject-precision.sql|amount exceeds ledger precision limit
+          tests/postgres-reject-nonfinite.sql|amount must be finite
           EOF

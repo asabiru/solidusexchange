@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,6 +21,18 @@ function readRepositoryFile(path) {
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) return value.map(canonicalize);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  return value;
 }
 
 function tableBody(sql, name) {
@@ -166,6 +179,8 @@ for (const required of [
   "actor is not permitted by its posting rule",
   "entries violate its posting rule",
   "missing its immutable acceptance seal",
+  "amount must be finite",
+  "COLLATE \"C\"",
   "NEW.amount::TEXT"
 ]) {
   assert(
@@ -205,16 +220,29 @@ for (const [fixture, evidence] of [
   ["tests/postgres-reject-rule-actor.sql", "'OPERATOR'"],
   ["tests/postgres-reject-rule-pattern.sql", "'CREDIT'"],
   ["tests/postgres-precision-boundary.sql", "repeat('9', 76)"],
-  ["tests/postgres-reject-precision.sql", "repeat('9', 77)"]
+  ["tests/postgres-reject-precision.sql", "repeat('9', 77)"],
+  ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
-const commandDigestVector =
-  "3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901";
+const commandDigestVector = readJson("tests/command-digest-vector.json");
+const computedCommandDigest = createHash("sha256")
+  .update(JSON.stringify(canonicalize(commandDigestVector.command)))
+  .digest("hex");
 assert(
-  read("tests/ledger.test.mjs").includes(commandDigestVector) &&
-    read("tests/postgres-smoke.sql").includes(commandDigestVector),
-  "JavaScript and PostgreSQL evidence must share the canonical command digest vector"
+  computedCommandDigest === commandDigestVector.expected_digest,
+  "Canonical command digest vector does not match its command"
+);
+assert(
+  commandDigestVector.command.entries.every(
+    (entry) => entry.asset_code === commandDigestVector.asset.code
+  ),
+  "Canonical command digest entries must use the configured vector asset"
+);
+assert(
+  read("tests/ledger.test.mjs").includes("tests\", \"command-digest-vector.json") &&
+    read("tests/postgres-smoke.sql").includes(":'command_vector_json'::JSONB"),
+  "JavaScript and PostgreSQL evidence must consume the canonical command digest vector"
 );
 
 const readme = read("README.md");
@@ -254,7 +282,9 @@ for (const required of [
   "tests/postgres-reject-unregistered-rule.sql",
   "tests/postgres-reject-rule-actor.sql",
   "tests/postgres-reject-rule-pattern.sql",
-  "tests/postgres-reject-precision.sql"
+  "tests/postgres-reject-precision.sql",
+  "tests/postgres-reject-nonfinite.sql",
+  "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
 }

@@ -128,6 +128,10 @@ BEGIN
     RAISE EXCEPTION 'asset % is not enabled for posting', NEW.asset_code
       USING ERRCODE = '23514';
   END IF;
+  IF NEW.amount::TEXT IN ('NaN', 'Infinity', '-Infinity') THEN
+    RAISE EXCEPTION 'amount must be finite'
+      USING ERRCODE = '22003';
+  END IF;
   IF scale(NEW.amount) > configured_scale THEN
     RAISE EXCEPTION 'amount scale exceeds asset % scale', NEW.asset_code
       USING ERRCODE = '23514';
@@ -218,7 +222,9 @@ BEGIN
         'definition_code', account.definition_code,
         'side', entry.side
       )
-      ORDER BY account.definition_code, entry.side
+      ORDER BY
+        account.definition_code COLLATE "C",
+        entry.side COLLATE "C"
     ) <> expected_entry_pattern
   ) THEN
     RAISE EXCEPTION 'journal % entries violate its posting rule', target_journal_id

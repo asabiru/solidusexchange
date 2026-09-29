@@ -58,7 +58,7 @@ INSERT INTO financial_core.ledger_entries (
   1,
   '10000000-0000-4000-8000-000000000001',
   'solidchange-dev',
-  'TUSD',
+  'TUSDT',
   'DEBIT',
   5.00,
   '2026-09-25T10:25:01.000Z'

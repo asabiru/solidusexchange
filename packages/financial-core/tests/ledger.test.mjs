@@ -15,12 +15,16 @@ import {
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const chart = JSON.parse(readFileSync(join(root, "chart-of-accounts.json"), "utf8"));
 const postingRules = JSON.parse(readFileSync(join(root, "posting-rules.json"), "utf8"));
+const commandDigestVector = JSON.parse(
+  readFileSync(join(root, "tests", "command-digest-vector.json"), "utf8")
+);
+const vectorAssetCode = commandDigestVector.asset.code;
 const accounts = [
   {
     account_id: "10000000-0000-4000-8000-000000000001",
     definition_code: "TREASURY_ASSET",
     legal_entity_id: "solidchange-dev",
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     owner_reference: "treasury-location-demo",
     created_at: "2026-09-25T10:00:00.000Z"
   },
@@ -28,7 +32,7 @@ const accounts = [
     account_id: "20000000-0000-4000-8000-000000000002",
     definition_code: "PROVIDER_PAYABLE_LIABILITY",
     legal_entity_id: "solidchange-dev",
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     owner_reference: "provider-demo",
     created_at: "2026-09-25T10:00:00.000Z"
   },
@@ -36,7 +40,7 @@ const accounts = [
     account_id: "30000000-0000-4000-8000-000000000003",
     definition_code: "CUSTOMER_SETTLED_LIABILITY",
     legal_entity_id: "solidchange-dev",
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     owner_reference: "customer-demo",
     created_at: "2026-09-25T10:00:00.000Z"
   },
@@ -44,7 +48,7 @@ const accounts = [
     account_id: "40000000-0000-4000-8000-000000000004",
     definition_code: "TREASURY_ASSET",
     legal_entity_id: "other-entity-dev",
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     owner_reference: "other-treasury-demo",
     created_at: "2026-09-25T10:00:00.000Z"
   },
@@ -66,7 +70,7 @@ const accounts = [
   }
 ];
 const assets = [
-  { code: "TUSDT", scale: 6 },
+  { code: vectorAssetCode, scale: commandDigestVector.asset.scale },
   { code: "TBTC", scale: 8 }
 ];
 
@@ -82,41 +86,7 @@ function createLedger() {
 
 function command(overrides = {}) {
   return {
-    journal_id: "70000000-0000-4000-8000-000000000007",
-    journal_type: "SYNTHETIC_PROVIDER_POSITION",
-    legal_entity_id: "solidchange-dev",
-    idempotency_key: "provider-position-demo-001",
-    correlation_id: "80000000-0000-4000-8000-000000000008",
-    causation_id: null,
-    effective_at: "2026-09-25T10:15:00.000Z",
-    actor: {
-      type: "SERVICE",
-      id: "financial-core-test"
-    },
-    authorization_reference: "policy-decision-demo-001",
-    policy_version: "ledger-dev-policy-v1",
-    posting_rule_version: "synthetic-provider-position-v1",
-    source: {
-      type: "synthetic-test",
-      reference: "provider-position-source-001",
-      evidence_digest: "a".repeat(64)
-    },
-    entries: [
-      {
-        entry_id: "90000000-0000-4000-8000-000000000009",
-        account_id: "10000000-0000-4000-8000-000000000001",
-        asset_code: "TUSDT",
-        side: "DEBIT",
-        amount: "25.500000"
-      },
-      {
-        entry_id: "a0000000-0000-4000-8000-00000000000a",
-        account_id: "20000000-0000-4000-8000-000000000002",
-        asset_code: "TUSDT",
-        side: "CREDIT",
-        amount: "25.500000"
-      }
-    ],
+    ...structuredClone(commandDigestVector.command),
     ...overrides
   };
 }
@@ -153,12 +123,12 @@ test("posting accepts a balanced journal and derives projections", () => {
 
   assert.equal(
     accepted.command_digest,
-    "3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901"
+    commandDigestVector.expected_digest
   );
   assert.equal(accepted.accepted_at, "2026-09-25T10:15:01.000Z");
   assert.deepEqual(ledger.getProjection(accounts[0].account_id), {
     account_id: accounts[0].account_id,
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     as_of_journal_count: 1,
     debit_total: "25.500000",
     credit_total: "0.000000",
@@ -166,7 +136,7 @@ test("posting accepts a balanced journal and derives projections", () => {
   });
   assert.deepEqual(ledger.getProjection(accounts[1].account_id), {
     account_id: accounts[1].account_id,
-    asset_code: "TUSDT",
+    asset_code: vectorAssetCode,
     as_of_journal_count: 1,
     debit_total: "0.000000",
     credit_total: "25.500000",
