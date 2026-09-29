@@ -35,6 +35,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
 | `tests/postgres-owner-truncate-guard.sh` | Migration-owner truncation denial regression |
 | `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger policy comparison |
+| `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -127,6 +128,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-trigger-function-catalog.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-chart-of-accounts.sh
 
 docker exec -i solidchange-ledger-test \
@@ -166,6 +175,8 @@ The chart regression loads every canonical definition through the real PostgreSQ
 The owner truncation regression exercises every append-only configuration and ledger table with the migration owner. Each `TRUNCATE ... CASCADE` must fail through a statement-level trigger, proving that accidental bulk deletion is blocked independently of the future runtime role's denied grants.
 
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
+
+The trigger-function catalog regression requires an exact match for all five installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
