@@ -22,24 +22,24 @@ INSERT INTO financial_core.ledger_journals (
   evidence_digest,
   created_at
 ) VALUES (
-  'c0000000-0000-4000-8000-00000000000c',
+  '31000000-0000-4000-8000-000000000031',
   'SYNTHETIC_PROVIDER_POSITION',
   'solidchange-dev',
-  'postgres-unbalanced-demo-001',
-  repeat('c', 64),
-  'd0000000-0000-4000-8000-00000000000d',
+  'postgres-rule-actor-demo-001',
+  repeat('7', 64),
+  '32000000-0000-4000-8000-000000000032',
   NULL,
-  '2026-09-25T10:20:00.000Z',
-  '2026-09-25T10:20:01.000Z',
-  'SERVICE',
-  'financial-core-postgres-test',
-  'policy-decision-demo-002',
+  '2026-09-25T10:50:00.000Z',
+  '2026-09-25T10:50:01.000Z',
+  'OPERATOR',
+  'operator-rule-test',
+  'policy-decision-demo-007',
   'ledger-dev-policy-v1',
   'synthetic-provider-position-v1',
   'synthetic-test',
-  'postgres-unbalanced-source-001',
-  repeat('d', 64),
-  '2026-09-25T10:20:01.000Z'
+  'postgres-rule-actor-source-001',
+  repeat('8', 64),
+  '2026-09-25T10:50:01.000Z'
 );
 
 INSERT INTO financial_core.ledger_entries (
@@ -54,26 +54,26 @@ INSERT INTO financial_core.ledger_entries (
   created_at
 ) VALUES
   (
-    'e0000000-0000-4000-8000-00000000000e',
-    'c0000000-0000-4000-8000-00000000000c',
+    '33000000-0000-4000-8000-000000000033',
+    '31000000-0000-4000-8000-000000000031',
     1,
     '10000000-0000-4000-8000-000000000001',
     'solidchange-dev',
     'TUSD',
     'DEBIT',
-    10.00,
-    '2026-09-25T10:20:01.000Z'
+    7.00,
+    '2026-09-25T10:50:01.000Z'
   ),
   (
-    'f0000000-0000-4000-8000-00000000000f',
-    'c0000000-0000-4000-8000-00000000000c',
+    '34000000-0000-4000-8000-000000000034',
+    '31000000-0000-4000-8000-000000000031',
     2,
     '20000000-0000-4000-8000-000000000002',
     'solidchange-dev',
     'TUSD',
     'CREDIT',
-    9.99,
-    '2026-09-25T10:20:01.000Z'
+    7.00,
+    '2026-09-25T10:50:01.000Z'
   );
 
 INSERT INTO financial_core.ledger_idempotency_registry (
@@ -84,10 +84,10 @@ INSERT INTO financial_core.ledger_idempotency_registry (
   first_seen_at
 ) VALUES (
   'solidchange-dev',
-  'postgres-unbalanced-demo-001',
-  repeat('c', 64),
-  'c0000000-0000-4000-8000-00000000000c',
-  '2026-09-25T10:20:01.000Z'
+  'postgres-rule-actor-demo-001',
+  repeat('7', 64),
+  '31000000-0000-4000-8000-000000000031',
+  '2026-09-25T10:50:01.000Z'
 );
 
 INSERT INTO financial_core.ledger_outbox_events (
@@ -97,16 +97,16 @@ INSERT INTO financial_core.ledger_outbox_events (
   payload,
   created_at
 ) VALUES (
-  '01000000-0000-4000-8000-000000000010',
-  'c0000000-0000-4000-8000-00000000000c',
+  '35000000-0000-4000-8000-000000000035',
+  '31000000-0000-4000-8000-000000000031',
   'internal.ledger.journal-accepted.v1',
   jsonb_build_object(
     'journal_id',
-    'c0000000-0000-4000-8000-00000000000c',
+    '31000000-0000-4000-8000-000000000031',
     'command_digest',
-    repeat('c', 64)
+    repeat('7', 64)
   ),
-  '2026-09-25T10:20:01.000Z'
+  '2026-09-25T10:50:01.000Z'
 );
 
 INSERT INTO financial_core.ledger_journal_seals (
@@ -115,10 +115,10 @@ INSERT INTO financial_core.ledger_journal_seals (
   entry_count,
   sealed_at
 ) VALUES (
-  'c0000000-0000-4000-8000-00000000000c',
-  repeat('c', 64),
+  '31000000-0000-4000-8000-000000000031',
+  repeat('7', 64),
   2,
-  '2026-09-25T10:20:01.000Z'
+  '2026-09-25T10:50:01.000Z'
 );
 
 SET CONSTRAINTS ALL IMMEDIATE;

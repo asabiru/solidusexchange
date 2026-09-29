@@ -68,6 +68,7 @@ assert(
 
 const migration = read("migrations/0001_ledger_foundation.sql");
 const verificationMigration = read("migrations/0002_ledger_verification_views.sql");
+const acceptanceMigration = read("migrations/0003_ledger_acceptance_seal.sql");
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -152,6 +153,69 @@ assert(
   !/CREATE MATERIALIZED VIEW/i.test(verificationMigration),
   "Ledger verification must remain a rebuildable read-only projection"
 );
+for (const required of [
+  "CREATE TABLE financial_core.posting_rule_registry",
+  "CREATE TABLE financial_core.ledger_journal_seals",
+  "ledger_journals_posting_rule_fk",
+  "CREATE FUNCTION financial_core.reject_sealed_journal_entry",
+  "CREATE OR REPLACE FUNCTION financial_core.validate_entry_amount",
+  "CREATE OR REPLACE FUNCTION financial_core.assert_journal_complete",
+  "CREATE CONSTRAINT TRIGGER ledger_journal_seals_complete",
+  "pre-seal journals require independent revalidation",
+  "journal % is sealed",
+  "actor is not permitted by its posting rule",
+  "entries violate its posting rule",
+  "missing its immutable acceptance seal",
+  "NEW.amount::TEXT"
+]) {
+  assert(
+    acceptanceMigration.includes(required),
+    `Acceptance migration is missing ${required}`
+  );
+}
+assert(
+  !acceptanceMigration.includes("trim_scale(NEW.amount)"),
+  "PostgreSQL precision must count the same lexical digits as JavaScript"
+);
+for (const rule of postingRules.rules) {
+  assert(
+    acceptanceMigration.includes(`'${rule.journal_type}'`) &&
+      acceptanceMigration.includes(`'${rule.posting_rule_version}'`),
+    `Database registry is missing ${rule.journal_type}`
+  );
+  for (const actorType of rule.allowed_actor_types) {
+    assert(
+      acceptanceMigration.includes(`ARRAY['${actorType}']`),
+      `Database registry is missing actor ${actorType}`
+    );
+  }
+  for (const leg of rule.entry_pattern) {
+    assert(
+      acceptanceMigration.includes(
+        `"definition_code": "${leg.definition_code}", "side": "${leg.side}"`
+      ),
+      `Database registry is missing ${leg.definition_code}|${leg.side}`
+    );
+  }
+}
+
+for (const [fixture, evidence] of [
+  ["tests/postgres-reject-late-entry.sql", "sequence_number"],
+  ["tests/postgres-reject-unregistered-rule.sql", "UNREGISTERED_BALANCED_RULE"],
+  ["tests/postgres-reject-rule-actor.sql", "'OPERATOR'"],
+  ["tests/postgres-reject-rule-pattern.sql", "'CREDIT'"],
+  ["tests/postgres-precision-boundary.sql", "repeat('9', 76)"],
+  ["tests/postgres-reject-precision.sql", "repeat('9', 77)"]
+]) {
+  assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
+}
+const commandDigestVector =
+  "3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901";
+assert(
+  read("tests/ledger.test.mjs").includes(commandDigestVector) &&
+    read("tests/postgres-smoke.sql").includes(commandDigestVector),
+  "JavaScript and PostgreSQL evidence must share the canonical command digest vector"
+);
 
 const readme = read("README.md");
 for (const required of [
@@ -179,6 +243,20 @@ for (const required of [
   "## NO-GO"
 ]) {
   assert(approvalPack.includes(required), `Finance approval pack is missing ${required}`);
+}
+
+const workflow = readRepositoryFile(".github/workflows/financial-core-ci.yml");
+for (const required of [
+  "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+  "persist-credentials: false",
+  "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444",
+  "tests/postgres-reject-late-entry.sql",
+  "tests/postgres-reject-unregistered-rule.sql",
+  "tests/postgres-reject-rule-actor.sql",
+  "tests/postgres-reject-rule-pattern.sql",
+  "tests/postgres-reject-precision.sql"
+]) {
+  assert(workflow.includes(required), `Financial core CI is missing ${required}`);
 }
 
 console.log(

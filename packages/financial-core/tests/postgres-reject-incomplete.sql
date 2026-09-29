@@ -23,7 +23,7 @@ INSERT INTO financial_core.ledger_journals (
   created_at
 ) VALUES (
   '02000000-0000-4000-8000-000000000020',
-  'SYNTHETIC_INCOMPLETE_POSITION',
+  'SYNTHETIC_PROVIDER_POSITION',
   'solidchange-dev',
   'postgres-incomplete-demo-001',
   repeat('e', 64),
@@ -35,7 +35,7 @@ INSERT INTO financial_core.ledger_journals (
   'financial-core-postgres-test',
   'policy-decision-demo-003',
   'ledger-dev-policy-v1',
-  'synthetic-incomplete-v1',
+  'synthetic-provider-position-v1',
   'synthetic-test',
   'postgres-incomplete-source-001',
   repeat('f', 64),
@@ -94,6 +94,18 @@ INSERT INTO financial_core.ledger_outbox_events (
     'command_digest',
     repeat('e', 64)
   ),
+  '2026-09-25T10:25:01.000Z'
+);
+
+INSERT INTO financial_core.ledger_journal_seals (
+  journal_id,
+  command_digest,
+  entry_count,
+  sealed_at
+) VALUES (
+  '02000000-0000-4000-8000-000000000020',
+  repeat('e', 64),
+  1,
   '2026-09-25T10:25:01.000Z'
 );
 

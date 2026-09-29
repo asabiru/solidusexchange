@@ -11,7 +11,7 @@ const JOURNAL_TYPE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{15,127}$/;
 const DATE_TIME_PATTERN =
-  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const MAX_ENTRIES = 1000;
 
 const CHART_KEYS = new Set([
@@ -114,9 +114,47 @@ function assertString(value, pattern, label) {
 }
 
 function assertDateTime(value, label) {
+  const match = typeof value === "string" ? DATE_TIME_PATTERN.exec(value) : null;
+  if (!match) {
+    reject("LEDGER_VALIDATION_FAILED", `${label} must be an ISO date-time.`);
+  }
+  const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] =
+    match;
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  const hour = Number(hourValue);
+  const minute = Number(minuteValue);
+  const second = Number(secondValue);
+  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
+  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [
+    31,
+    leapYear ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31
+  ];
   if (
-    typeof value !== "string" ||
-    !DATE_TIME_PATTERN.test(value) ||
+    year === 0 ||
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth[month - 1] ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 14 ||
+    (offsetHour === 14 && offsetMinute > 0) ||
+    offsetMinute > 59 ||
     !Number.isFinite(Date.parse(value))
   ) {
     reject("LEDGER_VALIDATION_FAILED", `${label} must be an ISO date-time.`);

@@ -99,7 +99,7 @@ INSERT INTO financial_core.ledger_journals (
   'SYNTHETIC_PROVIDER_POSITION',
   'solidchange-dev',
   'postgres-smoke-demo-001',
-  repeat('a', 64),
+  '3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901',
   '80000000-0000-4000-8000-000000000008',
   NULL,
   '2026-09-25T10:15:00.000Z',
@@ -158,7 +158,7 @@ INSERT INTO financial_core.ledger_idempotency_registry (
 ) VALUES (
   'solidchange-dev',
   'postgres-smoke-demo-001',
-  repeat('a', 64),
+  '3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901',
   '70000000-0000-4000-8000-000000000007',
   '2026-09-25T10:15:01.000Z'
 );
@@ -177,8 +177,20 @@ INSERT INTO financial_core.ledger_outbox_events (
     'journal_id',
     '70000000-0000-4000-8000-000000000007',
     'command_digest',
-    repeat('a', 64)
+    '3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901'
   ),
+  '2026-09-25T10:15:01.000Z'
+);
+
+INSERT INTO financial_core.ledger_journal_seals (
+  journal_id,
+  command_digest,
+  entry_count,
+  sealed_at
+) VALUES (
+  '70000000-0000-4000-8000-000000000007',
+  '3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901',
+  2,
   '2026-09-25T10:15:01.000Z'
 );
 
@@ -250,6 +262,18 @@ $$;
 
 DO $$
 BEGIN
+  BEGIN
+    DELETE FROM financial_core.ledger_entries
+     WHERE entry_id = '90000000-0000-4000-8000-000000000009';
+    RAISE EXCEPTION 'append-only deletion unexpectedly succeeded';
+  EXCEPTION
+    WHEN SQLSTATE '55000' THEN NULL;
+  END;
+END;
+$$;
+
+DO $$
+BEGIN
   IF EXISTS (
     SELECT 1
       FROM pg_class
@@ -270,11 +294,25 @@ BEGIN
       ) AS privilege
      WHERE relation.oid IN (
        'financial_core.ledger_account_projections'::REGCLASS,
-       'financial_core.ledger_trial_balance'::REGCLASS
+       'financial_core.ledger_trial_balance'::REGCLASS,
+       'financial_core.posting_rule_registry'::REGCLASS,
+       'financial_core.ledger_journal_seals'::REGCLASS
      )
        AND privilege.grantee = 0
   ) THEN
-    RAISE EXCEPTION 'PUBLIC privilege exists on ledger verification view';
+    RAISE EXCEPTION 'PUBLIC privilege exists on protected ledger relation';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+      FROM financial_core.posting_rule_registry
+     WHERE journal_type = 'SYNTHETIC_PROVIDER_POSITION'
+       AND posting_rule_version = 'synthetic-provider-position-v1'
+       AND allowed_actor_types = ARRAY['SERVICE']
+       AND production_execution_enabled = FALSE
+       AND runtime_boundary = 'dev-dry-run'
+  ) THEN
+    RAISE EXCEPTION 'synthetic posting rule is not database-bound';
   END IF;
 END;
 $$;

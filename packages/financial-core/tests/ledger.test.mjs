@@ -139,6 +139,9 @@ test("decimal conversion is exact and scale-aware", () => {
   assert.equal(parseAmount("25.500000", 6), 25_500_000n);
   assert.equal(formatAmount(25_500_000n, 6), "25.500000");
   assert.equal(formatAmount(-125n, 2), "-1.25");
+  assert.equal(parseAmount(`${"9".repeat(76)}.00`, 2), BigInt(`${"9".repeat(76)}00`));
+  assert.throws(() => parseAmount(`${"9".repeat(77)}.00`, 2), RangeError);
+  assert.throws(() => parseAmount(`${"9".repeat(78)}.00`, 2), RangeError);
   assert.throws(() => parseAmount("0.000001", 5), RangeError);
   assert.throws(() => parseAmount("0", 6), RangeError);
   assert.throws(() => parseAmount("1e6", 6), TypeError);
@@ -148,7 +151,10 @@ test("posting accepts a balanced journal and derives projections", () => {
   const ledger = createLedger();
   const accepted = ledger.post(command());
 
-  assert.match(accepted.command_digest, /^[0-9a-f]{64}$/);
+  assert.equal(
+    accepted.command_digest,
+    "3d89f6a3998a0fc41db88989a25cd39b3c09eee165fdfb550053e3bdcac84901"
+  );
   assert.equal(accepted.accepted_at, "2026-09-25T10:15:01.000Z");
   assert.deepEqual(ledger.getProjection(accounts[0].account_id), {
     account_id: accounts[0].account_id,
@@ -355,6 +361,14 @@ test("unsupported actors and hidden command fields are rejected", () => {
   );
   expectLedgerError(
     () => ledger.post(command({ effective_at: "0" })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ effective_at: "2026-02-31T10:00:00Z" })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  expectLedgerError(
+    () => ledger.post(command({ effective_at: "2026-09-25T10:00:00+14:01" })),
     "LEDGER_VALIDATION_FAILED"
   );
   expectLedgerError(
