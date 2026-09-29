@@ -1,0 +1,112 @@
+name: Financial Core CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/financial-core/**"
+      - ".github/workflows/financial-core-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/financial-core/**"
+      - ".github/workflows/financial-core-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/financial-core
+
+    services:
+      postgres:
+        image: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+        env:
+          POSTGRES_USER: ledger_test
+          POSTGRES_PASSWORD: ledger_test
+          POSTGRES_DB: ledger_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ledger_test -d ledger_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: packages/financial-core/package-lock.json
+
+      - name: Install locked package
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Verify reference posting boundary
+        run: npm run verify
+
+      - name: Apply PostgreSQL migration
+        run: >-
+          docker run --rm --network host
+          -e PGPASSWORD=ledger_test
+          -v "$PWD:/workspace:ro" -w /workspace
+          postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+          psql -h 127.0.0.1 -U ledger_test -d ledger_test
+          -v ON_ERROR_STOP=1 -f migrations/0001_ledger_foundation.sql
+
+      - name: Verify accepted balanced journal
+        run: >-
+          docker run --rm --network host
+          -e PGPASSWORD=ledger_test
+          -v "$PWD:/workspace:ro" -w /workspace
+          postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+          psql -h 127.0.0.1 -U ledger_test -d ledger_test
+          -v ON_ERROR_STOP=1 -f tests/postgres-smoke.sql
+
+      - name: Verify one-entry journal is rejected
+        run: |
+          set +e
+          output="$(docker run --rm --network host \
+            -e PGPASSWORD=ledger_test \
+            -v "$PWD:/workspace:ro" -w /workspace \
+            postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+            psql -h 127.0.0.1 -U ledger_test -d ledger_test \
+            -v ON_ERROR_STOP=1 -f tests/postgres-reject-incomplete.sql 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "One-entry journal unexpectedly committed."
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -F "requires at least two entries"
+
+      - name: Verify unbalanced journal is rejected
+        run: |
+          set +e
+          output="$(docker run --rm --network host \
+            -e PGPASSWORD=ledger_test \
+            -v "$PWD:/workspace:ro" -w /workspace \
+            postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+            psql -h 127.0.0.1 -U ledger_test -d ledger_test \
+            -v ON_ERROR_STOP=1 -f tests/postgres-reject-unbalanced.sql 2>&1)"
+          status=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "Unbalanced journal unexpectedly committed."
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -F "is not balanced per asset"

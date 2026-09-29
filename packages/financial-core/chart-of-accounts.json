@@ -1,0 +1,77 @@
+{
+  "chart_version": 1,
+  "status": "draft",
+  "runtime_boundary": "dev-dry-run",
+  "financial_execution_enabled": false,
+  "production_assets_enabled": false,
+  "direct_balance_updates_allowed": false,
+  "holds_in_scope": false,
+  "reversals_in_scope": false,
+  "reconciliation_in_scope": false,
+  "account_definitions": [
+    {
+      "code": "CUSTOMER_SETTLED_LIABILITY",
+      "category": "customer",
+      "account_class": "LIABILITY",
+      "normal_side": "CREDIT",
+      "owner_scope": "required",
+      "purpose": "Settled amount owed to one canonical customer for one asset."
+    },
+    {
+      "code": "TREASURY_ASSET",
+      "category": "treasury",
+      "account_class": "ASSET",
+      "normal_side": "DEBIT",
+      "owner_scope": "optional",
+      "purpose": "Asset controlled by an approved treasury location or account."
+    },
+    {
+      "code": "CUSTODY_ONCHAIN_ASSET",
+      "category": "custody",
+      "account_class": "ASSET",
+      "normal_side": "DEBIT",
+      "owner_scope": "required",
+      "purpose": "On-chain asset controlled through one custody location reference."
+    },
+    {
+      "code": "PROVIDER_RECEIVABLE_ASSET",
+      "category": "provider",
+      "account_class": "ASSET",
+      "normal_side": "DEBIT",
+      "owner_scope": "required",
+      "purpose": "Amount due from one external provider without treating provider status as settlement."
+    },
+    {
+      "code": "PROVIDER_PAYABLE_LIABILITY",
+      "category": "provider",
+      "account_class": "LIABILITY",
+      "normal_side": "CREDIT",
+      "owner_scope": "required",
+      "purpose": "Amount owed to one external provider pending controlled settlement."
+    },
+    {
+      "code": "FEE_REVENUE",
+      "category": "fee",
+      "account_class": "REVENUE",
+      "normal_side": "CREDIT",
+      "owner_scope": "optional",
+      "purpose": "Recognized platform fee revenue under an approved posting rule."
+    },
+    {
+      "code": "SUSPENSE_ASSET",
+      "category": "suspense",
+      "account_class": "ASSET",
+      "normal_side": "DEBIT",
+      "owner_scope": "required",
+      "purpose": "Unresolved debit position linked to an accountable exception reference."
+    },
+    {
+      "code": "SUSPENSE_LIABILITY",
+      "category": "suspense",
+      "account_class": "LIABILITY",
+      "normal_side": "CREDIT",
+      "owner_scope": "required",
+      "purpose": "Unresolved credit position linked to an accountable exception reference."
+    }
+  ]
+}
