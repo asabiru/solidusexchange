@@ -23,6 +23,7 @@
 | [Data classification](data-classification-register.md) | Классы данных, processors и retention questions |
 | [Vendor scorecards](vendor-scorecards.md) | Единые критерии bank/HSM/KYC/KYT/cloud/liquidity/issuer |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
+| [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 
 ## Статусы решений
 
@@ -39,15 +40,8 @@
 4. Money-moving endpoint нельзя добавлять без idempotency, policy decision, immutable audit, ledger effect и reconciliation path.
 5. Любой production enablement требует отдельного go/no-go и evidence из [Phase 0 evidence index](phase-0-evidence-index.md).
 
-## Следующий engineering slice
+## Текущий engineering gate
 
-После review этого pack можно начинать canonical API/event contracts:
+Canonical API/event contracts и dev-only ledger foundation уже подготовлены. Следующий dependency gate — письменный Finance/CTO/Security review [Finance ledger approval pack](finance-ledger-approval-pack.md).
 
-- versioned `/api/v1`;
-- standard error envelope;
-- `X-Request-Id`, `X-Client-Version`, `X-Platform`;
-- обязательный `Idempotency-Key` для command requests;
-- customer/operator namespaces;
-- domain event catalog и compatibility policy.
-
-Это не разрешает provider commands или финансовое исполнение.
+До approval разрешены только foundation hardening, deterministic projections, trial-balance evidence и synthetic tests. Holds, reversals, fees и reconciliation начинаются в Session D; provider commands и financial execution остаются запрещены.

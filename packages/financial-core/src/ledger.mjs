@@ -61,6 +61,22 @@ const REQUIRED_CATEGORIES = new Set([
   "suspense",
   "treasury"
 ]);
+const RULE_REGISTRY_KEYS = new Set([
+  "production_execution_enabled",
+  "registry_version",
+  "rules",
+  "runtime_boundary",
+  "status"
+]);
+const RULE_KEYS = new Set([
+  "allowed_actor_types",
+  "entry_pattern",
+  "journal_type",
+  "posting_rule_version",
+  "purpose",
+  "scope"
+]);
+const RULE_LEG_KEYS = new Set(["definition_code", "side"]);
 
 export class LedgerError extends Error {
   constructor(code, message) {
@@ -195,6 +211,76 @@ export function validateChart(chart) {
   return true;
 }
 
+function buildPostingRuleRegistry(registry, chart) {
+  assertExactKeys(registry, RULE_REGISTRY_KEYS, "Posting rule registry");
+  if (
+    registry.registry_version !== 1 ||
+    registry.status !== "draft" ||
+    registry.runtime_boundary !== "dev-dry-run" ||
+    registry.production_execution_enabled !== false
+  ) {
+    reject(
+      "LEDGER_POSTING_RULES_INVALID",
+      "Posting rules must remain draft, dev-only and non-production."
+    );
+  }
+  if (!Array.isArray(registry.rules) || registry.rules.length === 0) {
+    reject("LEDGER_POSTING_RULES_INVALID", "At least one synthetic posting rule is required.");
+  }
+
+  const definitions = new Set(chart.account_definitions.map(({ code }) => code));
+  const rules = new Map();
+  for (const rule of registry.rules) {
+    assertExactKeys(rule, RULE_KEYS, "Posting rule");
+    assertString(rule.journal_type, JOURNAL_TYPE_PATTERN, "Rule journal type");
+    assertString(rule.posting_rule_version, VERSION_PATTERN, "Posting rule version");
+    if (rule.scope !== "synthetic-test-only") {
+      reject("LEDGER_POSTING_RULES_INVALID", "Only synthetic test rules are allowed.");
+    }
+    if (typeof rule.purpose !== "string" || rule.purpose.length < 24) {
+      reject("LEDGER_POSTING_RULES_INVALID", "Posting rule purpose is incomplete.");
+    }
+    if (
+      !Array.isArray(rule.allowed_actor_types) ||
+      rule.allowed_actor_types.length === 0 ||
+      new Set(rule.allowed_actor_types).size !== rule.allowed_actor_types.length ||
+      rule.allowed_actor_types.some((actorType) => !ACTOR_TYPES.has(actorType))
+    ) {
+      reject("LEDGER_POSTING_RULES_INVALID", "Posting rule actor types are invalid.");
+    }
+    if (!Array.isArray(rule.entry_pattern) || rule.entry_pattern.length < 2) {
+      reject("LEDGER_POSTING_RULES_INVALID", "Posting rule requires at least two entry legs.");
+    }
+
+    const entryPattern = new Set();
+    for (const leg of rule.entry_pattern) {
+      assertExactKeys(leg, RULE_LEG_KEYS, "Posting rule leg");
+      assertString(leg.definition_code, JOURNAL_TYPE_PATTERN, "Rule account definition");
+      if (!definitions.has(leg.definition_code) || !SIDES.has(leg.side)) {
+        reject("LEDGER_POSTING_RULES_INVALID", "Posting rule leg is invalid.");
+      }
+      const signature = `${leg.definition_code}|${leg.side}`;
+      if (entryPattern.has(signature)) {
+        reject("LEDGER_POSTING_RULES_INVALID", `Duplicate posting rule leg ${signature}.`);
+      }
+      entryPattern.add(signature);
+    }
+
+    const identity = `${rule.journal_type}|${rule.posting_rule_version}`;
+    if (rules.has(identity)) {
+      reject("LEDGER_POSTING_RULES_INVALID", `Duplicate posting rule ${identity}.`);
+    }
+    rules.set(identity, freezeDeep(clone(rule)));
+  }
+  return rules;
+}
+
+export function validatePostingRules(registry, chart) {
+  validateChart(chart);
+  buildPostingRuleRegistry(registry, chart);
+  return true;
+}
+
 function validateAssets(assets) {
   if (!Array.isArray(assets) || assets.length === 0) {
     reject("LEDGER_CONFIGURATION_INVALID", "At least one synthetic asset is required.");
@@ -274,7 +360,7 @@ function validateAccounts(accounts, chartDefinitions, assets) {
   return result;
 }
 
-function validateCommand(command, accounts, assets) {
+function validateCommand(command, accounts, assets, postingRules) {
   assertExactKeys(command, COMMAND_KEYS, "Posting command");
   assertString(command.journal_id, UUID_PATTERN, "Journal ID");
   assertString(command.journal_type, JOURNAL_TYPE_PATTERN, "Journal type");
@@ -288,10 +374,19 @@ function validateCommand(command, accounts, assets) {
   assertString(command.authorization_reference, IDENTIFIER_PATTERN, "Authorization reference");
   assertString(command.policy_version, VERSION_PATTERN, "Policy version");
   assertString(command.posting_rule_version, VERSION_PATTERN, "Posting rule version");
+  const postingRule = postingRules.get(
+    `${command.journal_type}|${command.posting_rule_version}`
+  );
+  if (!postingRule) {
+    reject("LEDGER_POSTING_RULE_NOT_FOUND", "Posting rule is not registered.");
+  }
 
   assertExactKeys(command.actor, ACTOR_KEYS, "Actor");
   if (!ACTOR_TYPES.has(command.actor.type)) {
     reject("LEDGER_VALIDATION_FAILED", "Actor type is not permitted.");
+  }
+  if (!postingRule.allowed_actor_types.includes(command.actor.type)) {
+    reject("LEDGER_POSTING_RULE_VIOLATION", "Actor is not permitted by the posting rule.");
   }
   assertString(command.actor.id, IDENTIFIER_PATTERN, "Actor ID");
 
@@ -312,6 +407,7 @@ function validateCommand(command, accounts, assets) {
   }
   const entryIds = new Set();
   const totals = new Map();
+  const entryPatterns = new Map();
   for (const entry of command.entries) {
     assertExactKeys(entry, ENTRY_KEYS, "Ledger entry");
     assertString(entry.entry_id, UUID_PATTERN, "Entry ID");
@@ -333,6 +429,9 @@ function validateCommand(command, accounts, assets) {
     if (account.asset_code !== entry.asset_code) {
       reject("LEDGER_BOUNDARY_VIOLATION", "Entry asset does not match its account.");
     }
+    const pattern = entryPatterns.get(entry.asset_code) ?? [];
+    pattern.push(`${account.definition_code}|${entry.side}`);
+    entryPatterns.set(entry.asset_code, pattern);
     const asset = assets.get(entry.asset_code);
     let minorUnits;
     try {
@@ -348,12 +447,28 @@ function validateCommand(command, accounts, assets) {
       reject("LEDGER_UNBALANCED_JOURNAL", `Journal is not balanced for ${asset}.`);
     }
   }
+  const expectedPattern = postingRule.entry_pattern
+    .map(({ definition_code: definitionCode, side }) => `${definitionCode}|${side}`)
+    .sort();
+  for (const [asset, pattern] of entryPatterns) {
+    const actualPattern = pattern.sort();
+    if (
+      actualPattern.length !== expectedPattern.length ||
+      actualPattern.some((signature, index) => signature !== expectedPattern[index])
+    ) {
+      reject(
+        "LEDGER_POSTING_RULE_VIOLATION",
+        `Journal entries do not match the registered pattern for ${asset}.`
+      );
+    }
+  }
 }
 
 export function createInMemoryLedger({
   accounts,
   assets,
   chart,
+  postingRules,
   clock = () => new Date().toISOString()
 }) {
   validateChart(chart);
@@ -363,6 +478,7 @@ export function createInMemoryLedger({
   const definitions = new Map(
     chart.account_definitions.map((definition) => [definition.code, freezeDeep(clone(definition))])
   );
+  const postingRuleRegistry = buildPostingRuleRegistry(postingRules, chart);
   const assetRegistry = validateAssets(assets);
   const accountRegistry = validateAccounts(accounts, definitions, assetRegistry);
   const journals = new Map();
@@ -370,7 +486,7 @@ export function createInMemoryLedger({
 
   function post(command) {
     const candidate = clone(command);
-    validateCommand(candidate, accountRegistry, assetRegistry);
+    validateCommand(candidate, accountRegistry, assetRegistry, postingRuleRegistry);
     const commandDigest = digest(candidate);
     const idempotencyIdentity = `${candidate.legal_entity_id}|${candidate.idempotency_key}`;
     const prior = idempotency.get(idempotencyIdentity);
@@ -429,10 +545,70 @@ export function createInMemoryLedger({
     });
   }
 
+  function getTrialBalance() {
+    const totals = new Map();
+    for (const journal of journals.values()) {
+      for (const entry of journal.entries) {
+        const identity = `${journal.legal_entity_id}|${entry.asset_code}`;
+        const row = totals.get(identity) ?? {
+          legalEntityId: journal.legal_entity_id,
+          assetCode: entry.asset_code,
+          debits: 0n,
+          credits: 0n,
+          entryCount: 0,
+          journalIds: new Set()
+        };
+        const amount = parseAmount(entry.amount, assetRegistry.get(entry.asset_code).scale);
+        if (entry.side === "DEBIT") row.debits += amount;
+        else row.credits += amount;
+        row.entryCount += 1;
+        row.journalIds.add(journal.journal_id);
+        totals.set(identity, row);
+      }
+    }
+
+    return freezeDeep(
+      [...totals.values()]
+        .sort(
+          (left, right) =>
+            left.legalEntityId.localeCompare(right.legalEntityId) ||
+            left.assetCode.localeCompare(right.assetCode)
+        )
+        .map((row) => {
+          const scale = assetRegistry.get(row.assetCode).scale;
+          const difference = row.debits - row.credits;
+          return {
+            legal_entity_id: row.legalEntityId,
+            asset_code: row.assetCode,
+            journal_count: row.journalIds.size,
+            entry_count: row.entryCount,
+            debit_total: formatAmount(row.debits, scale),
+            credit_total: formatAmount(row.credits, scale),
+            difference: formatAmount(difference, scale),
+            balanced: difference === 0n
+          };
+        })
+    );
+  }
+
+  function rebuildProjectionSnapshot() {
+    const snapshot = {
+      as_of_journal_count: journals.size,
+      projections: [...accountRegistry.keys()].sort().map(getProjection),
+      trial_balance: getTrialBalance()
+    };
+    return freezeDeep({
+      ...snapshot,
+      snapshot_digest: digest(snapshot)
+    });
+  }
+
   return freezeDeep({
     getProjection,
+    getTrialBalance,
     listJournals,
     post,
+    rebuildProjectionSnapshot,
     runtime_boundary: "dev-dry-run"
   });
 }

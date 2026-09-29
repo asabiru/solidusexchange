@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { validateChart } from "../src/ledger.mjs";
+import { validateChart, validatePostingRules } from "../src/ledger.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -12,6 +12,10 @@ function read(path) {
 
 function readJson(path) {
   return JSON.parse(read(path));
+}
+
+function readRepositoryFile(path) {
+  return readFileSync(join(root, "..", "..", path), "utf8");
 }
 
 function assert(condition, message) {
@@ -33,6 +37,8 @@ assert(packageJson.devDependencies === undefined, "Financial core must remain de
 
 const chart = readJson("chart-of-accounts.json");
 validateChart(chart);
+const postingRules = readJson("posting-rules.json");
+validatePostingRules(postingRules, chart);
 
 const commandSchema = readJson("schemas/posting-command.schema.json");
 assert(commandSchema.additionalProperties === false, "Posting command must reject unknown fields");
@@ -61,6 +67,7 @@ assert(
 );
 
 const migration = read("migrations/0001_ledger_foundation.sql");
+const verificationMigration = read("migrations/0002_ledger_verification_views.sql");
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -132,6 +139,19 @@ assert(
   migration.includes("payload - ARRAY['journal_id', 'command_digest'] = '{}'::JSONB"),
   "Outbox payload must remain reference-only"
 );
+for (const required of [
+  "CREATE VIEW financial_core.ledger_account_projections",
+  "CREATE VIEW financial_core.ledger_trial_balance",
+  "WITH (security_invoker = TRUE)",
+  "REVOKE ALL ON financial_core.ledger_account_projections FROM PUBLIC",
+  "REVOKE ALL ON financial_core.ledger_trial_balance FROM PUBLIC"
+]) {
+  assert(verificationMigration.includes(required), `Verification migration is missing ${required}`);
+}
+assert(
+  !/CREATE MATERIALIZED VIEW/i.test(verificationMigration),
+  "Ledger verification must remain a rebuildable read-only projection"
+);
 
 const readme = read("README.md");
 for (const required of [
@@ -141,11 +161,26 @@ for (const required of [
   "## Explicit exclusions",
   "Runtime boundary: `dev-dry-run`",
   "PostgreSQL remains the proposed target under D-009",
+  "Finance approval gate",
   "Session D"
 ]) {
   assert(readme.includes(required), `README is missing ${required}`);
 }
 
+const approvalPack = readRepositoryFile(
+  "Documentation/regulated-core/finance-ledger-approval-pack.md"
+);
+for (const required of [
+  "Review state: `PENDING`",
+  "Finance approver:",
+  "CTO approver:",
+  "Security approver:",
+  "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
+  "## NO-GO"
+]) {
+  assert(approvalPack.includes(required), `Finance approval pack is missing ${required}`);
+}
+
 console.log(
-  "Financial core ledger foundation is structurally consistent and remains dev-only."
+  "Financial core ledger evidence is structurally consistent and remains dev-only."
 );

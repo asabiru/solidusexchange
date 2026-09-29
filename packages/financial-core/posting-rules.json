@@ -1,0 +1,27 @@
+{
+  "registry_version": 1,
+  "status": "draft",
+  "runtime_boundary": "dev-dry-run",
+  "production_execution_enabled": false,
+  "rules": [
+    {
+      "journal_type": "SYNTHETIC_PROVIDER_POSITION",
+      "posting_rule_version": "synthetic-provider-position-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "PROVIDER_PAYABLE_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Exercise balanced posting and projection controls with synthetic assets only."
+    }
+  ]
+}
