@@ -10,7 +10,7 @@ import type {
   QueueRow
 } from "./demo";
 
-interface SignedEnvelope<T> {
+export interface SignedEnvelope<T> {
   keyId: string;
   issuedAt: string;
   requestId: string;
@@ -61,10 +61,25 @@ export interface ApprovalsPayload {
 export interface AuditPayload {
   events: readonly AuditEvent[];
   chain: {
+    backend: "synthetic-memory" | "postgresql";
+    durable: boolean;
+    retentionDays: number;
     verified: boolean;
     length: number;
     headHash: string;
   };
+}
+
+export interface AuditExportPayload {
+  formatVersion: 1;
+  generatedAt: string;
+  storage: {
+    backend: "synthetic-memory" | "postgresql";
+    durable: boolean;
+    retentionDays: number;
+  };
+  chain: AuditPayload["chain"];
+  events: readonly AuditEvent[];
 }
 
 export interface HealthPayload {
@@ -72,6 +87,12 @@ export interface HealthPayload {
   oidcConfigured: boolean;
   devLoginEnabled: boolean;
   dataSource: "synthetic";
+  audit: {
+    backend: "synthetic-memory" | "postgresql";
+    durable: boolean;
+    retentionDays: number;
+    verified: boolean;
+  };
   commandsEnabled: false;
 }
 
@@ -221,6 +242,17 @@ export function getApprovals(): Promise<ApprovalsPayload> {
 
 export function getAudit(): Promise<AuditPayload> {
   return getSigned("/bff/api/audit", "audit");
+}
+
+export async function getAuditExport(): Promise<SignedEnvelope<AuditExportPayload>> {
+  const response = await fetch("/bff/api/audit/export", {
+    credentials: "same-origin",
+    headers: { accept: "application/json" }
+  });
+  if (!response.ok) throw new ApiError(response.status, "Audit export was rejected");
+  const envelope = await response.json() as SignedEnvelope<AuditExportPayload>;
+  await verifyEnvelope(envelope, "audit-export");
+  return envelope;
 }
 
 export function previewApproval(

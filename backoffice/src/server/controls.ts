@@ -7,9 +7,9 @@ import type {
   Tone
 } from "../data/demo.js";
 
-const genesisHash = "0".repeat(64);
+export const auditGenesisHash = "0".repeat(64);
 
-function sha256(value: unknown): string {
+export function sha256(value: unknown): string {
   return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
@@ -20,25 +20,37 @@ function auditTone(outcome: AuditSourceEvent["outcome"]): Tone {
 }
 
 export function buildAuditChain(source: readonly AuditSourceEvent[]): readonly AuditEvent[] {
-  let previousHash = genesisHash;
+  let previousHash = auditGenesisHash;
   const events = source.map((event, index) => {
-    const sequence = index + 1;
-    const hash = sha256({ sequence, previousHash, ...event });
-    const chained = Object.freeze({
-      sequence,
-      previousHash,
-      ...event,
-      hash,
-      tone: auditTone(event.outcome)
-    });
-    previousHash = hash;
+    const chained = buildAuditEvent(index + 1, previousHash, event);
+    previousHash = chained.hash;
     return chained;
   });
   return Object.freeze(events);
 }
 
+export function buildAuditEvent(
+  sequence: number,
+  previousHash: string,
+  event: AuditSourceEvent
+): AuditEvent {
+  const occurredAt = new Date(event.occurredAt);
+  if (!Number.isSafeInteger(sequence) || sequence < 1 || Number.isNaN(occurredAt.valueOf())) {
+    throw new Error("Audit event is not canonicalizable");
+  }
+  const canonical = { ...event, occurredAt: occurredAt.toISOString() };
+  const hash = sha256({ sequence, previousHash, ...canonical });
+  return Object.freeze({
+    sequence,
+    previousHash,
+    ...canonical,
+    hash,
+    tone: auditTone(event.outcome)
+  });
+}
+
 export function verifyAuditChain(events: readonly AuditEvent[]): boolean {
-  let previousHash = genesisHash;
+  let previousHash = auditGenesisHash;
   for (const [index, event] of events.entries()) {
     const { hash, tone: _tone, ...payload } = event;
     if (

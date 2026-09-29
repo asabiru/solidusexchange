@@ -6,6 +6,7 @@ import {
   getAmlCases,
   getApprovals,
   getAudit,
+  getAuditExport,
   getAuthStatus,
   getCustomers,
   getDashboard,
@@ -561,12 +562,35 @@ function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) {
   );
 }
 
-function AuditView({ data }: { data: AuditPayload }) {
+function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean }) {
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+
+  async function downloadExport() {
+    setExportState("loading");
+    try {
+      const envelope = await getAuditExport();
+      const blob = new Blob([JSON.stringify(envelope, null, 2)], {
+        type: "application/json"
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `solidchange-audit-${envelope.payload.chain.headHash.slice(0, 12)}.json`;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportState("idle");
+    } catch {
+      setExportState("failed");
+    }
+  }
+
   return (
     <>
       <PageHeading
         title="Audit trail"
-        description="Signed read-only envelope · SHA-256 hash chain · synthetic dev evidence"
+        description="Signed read-only evidence · SHA-256 hash chain · fail-closed verification"
       />
       <section className="audit-summary">
         <article className="metric">
@@ -579,12 +603,30 @@ function AuditView({ data }: { data: AuditPayload }) {
           <strong>{data.chain.headHash.slice(0, 16)}…</strong>
           <small>Bound to the latest event</small>
         </article>
+        <article className="metric">
+          <div><span>Evidence storage</span><i data-tone={data.chain.durable ? "success" : "warning"} /></div>
+          <strong>{data.chain.durable ? "PostgreSQL" : "Synthetic memory"}</strong>
+          <small>Minimum retention · {data.chain.retentionDays} days</small>
+        </article>
       </section>
       <article className="panel">
         <header className="panel-heading">
           <div><h2>Append-only events</h2><p>Previous hash связывает каждую запись с предшествующей</p></div>
-          <Status tone="success">Verified chain</Status>
+          <div className="audit-actions">
+            <Status tone="success">Verified chain</Status>
+            <button
+              className="button"
+              type="button"
+              disabled={!mayExport || exportState === "loading"}
+              onClick={() => void downloadExport()}
+            >
+              {exportState === "loading" ? "Экспорт…" : "Экспорт evidence"}
+            </button>
+          </div>
         </header>
+        {exportState === "failed" && (
+          <div className="preview-error">Экспорт отклонён или integrity verification недоступна.</div>
+        )}
         <TableShell label="Audit trail">
           <table>
             <thead>
@@ -957,7 +999,12 @@ export function App() {
               data={access.data.approvals}
             />
           )}
-          {screen === "audit" && access.data.audit && <AuditView data={access.data.audit} />}
+          {screen === "audit" && access.data.audit && (
+            <AuditView
+              data={access.data.audit}
+              mayExport={hasCapability(access.data.session, "audit:export")}
+            />
+          )}
           {!activeItem.implemented && <PlaceholderView item={activeItem} />}
         </main>
       </div>
