@@ -6,7 +6,8 @@ export type Capability =
   | "approvals:read"
   | "approvals:review"
   | "approvals:preview"
-  | "audit:read";
+  | "audit:read"
+  | "audit:export";
 
 export type OperatorRole =
   | "compliance-lead"
@@ -36,7 +37,8 @@ export const roleProfiles: readonly RoleProfile[] = [
       "approvals:read",
       "approvals:review",
       "approvals:preview",
-      "audit:read"
+      "audit:read",
+      "audit:export"
     ]
   },
   {
@@ -70,7 +72,8 @@ export const roleProfiles: readonly RoleProfile[] = [
       "kyc:read",
       "aml:read",
       "approvals:read",
-      "audit:read"
+      "audit:read",
+      "audit:export"
     ]
   }
 ];

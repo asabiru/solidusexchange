@@ -12,12 +12,19 @@ export interface OidcConfig {
   roleMap: Readonly<Record<string, OperatorRole>>;
 }
 
+export interface AuditConfig {
+  storage: "memory" | "postgresql";
+  retentionDays: number;
+  databaseUrl?: string;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
   allowedOrigins: readonly string[];
   allowDevLogin: boolean;
   sessionTtlSeconds: number;
+  audit: AuditConfig;
   oidc?: OidcConfig;
 }
 
@@ -83,6 +90,31 @@ function loadOidcConfig(): OidcConfig | undefined {
   };
 }
 
+function loadAuditConfig(): AuditConfig {
+  const storage = process.env.BACKOFFICE_AUDIT_STORAGE ?? "memory";
+  if (storage !== "memory" && storage !== "postgresql") {
+    throw new Error("BACKOFFICE_AUDIT_STORAGE must be memory or postgresql");
+  }
+
+  const retentionDays = Number(process.env.BACKOFFICE_AUDIT_RETENTION_DAYS ?? "2555");
+  if (!Number.isInteger(retentionDays) || retentionDays < 1 || retentionDays > 36_500) {
+    throw new Error("BACKOFFICE_AUDIT_RETENTION_DAYS must be between 1 and 36500");
+  }
+
+  const databaseUrl = requiredOidcValue("BACKOFFICE_AUDIT_DATABASE_URL");
+  if (storage === "postgresql" && !databaseUrl) {
+    throw new Error("BACKOFFICE_AUDIT_DATABASE_URL is required for PostgreSQL audit storage");
+  }
+  if (databaseUrl) {
+    const url = new URL(databaseUrl);
+    if (!["postgres:", "postgresql:"].includes(url.protocol)) {
+      throw new Error("BACKOFFICE_AUDIT_DATABASE_URL must use PostgreSQL");
+    }
+  }
+
+  return { storage, retentionDays, databaseUrl };
+}
+
 export function loadServerConfig(): ServerConfig {
   if ((process.env.BACKOFFICE_MODE ?? "dev-dry-run") !== "dev-dry-run") {
     throw new Error("Backoffice BFF refuses to start outside dev-dry-run mode");
@@ -122,6 +154,7 @@ export function loadServerConfig(): ServerConfig {
     allowedOrigins,
     allowDevLogin: process.env.BACKOFFICE_ALLOW_DEV_LOGIN === "true",
     sessionTtlSeconds,
+    audit: loadAuditConfig(),
     oidc: loadOidcConfig()
   };
 }

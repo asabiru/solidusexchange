@@ -12,10 +12,14 @@ import {
 import { ExpiringStore, type OperatorSession, type PendingLogin } from "./session.js";
 import { ResponseSigner } from "./signing.js";
 import {
+  AuditUnavailableError,
+  AuditStoreError,
+  type AuditStore,
+  MemoryAuditStore
+} from "./audit-store.js";
+import {
   approvalCommandDigest,
-  buildApprovalPreview,
-  buildAuditChain,
-  verifyAuditChain
+  buildApprovalPreview
 } from "./controls.js";
 
 const sessionCookie = "solidchange_bo_session";
@@ -86,12 +90,20 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-export function createBackofficeServer(config: ServerConfig) {
+function defaultAuditStore(config: ServerConfig): AuditStore {
+  if (config.audit.storage !== "memory") {
+    throw new AuditUnavailableError("PostgreSQL audit storage must be initialized before BFF");
+  }
+  return new MemoryAuditStore(demoRepository.auditSource(), config.audit.retentionDays);
+}
+
+export function createBackofficeServer(
+  config: ServerConfig,
+  auditStore: AuditStore = defaultAuditStore(config)
+) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
   const sessions = new ExpiringStore<OperatorSession>();
   const signer = new ResponseSigner();
-  const audit = buildAuditChain(demoRepository.auditSource());
-  if (!verifyAuditChain(audit)) throw new Error("Synthetic audit chain is invalid");
 
   function setSessionCookie(response: ServerResponse, session: OperatorSession): void {
     const secure = config.allowedOrigins.every((origin) => origin.startsWith("https://"));
@@ -159,11 +171,18 @@ export function createBackofficeServer(config: ServerConfig) {
       const path = url.pathname;
 
       if (request.method === "GET" && path === "/bff/healthz") {
+        const audit = await auditStore.snapshot();
         json(response, 200, {
           mode: "dev-dry-run",
           oidcConfigured: Boolean(config.oidc),
           devLoginEnabled: config.allowDevLogin,
           dataSource: "synthetic",
+          audit: {
+            backend: audit.status.backend,
+            durable: audit.status.durable,
+            retentionDays: audit.status.retentionDays,
+            verified: audit.status.verified
+          },
           commandsEnabled: false
         });
         return;
@@ -324,14 +343,27 @@ export function createBackofficeServer(config: ServerConfig) {
 
       if (request.method === "GET" && path === "/bff/api/audit") {
         if (!authorized(request, response, "audit:read")) return;
-        const head = audit.at(-1);
+        const audit = await auditStore.snapshot();
         signed(response, "audit", {
-          events: audit,
-          chain: {
-            verified: true,
-            length: audit.length,
-            headHash: head?.hash ?? ""
-          }
+          events: audit.events,
+          chain: audit.status
+        });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/audit/export") {
+        if (!authorized(request, response, "audit:export")) return;
+        const audit = await auditStore.snapshot();
+        signed(response, "audit-export", {
+          formatVersion: 1,
+          generatedAt: new Date().toISOString(),
+          storage: {
+            backend: audit.status.backend,
+            durable: audit.status.durable,
+            retentionDays: audit.status.retentionDays
+          },
+          chain: audit.status,
+          events: audit.events
         });
         return;
       }
@@ -381,13 +413,21 @@ export function createBackofficeServer(config: ServerConfig) {
         signed(
           response,
           `approval-preview:${approval.id}`,
-          buildApprovalPreview(approval, session.subject, audit)
+          buildApprovalPreview(
+            approval,
+            session.subject,
+            (await auditStore.snapshot()).events
+          )
         );
         return;
       }
 
       json(response, 404, { error: "not_found" });
-    } catch {
+    } catch (error) {
+      if (error instanceof AuditStoreError) {
+        json(response, 503, { error: "audit_integrity_unavailable" });
+        return;
+      }
       json(response, 500, { error: "request_failed" });
     }
   });

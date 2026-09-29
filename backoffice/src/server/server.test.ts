@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
 import type { ApprovalRow } from "../data/demo.js";
+import {
+  AuditUnavailableError,
+  type AuditStore
+} from "./audit-store.js";
 import { approvalCommandDigest } from "./controls.js";
 import { createBackofficeServer } from "./server.js";
 
@@ -31,7 +35,11 @@ describe("backoffice BFF", () => {
       port: 0,
       allowedOrigins: [origin],
       allowDevLogin: true,
-      sessionTtlSeconds: 900
+      sessionTtlSeconds: 900,
+      audit: {
+        storage: "memory",
+        retentionDays: 30
+      }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
     const address = server.address();
@@ -184,6 +192,32 @@ describe("backoffice BFF", () => {
     assert.equal(envelope.payload.chain.length, 6);
     assert.equal(envelope.payload.events[0].previousHash, "0".repeat(64));
     assert.equal(envelope.payload.chain.headHash, envelope.payload.events.at(-1)?.hash);
+
+    const exportResponse = await fetch(`${baseUrl}/bff/api/audit/export`, {
+      headers: { cookie }
+    });
+    assert.equal(exportResponse.status, 200);
+    const exported = await exportResponse.json() as {
+      resource: string;
+      payload: {
+        formatVersion: number;
+        storage: { durable: boolean; retentionDays: number };
+        chain: { verified: boolean; headHash: string };
+        events: readonly { hash: string }[];
+      };
+    };
+    assert.equal(exported.resource, "audit-export");
+    assert.equal(exported.payload.formatVersion, 1);
+    assert.equal(exported.payload.storage.durable, false);
+    assert.equal(exported.payload.storage.retentionDays, 30);
+    assert.equal(exported.payload.chain.verified, true);
+    assert.equal(exported.payload.chain.headHash, exported.payload.events.at(-1)?.hash);
+
+    const mutation = await fetch(`${baseUrl}/bff/api/audit`, {
+      method: "POST",
+      headers: { cookie, origin }
+    });
+    assert.equal(mutation.status, 404);
   });
 
   it("returns a side-effect-free preview with policy blockers", async () => {
@@ -219,6 +253,7 @@ describe("backoffice BFF", () => {
           executable: boolean;
           blockers: readonly string[];
         };
+        auditAnchor: { hash: string };
       };
     };
     assert.equal(envelope.resource, `approval-preview:${approval.id}`);
@@ -227,6 +262,13 @@ describe("backoffice BFF", () => {
     assert.equal(envelope.payload.policy.commandClient, "absent");
     assert.equal(envelope.payload.policy.executable, false);
     assert.ok(envelope.payload.policy.blockers.includes("command_client_absent"));
+    const auditResponse = await fetch(`${baseUrl}/bff/api/audit`, {
+      headers: { cookie }
+    });
+    const auditEnvelope = await auditResponse.json() as {
+      payload: { chain: { headHash: string } };
+    };
+    assert.equal(envelope.payload.auditAnchor.hash, auditEnvelope.payload.chain.headHash);
   });
 
   it("denies approval preview to read-only roles", async () => {
@@ -292,5 +334,58 @@ describe("backoffice BFF", () => {
       body: JSON.stringify({ role: "compliance-lead" })
     });
     assert.equal(response.status, 404);
+  });
+});
+
+describe("audit fail-closed boundary", () => {
+  it("does not silently fall back when PostgreSQL mode was selected", () => {
+    assert.throws(
+      () => createBackofficeServer({
+        host: "127.0.0.1",
+        port: 0,
+        allowedOrigins: [origin],
+        allowDevLogin: false,
+        sessionTtlSeconds: 900,
+        audit: {
+          storage: "postgresql",
+          retentionDays: 2_555,
+          databaseUrl: "postgresql://unused@127.0.0.1/unused"
+        }
+      }),
+      AuditUnavailableError
+    );
+  });
+
+  it("returns unavailable instead of serving unverified audit state", async () => {
+    const unavailable: AuditStore = {
+      async snapshot() {
+        throw new AuditUnavailableError();
+      },
+      async append() {
+        throw new AuditUnavailableError();
+      },
+      async close() {}
+    };
+    const isolated = createBackofficeServer({
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: [origin],
+      allowDevLogin: false,
+      sessionTtlSeconds: 900,
+      audit: {
+        storage: "postgresql",
+        retentionDays: 2_555,
+        databaseUrl: "postgresql://unused@127.0.0.1/unused"
+      }
+    }, unavailable);
+    await new Promise<void>((resolve) => isolated.listen(0, "127.0.0.1", resolve));
+    const address = isolated.address();
+    if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+    const response = await fetch(`http://127.0.0.1:${address.port}/bff/healthz`);
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: "audit_integrity_unavailable" });
+    await new Promise<void>((resolve, reject) => {
+      isolated.close((error) => error ? reject(error) : resolve());
+    });
   });
 });

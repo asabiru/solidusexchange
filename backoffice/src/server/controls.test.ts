@@ -26,6 +26,14 @@ describe("protected control contracts", () => {
     assert.equal(verifyAuditChain(tampered), false);
   });
 
+  it("rejects missing and reordered audit events", () => {
+    const audit = buildAuditChain(demoRepository.auditSource());
+    assert.equal(verifyAuditChain(audit.filter((event) => event.sequence !== 3)), false);
+    const reordered = [...audit];
+    [reordered[1], reordered[2]] = [reordered[2], reordered[1]];
+    assert.equal(verifyAuditChain(reordered), false);
+  });
+
   it("keeps previews non-executable and enforces maker-checker separation", () => {
     const audit = buildAuditChain(demoRepository.auditSource());
     const approval = demoRepository.approvals().find((item) => item.id === "APV-843918");
