@@ -83,11 +83,15 @@ const migration = read("migrations/0001_ledger_foundation.sql");
 const verificationMigration = read("migrations/0002_ledger_verification_views.sql");
 const acceptanceMigration = read("migrations/0003_ledger_acceptance_seal.sql");
 const truncationMigration = read("migrations/0004_ledger_truncate_guard.sql");
+const replicationGuardMigration = read(
+  "migrations/0005_ledger_trigger_replication_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
   acceptanceMigration,
-  truncationMigration
+  truncationMigration,
+  replicationGuardMigration
 ].join("\n");
 for (const required of [
   "CREATE SCHEMA financial_core",
@@ -121,6 +125,35 @@ for (const table of [
   assert(
     migration.includes(`BEFORE UPDATE OR DELETE ON financial_core.${table}`),
     `${table} is missing append-only protection`
+  );
+}
+for (const trigger of [
+  "account_definitions_append_only",
+  "account_definitions_reject_truncate",
+  "ledger_accounts_append_only",
+  "ledger_accounts_reject_truncate",
+  "ledger_assets_append_only",
+  "ledger_assets_reject_truncate",
+  "ledger_entries_append_only",
+  "ledger_entries_reject_truncate",
+  "ledger_idempotency_append_only",
+  "ledger_idempotency_reject_truncate",
+  "ledger_journal_seals_append_only",
+  "ledger_journal_seals_reject_truncate",
+  "ledger_journals_append_only",
+  "ledger_journals_reject_truncate",
+  "ledger_delivery_attempts_append_only",
+  "ledger_delivery_attempts_reject_truncate",
+  "ledger_outbox_append_only",
+  "ledger_outbox_reject_truncate",
+  "posting_rule_registry_append_only",
+  "posting_rule_registry_reject_truncate",
+  "schema_migrations_append_only",
+  "schema_migrations_reject_truncate"
+]) {
+  assert(
+    replicationGuardMigration.includes(`ENABLE ALWAYS TRIGGER ${trigger}`),
+    `${trigger} is not enforced in every replication mode`
   );
 }
 for (const table of [
@@ -269,7 +302,25 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
   ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"],
   ["tests/postgres-owner-truncate-guard.sh", "TRUNCATE TABLE"],
-  ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"]
+  ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"],
+  ["tests/postgres-immutability-catalog.sql", "pg_catalog.pg_trigger"],
+  [
+    "tests/postgres-immutability-catalog.sql",
+    "trigger_function.proname = 'reject_mutation'"
+  ],
+  ["scripts/verify-postgres-immutability-catalog.mjs", "assert.deepStrictEqual"],
+  [
+    "scripts/verify-postgres-immutability-catalog.mjs",
+    "postgres-immutability-catalog-ok"
+  ],
+  [
+    "tests/postgres-immutability-catalog.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-immutability-catalog.sh",
+    "postgres-replication-mode-immutability-ok"
+  ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
@@ -354,6 +405,7 @@ for (const required of [
   "tests/postgres-concurrency.sh",
   "tests/postgres-runtime-privileges.sh",
   "tests/postgres-owner-truncate-guard.sh",
+  "tests/postgres-immutability-catalog.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
