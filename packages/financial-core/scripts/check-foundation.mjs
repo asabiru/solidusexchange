@@ -223,7 +223,9 @@ for (const [fixture, evidence] of [
   ["tests/postgres-precision-boundary.sql", "repeat('9', 76)"],
   ["tests/postgres-reject-precision.sql", "repeat('9', 77)"],
   ["tests/postgres-reject-nonfinite.sql", "'NaN'::NUMERIC"],
-  ["tests/postgres-reject-nonfinite.sql", "ARRAY['Infinity', '-Infinity']"]
+  ["tests/postgres-reject-nonfinite.sql", "ARRAY['Infinity', '-Infinity']"],
+  ["tests/postgres-concurrency.sh", "concurrent-late-entry-ok"],
+  ["tests/postgres-concurrency.sh", "pg_try_advisory_lock"]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
 }
@@ -290,6 +292,7 @@ for (const required of [
   "tests/postgres-reject-rule-pattern.sql",
   "tests/postgres-reject-precision.sql",
   "tests/postgres-reject-nonfinite.sql",
+  "tests/postgres-concurrency.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);

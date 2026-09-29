@@ -87,6 +87,11 @@ jobs:
           -v "command_vector_json=$(tr -d '\n' < tests/command-digest-vector.json)"
           -f tests/postgres-smoke.sql
 
+      - name: Verify concurrent journal acceptance
+        env:
+          PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+        run: bash tests/postgres-concurrency.sh
+
       - name: Verify accepted precision boundary
         run: >-
           docker run --rm --network host
