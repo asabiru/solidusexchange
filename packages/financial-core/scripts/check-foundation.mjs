@@ -92,6 +92,9 @@ const invariantReplicationGuardMigration = read(
 const replicaReferenceGuardMigration = read(
   "migrations/0007_ledger_replica_reference_guard.sql"
 );
+const acceptanceArtifactGuardMigration = read(
+  "migrations/0008_ledger_acceptance_artifact_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -99,7 +102,8 @@ const migrations = [
   truncationMigration,
   replicationGuardMigration,
   invariantReplicationGuardMigration,
-  replicaReferenceGuardMigration
+  replicaReferenceGuardMigration,
+  acceptanceArtifactGuardMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
@@ -319,6 +323,20 @@ for (const rule of postingRules.rules) {
     );
   }
 }
+for (const required of [
+  "CREATE FUNCTION financial_core.validate_acceptance_artifact_timestamp",
+  "ledger_idempotency_validate_acceptance_timestamp",
+  "ledger_outbox_validate_acceptance_timestamp",
+  "ENABLE ALWAYS TRIGGER ledger_idempotency_validate_acceptance_timestamp",
+  "ENABLE ALWAYS TRIGGER ledger_outbox_validate_acceptance_timestamp",
+  "artifact_at IS DISTINCT FROM expected_accepted_at",
+  "REVOKE ALL ON FUNCTION financial_core.validate_acceptance_artifact_timestamp()"
+]) {
+  assert(
+    acceptanceArtifactGuardMigration.includes(required),
+    `Acceptance artifact guard is missing ${required}`
+  );
+}
 
 for (const [fixture, evidence] of [
   ["tests/postgres-reject-late-entry.sql", "sequence_number"],
@@ -410,6 +428,22 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-replica-reference-integrity.sh",
     "postgres-replica-mode-reference-integrity-ok"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "SET session_replication_role = ${replication_mode}"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "ledger_idempotency_registry acceptance timestamp does not match journal"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "ledger_outbox_events acceptance timestamp does not match journal"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "postgres-acceptance-artifact-integrity-ok"
   ],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_constraint"],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_index"],
@@ -588,6 +622,7 @@ for (const required of [
   "tests/postgres-access-control-catalog.sh",
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
+  "tests/postgres-acceptance-artifact-integrity.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);

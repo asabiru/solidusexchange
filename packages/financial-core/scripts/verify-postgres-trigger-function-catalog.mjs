@@ -14,6 +14,10 @@ const sourceHashes = [
     "4eb506b1c167b6e0e3cecaca098d39a3e595cb8c9aad13f43a94513b5a97098a"
   ],
   [
+    "validate_acceptance_artifact_timestamp",
+    "86b347d14d51fb8b4414b7991accb790e595bb8b02534185e27476c2e81202f7"
+  ],
+  [
     "validate_account",
     "daf3a4ff8ddbfd73792cf187470c59e73cdf5d8c5537aaafed5d937d30993b69"
   ],
