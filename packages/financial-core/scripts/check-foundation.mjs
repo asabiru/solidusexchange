@@ -101,6 +101,10 @@ const migrations = [
   invariantReplicationGuardMigration,
   replicaReferenceGuardMigration
 ].join("\n");
+assert(
+  !migrations.includes("ALTER DEFAULT PRIVILEGES"),
+  "Financial core migrations must not modify role-level default privileges"
+);
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -466,6 +470,32 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-relation-catalog.sh",
     "postgres-replica-mode-not-null-integrity-ok"
+  ],
+  ["tests/postgres-access-control-catalog.sql", "pg_catalog.aclexplode"],
+  ["tests/postgres-access-control-catalog.sql", "pg_catalog.pg_default_acl"],
+  [
+    "scripts/verify-postgres-access-control-catalog.mjs",
+    "expectedCatalogSha256"
+  ],
+  [
+    "scripts/verify-postgres-access-control-catalog.mjs",
+    "PostgreSQL ownership or access-control catalog differs"
+  ],
+  [
+    "tests/postgres-access-control-catalog.sh",
+    "GRANT USAGE ON SCHEMA financial_core TO PUBLIC"
+  ],
+  [
+    "tests/postgres-access-control-catalog.sh",
+    "GRANT SELECT (amount) ON TABLE financial_core.ledger_entries TO PUBLIC"
+  ],
+  [
+    "tests/postgres-access-control-catalog.sh",
+    "GRANT EXECUTE ON FUNCTION financial_core.reject_mutation() TO PUBLIC"
+  ],
+  [
+    "tests/postgres-access-control-catalog.sh",
+    "postgres-access-control-catalog-negative-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -555,6 +585,7 @@ for (const required of [
   "tests/postgres-trigger-function-catalog.sh",
   "tests/postgres-constraint-catalog.sh",
   "tests/postgres-relation-catalog.sh",
+  "tests/postgres-access-control-catalog.sh",
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
   "tests/command-digest-vector.json"
