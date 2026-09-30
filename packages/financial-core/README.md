@@ -40,6 +40,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
 | `tests/postgres-constraint-catalog.sh` | Exact installed constraint/index policy and replica-mode rejection evidence |
 | `tests/postgres-relation-catalog.sh` | Exact installed table/view/column policy and replica-mode NOT NULL evidence |
+| `tests/postgres-access-control-catalog.sh` | Exact ownership/ACL policy and rejected privilege-drift evidence |
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
@@ -73,6 +74,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 18. Account, asset, posting-rule, journal, ledger-account and outbox references remain fail closed when replica mode suppresses PostgreSQL's internal foreign-key triggers.
 19. The installed check, uniqueness, primary-key, foreign-key and standalone unique-index catalog must exactly match the reviewed policy; checks and uniqueness remain active in replica mode.
 20. The installed table, verification-view and column catalog must exactly match the reviewed logged-storage, type, nullability, default and view-definition policy; NOT NULL remains active in replica mode.
+21. The financial-core schema, relations and functions remain migration-owner controlled with no `PUBLIC`, non-owner or column-specific grants and no migration-owner default-ACL overrides.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -175,6 +177,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-access-control-catalog.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-invariant-trigger-catalog.sh
 
 PGHOST=127.0.0.1 \
@@ -223,6 +233,8 @@ The trigger-function catalog regression requires an exact match for all six inst
 The constraint catalog regression requires an exact match for all 83 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
 The relation catalog regression requires an exact match for all 11 logged tables, both security-invoker verification views and all 102 exposed columns. It covers relation persistence, access method, row-security and replica-identity state; view definitions; and column order, types, nullability, defaults, identity/generated flags, collation, storage and compression. It also proves critical journal, entry and outbox `NOT NULL` requirements reject null writes in replica mode.
+
+The access-control catalog regression requires the schema, all 13 relations and all six trigger functions to retain migration-owner ownership and their exact owner-only ACLs. It also requires all 102 visible columns to have no column-specific grants and no global or financial-core default-ACL overrides for the migration owner. Financial-core migrations intentionally avoid role-level `ALTER DEFAULT PRIVILEGES`, which could affect future objects outside this package; every created object instead revokes `PUBLIC` access in its migration transaction. Transactional negative probes prove that schema, relation, column or function grants to `PUBLIC` change the digest and fail verification without provisioning a runtime or production role.
 
 The invariant-trigger catalog regression requires all nine user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
 

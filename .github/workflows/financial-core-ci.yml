@@ -122,6 +122,11 @@ jobs:
           PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
         run: bash tests/postgres-relation-catalog.sh
 
+      - name: Verify PostgreSQL access-control catalog
+        env:
+          PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+        run: bash tests/postgres-access-control-catalog.sh
+
       - name: Verify PostgreSQL invariant triggers in replica mode
         env:
           PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
