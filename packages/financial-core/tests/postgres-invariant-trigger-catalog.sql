@@ -38,6 +38,7 @@ WHERE relation_namespace.nspname = 'financial_core'
   AND trigger_function.proname IN (
     'assert_journal_complete',
     'reject_sealed_journal_entry',
+    'validate_acceptance_artifact_timestamp',
     'validate_account',
     'validate_delivery_attempt_reference',
     'validate_entry_amount'

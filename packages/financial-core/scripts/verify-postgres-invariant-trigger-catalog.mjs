@@ -3,11 +3,21 @@ import assert from "node:assert/strict";
 const immediateTriggers = [
   ["ledger_accounts", "ledger_accounts_validate", "validate_account"],
   [
+    "ledger_idempotency_registry",
+    "ledger_idempotency_validate_acceptance_timestamp",
+    "validate_acceptance_artifact_timestamp"
+  ],
+  [
     "ledger_entries",
     "ledger_entries_reject_sealed_journal",
     "reject_sealed_journal_entry"
   ],
   ["ledger_entries", "ledger_entries_validate_amount", "validate_entry_amount"],
+  [
+    "ledger_outbox_events",
+    "ledger_outbox_validate_acceptance_timestamp",
+    "validate_acceptance_artifact_timestamp"
+  ],
   [
     "ledger_outbox_delivery_attempts",
     "ledger_delivery_attempts_validate_outbox",

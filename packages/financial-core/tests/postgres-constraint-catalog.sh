@@ -201,6 +201,46 @@ assert_replica_constraint_rejected \
 assert_replica_constraint_rejected \
   'violates unique constraint "ledger_idempotency_registry_pkey"' \
   "
+    BEGIN;
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      '58000000-0000-4000-8000-000000000058',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'constraint-test',
+      'constraint-idempotency-parent-001',
+      repeat('5', 64),
+      '58100000-0000-4000-8000-000000000058',
+      NULL,
+      '2026-09-25T12:09:59.000Z',
+      '2026-09-25T12:10:00.000Z',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'policy-decision-demo-011',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'constraint-idempotency-source-001',
+      repeat('6', 64),
+      '2026-09-25T12:10:00.000Z'
+    );
     INSERT INTO financial_core.ledger_idempotency_registry (
       legal_entity_id,
       idempotency_key,
@@ -214,6 +254,7 @@ assert_replica_constraint_rejected \
       '58000000-0000-4000-8000-000000000058',
       '2026-09-25T12:10:00.000Z'
     );
+    COMMIT;
   "
 
 assert_replica_constraint_rejected \

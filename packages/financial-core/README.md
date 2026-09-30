@@ -29,6 +29,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0005_ledger_trigger_replication_guard.sql` | Immutability triggers enforced in every PostgreSQL replication mode |
 | `migrations/0006_ledger_invariant_replication_guard.sql` | Insert and acceptance invariant triggers enforced in every replication mode |
 | `migrations/0007_ledger_replica_reference_guard.sql` | Critical foreign-key references mirrored by always-enabled user triggers |
+| `migrations/0008_ledger_acceptance_artifact_guard.sql` | Journal acceptance timestamp binding for idempotency and outbox artifacts |
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
@@ -43,6 +44,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-access-control-catalog.sh` | Exact ownership/ACL policy and rejected privilege-drift evidence |
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
+| `tests/postgres-acceptance-artifact-integrity.sh` | Normal and replica-mode rejection of mismatched acceptance timestamps |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -75,6 +77,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 19. The installed check, uniqueness, primary-key, foreign-key and standalone unique-index catalog must exactly match the reviewed policy; checks and uniqueness remain active in replica mode.
 20. The installed table, verification-view and column catalog must exactly match the reviewed logged-storage, type, nullability, default and view-definition policy; NOT NULL remains active in replica mode.
 21. The financial-core schema, relations and functions remain migration-owner controlled with no `PUBLIC`, non-owner or column-specific grants and no migration-owner default-ACL overrides.
+22. The idempotency record and immutable outbox event must use the journal's service-stamped `accepted_at`, including in PostgreSQL replica mode.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -92,7 +95,7 @@ The future posting service must use one transaction:
 6. insert the acceptance seal with the command digest and final entry count;
 7. commit after deferred database invariants pass.
 
-The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. An entry statement that overlaps creation of its parent journal waits for the foreign key and fails closed because that statement cannot adopt the concurrently committed parent. Any entry statement started after acceptance sees the seal and is rejected by the append trigger. The migrations grant no runtime writer. The test-only grant profile proves that a non-owner role can accept a complete journal without receiving mutation, truncation, configuration or DDL powers; it is not deployment provisioning and is not applied by migrations. A future environment-specific role may receive an independently reviewed profile only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event.
+The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. An entry statement that overlaps creation of its parent journal waits for the foreign key and fails closed because that statement cannot adopt the concurrently committed parent. Any entry statement started after acceptance sees the seal and is rejected by the append trigger. The migrations grant no runtime writer. The test-only grant profile proves that a non-owner role can accept a complete journal without receiving mutation, truncation, configuration or DDL powers; it is not deployment provisioning and is not applied by migrations. A future environment-specific role may receive an independently reviewed profile only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event. The idempotency `first_seen_at`, outbox `created_at` and acceptance seal `sealed_at` must all equal the journal `accepted_at`, so one committed acceptance cannot contain conflicting audit timestamps.
 
 ## Local verification
 
@@ -201,6 +204,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-acceptance-artifact-integrity.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-posting-rule-registry.sh
 
 PGHOST=127.0.0.1 \
@@ -228,17 +239,19 @@ The owner truncation regression exercises every append-only configuration and le
 
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
 
-The trigger-function catalog regression requires an exact match for all six installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
+The trigger-function catalog regression requires an exact match for all seven installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
 
 The constraint catalog regression requires an exact match for all 83 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
 The relation catalog regression requires an exact match for all 11 logged tables, both security-invoker verification views and all 102 exposed columns. It covers relation persistence, access method, row-security and replica-identity state; view definitions; and column order, types, nullability, defaults, identity/generated flags, collation, storage and compression. It also proves critical journal, entry and outbox `NOT NULL` requirements reject null writes in replica mode.
 
-The access-control catalog regression requires the schema, all 13 relations and all six trigger functions to retain migration-owner ownership and their exact owner-only ACLs. It also requires all 102 visible columns to have no column-specific grants and no global or financial-core default-ACL overrides for the migration owner. Financial-core migrations intentionally avoid role-level `ALTER DEFAULT PRIVILEGES`, which could affect future objects outside this package; every created object instead revokes `PUBLIC` access in its migration transaction. Transactional negative probes prove that schema, relation, column or function grants to `PUBLIC` change the digest and fail verification without provisioning a runtime or production role.
+The access-control catalog regression requires the schema, all 13 relations and all seven trigger functions to retain migration-owner ownership and their exact owner-only ACLs. It also requires all 102 visible columns to have no column-specific grants and no global or financial-core default-ACL overrides for the migration owner. Financial-core migrations intentionally avoid role-level `ALTER DEFAULT PRIVILEGES`, which could affect future objects outside this package; every created object instead revokes `PUBLIC` access in its migration transaction. Transactional negative probes prove that schema, relation, column or function grants to `PUBLIC` change the digest and fail verification without provisioning a runtime or production role.
 
-The invariant-trigger catalog regression requires all nine user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
+The invariant-trigger catalog regression requires all 11 user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
 
 The replica reference-integrity regression accounts for PostgreSQL suppressing internal foreign-key triggers in replica mode. Always-enabled user triggers mirror the critical acceptance references and reject missing account definitions, assets, posting rules, journals, matching ledger accounts and outbox events. This is synthetic database evidence, not approval to configure replication or production roles.
+
+The acceptance-artifact regression proves that idempotency and outbox timestamps cannot diverge from the journal acceptance timestamp in either normal or replica mode. The rejected transactions are synthetic and do not provision runtime or production roles.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
