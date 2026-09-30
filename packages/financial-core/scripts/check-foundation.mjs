@@ -406,6 +406,33 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-replica-reference-integrity.sh",
     "postgres-replica-mode-reference-integrity-ok"
+  ],
+  ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_constraint"],
+  ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_index"],
+  ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_get_constraintdef"],
+  [
+    "scripts/verify-postgres-constraint-catalog.mjs",
+    "expectedCatalogSha256"
+  ],
+  [
+    "scripts/verify-postgres-constraint-catalog.mjs",
+    "postgres-constraint-catalog-ok"
+  ],
+  [
+    "tests/postgres-constraint-catalog.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-constraint-catalog.sh",
+    "ledger_entries_amount_check"
+  ],
+  [
+    "tests/postgres-constraint-catalog.sh",
+    "ledger_accounts_identity"
+  ],
+  [
+    "tests/postgres-constraint-catalog.sh",
+    "postgres-replica-mode-constraint-integrity-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -493,6 +520,7 @@ for (const required of [
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
+  "tests/postgres-constraint-catalog.sh",
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
   "tests/command-digest-vector.json"

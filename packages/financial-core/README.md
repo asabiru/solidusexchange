@@ -38,6 +38,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-owner-truncate-guard.sh` | Migration-owner truncation denial regression |
 | `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger policy comparison |
 | `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
+| `tests/postgres-constraint-catalog.sh` | Exact installed constraint/index policy and replica-mode rejection evidence |
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
@@ -69,6 +70,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 16. Every canonical chart definition must satisfy the PostgreSQL schema and survive an exact, deterministic round-trip.
 17. User-defined account, amount, seal and journal-completeness safeguards fail closed in every PostgreSQL replication mode.
 18. Account, asset, posting-rule, journal, ledger-account and outbox references remain fail closed when replica mode suppresses PostgreSQL's internal foreign-key triggers.
+19. The installed check, uniqueness, primary-key, foreign-key and standalone unique-index catalog must exactly match the reviewed policy; checks and uniqueness remain active in replica mode.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -155,6 +157,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-constraint-catalog.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-invariant-trigger-catalog.sh
 
 PGHOST=127.0.0.1 \
@@ -199,6 +209,8 @@ The owner truncation regression exercises every append-only configuration and le
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
 
 The trigger-function catalog regression requires an exact match for all six installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
+
+The constraint catalog regression requires an exact match for all 83 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
 The invariant-trigger catalog regression requires all nine user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
 
