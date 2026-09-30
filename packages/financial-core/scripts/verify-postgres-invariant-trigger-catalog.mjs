@@ -7,7 +7,12 @@ const immediateTriggers = [
     "ledger_entries_reject_sealed_journal",
     "reject_sealed_journal_entry"
   ],
-  ["ledger_entries", "ledger_entries_validate_amount", "validate_entry_amount"]
+  ["ledger_entries", "ledger_entries_validate_amount", "validate_entry_amount"],
+  [
+    "ledger_outbox_delivery_attempts",
+    "ledger_delivery_attempts_validate_outbox",
+    "validate_delivery_attempt_reference"
+  ]
 ];
 
 const deferredTriggers = [
