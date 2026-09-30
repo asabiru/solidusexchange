@@ -433,6 +433,39 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-constraint-catalog.sh",
     "postgres-replica-mode-constraint-integrity-ok"
+  ],
+  ["tests/postgres-relation-catalog.sql", "pg_catalog.pg_attribute"],
+  ["tests/postgres-relation-catalog.sql", "attribute.attnotnull"],
+  ["tests/postgres-relation-catalog.sql", "relation.relkind"],
+  ["tests/postgres-relation-catalog.sql", "relation.relpersistence"],
+  ["tests/postgres-relation-catalog.sql", "pg_catalog.pg_get_viewdef"],
+  [
+    "scripts/verify-postgres-relation-catalog.mjs",
+    "expectedCatalogSha256"
+  ],
+  [
+    "scripts/verify-postgres-relation-catalog.mjs",
+    "postgres-relation-catalog-ok"
+  ],
+  [
+    "tests/postgres-relation-catalog.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-relation-catalog.sh",
+    'null value in column "command_digest"'
+  ],
+  [
+    "tests/postgres-relation-catalog.sh",
+    'null value in column "amount"'
+  ],
+  [
+    "tests/postgres-relation-catalog.sh",
+    'null value in column "payload"'
+  ],
+  [
+    "tests/postgres-relation-catalog.sh",
+    "postgres-replica-mode-not-null-integrity-ok"
   ]
 ]) {
   assert(read(fixture).includes(evidence), `${fixture} is missing ${evidence}`);
@@ -521,6 +554,7 @@ for (const required of [
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
   "tests/postgres-constraint-catalog.sh",
+  "tests/postgres-relation-catalog.sh",
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
   "tests/command-digest-vector.json"
