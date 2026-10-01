@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { verifyUnsignedTransactionIntent } from "./unsigned-intent.mjs";
 
 const eventContextKeys = [
@@ -76,6 +78,26 @@ function deepFreeze(value) {
     Object.values(value).forEach(deepFreeze);
   }
   return value;
+}
+
+function canonicalize(value) {
+  if (Array.isArray(value)) {
+    return value.map(canonicalize);
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  return value;
+}
+
+function digest(value) {
+  return createHash("sha256")
+    .update(JSON.stringify(canonicalize(value)))
+    .digest("hex");
 }
 
 function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOccurredAt }) {
@@ -208,4 +230,57 @@ export function createCustodyIntentPreparedEvent({
     },
     producer: "custody-orchestrator"
   });
+}
+
+export function createCustodyProjectionRegistry() {
+  const idempotency = new Map();
+  const eventIds = new Map();
+  const approvalEventIds = new Map();
+  const withdrawalIds = new Map();
+  const custodyIntentIds = new Map();
+
+  function project(request) {
+    const event = createCustodyIntentPreparedEvent(request);
+    const requestDigest = digest(request);
+    const idempotencyKey = event.idempotency_key;
+    const prior = idempotency.get(idempotencyKey);
+
+    if (prior) {
+      assert(
+        prior.request_digest === requestDigest,
+        "custody projection idempotency key was reused with different evidence"
+      );
+      return prior.event;
+    }
+
+    for (const [registry, identity, message] of [
+      [eventIds, event.event_id, "custody event_id has already been projected"],
+      [
+        approvalEventIds,
+        event.causation_id,
+        "WithdrawalApproved event has already been projected"
+      ],
+      [withdrawalIds, event.aggregate_id, "withdrawal already has a custody projection"],
+      [
+        custodyIntentIds,
+        event.payload.custody_intent_id,
+        "custody intent already has a projection"
+      ]
+    ]) {
+      assert(!registry.has(identity), message);
+    }
+
+    const record = deepFreeze({
+      event,
+      request_digest: requestDigest
+    });
+    idempotency.set(idempotencyKey, record);
+    eventIds.set(event.event_id, idempotencyKey);
+    approvalEventIds.set(event.causation_id, idempotencyKey);
+    withdrawalIds.set(event.aggregate_id, idempotencyKey);
+    custodyIntentIds.set(event.payload.custody_intent_id, idempotencyKey);
+    return event;
+  }
+
+  return Object.freeze({ project });
 }
