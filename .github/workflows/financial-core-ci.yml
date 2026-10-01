@@ -65,6 +65,9 @@ jobs:
       - name: Verify reference posting boundary
         run: npm run verify
 
+      - name: Verify PostgreSQL migration source catalog
+        run: bash tests/postgres-migration-source-catalog.sh
+
       - name: Apply PostgreSQL migrations
         run: |
           for migration in migrations/*.sql; do
