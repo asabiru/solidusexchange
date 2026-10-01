@@ -40,11 +40,38 @@ test("rejects mutable external action refs", () => {
 });
 
 test("rejects flow-style steps that hide mutable external action refs", () => {
-  const errors = validateWorkflowText(
-    workflow("      - { uses: actions/setup-node@v4 }"),
-  );
+  for (const step of [
+    "{ uses: actions/setup-node@v4 }",
+    '{ name: Setup, "uses": actions/setup-node@v4 }',
+    "{ name: Setup, 'uses': actions/setup-node@v4 }",
+  ]) {
+    const errors = validateWorkflowText(
+      workflow(`      - ${step}`),
+    );
 
-  assert.match(errors.join("\n"), /flow-style sequence mappings are not allowed/);
+    assert.match(errors.join("\n"), /flow-style uses mappings are not allowed/);
+  }
+});
+
+test("accepts unrelated flow-style list data", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      matrix:
+        include:
+          - { os: ubuntu-latest, node: 24 }
+    runs-on: \${{ matrix.os }}
+    steps:
+      - run: node --version
+`);
+
+  assert.deepEqual(errors, []);
 });
 
 test("rejects excessive workflow permissions", () => {
