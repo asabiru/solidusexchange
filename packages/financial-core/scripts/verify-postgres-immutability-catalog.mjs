@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+
+const expectedTriggerDefinitionCatalogSha256 =
+  "8bafd5ddb88ffb57c14d9543c074120f0a0b17e663a27a730a6ac2bc95292a19";
 
 const protectedTables = [
   ["account_definitions", "account_definitions_append_only", "account_definitions_reject_truncate"],
@@ -40,6 +44,9 @@ for await (const chunk of process.stdin) {
 }
 
 const actual = JSON.parse(input);
+const actualMetadata = actual.map(
+  ({ definition_sha256: _definitionSha256, ...metadata }) => metadata
+);
 const expected = protectedTables.flatMap(
   ([tableName, appendOnlyTrigger, truncateTrigger]) => [
     {
@@ -71,9 +78,28 @@ const expected = protectedTables.flatMap(
 );
 
 assert.deepStrictEqual(
-  actual,
+  actualMetadata,
   expected,
   "PostgreSQL immutability trigger catalog differs from the expected policy"
+);
+
+const actualTriggerDefinitionCatalogSha256 = createHash("sha256")
+  .update(
+    JSON.stringify(
+      actual.map(
+        ({ table_name, trigger_name, definition_sha256 }) => ({
+          table_name,
+          trigger_name,
+          definition_sha256
+        })
+      )
+    )
+  )
+  .digest("hex");
+assert.equal(
+  actualTriggerDefinitionCatalogSha256,
+  expectedTriggerDefinitionCatalogSha256,
+  "PostgreSQL immutability trigger definitions differ from the expected policy"
 );
 
 console.log("postgres-immutability-catalog-ok");

@@ -12,7 +12,16 @@ SELECT COALESCE(
         CASE WHEN (trigger.tgtype::INTEGER & 32) <> 0 THEN 'TRUNCATE' END
       ], NULL)),
       'function_schema', function_namespace.nspname,
-      'function_name', trigger_function.proname
+      'function_name', trigger_function.proname,
+      'definition_sha256', pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.pg_get_triggerdef(trigger.oid, FALSE),
+            'UTF8'
+          )
+        ),
+        'hex'
+      )
     )
     ORDER BY
       relation.relname COLLATE "C",
