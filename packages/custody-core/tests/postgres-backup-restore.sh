@@ -10,6 +10,7 @@ set -euo pipefail
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
+: "${STALE_CHAIN_RESTORE_DATABASE:=${PGDATABASE}_stale_chain_restore_test}"
 : "${OCCUPIED_RESTORE_DATABASE:=${PGDATABASE}_occupied_restore_test}"
 : "${PARTIAL_RESTORE_DATABASE:=${PGDATABASE}_partial_restore_test}"
 : "${PSQL_DOCKER_IMAGE:=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297}"
@@ -36,6 +37,7 @@ validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
+validate_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 validate_restore_database "$OCCUPIED_RESTORE_DATABASE"
 validate_restore_database "$PARTIAL_RESTORE_DATABASE"
 
@@ -45,14 +47,20 @@ if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$OCCUPIED_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
@@ -103,6 +111,7 @@ cleanup() {
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
+  drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
   drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
   drop_restore_database "$PARTIAL_RESTORE_DATABASE"
   run_psql "$PGDATABASE" \
@@ -211,6 +220,7 @@ drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
+drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
 drop_restore_database "$PARTIAL_RESTORE_DATABASE"
 
@@ -532,6 +542,65 @@ if [[ "$restored_continuity_snapshot" == "$restored_snapshot" ]]; then
 fi
 
 printf 'custody-postgres-backup-continuity-ok %s\n' "$restored_continuity_digest"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$STALE_CHAIN_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$STALE_CHAIN_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$backup_path"
+
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$STALE_CHAIN_RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-catalog.sh
+
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$STALE_CHAIN_RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-migration-history.sh
+
+stale_chain_snapshot="$(snapshot "$STALE_CHAIN_RESTORE_DATABASE")"
+stale_chain_digest="$(
+  printf '%s' "$stale_chain_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$stale_chain_snapshot" == "$restored_continuity_snapshot" ]]; then
+  echo "Stale first-generation custody restore unexpectedly matched the active recovery state." >&2
+  exit 1
+fi
+
+if [[ "$stale_chain_snapshot" != "$restored_snapshot" ]]; then
+  echo "Stale first-generation custody restore differs from its canonical recovery point." >&2
+  exit 1
+fi
+
+run_psql "$STALE_CHAIN_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT count(*) = 0
+    FROM custody_core.custody_projection_outbox
+    WHERE event_id = '018f3f8a-0061-7000-8000-000000000061';
+  " \
+  | grep -Fx "t"
+
+source_after_stale_chain_restore="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_stale_chain_restore" != "$source_snapshot" ]]; then
+  echo "Stale custody restore regression changed the source state." >&2
+  exit 1
+fi
+
+printf 'custody-postgres-backup-stale-chain-negative-ok %s\n' "$stale_chain_digest"
 
 run_pg_tool \
   pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DATABASE" \
