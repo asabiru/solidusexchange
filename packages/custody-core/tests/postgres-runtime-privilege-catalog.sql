@@ -17,7 +17,7 @@ grantees (oid, label) AS (
 schema_grants AS (
   SELECT
     'schema' AS object_type,
-    namespace.nspname AS object_name,
+    namespace.nspname::TEXT AS object_name,
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
