@@ -18,6 +18,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Release authorization baseline | SRE / Security / CTO | Artifact provenance, approval binding, enablement, rollback and NO-GO gates | Proposed; D-015/D-018 and domain approvals pending |
 | Audit evidence baseline | Security / Compliance / SRE | Event semantics, actor/policy binding, append-only integrity, access/export and retention | Proposed; identity, retention and key-custody approvals pending |
 | Data lifecycle baseline | Legal / Privacy / MLRO / Finance / Security | Retention triggers, holds, correction, disposal, processors, copies and recovery behavior | Proposed; schedule, location, processor and legal-basis approvals pending |
+| Access-control baseline | Security / CTO / domain owners | Identity lifecycle, authentication, authorization, segregation of duties, privileged access and review | Proposed; D-016, production IdP/MFA, JML and privileged-access approvals pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
@@ -28,6 +29,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 - [ ] Custody and HSM direction is approved before vendor provisioning.
 - [ ] Financial schema and chart of accounts have Finance review.
 - [ ] Data locations, processors and retention are approved.
+- [ ] Workforce SSO/MFA, JML, privileged access and access-review controls are approved.
 - [ ] Legacy schema is reproducible without relying on an unsanitized dump.
 - [ ] Any credential-like seeded fixture is removed or proven non-production and rotated.
 - [ ] Production provider work remains blocked until its vendor gate is complete.
