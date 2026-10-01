@@ -121,6 +121,29 @@ assert_source_policy_rejected \
   "PostgreSQL custody migration must change history only through canonical history rows: 0002_custody_migration_history.sql" \
   "$scratch/history-rewrite"
 
+mkdir "$scratch/quoted-commented-history-write"
+cp -R "$workspace/migrations/." "$scratch/quoted-commented-history-write/"
+python3 - "$scratch/quoted-commented-history-write/0002_custody_migration_history.sql" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+source = path.read_text()
+canonical = """INSERT INTO custody_core.schema_migrations (version, migration_name)
+VALUES (2, '0002_custody_migration_history');"""
+bypass = """/*
+INSERT INTO custody_core.schema_migrations (version, migration_name)
+VALUES (2, '0002_custody_migration_history');
+*/
+INSERT INTO custody_core."schema_migrations" (version, migration_name)
+VALUES (2, '0002_noncanonical');"""
+assert source.count(canonical) == 1
+path.write_text(source.replace(canonical, bypass))
+PY
+assert_source_policy_rejected \
+  "PostgreSQL custody migration history rows must match canonical source history: 0002_custody_migration_history.sql" \
+  "$scratch/quoted-commented-history-write"
+
 mkdir "$scratch/duplicate-history-table"
 cp -R "$workspace/migrations/." "$scratch/duplicate-history-table/"
 sed -i \

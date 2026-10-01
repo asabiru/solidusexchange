@@ -261,6 +261,8 @@ for (const required of [
   "PostgreSQL custody migration must contain exactly one top-level BEGIN and COMMIT transaction boundary",
   "PostgreSQL custody migration must not execute psql meta-commands",
   "const historyBootstrapVersion = 2;",
+  "function normalizeSqlSource(source)",
+  'identifier === "custody_core" || identifier === "schema_migrations"',
   "PostgreSQL custody migration history rows must match canonical source history",
   "PostgreSQL custody migration must change history only through canonical history rows",
   "PostgreSQL custody migration history table must be created only by the history bootstrap migration",
@@ -284,6 +286,9 @@ for (const required of [
   "PostgreSQL custody migration source policy requires the history bootstrap migration 0002",
   "PostgreSQL custody migration history rows must match canonical source history",
   "PostgreSQL custody migration must change history only through canonical history rows",
+  "quoted-commented-history-write",
+  'custody_core."schema_migrations"',
+  "0002_noncanonical",
   "PostgreSQL custody migration history table must be created only by the history bootstrap migration",
   "custody-postgres-migration-source-policy-negative-ok"
 ]) {
