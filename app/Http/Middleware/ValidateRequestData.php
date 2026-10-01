@@ -23,6 +23,8 @@ class ValidateRequestData
             if (Str::contains($key, 'password')) {
                 // Escape special characters for password fields
                 $request[$key] = isset($req) ? $req : null;
+            } elseif (in_array($key, ['initData', 'tgWebAppData'], true)) {
+                $request[$key] = isset($req) ? $req : null;
             } elseif (!$request->hasFile($key) && $key != 'email_template' && $key != 'email_description') {
                 // For other fields, apply HTML purifier
                 $request[$key] = isset($req) ? Purify::clean($req) : null;

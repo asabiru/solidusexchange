@@ -27,7 +27,7 @@
                         <ul class="nav nav-segment " role="tablist">
                             @foreach($allTemplate as $key => $template)
                                 <li class="nav-item">
-                                    <a class="nav-link {{ $template == "light" ? 'active' : '' }}" id="nav-one-eg1-tab"
+                                    <a class="nav-link {{ $template == "solidchange" ? 'active' : '' }}" id="nav-one-eg1-tab"
                                        href="#nav-{{$key}}-eg1"
                                        data-bs-toggle="pill" data-bs-target="#nav-one-eg1" role="tab"
                                        aria-controls="nav-one-eg1" aria-selected="true">
@@ -241,7 +241,6 @@
         })
     </script>
 @endpush
-
 
 
 

@@ -34,7 +34,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,sumsub',
+            'provider' => 'required|in:manual,sumsub,didit',
         ];
 
         if ($request->provider === 'manual') {
@@ -72,6 +72,10 @@ class KycController extends Controller
             $providerSettings = [];
             if ($request->provider === 'sumsub') {
                 $providerSettings['level_name'] = trim((string) $request->sumsub_level_name);
+            } elseif ($request->provider === 'didit') {
+                $providerSettings['workflow_id'] = trim((string) $request->didit_workflow_id);
+            } elseif ($request->provider === 'didit') {
+                $providerSettings['workflow_id'] = trim((string) $request->didit_workflow_id);
             }
 
             $kyc = Kyc::create([
@@ -114,7 +118,7 @@ class KycController extends Controller
         $requestData = $request->all();
         $rules = [
             'name' => 'required|string',
-            'provider' => 'required|in:manual,sumsub',
+            'provider' => 'required|in:manual,sumsub,didit',
         ];
 
         if ($request->provider === 'manual') {

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Storage;
 
 function template($asset = false)
 {
-    $activeTheme = basicControl()->theme??'light';
+    $activeTheme = basicControl()->theme ?? 'solidchange';
     if ($asset) return 'assets/themes/' . $activeTheme . '/';
     return 'themes.' . $activeTheme . '.';
 }

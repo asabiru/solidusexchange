@@ -46,6 +46,7 @@
                                         <select class="form-select @error('provider') is-invalid @enderror" name="provider" id="providerLabel">
                                             <option value="manual" {{ old('provider', $kyc->provider ?? 'manual') === 'manual' ? 'selected' : '' }}>@lang('Manual')</option>
                                             <option value="sumsub" {{ old('provider', $kyc->provider ?? 'manual') === 'sumsub' ? 'selected' : '' }}>@lang('Sumsub')</option>
+                                            <option value="didit" {{ old('provider', $kyc->provider ?? 'manual') === 'didit' ? 'selected' : '' }}>@lang('Didit')</option>
                                         </select>
                                         @error('provider')
                                         <span class="invalid-feedback">{{ $message }}</span>
@@ -58,6 +59,11 @@
                                         <label for="sumsubLevelName" class="form-label">@lang('Sumsub Level Name')</label>
                                         <input type="text" class="form-control" name="sumsub_level_name" id="sumsubLevelName" value="{{ old('sumsub_level_name', data_get($kyc->provider_settings, 'level_name')) }}" autocomplete="off">
                                         <small class="text-muted">@lang('Leave empty to use default Sumsub level from global provider settings.')</small>
+                                    </div>
+                                    <div class="col-md-6 didit-settings {{ old('provider', $kyc->provider ?? 'manual') === 'didit' ? '' : 'd-none' }}">
+                                        <label for="diditWorkflowId" class="form-label">@lang('Didit Workflow ID')</label>
+                                        <input type="text" class="form-control" name="didit_workflow_id" id="diditWorkflowId" value="{{ old('didit_workflow_id', data_get($kyc->provider_settings, 'workflow_id')) }}" autocomplete="off">
+                                        <small class="text-muted">@lang('Leave empty to use default Didit workflow from global provider settings.')</small>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="row form-check form-switch mt-3" for="push_notification">
@@ -82,6 +88,9 @@
 
                                 <div class="sumsub-settings alert alert-soft-primary {{ old('provider', $kyc->provider ?? 'manual') === 'sumsub' ? '' : 'd-none' }}">
                                     @lang('Sumsub forms do not use local field builder. Users will start verification inside Sumsub WebSDK and statuses will come back through webhook.')
+                                </div>
+                                <div class="didit-settings alert alert-soft-primary {{ old('provider', $kyc->provider ?? 'manual') === 'didit' ? '' : 'd-none' }}">
+                                    @lang('Didit forms do not use local field builder. Users will open the hosted Didit verification flow and statuses will come back through webhook.')
                                 </div>
 
                                 <div class="js-add-field card mb-3 mb-lg-5 manual-kyc-builder {{ old('provider', $kyc->provider ?? 'manual') === 'manual' ? '' : 'd-none' }}">
@@ -221,6 +230,7 @@
                 let provider = $('#providerLabel').val();
                 $('.manual-kyc-builder').toggleClass('d-none', provider !== 'manual');
                 $('.sumsub-settings').toggleClass('d-none', provider !== 'sumsub');
+                $('.didit-settings').toggleClass('d-none', provider !== 'didit');
             }
 
             toggleKycProviderFields();
@@ -282,6 +292,5 @@
 
     </script>
 @endpush
-
 
 

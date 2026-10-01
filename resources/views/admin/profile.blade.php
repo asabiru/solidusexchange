@@ -29,12 +29,8 @@
                         @csrf
                         @method("put")
                         <div>
-                            <div class="profile-cover">
-                                <div class="profile-cover-img-wrapper">
-                                    <img id="profileCoverImg" class="profile-cover-img"
-                                         src="{{ asset('assets/admin/img/img1.jpg') }}"
-                                         alt="Image Description">
-                                </div>
+                            <div class="profile-cover sc-profile-cover">
+                                <div class="profile-cover-img-wrapper"></div>
                             </div>
 
                             <label class="avatar avatar-xxl avatar-circle avatar-uploader profile-cover-avatar"
@@ -363,7 +359,6 @@
         })
     </script>
 @endpush
-
 
 
 

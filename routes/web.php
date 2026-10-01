@@ -19,25 +19,34 @@ use App\Http\Controllers\User\VerificationController;
 use App\Http\Controllers\FaSecurityController;
 use App\Http\Controllers\User\UserProfileController;
 use App\Http\Controllers\SocialiteController;
+use App\Http\Controllers\SchedulerController;
+use App\Http\Controllers\Telegram\TelegramWebhookController;
+use App\Http\Controllers\Telegram\TelegramMiniAppController;
 
 $basicControl = basicControl();
 
 
 Route::get('maintenance-mode', function () {
     if (!basicControl()->is_maintenance_mode) {
-        return redirect(route('page'));
+        return redirect(route('home'));
     }
     $data['maintenanceMode'] = \App\Models\MaintenanceMode::first();
     return view(template() . 'maintenance', $data);
 })->name('maintenance');
 
 Route::get('password/reset', [ForgotPasswordController::class, 'showLinkRequestForm'])->name('password.request');
-Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->name('password.email');
+Route::post('password/email', [ForgotPasswordController::class, 'sendResetLinkEmail'])->middleware('throttle:password-reset')->name('password.email');
 Route::get('password/reset/{token}', [ResetPasswordController::class, 'showResetForm'])->name('password.reset')->middleware('guest');
-Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('password.reset.update');
+Route::post('password/reset', [ResetPasswordController::class, 'reset'])->middleware('throttle:password-reset')->name('password.reset.update');
     Route::get('instruction/page', function () {
         return view('instruction-page');
     })->name('instructionPage');
+
+    // HTTP-triggered scheduler endpoints (for shared hosting without crontab)
+    // Protected by scheduler_secret + rate-limited to prevent brute-force
+    Route::get('__scheduler/run', [SchedulerController::class, 'run'])->middleware('throttle:6,1');
+    Route::get('__scheduler/sync-crypto', [SchedulerController::class, 'syncCryptoRates'])->middleware('throttle:6,1');
+    Route::get('__scheduler/sync-fiat', [SchedulerController::class, 'syncFiatRates'])->middleware('throttle:6,1');
 
     Route::get('license', function () {
         return redirect()->route('page');
@@ -67,8 +76,20 @@ Route::post('password/reset', [ResetPasswordController::class, 'reset'])->name('
 Route::group(['middleware' => ['maintenanceMode']], function () use ($basicControl) {
     Route::group(['middleware' => ['guest']], function () {
         Route::get('/login', [UserLoginController::class, 'showLoginForm'])->name('login');
-        Route::post('/login', [UserLoginController::class, 'login'])->name('login.submit');
+        Route::post('/login', [UserLoginController::class, 'login'])->middleware('throttle:login')->name('login.submit');
+        Route::post('/auth/telegram-miniapp', [SocialiteController::class, 'telegramMiniAppLogin'])->middleware('throttle:login')->name('telegram.miniapp.login');
     });
+
+    Route::post('/telegram/webhook/{token}', [TelegramWebhookController::class, 'handle'])->name('telegram.webhook');
+    Route::match(['get', 'post'], '/telegram/mini-app', [TelegramMiniAppController::class, 'launch'])->name('telegram.mini-app');
+    Route::post('/telegram/mini-app/quote', [TelegramMiniAppController::class, 'quote'])->name('telegram.mini-app.quote');
+    Route::post('/telegram/mini-app/request', [TelegramMiniAppController::class, 'storeRequest'])->name('telegram.mini-app.request');
+    Route::match(['get', 'post'], '/telegram/mini-app/stats', [TelegramMiniAppController::class, 'stats'])->name('telegram.mini-app.stats');
+    Route::post('/telegram/mini-app/email/send', [TelegramMiniAppController::class, 'sendEmailCode'])->name('telegram.mini-app.email.send');
+    Route::post('/telegram/mini-app/email/verify', [TelegramMiniAppController::class, 'verifyEmailCode'])->name('telegram.mini-app.email.verify');
+    Route::match(['get', 'post'], '/telegram/mini-app/kyc', [TelegramMiniAppController::class, 'kyc'])->name('telegram.mini-app.kyc');
+    Route::post('/telegram/mini-app/kyc/submit', [TelegramMiniAppController::class, 'submitKyc'])->name('telegram.mini-app.kyc.submit');
+    Route::get('/telegram/mini-app/page/{slug}', [TelegramMiniAppController::class, 'pageContent'])->name('telegram.mini-app.page');
 
     $resolveLegacyPage = function (string $slug, array $fallbackSlugs = ['/']) {
         $candidateSlugs = collect(array_merge([$slug], $fallbackSlugs))
@@ -91,12 +112,12 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
     Route::get('check', [VerificationController::class, 'check'])->name('check');
     Route::get('resend_code', [VerificationController::class, 'resendCode'])->name('user.resendCode');
     Route::get('verification/resend', [VerificationController::class, 'resendCode'])->name('verification.resend');
-    Route::post('mail-verify', [VerificationController::class, 'mailVerify'])->name('user.mailVerify');
-    Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->name('user.smsVerify');
-    Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->name('user.twoFA-Verify');
+    Route::post('mail-verify', [VerificationController::class, 'mailVerify'])->middleware('throttle:two-fa')->name('user.mailVerify');
+    Route::post('sms-verify', [VerificationController::class, 'smsVerify'])->middleware('throttle:two-fa')->name('user.smsVerify');
+    Route::post('twoFA-Verify', [VerificationController::class, 'twoFAverify'])->middleware('throttle:two-fa')->name('user.twoFA-Verify');
 
     $legacyPageRoutes = [
-        'home' => ['/',],
+        // 'home' removed — conflicts with Route::get("/", ...)->name('home') defined below
         'about' => ['about'],
         'feature' => ['feature'],
         'features' => ['feature', '/'],
@@ -132,7 +153,7 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
             Route::get('kyc/{slug}/{id}', 'kycShow')->name('kyc');
             Route::post('kyc/submit/{id}', 'kycVerificationSubmit')->name('kyc.verification.submit');
-            Route::post('kyc/sumsub/token/{id}', 'kycSumsubAccessToken')->name('kyc.sumsub.token');
+            Route::post('kyc/amlbot/session/{id}', 'kycAmlBotSession')->name('kyc.amlbot.session');
             Route::get('verification/center', 'verificationCenter')->name('verification.center');
         });
 
@@ -149,6 +170,8 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
             Route::match(['get', 'post'], 'profile', 'index')->name('profile');
             Route::match(['get', 'post'], 'change-password', 'changePassword')->name('change.password');
             Route::match(['get', 'post'], 'notification', 'notification')->name('notification');
+            Route::get('telegram/link', 'telegramLink')->name('telegram.link');
+            Route::post('telegram/unlink', 'telegramUnlink')->name('telegram.unlink');
         });
 
         // TWO-FACTOR SECURITY
@@ -198,6 +221,10 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
 
     Route::post('khalti/payment/verify/{trx}', [khaltiPaymentController::class, 'verifyPayment'])->name('khalti.verifyPayment');
     Route::post('khalti/payment/store', [khaltiPaymentController::class, 'storePayment'])->name('khalti.storePayment');
+
+    /* SBP QR Webhooks & Status Check */
+    Route::post('sbp/webhook/tinkoff', [\App\Http\Controllers\SbpWebhookController::class, 'tinkoffNotify'])->name('sbp.webhook.tinkoff');
+    Route::get('sbp/status/{orderId}', [\App\Http\Controllers\SbpWebhookController::class, 'checkStatus'])->name('sbp.status');
 
     Route::post('subscribe', [FrontendController::class, 'subscribe'])->name('subscribe');
     Route::post('/contact/send', [FrontendController::class, 'contactSend'])->name('contact.send');
@@ -259,7 +286,11 @@ Route::group(['middleware' => ['maintenanceMode']], function () use ($basicContr
         return redirect('/');
     })->name('language');
 
+    Route::get("/", [FrontendController::class, 'home'])->name('home');
+
+    // Public buy/sell routes (create request without auth)
+    Route::post('/buy/request/public', [App\Http\Controllers\User\BuyController::class, 'publicBuyRequest'])->name('publicBuyRequest');
+    Route::post('/sell/request/public', [App\Http\Controllers\User\SellController::class, 'publicSellRequest'])->name('publicSellRequest');
+
     Route::get("/{slug?}", [FrontendController::class, 'page'])->name('page');
 });
-
-

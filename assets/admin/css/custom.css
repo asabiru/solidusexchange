@@ -8,7 +8,6 @@
 
 .bg-img-start {
     height: 32rem;
-    background-image: url('../../../assets/admin/img/card-6.svg');
 }
 
 .oc-error {
@@ -213,7 +212,7 @@
 }
 
 .filepond--panel-root {
-    background-color: #f8fafd !important;
+    background-color: #0b0608 !important;
     border: 2px dashed rgba(231, 234, 243, 0.7);
 }
 
@@ -1165,32 +1164,32 @@
 }
 
 .transaction-card {
-    border-bottom: 2px solid #6371f8 !important;
+    border-bottom: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
 .user-card {
-    border-bottom: 2px solid #6371f8 !important;
+    border-bottom: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
 .sales-card {
-    border-bottom: 2px solid #6371f8 !important;
+    border-bottom: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
 .order-card {
-    border-bottom: 2px solid #6371f8 !important;
+    border-bottom: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
 .history-card {
-    border-bottom: 2px solid #6371f8 !important;
+    border-bottom: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
 .sale-card {
-    border-top: 2px solid #6371f8 !important;
+    border-top: 2px solid #e8c9a0 !important;
     border-radius: 5px;
 }
 
@@ -1198,8 +1197,8 @@
     width: 40px;
     height: 40px;
     border-radius: 5px;
-    background-color: #e7e7ff;
-    color: #6371f8;
+    background-color: rgba(232, 201, 160, 0.14);
+    color: #e8c9a0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1207,7 +1206,7 @@
 }
 
 .user-card .card-body .badge {
-    color: #02d584 !important;
+    color: #e8c9a0 !important;
 }
 
 .nav-pills .nav-link {
@@ -1215,18 +1214,18 @@
 }
 
 .nav-pills .nav-link:hover {
-    background-color: #e7e7ff !important;
-    color: #6e71ff !important;
+    background-color: rgba(232, 201, 160, 0.14) !important;
+    color: #e8c9a0 !important;
 }
 
 .nav-vertical.nav-pills .nav-link.active {
-    background-color: #6e71ff !important;
-    color: #e7e7ff !important;
+    background-color: rgba(232, 201, 160, 0.18) !important;
+    color: #e8c9a0 !important;
 }
 
 .navbar-dark .nav-pills .nav-link.active {
-    background-color: #6e71ff !important;
-    color: #e7e7ff !important;
+    background-color: rgba(232, 201, 160, 0.18) !important;
+    color: #e8c9a0 !important;
 }
 
 .order-chart {
@@ -1317,7 +1316,7 @@
 }
 
 .talk-nav-link-icon a:hover {
-    color: #e7e7ff;
+    color: #e8c9a0;
 }
 
 

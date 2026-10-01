@@ -27,7 +27,7 @@
 
                         @if(auth()->guard('admin')->check())
                             <div class="btn-area">
-                                <a href="{{ route('admin.page.index', basicControl()->theme??'light') }}"
+                                <a href="{{ route('admin.page.index', basicControl()->theme ?? 'solidchange') }}"
                                    class="cmn-btn">@lang('Go To Settings')</a>
                             </div>
                         @endif

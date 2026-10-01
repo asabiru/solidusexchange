@@ -2,6 +2,7 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\DiditWebhookController;
 use App\Http\Controllers\SumsubWebhookController;
 use App\Http\Controllers\WebhookController;
 
@@ -23,5 +24,5 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::any('deposit/webhook/{code}/{type?}', [WebhookController::class, 'webhookResponse'])->name('depositCallback');
 Route::any('withdraw/webhook/{code?}/{utr?}/{type?}', [WebhookController::class, 'withdrawWebhookResponse'])->name('withdrawCallback');
 Route::post('kyc/sumsub/webhook', SumsubWebhookController::class)->name('sumsub.webhook');
-
+Route::post('kyc/didit/webhook', DiditWebhookController::class)->name('didit.webhook');
 

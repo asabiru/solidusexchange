@@ -21,6 +21,7 @@ class BasicControl extends Model
         'logo', 'logo_driver', 'favicon', 'favicon_driver', 'admin_logo', 'admin_logo_driver', 'admin_dark_mode_logo', 'admin_dark_mode_logo_driver',
         'currency_layer_access_key', 'currency_layer_auto_update_at', 'currency_layer_auto_update', 'coin_market_cap_app_key', 'coin_market_cap_auto_update_at',
         'coin_market_cap_auto_update', 'sumsub_enabled', 'sumsub_app_token', 'sumsub_secret_key', 'sumsub_base_url', 'sumsub_level_name', 'sumsub_websdk_url',
+        'didit_enabled', 'didit_api_key', 'didit_webhook_secret', 'didit_base_url', 'didit_workflow_id',
         'automatic_payout_permission', 'date_time_format', 'google_reCapture_admin_login', 'google_reCaptcha_status_login',
         'google_reCaptcha_status_registration', 'exchange_rate', 'floating_rate_update_time', 'floating_rate_update_status',
         'crypto_send_time', 'fiat_send_time', 'default_mode','changeable_mode'

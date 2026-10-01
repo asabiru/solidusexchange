@@ -11,6 +11,7 @@ use App\Models\Kyc;
 use App\Models\SellRequest;
 use App\Models\Transaction;
 use App\Models\UserKyc;
+use App\Services\Kyc\DiditKycService;
 use App\Services\Kyc\SumsubKycService;
 use App\Services\Kyc\UserKycManager;
 use App\Traits\Upload;
@@ -333,8 +334,8 @@ class HomeController extends Controller
     public function kycVerificationSubmit(Request $request, $id, UserKycManager $userKycManager)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
-        if (($kyc->provider ?? 'manual') === 'sumsub') {
-            return back()->with('error', 'This verification method is started through Sumsub widget.');
+        if (in_array(($kyc->provider ?? 'manual'), ['sumsub', 'didit'], true)) {
+            return back()->with('error', 'This verification method is started through the provider widget.');
         }
         try {
             $params = $kyc->input_form;
@@ -416,16 +417,27 @@ class HomeController extends Controller
         return view($this->theme . 'user.kyc.verification-center', $data);
     }
 
-    public function kycSumsubAccessToken(Request $request, $id, SumsubKycService $sumsubKycService)
+    public function kycAmlBotSession(Request $request, $id, SumsubKycService $sumsubKycService, DiditKycService $diditKycService)
     {
         $kyc = Kyc::where('status', 1)->findOrFail($id);
 
         try {
+            if (($kyc->provider ?? 'manual') === 'didit') {
+                $session = $diditKycService->startSession(auth()->user(), $kyc, route('user.verification.center'));
+
+                return response()->json([
+                    'status' => 'ok',
+                    'iframe_url' => $session['url'],
+                    'session_id' => $session['session_id'],
+                ]);
+            }
+
             $session = $sumsubKycService->startSession(auth()->user(), $kyc);
 
             return response()->json([
                 'status' => 'ok',
                 'token' => $session['token'],
+                'iframe_url' => $session['websdk_url'],
                 'websdk_url' => $session['websdk_url'],
                 'applicant_id' => $session['applicant_id'],
             ]);

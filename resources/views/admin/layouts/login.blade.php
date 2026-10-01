@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="{{ asset('assets/admin/css/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/admin/css/custom.css') }}">
     <link rel="stylesheet" href="{{ asset('assets/global/css/solidus-theme.css') }}">
+    <link rel="stylesheet" href="{{ asset('assets/admin/css/solidchange-admin.css') }}">
 
     <!-- CSS Front Template -->
     <link rel="preload" href="{{ asset('assets/admin/css/theme.min.css') }}" data-hs-appearance="default" as="style">
@@ -55,11 +56,11 @@
                 "sidebarSkin": "default",
                 "styles": {
                     "colors": {
-                        "primary": "#8d3dff",
+                        "primary": "#e8c9a0",
                         "transparent": "transparent",
                         "white": "#fff",
-                        "dark": "132144",
-                        "gray": {"100": "#f9fafc", "900": "#1e2022"}
+                        "dark": "#0b0608",
+                        "gray": {"100": "#150c10", "900": "#0b0608"}
                     }, "font": "Inter"
                 }
             },
@@ -91,7 +92,7 @@
     <script>
         (function () {
             function resolveAdminTheme() {
-                var fallback = (window.hs_config && window.hs_config.themeAppearance && window.hs_config.themeAppearance.layoutSkin) || 'default';
+                var fallback = 'dark';
                 var theme = localStorage.getItem('hs_theme') || fallback;
                 if (theme === 'auto') {
                     theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
@@ -104,6 +105,7 @@
             }
 
             applyAdminTheme(resolveAdminTheme());
+            localStorage.setItem('hs_theme', 'dark');
 
             window.addEventListener('on-hs-appearance-change', function (event) {
                 applyAdminTheme(event.detail || resolveAdminTheme());
@@ -121,7 +123,7 @@
     </script>
 </head>
 
-<body>
+<body class="solidchange-admin-login" data-hs-theme-appearance="dark">
 
 <script src="{{ asset('assets/admin/js/hs.theme-appearance.js') }}"></script>
 
