@@ -142,6 +142,12 @@ function checkOpenApi() {
 
   const operationIds = new Set();
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
+  const protectedSuccessSchemas = new Map([
+    ["getCustomerSession", "#/components/schemas/SessionView"],
+    ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
+    ["getOperatorSession", "#/components/schemas/SessionView"],
+    ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"]
+  ]);
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {
     assert(pathName.startsWith("/api/v1/"), `Unversioned API path: ${pathName}`);
     for (const [method, operation] of Object.entries(pathItem)) {
@@ -191,6 +197,24 @@ function checkOpenApi() {
 
       const success = operation.responses?.["200"];
       assert(success?.headers?.["X-Request-Id"], `Success response must echo X-Request-Id: ${operation.operationId}`);
+      if (pathName !== "/api/v1/meta") {
+        const expectedSchema = protectedSuccessSchemas.get(operation.operationId);
+        assert(expectedSchema, `Protected success schema is not pinned: ${operation.operationId}`);
+        sameSet(
+          Object.keys(operation.responses ?? {}).filter((status) => status.startsWith("2")),
+          ["200"],
+          `Success response statuses for ${operation.operationId}`
+        );
+        sameSet(
+          Object.keys(success.content ?? {}),
+          ["application/json"],
+          `Success response media types for ${operation.operationId} 200`
+        );
+        assert(
+          success.content?.["application/json"]?.schema?.$ref === expectedSchema,
+          `Success response must use canonical schema: ${operation.operationId} 200`
+        );
+      }
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         if (status.startsWith("2")) continue;
         const resolvedResponse = response.$ref
