@@ -486,6 +486,7 @@ for (const [fixture, evidence] of [
   ["tests/postgres-owner-truncate-guard.sh", "TRUNCATE TABLE"],
   ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"],
   ["tests/postgres-immutability-catalog.sql", "pg_catalog.pg_trigger"],
+  ["tests/postgres-immutability-catalog.sql", "pg_catalog.pg_get_triggerdef"],
   [
     "tests/postgres-immutability-catalog.sql",
     "trigger_function.proname = 'reject_mutation'"
@@ -494,6 +495,15 @@ for (const [fixture, evidence] of [
   [
     "scripts/verify-postgres-immutability-catalog.mjs",
     "postgres-immutability-catalog-ok"
+  ],
+  [
+    "scripts/verify-postgres-immutability-catalog.mjs",
+    "PostgreSQL immutability trigger definitions differ from the expected policy"
+  ],
+  ["tests/postgres-immutability-catalog.sh", "WHEN (false)"],
+  [
+    "tests/postgres-immutability-catalog.sh",
+    "postgres-immutability-catalog-negative-ok"
   ],
   [
     "tests/postgres-immutability-catalog.sh",

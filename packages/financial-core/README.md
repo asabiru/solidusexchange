@@ -43,7 +43,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
 | `tests/postgres-owner-truncate-guard.sh` | Migration-owner truncation denial regression |
-| `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger policy comparison |
+| `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger definition and policy comparison |
 | `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
 | `tests/postgres-constraint-catalog.sh` | Exact installed constraint/index policy and replica-mode rejection evidence |
 | `tests/postgres-relation-catalog.sh` | Exact installed table/view/column policy and replica-mode NOT NULL evidence |
@@ -78,7 +78,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 7. The accepted journal stores actor, authorization, policy, posting-rule, correlation and evidence references.
 8. Journal acceptance, idempotency registration, immutable outbox creation and sealing form one database transaction.
 9. Balance views are derived projections; no mutable balance column exists.
-10. Update, delete and owner-level truncate operations on financial-core records fail closed in every PostgreSQL replication mode.
+10. Exact always-enabled immutability-trigger definitions reject update, delete and owner-level truncate operations on financial-core records in every PostgreSQL replication mode.
 11. A committed acceptance seal prevents later entries from being appended, including an entry transaction that overlaps journal acceptance.
 12. JavaScript and PostgreSQL both enforce the registered `journal_type` + `posting_rule_version`, allowed actor and exact per-asset entry pattern.
 13. Projection snapshots and trial balance are deterministically rebuilt from immutable entries.
