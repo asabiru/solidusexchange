@@ -1,10 +1,35 @@
 import { verifyUnsignedTransactionIntent } from "./unsigned-intent.mjs";
 
 const eventContextKeys = [
-  "causation_id",
   "event_id",
   "occurred_at"
 ];
+const domainEventKeys = [
+  "actor",
+  "aggregate_id",
+  "aggregate_type",
+  "causation_id",
+  "correlation_id",
+  "data_classification",
+  "event_id",
+  "event_type",
+  "event_version",
+  "idempotency_key",
+  "occurred_at",
+  "payload",
+  "producer"
+];
+const actorKeys = [
+  "subject",
+  "type"
+];
+const withdrawalApprovedPayloadKeys = [
+  "approval_id",
+  "approver_count",
+  "evidence_digest",
+  "withdrawal_id"
+];
+const referencePattern = /^[a-z][a-z0-9_]{2,127}$/u;
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
 function fail(message) {
@@ -53,17 +78,104 @@ function deepFreeze(value) {
   return value;
 }
 
-export function createCustodyIntentPreparedEvent({ context, intent, policy }) {
+function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOccurredAt }) {
+  assertExactKeys(event, domainEventKeys, "withdrawal approval event");
+  assertUuidV7(event.event_id, "withdrawal approval event_id");
+  assert(
+    event.causation_id === null ||
+      (typeof event.causation_id === "string" && uuidV7Pattern.test(event.causation_id)),
+    "withdrawal approval causation_id must be null or UUIDv7"
+  );
+  assert(
+    event.causation_id !== event.event_id,
+    "withdrawal approval event cannot cause itself"
+  );
+  assert(event.event_id !== targetEventId, "custody event must not reuse approval event_id");
+  assert(event.event_type === "WithdrawalApproved", "source event must be WithdrawalApproved");
+  assert(event.event_version === 1, "withdrawal approval event version must be 1");
+  assert(event.producer === "approvals", "withdrawal approval producer must be approvals");
+  assert(event.aggregate_type === "withdrawal", "withdrawal approval aggregate must be withdrawal");
+  assert(
+    event.aggregate_id === intent.command.withdrawal_id,
+    "withdrawal approval aggregate does not match custody intent"
+  );
+  assert(
+    event.correlation_id === intent.command.correlation_id,
+    "withdrawal approval correlation does not match custody intent"
+  );
+  assert(event.idempotency_key === null, "withdrawal approval idempotency_key must be null");
+  assert(
+    event.data_classification === "highly-confidential",
+    "withdrawal approval classification must be highly-confidential"
+  );
+
+  assertExactKeys(event.actor, actorKeys, "withdrawal approval actor");
+  assert(event.actor.type === "operator", "withdrawal approval actor must be an operator");
+  assert(
+    typeof event.actor.subject === "string" &&
+      referencePattern.test(event.actor.subject) &&
+      event.actor.subject.startsWith("operator_"),
+    "withdrawal approval actor subject must be an operator reference"
+  );
+
+  assertExactKeys(event.payload, withdrawalApprovedPayloadKeys, "withdrawal approval payload");
+  assert(
+    event.payload.withdrawal_id === intent.command.withdrawal_id,
+    "withdrawal approval payload does not match custody intent"
+  );
+  assert(
+    Number.isInteger(event.payload.approver_count) &&
+      event.payload.approver_count === intent.approvals.length,
+    "withdrawal approval count does not match custody evidence"
+  );
+  assert(
+    event.payload.evidence_digest === intent.approval_evidence_digest,
+    "withdrawal approval digest does not match custody evidence"
+  );
+  assert(
+    typeof event.payload.approval_id === "string" &&
+      referencePattern.test(event.payload.approval_id) &&
+      event.payload.approval_id.startsWith("approval_"),
+    "withdrawal approval_id must be an approval reference"
+  );
+
+  const sourceOccurredAt = parseTimestamp(
+    event.occurred_at,
+    "withdrawal approval occurred_at"
+  );
+  const latestApprovalAt = Math.max(
+    ...intent.approvals.map((approval) => Date.parse(approval.approved_at))
+  );
+  assert(
+    sourceOccurredAt >= latestApprovalAt,
+    "withdrawal approval event cannot predate custody approvals"
+  );
+  assert(
+    sourceOccurredAt <= targetOccurredAt,
+    "custody event cannot predate WithdrawalApproved"
+  );
+}
+
+export function createCustodyIntentPreparedEvent({
+  context,
+  intent,
+  policy,
+  withdrawalApprovedEvent
+}) {
   assertExactKeys(context, eventContextKeys, "event context");
   assertUuidV7(context.event_id, "event_id");
-  assertUuidV7(context.causation_id, "causation_id");
-  assert(context.event_id !== context.causation_id, "event_id and causation_id must differ");
 
   const occurredAt = parseTimestamp(context.occurred_at, "occurred_at");
   verifyUnsignedTransactionIntent({
     intent,
     now: new Date(occurredAt),
     policy
+  });
+  verifyWithdrawalApprovedEvent({
+    event: withdrawalApprovedEvent,
+    intent,
+    targetEventId: context.event_id,
+    targetOccurredAt: occurredAt
   });
 
   return deepFreeze({
@@ -73,7 +185,7 @@ export function createCustodyIntentPreparedEvent({ context, intent, policy }) {
     },
     aggregate_id: intent.command.withdrawal_id,
     aggregate_type: "withdrawal",
-    causation_id: context.causation_id,
+    causation_id: withdrawalApprovedEvent.event_id,
     correlation_id: intent.command.correlation_id,
     data_classification: "highly-confidential",
     event_id: context.event_id,
