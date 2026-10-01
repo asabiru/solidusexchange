@@ -194,6 +194,9 @@ export async function verifyIdToken(
     });
   const jwk = jwks.keys.find((candidate) => candidate.kid === header.kid);
   if (!jwk) throw new Error("OIDC signing key was not found");
+  if (jwk.use !== undefined && jwk.use !== "sig") {
+    throw new Error("OIDC signing key is not allowed");
+  }
 
   const verified = verify(
     "RSA-SHA256",
