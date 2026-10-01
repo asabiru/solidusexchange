@@ -180,6 +180,9 @@ const backupRestore = read("packages/custody-core/tests/postgres-backup-restore.
 for (const required of [
   "--schema=custody_core",
   "--single-transaction",
+  "tests/postgres-backup-consistency.sql",
+  "Concurrent custody backup contains a partial or unexpected state.",
+  "custody-postgres-backup-consistency-ok",
   "Corrupted custody-core backup unexpectedly restored.",
   "Corrupted custody-core restore left a partial schema.",
   "custody-postgres-backup-corruption-ok",
