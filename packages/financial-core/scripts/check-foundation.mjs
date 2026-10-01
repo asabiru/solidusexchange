@@ -98,6 +98,9 @@ const acceptanceArtifactGuardMigration = read(
 const acceptanceTimelineGuardMigration = read(
   "migrations/0009_ledger_acceptance_timeline_guard.sql"
 );
+const finiteTimestampGuardMigration = read(
+  "migrations/0010_ledger_finite_timestamp_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -107,7 +110,8 @@ const migrations = [
   invariantReplicationGuardMigration,
   replicaReferenceGuardMigration,
   acceptanceArtifactGuardMigration,
-  acceptanceTimelineGuardMigration
+  acceptanceTimelineGuardMigration,
+  finiteTimestampGuardMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
@@ -353,6 +357,27 @@ for (const required of [
     `Acceptance timeline guard is missing ${required}`
   );
 }
+for (const required of [
+  "schema_migrations_applied_at_finite",
+  "ledger_assets_created_at_finite",
+  "account_definitions_created_at_finite",
+  "ledger_accounts_created_at_finite",
+  "ledger_journals_effective_at_finite",
+  "ledger_journals_accepted_at_finite",
+  "ledger_journals_created_at_finite",
+  "ledger_entries_created_at_finite",
+  "ledger_idempotency_first_seen_at_finite",
+  "ledger_outbox_created_at_finite",
+  "ledger_delivery_attempts_attempted_at_finite",
+  "posting_rule_registry_created_at_finite",
+  "ledger_journal_seals_sealed_at_finite",
+  "CHECK (pg_catalog.isfinite"
+]) {
+  assert(
+    finiteTimestampGuardMigration.includes(required),
+    `Finite timestamp guard is missing ${required}`
+  );
+}
 
 for (const [fixture, evidence] of [
   ["tests/postgres-reject-late-entry.sql", "sequence_number"],
@@ -469,6 +494,19 @@ for (const [fixture, evidence] of [
     "tests/postgres-acceptance-artifact-integrity.sh",
     "postgres-acceptance-artifact-integrity-ok"
   ],
+  [
+    "tests/postgres-finite-timestamps.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-finite-timestamps.sh",
+    "ledger_journals_accepted_at_finite"
+  ],
+  [
+    "tests/postgres-finite-timestamps.sh",
+    "ledger_journal_seals_sealed_at_finite"
+  ],
+  ["tests/postgres-finite-timestamps.sh", "postgres-finite-timestamps-ok"],
   ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
   ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
   ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
@@ -687,6 +725,7 @@ for (const required of [
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
   "tests/postgres-acceptance-artifact-integrity.sh",
+  "tests/postgres-finite-timestamps.sh",
   "tests/postgres-backup-restore.sh",
   "tests/command-digest-vector.json"
 ]) {
