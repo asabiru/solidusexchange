@@ -20,6 +20,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Data lifecycle baseline | Legal / Privacy / MLRO / Finance / Security | Retention triggers, holds, correction, disposal, processors, copies and recovery behavior | Proposed; schedule, location, processor and legal-basis approvals pending |
 | Access-control baseline | Security / CTO / domain owners | Identity lifecycle, authentication, authorization, segregation of duties, privileged access and review | Proposed; D-016, production IdP/MFA, JML and privileged-access approvals pending |
 | Third-party risk baseline | Procurement / Security / Legal / domain owners | Criticality, diligence, contracts, onboarding, monitoring, incidents, concentration and exit | Proposed; provider selections, contracts and applicable D-001…D-018 approvals pending |
+| Operational-resilience baseline | SRE / Security / business-service owners | Impact tolerances, degraded modes, capacity, dependency continuity, RPO/RTO, recovery and exercises | Proposed; D-008/D-015/D-017/D-018, service objectives and exercise approvals pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
@@ -32,6 +33,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 - [ ] Data locations, processors and retention are approved.
 - [ ] Workforce SSO/MFA, JML, privileged access and access-review controls are approved.
 - [ ] Critical vendors, subprocessors, concentration risks and exit plans are approved.
+- [ ] Critical business services, impact tolerances, degraded modes, capacity and continuity exercises are approved.
 - [ ] Legacy schema is reproducible without relying on an unsanitized dump.
 - [ ] Any credential-like seeded fixture is removed or proven non-production and rotated.
 - [ ] Production provider work remains blocked until its vendor gate is complete.

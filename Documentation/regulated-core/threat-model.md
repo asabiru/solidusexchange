@@ -164,6 +164,7 @@ Production execution remains prohibited while any of the following is missing:
 - custody responsibility, signer architecture, HSM/MPC vendor and key ceremony;
 - production role model, secrets management, runner isolation and release provenance;
 - approved backup encryption, retention, RPO/RTO and restore drill;
+- approved business-service impact tolerances, degraded modes, capacity evidence and continuity exercises;
 - independent security assessment and remediation of critical/high findings;
 - incident response ownership, escalation and regulatory notification procedure.
 
@@ -186,6 +187,7 @@ Synthetic tests, green CI and a successful dev restore do not satisfy these cond
 | Data lifecycle | data lifecycle baseline and data classification register |
 | Identity and access | access-control baseline |
 | Third parties and outsourcing | third-party risk baseline and vendor scorecards |
+| Operational resilience | operational-resilience baseline |
 | Decisions and approvals | decision register and Phase 0 evidence index |
 
 ## Review rule
