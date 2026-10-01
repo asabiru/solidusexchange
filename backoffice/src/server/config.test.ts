@@ -3,6 +3,7 @@ import { afterEach, describe, it } from "node:test";
 import { loadServerConfig } from "./config.js";
 
 const configurationEnvironment = [
+  "BACKOFFICE_ALLOWED_ORIGINS",
   "BACKOFFICE_AUDIT_STORAGE",
   "BACKOFFICE_AUDIT_RETENTION_DAYS",
   "BACKOFFICE_AUDIT_DATABASE_URL",
@@ -75,5 +76,36 @@ describe("audit configuration", () => {
     delete process.env.BACKOFFICE_SIGNING_ROTATION_SECONDS;
     process.env.BACKOFFICE_SIGNING_RETAINED_KEYS = "0";
     assert.throws(() => loadServerConfig(), /BACKOFFICE_SIGNING_RETAINED_KEYS/);
+  });
+
+  it("rejects public plaintext and mixed session origins", () => {
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = "http://operators.example.test";
+    assert.throws(
+      () => loadServerConfig(),
+      /permits HTTP only for loopback origins/
+    );
+
+    process.env.BACKOFFICE_ALLOWED_ORIGINS =
+      "http://127.0.0.1:4173,https://operators.example.test";
+    assert.throws(
+      () => loadServerConfig(),
+      /must not mix HTTP and HTTPS origins/
+    );
+  });
+
+  it("accepts one loopback HTTP or HTTPS session boundary", () => {
+    process.env.BACKOFFICE_ALLOWED_ORIGINS =
+      "http://127.0.0.1:4173,http://localhost:4173";
+    assert.deepEqual(loadServerConfig().allowedOrigins, [
+      "http://127.0.0.1:4173",
+      "http://localhost:4173"
+    ]);
+
+    process.env.BACKOFFICE_ALLOWED_ORIGINS =
+      "https://operators.example.test,https://audit.example.test";
+    assert.deepEqual(loadServerConfig().allowedOrigins, [
+      "https://operators.example.test",
+      "https://audit.example.test"
+    ]);
   });
 });

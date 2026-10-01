@@ -139,6 +139,12 @@ function integerSetting(name: string, fallback: number, minimum: number, maximum
   return value;
 }
 
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost"
+    || hostname === "127.0.0.1"
+    || hostname === "[::1]";
+}
+
 function loadStepUpConfig(): StepUpConfig {
   return {
     provider: "synthetic-dev",
@@ -186,18 +192,28 @@ export function loadServerConfig(): ServerConfig {
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
+  let originUrls: readonly URL[];
+  try {
+    originUrls = allowedOrigins.map((origin) => new URL(origin));
+  } catch {
+    throw new Error("BACKOFFICE_ALLOWED_ORIGINS must contain exact HTTP(S) origins");
+  }
   if (
-    allowedOrigins.length === 0
-    || allowedOrigins.some((origin) => {
-      try {
-        const url = new URL(origin);
-        return !["http:", "https:"].includes(url.protocol) || url.origin !== origin;
-      } catch {
-        return true;
-      }
-    })
+    originUrls.length === 0
+    || originUrls.some((url, index) =>
+      !["http:", "https:"].includes(url.protocol) || url.origin !== allowedOrigins[index]
+    )
   ) {
     throw new Error("BACKOFFICE_ALLOWED_ORIGINS must contain exact HTTP(S) origins");
+  }
+  if (originUrls.some((url) =>
+    url.protocol === "http:" && !isLoopbackHostname(url.hostname)
+  )) {
+    throw new Error("BACKOFFICE_ALLOWED_ORIGINS permits HTTP only for loopback origins");
+  }
+  const protocols = new Set(originUrls.map((url) => url.protocol));
+  if (protocols.size > 1) {
+    throw new Error("BACKOFFICE_ALLOWED_ORIGINS must not mix HTTP and HTTPS origins");
   }
 
   const port = Number(process.env.BACKOFFICE_BFF_PORT ?? "4174");
