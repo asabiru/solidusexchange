@@ -225,7 +225,15 @@ export interface ReadonlyBackofficeRepository {
   auditSource(): readonly AuditSourceEvent[];
 }
 
-const data = {
+function deepFreeze<T>(value: T): T {
+  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+const data = deepFreeze({
   metrics: [
     { label: "Открытые кейсы", value: "29", detail: "−6 с начала смены", tone: "info" },
     { label: "SLA под риском", value: "5", detail: "2 требуют решения в течение часа", tone: "warning" },
@@ -934,7 +942,7 @@ const data = {
       evidenceDigest: "sha256:ac7f8c9321d4"
     }
   ]
-} as const;
+} as const);
 
 export const demoRepository: ReadonlyBackofficeRepository = {
   metrics: () => data.metrics,

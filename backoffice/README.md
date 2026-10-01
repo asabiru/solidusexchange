@@ -5,7 +5,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 ## Current boundary
 
 - `dev-dry-run` is the only accepted runtime mode.
-- All data is synthetic and exposed only through the read-only BFF.
+- All data is synthetic, deeply frozen at runtime and exposed only through the read-only BFF.
 - OIDC uses Authorization Code with PKCE; OIDC tokens remain in the BFF.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
