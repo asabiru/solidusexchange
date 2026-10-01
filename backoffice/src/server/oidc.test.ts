@@ -258,4 +258,39 @@ describe("OIDC boundary", () => {
       /signing key is not allowed/
     );
   });
+
+  it("rejects a signed token when the selected JWK excludes verification", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "sign-only-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-48",
+      aud: config.clientId,
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-7",
+      groups: ["compliance"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      pair.privateKey
+    ).toString("base64url");
+
+    await assert.rejects(
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-7", {
+        keys: [
+          {
+            ...pair.publicKey.export({ format: "jwk" }),
+            kid: "sign-only-key",
+            use: "sig",
+            alg: "RS256",
+            key_ops: ["sign"]
+          }
+        ]
+      }),
+      /signing key is not allowed/
+    );
+  });
 });

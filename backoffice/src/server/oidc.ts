@@ -197,6 +197,10 @@ export async function verifyIdToken(
   if (
     (jwk.use !== undefined && jwk.use !== "sig")
     || (jwk.alg !== undefined && jwk.alg !== header.alg)
+    || (
+      jwk.key_ops !== undefined
+      && (!Array.isArray(jwk.key_ops) || !jwk.key_ops.includes("verify"))
+    )
   ) {
     throw new Error("OIDC signing key is not allowed");
   }
