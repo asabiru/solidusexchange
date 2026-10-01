@@ -92,12 +92,12 @@ function childMappings(lines, parentIndex, keys) {
     }
 
     const match = trimmed.match(/^([A-Za-z_-]+):\s*(.*?)\s*$/);
-    if (match && keys.has(match[1])) {
+    if (!keys || (match && keys.has(match[1]))) {
       mappings.push({
         index,
         indent,
-        name: match[1],
-        value: scalar(match[2]),
+        name: match?.[1],
+        value: match ? scalar(match[2]) : trimmed,
       });
     }
   }
@@ -145,7 +145,8 @@ function triggerErrors(lines, fileName) {
     return [`${fileName}: workflow must declare one block-style top-level on mapping`];
   }
 
-  const events = childMappings(lines, onMappings[0].index, EVENT_KEYS);
+  const directEvents = childMappings(lines, onMappings[0].index);
+  const events = directEvents.filter(({ name }) => EVENT_KEYS.has(name));
   const eventCount = (name) => events.filter((event) => event.name === name).length;
 
   for (const event of events.filter(({ value }) => value)) {
@@ -155,8 +156,11 @@ function triggerErrors(lines, fileName) {
   }
 
   if (MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/"))) {
-    if (eventCount("workflow_dispatch") !== 1) {
-      errors.push(`${fileName}: approved manual workflow must retain workflow_dispatch`);
+    if (
+      directEvents.length !== 1 ||
+      eventCount("workflow_dispatch") !== 1
+    ) {
+      errors.push(`${fileName}: approved manual workflow must use only workflow_dispatch`);
     }
     return errors;
   }

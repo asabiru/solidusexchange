@@ -74,6 +74,38 @@ jobs:
   );
 });
 
+test("rejects automatic triggers on the approved manual deployment workflow", () => {
+  const manualWorkflow = `name: Deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./local-action
+`;
+
+  for (const automaticTrigger of [
+    "  pull_request:\n",
+    "  push:\n",
+    "  schedule:\n    - cron: '0 0 * * *'\n",
+  ]) {
+    const errors = validateWorkflowText(
+      manualWorkflow.replace(
+        "  workflow_dispatch:\n",
+        `${automaticTrigger}  workflow_dispatch:\n`,
+      ),
+      ".github/workflows/deploy.yml",
+    );
+
+    assert.match(errors.join("\n"), /must use only workflow_dispatch/);
+  }
+});
+
 test("normalizes quoted trigger keys without changing unrelated YAML", () => {
   const errors = validateWorkflowText(
     workflow("      - uses: ./local-action")
