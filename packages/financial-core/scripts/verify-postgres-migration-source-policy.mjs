@@ -44,6 +44,7 @@ function dollarQuoteDelimiterAt(source, offset) {
 function analyzeSql(source) {
   const masked = [...source];
   const dollarQuotedBodies = [];
+  const singleQuotedLiterals = [];
   let index = 0;
 
   function mask(start, end) {
@@ -76,6 +77,7 @@ function analyzeSql(source) {
       mask(start, index);
     } else if (source[index] === "'") {
       const start = index;
+      singleQuotedLiterals.push(start);
       const usesBackslashEscapes = start > 0 && /e/iu.test(source[start - 1]);
       index += 1;
       while (index < source.length) {
@@ -131,7 +133,8 @@ function analyzeSql(source) {
 
   return {
     masked: masked.join(""),
-    dollarQuotedBodies
+    dollarQuotedBodies,
+    singleQuotedLiterals
   };
 }
 
@@ -157,20 +160,23 @@ function containsHistoryChange(source) {
   return historyChangePattern.test(analyzeSql(source).masked);
 }
 
-function containsDynamicSql(source) {
-  const sourceAnalysis = analyzeSql(source);
-  return sourceAnalysis.dollarQuotedBodies.some(({ start, value }) => {
-    const statementStart = sourceAnalysis.masked.lastIndexOf(";", start - 1) + 1;
-    const statementPrefix = sourceAnalysis.masked.slice(statementStart, start).trim();
+function containsDisallowedProceduralStatement(source) {
+  return splitSqlStatements(source).some((statement) => {
+    const analysis = analyzeSql(statement);
     if (
-      !/^(?:DO\b|CREATE(?:\s+OR\s+REPLACE)?\s+(?:FUNCTION|PROCEDURE)\b)/iu.test(
-        statementPrefix
+      !/^\s*(?:DO\b|CREATE(?:\s+OR\s+REPLACE)?\s+(?:FUNCTION|PROCEDURE)\b)/iu.test(
+        analysis.masked
       )
     ) {
       return false;
     }
-    const analysis = analyzeSql(value);
-    return /\bEXECUTE\b(?!\s+FUNCTION\b)/iu.test(analysis.masked);
+    if (analysis.singleQuotedLiterals.length > 0) return true;
+    return analysis.dollarQuotedBodies.some(({ value }) => {
+      const body = analyzeSql(value).masked;
+      return (
+        /\bEXECUTE\b(?!\s+FUNCTION\b)/iu.test(body) || historyChangePattern.test(body)
+      );
+    });
   });
 }
 
@@ -235,8 +241,8 @@ for (const { name, migrationName, version } of migrations) {
     `PostgreSQL migration must change history only through canonical history rows: ${name}`
   );
   assert(
-    !containsDynamicSql(source),
-    `PostgreSQL migration must not execute dynamic SQL in procedural bodies: ${name}`
+    !containsDisallowedProceduralStatement(source),
+    `PostgreSQL migration must not use unreviewable procedural SQL: ${name}`
   );
   assert.deepStrictEqual(
     [Number(historyRows[0][1]), historyRows[0][2]],

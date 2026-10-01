@@ -696,7 +696,7 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-migration-source-policy.mjs",
-    "PostgreSQL migration must not execute dynamic SQL in procedural bodies"
+    "PostgreSQL migration must not use unreviewable procedural SQL"
   ],
   [
     "scripts/verify-postgres-migration-source-policy.mjs",
@@ -725,6 +725,10 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-migration-source-policy.sh",
     "concatenated-dynamic-history-rewrite"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "single-quoted-dynamic-history-rewrite"
   ],
   [
     "tests/postgres-migration-source-policy.sh",

@@ -90,7 +90,7 @@ END;\
 $migration_policy_bypass$;' \
   "$scratch/dynamic-history-rewrite/0002_ledger_verification_views.sql"
 assert_source_policy_rejected \
-  "PostgreSQL migration must not execute dynamic SQL in procedural bodies: 0002_ledger_verification_views.sql" \
+  "PostgreSQL migration must not use unreviewable procedural SQL: 0002_ledger_verification_views.sql" \
   "$scratch/dynamic-history-rewrite"
 
 mkdir "$scratch/concatenated-dynamic-history-rewrite"
@@ -99,8 +99,17 @@ sed -i \
   "/^COMMIT;$/i DO \\\$bypass\\\$\\nBEGIN\\n  EXECUTE 'UPDATE financial_core.' || 'schema_migrations SET migration_name = migration_name';\\nEND;\\n\\\$bypass\\\$;" \
   "$scratch/concatenated-dynamic-history-rewrite/0002_ledger_verification_views.sql"
 assert_source_policy_rejected \
-  "PostgreSQL migration must not execute dynamic SQL in procedural bodies: 0002_ledger_verification_views.sql" \
+  "PostgreSQL migration must not use unreviewable procedural SQL: 0002_ledger_verification_views.sql" \
   "$scratch/concatenated-dynamic-history-rewrite"
+
+mkdir "$scratch/single-quoted-dynamic-history-rewrite"
+cp -R "$workspace/migrations/." "$scratch/single-quoted-dynamic-history-rewrite/"
+sed -i \
+  "/^COMMIT;$/i DO 'BEGIN\\n  EXECUTE ''UPDATE financial_core.schema_migrations SET migration_name = migration_name'';\\nEND';" \
+  "$scratch/single-quoted-dynamic-history-rewrite/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must not use unreviewable procedural SQL: 0002_ledger_verification_views.sql" \
+  "$scratch/single-quoted-dynamic-history-rewrite"
 
 mkdir "$scratch/harmless-history-text"
 cp -R "$workspace/migrations/." "$scratch/harmless-history-text/"
