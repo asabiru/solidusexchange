@@ -165,6 +165,37 @@ describe("OIDC boundary", () => {
     );
   });
 
+  it("rejects single-audience tokens naming another authorized party", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "test-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-azp-mismatch",
+      aud: config.clientId,
+      azp: "another-client",
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-azp-mismatch",
+      groups: ["compliance"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      pair.privateKey
+    ).toString("base64url");
+
+    await assert.rejects(
+      verifyIdToken(
+        `${header}.${claims}.${signature}`,
+        config,
+        "nonce-azp-mismatch",
+        { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
+      ),
+      /authorized party mismatch/
+    );
+  });
+
   it("rejects tokens before their not-before time", async () => {
     const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const header = encode({ alg: "RS256", kid: "test-key" });
