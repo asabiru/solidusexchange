@@ -110,6 +110,48 @@ snapshot() {
     -f tests/postgres-state-snapshot.sql
 }
 
+verify_migration_history() {
+  local database="$1"
+  run_psql "$database" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -f tests/postgres-migration-history.sql \
+    | node scripts/verify-postgres-migration-history.mjs
+}
+
+assert_restored_history_drift_rejected() {
+  local database="$1"
+  local output
+  local status
+
+  set +e
+  output="$(
+    {
+      printf '%s\n' \
+        "BEGIN;" \
+        "INSERT INTO financial_core.schema_migrations (version, migration_name)" \
+        "VALUES (12, '0012_unreviewed_restore_drift');"
+      cat tests/postgres-migration-history.sql
+      printf '%s\n' "ROLLBACK;"
+    } | run_psql "$database" -v ON_ERROR_STOP=1 -Atq \
+      | node scripts/verify-postgres-migration-history.mjs 2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Restored database with unreviewed migration history unexpectedly passed." >&2
+    exit 1
+  fi
+  grep -F \
+    "PostgreSQL migration history differs from canonical manifest" \
+    <<<"$output"
+
+  verify_migration_history "$database"
+  echo "postgres-backup-migration-history-negative-ok"
+}
+
 scope_snapshot() {
   local database="$1"
   run_psql "$database" \
@@ -352,6 +394,9 @@ for check in "${catalog_checks[@]}"; do
   PGDATABASE="$RESTORE_DATABASE" bash "$check"
 done
 
+verify_migration_history "$RESTORE_DATABASE"
+assert_restored_history_drift_rejected "$RESTORE_DATABASE"
+
 source_snapshot="$(snapshot "$PGDATABASE")"
 restored_snapshot="$(snapshot "$RESTORE_DATABASE")"
 source_digest="$(printf '%s' "$source_snapshot" | sha256sum | cut -d ' ' -f 1)"
@@ -530,6 +575,8 @@ run_pg_tool \
 for check in "${catalog_checks[@]}"; do
   PGDATABASE="$CHAIN_RESTORE_DATABASE" bash "$check"
 done
+
+verify_migration_history "$CHAIN_RESTORE_DATABASE"
 
 chain_snapshot="$(snapshot "$CHAIN_RESTORE_DATABASE")"
 chain_digest="$(printf '%s' "$chain_snapshot" | sha256sum | cut -d ' ' -f 1)"
