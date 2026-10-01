@@ -508,9 +508,14 @@ for (const [fixture, evidence] of [
   ],
   ["tests/postgres-finite-timestamps.sh", "postgres-finite-timestamps-ok"],
   ["tests/postgres-migration-history.sql", "financial_core.schema_migrations"],
+  ["tests/postgres-migration-history.sql", "applied_in_version_order"],
   [
     "scripts/verify-postgres-migration-history.mjs",
     "PostgreSQL migration history differs from canonical manifest"
+  ],
+  [
+    "scripts/verify-postgres-migration-history.mjs",
+    "PostgreSQL migrations were not applied in canonical version order"
   ],
   [
     "scripts/verify-postgres-migration-history.mjs",
@@ -519,6 +524,18 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-migration-history.sh",
     "9999_unreviewed_migration"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "OUT_OF_ORDER_DATABASE"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "Out-of-order PostgreSQL migration history unexpectedly passed."
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "postgres-migration-order-negative-ok"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -712,7 +729,7 @@ for (const required of [
   "CTO approver:",
   "Security approver:",
   "synthetic logical backup/restore",
-  "migration history точно соответствует migrations `0001`–`0010`",
+  "migration history точно соответствует migrations `0001`–`0010` и порядку их применения",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {

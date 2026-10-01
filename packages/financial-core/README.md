@@ -35,7 +35,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
-| `tests/postgres-migration-history.sh` | Exact installed migration manifest and rejected extra-history evidence |
+| `tests/postgres-migration-history.sh` | Exact installed migration manifest, application order and rejected drift evidence |
 | `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
@@ -95,7 +95,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 29. Reapplying a logical backup to an occupied financial-core target must fail atomically without changing its canonical state.
 30. A financial-core logical backup must neither copy unrelated source schemas nor alter unrelated state already present in the restore target.
 31. Every persisted financial-core timestamp must be finite; PostgreSQL positive and negative infinity are rejected even in replica mode.
-32. Installed migration versions and names must exactly match the reviewed canonical manifest; missing, renamed, reordered or extra history fails verification.
+32. Installed migration versions and names must exactly match the reviewed canonical manifest and their `applied_at` chronology must follow version order; missing, renamed, out-of-order or extra history fails verification.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -297,7 +297,7 @@ The acceptance-artifact regression proves that journal, entry, idempotency and o
 
 The finite-timestamp regression proves all 13 PostgreSQL timestamp constraints reject `infinity` and `-infinity` while replica mode is active. Exact catalog verification makes removal or weakening of any one constraint fail CI.
 
-The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0010` in canonical order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged.
+The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0010` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
