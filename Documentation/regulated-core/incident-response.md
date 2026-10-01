@@ -12,6 +12,10 @@ This baseline defines how SolidChange must coordinate, preserve evidence and mak
 
 It is not a production runbook. Provider contacts, regulator timelines, customer-notification rules, infrastructure commands, production identities and emergency command paths remain undefined until their owners approve them. Missing ownership or notification guidance is a production stop condition.
 
+Provider assessment, monitoring, cooperation and exit requirements are defined
+in the proposed [third-party risk baseline](third-party-risk.md). Provider
+communications remain claims until bound to preserved evidence.
+
 ## Objectives
 
 1. Protect customers and prevent additional unauthorized activity.
