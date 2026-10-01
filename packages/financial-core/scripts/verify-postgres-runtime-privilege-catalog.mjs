@@ -37,7 +37,19 @@ const expected = {
       )
   ],
   memberships: [],
-  runtime_role_exists: true
+  runtime_role: {
+    bypass_row_security: false,
+    can_login: false,
+    configuration: [],
+    create_database: false,
+    create_role: false,
+    exists: true,
+    inherit: false,
+    owns_database: false,
+    owns_financial_objects: false,
+    replication: false,
+    superuser: false
+  }
 };
 
 let input = "";
@@ -49,7 +61,7 @@ const actual = JSON.parse(input);
 assert.deepStrictEqual(
   actual,
   expected,
-  "PostgreSQL runtime writer privileges differ from the reviewed least-privilege profile"
+  "PostgreSQL runtime role or privileges differ from the reviewed least-privilege profile"
 );
 
 console.log("postgres-runtime-privilege-catalog-ok");

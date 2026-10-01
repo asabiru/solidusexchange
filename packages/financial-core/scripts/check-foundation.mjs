@@ -426,6 +426,8 @@ for (const [fixture, evidence] of [
   ["tests/postgres-concurrency.sh", "pg_try_advisory_lock"],
   ["tests/runtime-writer-grants.sql", "REVOKE ALL PRIVILEGES ON ALL TABLES"],
   ["tests/runtime-writer-grants.sql", "GRANT INSERT ON TABLE"],
+  ["tests/runtime-writer-grants.sql", "rolcanlogin = FALSE"],
+  ["tests/runtime-writer-grants.sql", "rolconfig IS NULL"],
   ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
   ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"],
@@ -442,6 +444,15 @@ for (const [fixture, evidence] of [
     "tests/postgres-runtime-privileges.sh",
     "GRANT financial_core_runtime_parent_test TO $runtime_role"
   ],
+  ["tests/postgres-runtime-privileges.sh", "ALTER ROLE $runtime_role LOGIN"],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "ALTER ROLE $runtime_role SET search_path = public"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "ALTER SCHEMA financial_core OWNER TO $runtime_role"
+  ],
   ["tests/postgres-runtime-privileges.sh", "WITH GRANT OPTION"],
   [
     "tests/postgres-runtime-privileges.sh",
@@ -454,9 +465,23 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.aclexplode(attribute.attacl)"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_auth_members"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_default_acl"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "role.rolcanlogin"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "'owns_financial_objects'"],
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",
-    "PostgreSQL runtime writer privileges differ from the reviewed least-privilege profile"
+    "can_login: false"
+  ],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    "configuration: []"
+  ],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    "owns_financial_objects: false"
+  ],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    "PostgreSQL runtime role or privileges differ from the reviewed least-privilege profile"
   ],
   ["tests/postgres-owner-truncate-guard.sh", "TRUNCATE TABLE"],
   ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"],
