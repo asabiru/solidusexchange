@@ -326,6 +326,11 @@ contract, credential, data transfer, production connection or failover; waive
 reconciliation; make a regulated decision; or approve its own provider or
 service identity.
 
+Business-service dependency mapping, impact tolerances, degraded operation,
+capacity and continuity exercises must also satisfy the proposed
+[operational-resilience baseline](operational-resilience.md). A provider
+scorecard or contractual SLO alone is not internal recovery evidence.
+
 ## Approval dependencies
 
 Production use remains blocked until:
