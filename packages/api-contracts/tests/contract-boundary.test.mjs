@@ -103,6 +103,16 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects renamed request context headers",
+  "ClientVersion must use X-Client-Version",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.ClientVersion.name = "X-App-Version";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {

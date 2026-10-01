@@ -206,11 +206,17 @@ function checkOpenApi() {
   }
 
   const parameters = openapi.components?.parameters ?? {};
-  for (const name of ["RequestId", "ClientVersion", "Platform", "IdempotencyKey"]) {
+  const parameterNames = {
+    RequestId: "X-Request-Id",
+    ClientVersion: "X-Client-Version",
+    Platform: "X-Platform",
+    IdempotencyKey: "Idempotency-Key"
+  };
+  for (const [name, headerName] of Object.entries(parameterNames)) {
     assert(parameters[name]?.required === true, `${name} must be required when used`);
     assert(parameters[name]?.in === "header", `${name} must remain a header parameter`);
+    assert(parameters[name]?.name === headerName, `${name} must use ${headerName}`);
   }
-  assert(parameters.IdempotencyKey.name === "Idempotency-Key", "Idempotency-Key component is missing");
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
