@@ -53,6 +53,54 @@ test("rejects flow-style steps that hide mutable external action refs", () => {
   }
 });
 
+test("rejects flow-style jobs with valid ID syntaxes that hide mutable reusable workflow refs", () => {
+  for (const jobId of ["call-external", "'call-external'", '"call-external"']) {
+    const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  ${jobId}: { uses: example/repository/.github/workflows/reusable.yml@main }
+`);
+
+    assert.match(
+      errors.join("\n"),
+      /flow-style reusable workflow jobs are not allowed/,
+    );
+  }
+});
+
+test("accepts unrelated flow-style jobs with quoted IDs", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  'build-job': { runs-on: ubuntu-latest, steps: [{ run: "echo policy fixture" }] }
+`);
+
+  assert.deepEqual(errors, []);
+});
+
+test("accepts block-style local reusable workflow jobs", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  call-local:
+    uses: ./.github/workflows/reusable.yml
+`);
+
+  assert.deepEqual(errors, []);
+});
+
 test("accepts unrelated flow-style list data", () => {
   const errors = validateWorkflowText(`name: Policy fixture
 on: pull_request
