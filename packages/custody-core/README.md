@@ -49,6 +49,8 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, always-enabled mutation triggers, function definitions, ownership and access controls. Unexpected DDL, disabled triggers, public access, function-security drift or removed constraints fail closed.
 
+`tests/postgres-backup-restore.sh` creates a schema-scoped logical backup, restores it atomically into a disposable database, reruns the exact installed-catalog policy and compares a deterministic outbox snapshot with the source. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
+
 ## Verification
 
 ```bash
@@ -57,6 +59,7 @@ npm run verify
 npm audit --audit-level=moderate
 bash tests/postgres-outbox.sh
 bash tests/postgres-catalog.sh
+bash tests/postgres-backup-restore.sh
 bash tests/postgres-runtime-privileges.sh
 ```
 

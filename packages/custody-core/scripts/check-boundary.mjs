@@ -167,6 +167,27 @@ for (const required of [
   assert(catalogTests.includes(required), `Custody catalog tests are missing evidence: ${required}`);
 }
 
+const stateSnapshot = read("packages/custody-core/tests/postgres-state-snapshot.sql");
+for (const required of [
+  "custody-core-state-v1",
+  "custody_projection_outbox",
+  "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"
+]) {
+  assert(stateSnapshot.includes(required), `Custody state snapshot is missing evidence: ${required}`);
+}
+
+const backupRestore = read("packages/custody-core/tests/postgres-backup-restore.sh");
+for (const required of [
+  "--schema=custody_core",
+  "--single-transaction",
+  "PGDATABASE=\"$RESTORE_DATABASE\"",
+  "bash tests/postgres-catalog.sh",
+  "Restored custody-core state differs from the source state.",
+  "custody-postgres-backup-restore-ok"
+]) {
+  assert(backupRestore.includes(required), `Custody recovery test is missing evidence: ${required}`);
+}
+
 const adr = read("Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md");
 for (const required of [
   "Status: Proposed",
