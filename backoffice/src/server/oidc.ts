@@ -15,6 +15,7 @@ interface ValidIdTokenClaims {
   azp?: string;
   exp: number;
   iat: number;
+  nbf?: number;
   nonce: string;
   email?: string;
   name?: string;
@@ -130,7 +131,19 @@ function validateClaims(
   if (audience.length > 1 && claims.azp !== config.clientId) {
     throw new Error("OIDC authorized party mismatch");
   }
-  if (claims.nonce !== nonce || claims.exp <= now || claims.iat > now + 60) {
+  if (
+    claims.nonce !== nonce
+    || claims.exp <= now
+    || claims.iat > now + 60
+    || (
+      claims.nbf !== undefined
+      && (
+        typeof claims.nbf !== "number"
+        || !Number.isFinite(claims.nbf)
+        || claims.nbf > now + 60
+      )
+    )
+  ) {
     throw new Error("OIDC token claims are not valid");
   }
 }

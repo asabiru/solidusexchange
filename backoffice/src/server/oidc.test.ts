@@ -164,4 +164,32 @@ describe("OIDC boundary", () => {
       /authorized party mismatch/
     );
   });
+
+  it("rejects tokens before their not-before time", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "test-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-45",
+      aud: config.clientId,
+      exp: now + 600,
+      iat: now,
+      nbf: now + 300,
+      nonce: "nonce-4",
+      groups: ["compliance"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      pair.privateKey
+    ).toString("base64url");
+
+    await assert.rejects(
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-4", {
+        keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
+      }),
+      /token claims are not valid/
+    );
+  });
 });
