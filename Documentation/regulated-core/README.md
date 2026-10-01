@@ -31,6 +31,7 @@
 | [Third-party risk](third-party-risk.md) | Vendor criticality, diligence, approval, monitoring, incident, concentration and exit gates |
 | [Operational resilience](operational-resilience.md) | Business-service impact, degraded operation, capacity, continuity, recovery and exercise gates |
 | [AI governance](ai-governance.md) | Capability inventory, human control, data/tool boundaries, evaluation, release and withdrawal gates |
+| [Customer protection](customer-protection.md) | Disclosures, quotes, status, restrictions, support, complaints, remediation and customer-harm gates |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
 | [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 
