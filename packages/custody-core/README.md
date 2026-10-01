@@ -45,6 +45,8 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `migrations/0001_custody_projection_outbox.sql` adds PostgreSQL evidence for the same contract. The append-only outbox accepts only the exact unsigned testnet event shape, recognizes exact concurrent replays, rejects changed idempotency evidence and enforces unique event, approval-source, withdrawal and custody-intent identities. It is still a dev-only reference migration: production role provisioning, infrastructure and operational authorization are intentionally absent.
 
+`tests/postgres-migration-source-catalog.sh` pins the exact ordered migration filename and SHA-256 digest. Changed, missing or unexpected SQL migration sources fail closed before database execution.
+
 `tests/runtime-writer-grants.sql` defines the dev-only least-privilege writer contract. A validated unprivileged role receives only schema usage and execution of the fixed-search-path `record_custody_projection` security boundary; it cannot read or mutate the outbox directly, create schema objects or disable triggers.
 
 `tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, always-enabled mutation triggers, function definitions, ownership and access controls. Unexpected DDL, disabled triggers, public access, function-security drift or removed constraints fail closed.
@@ -57,6 +59,7 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 npm ci
 npm run verify
 npm audit --audit-level=moderate
+bash tests/postgres-migration-source-catalog.sh
 bash tests/postgres-outbox.sh
 bash tests/postgres-catalog.sh
 bash tests/postgres-backup-restore.sh

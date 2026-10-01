@@ -63,6 +63,9 @@ jobs:
       - name: Verify custody boundary
         run: npm run verify
 
+      - name: Verify PostgreSQL custody migration sources
+        run: bash tests/postgres-migration-source-catalog.sh
+
       - name: Verify PostgreSQL custody outbox
         env:
           PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
