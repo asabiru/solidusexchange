@@ -133,6 +133,14 @@ for (const required of [
 
 const runtimeTests = read("packages/custody-core/tests/postgres-runtime-privileges.sh");
 for (const required of [
+  "verify_runtime_catalog",
+  "GRANT SELECT ON TABLE custody_core.custody_projection_outbox TO $runtime_role",
+  "GRANT UPDATE (request_digest) ON TABLE custody_core.custody_projection_outbox TO $runtime_role",
+  "WITH GRANT OPTION",
+  "GRANT USAGE ON TYPE custody_core.custody_projection_outbox TO $runtime_role",
+  "ALTER DEFAULT PRIVILEGES IN SCHEMA custody_core",
+  "GRANT SELECT ON TABLE custody_core.schema_migrations TO PUBLIC",
+  "custody-postgres-runtime-privilege-catalog-negative-ok",
   "custody-runtime-privilege-shape-ok",
   "direct custody outbox select",
   "direct custody outbox insert",
@@ -143,6 +151,35 @@ for (const required of [
   "custody-postgres-runtime-privileges-ok"
 ]) {
   assert(runtimeTests.includes(required), `Custody runtime tests are missing evidence: ${required}`);
+}
+
+const runtimePrivilegeCatalog = read(
+  "packages/custody-core/tests/postgres-runtime-privilege-catalog.sql"
+);
+for (const required of [
+  "pg_catalog.aclexplode(attribute.attacl)",
+  "pg_catalog.pg_default_acl",
+  "namespace.nspname = 'custody_core'",
+  "grantees.label AS grantee"
+]) {
+  assert(
+    runtimePrivilegeCatalog.includes(required),
+    `Custody runtime privilege catalog is missing evidence: ${required}`
+  );
+}
+
+const runtimePrivilegeVerifier = read(
+  "packages/custody-core/scripts/verify-postgres-runtime-privilege-catalog.mjs"
+);
+for (const required of [
+  "record_custody_projection(p_event_document jsonb, p_request_digest text)",
+  "PostgreSQL custody runtime writer privileges differ from the reviewed least-privilege profile",
+  "custody-postgres-runtime-privilege-catalog-ok"
+]) {
+  assert(
+    runtimePrivilegeVerifier.includes(required),
+    `Custody runtime privilege verifier is missing evidence: ${required}`
+  );
 }
 
 const catalogQuery = read("packages/custody-core/tests/postgres-catalog.sql");
