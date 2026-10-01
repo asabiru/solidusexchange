@@ -48,7 +48,8 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-acceptance-artifact-integrity.sh` | Normal and replica-mode rejection of mismatched acceptance timestamps |
 | `tests/postgres-state-snapshot.sql` | Canonical financial-core tables and verification-view state snapshot |
 | `tests/postgres-backup-consistency.sql` | Uncommitted balanced journal fixture held open during a logical backup |
-| `tests/postgres-backup-restore.sh` | Synthetic concurrent snapshot, corruption, atomic restore, state and policy parity regression |
+| `tests/postgres-backup-continuity.sql` | Post-restore journal acceptance and read-model continuity fixture |
+| `tests/postgres-backup-restore.sh` | Synthetic snapshot, corruption, atomic restore, state/policy parity and continuity regression |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -86,6 +87,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 24. A synthetic logical backup must restore every financial-core table, verification view and reviewed database policy to an exact canonical state in a disposable database.
 25. A truncated logical backup must fail restoration atomically and leave no partial `financial_core` schema in its disposable database.
 26. A logical backup taken while a complete journal is still uncommitted must restore the exact prior committed state, without any partial acceptance artifacts.
+27. After exact restore verification, the restored database must accept a new complete journal and advance projections and trial balance without mutating the source database.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -273,7 +275,7 @@ The posting-rule registry regression exports every policy field from PostgreSQL 
 
 The runtime privilege regression creates an ephemeral `NOLOGIN`, `NOINHERIT`, non-owner role in the synthetic test database. It proves the exact posting transaction can commit with the proposed grants while direct configuration writes, `UPDATE`, `DELETE`, `TRUNCATE` and trigger-disabling DDL fail before reaching application code.
 
-The logical backup/restore regression dumps only the synthetic `financial_core` schema. It first holds a complete balanced journal uncommitted while `pg_dump` takes its snapshot; restoring that archive must reproduce the exact canonical state from before the transaction and contain none of the pending acceptance artifacts. It then truncates a copy of a post-commit archive and requires `pg_restore --single-transaction` to reject it without leaving a partial schema. Finally, it restores the intact archive into a separate disposable database and reruns the exact trigger, function, constraint, relation and access-control policies. A canonical snapshot requires every base table and both verification views to match the source byte-for-byte after JSON normalization. This is dev-only recoverability evidence; it does not satisfy production RPO/RTO, retention, encryption, HA or D-017 restore-drill approval.
+The logical backup/restore regression dumps only the synthetic `financial_core` schema. It first holds a complete balanced journal uncommitted while `pg_dump` takes its snapshot; restoring that archive must reproduce the exact canonical state from before the transaction and contain none of the pending acceptance artifacts. It then truncates a copy of a post-commit archive and requires `pg_restore --single-transaction` to reject it without leaving a partial schema. Finally, it restores the intact archive into a separate disposable database, reruns the exact trigger, function, constraint, relation and access-control policies, and requires every base table and both verification views to match the source byte-for-byte after JSON normalization. Only after exact parity is established, the restored database accepts a new synthetic journal; account projections and trial balance must advance correctly while the source database remains unchanged. This is dev-only recoverability evidence; it does not satisfy production RPO/RTO, retention, encryption, HA or D-017 restore-drill approval.
 
 ## Finance approval gate
 

@@ -313,3 +313,90 @@ if [[ "$restored_snapshot" != "$source_snapshot" ]]; then
 fi
 
 printf 'postgres-backup-restore-ok %s\n' "$restored_digest"
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -f tests/postgres-backup-continuity.sql
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      (
+        SELECT count(*)
+        FROM financial_core.ledger_journals
+        WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+          AND created_at = accepted_at
+      ) = 1
+      AND (
+        SELECT
+          count(*) = 2
+          AND bool_and(entry.created_at = journal.accepted_at)
+          AND sum(entry.amount) FILTER (WHERE entry.side = 'DEBIT') = 11
+          AND sum(entry.amount) FILTER (WHERE entry.side = 'CREDIT') = 11
+        FROM financial_core.ledger_entries AS entry
+        JOIN financial_core.ledger_journals AS journal USING (journal_id)
+        WHERE entry.journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+      )
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_idempotency_registry AS registry
+        JOIN financial_core.ledger_journals AS journal USING (journal_id)
+        WHERE registry.journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+          AND registry.command_digest = journal.command_digest
+          AND registry.first_seen_at = journal.accepted_at
+      ) = 1
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_outbox_events AS outbox
+        JOIN financial_core.ledger_journals AS journal USING (journal_id)
+        WHERE outbox.journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+          AND outbox.created_at = journal.accepted_at
+          AND outbox.payload = jsonb_build_object(
+            'journal_id', journal.journal_id,
+            'command_digest', journal.command_digest
+          )
+      ) = 1
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_journal_seals AS seal
+        JOIN financial_core.ledger_journals AS journal USING (journal_id)
+        WHERE seal.journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+          AND seal.command_digest = journal.command_digest
+          AND seal.entry_count = 2
+          AND seal.sealed_at = journal.accepted_at
+      ) = 1;
+  " \
+  | grep -Fx "t"
+
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT count(*) = 0
+    FROM (
+      SELECT journal_id
+      FROM financial_core.ledger_journals
+      WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_entries
+      WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_idempotency_registry
+      WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_outbox_events
+      WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_journal_seals
+      WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1'
+    ) AS acceptance_artifacts;
+  " \
+  | grep -Fx "t"
+
+echo "postgres-backup-continuity-ok"
