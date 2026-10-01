@@ -129,6 +129,17 @@ function checkOpenApi() {
     "Planned operator namespaces"
   );
 
+  const securitySchemes = openapi.components?.securitySchemes ?? {};
+  for (const name of ["CustomerBearer", "OperatorBearer"]) {
+    const scheme = securitySchemes[name];
+    assert(scheme?.type === "http", `${name} must remain an HTTP security scheme`);
+    assert(scheme.scheme === "bearer", `${name} must remain a bearer security scheme`);
+    assert(
+      scheme.bearerFormat === "OIDC access token",
+      `${name} must remain an OIDC access-token scheme`
+    );
+  }
+
   const operationIds = new Set();
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {

@@ -79,6 +79,20 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened authentication scheme definitions",
+  "CustomerBearer must remain an HTTP security scheme",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.securitySchemes.CustomerBearer = {
+      type: "apiKey",
+      in: "header",
+      name: "X-Customer-Token"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {
