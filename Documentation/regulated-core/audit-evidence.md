@@ -267,6 +267,9 @@ AI must not:
 - present probabilistic findings as authoritative facts.
 
 Every AI access and export is audited like any other service access and bound to an approved purpose.
+Capability identity, human control, tool evidence, evaluation, release and
+withdrawal requirements are defined in the proposed
+[AI-governance baseline](ai-governance.md).
 
 ## Minimum misuse-case tests
 

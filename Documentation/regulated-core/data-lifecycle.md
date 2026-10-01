@@ -269,6 +269,8 @@ AI must not:
 - claim processor or system completion without deterministic evidence.
 
 AI access and output are governed, minimized and audited like any other service.
+AI-specific provider, training, retrieval, evaluation and output controls are
+defined in the proposed [AI-governance baseline](ai-governance.md).
 
 ## Minimum misuse-case tests
 
