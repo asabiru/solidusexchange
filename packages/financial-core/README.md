@@ -47,7 +47,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/postgres-acceptance-artifact-integrity.sh` | Normal and replica-mode rejection of mismatched acceptance timestamps |
 | `tests/postgres-state-snapshot.sql` | Canonical financial-core tables and verification-view state snapshot |
-| `tests/postgres-backup-restore.sh` | Synthetic logical backup/restore state and policy parity regression |
+| `tests/postgres-backup-restore.sh` | Synthetic logical backup corruption, atomic restore, state and policy parity regression |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -83,6 +83,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 22. The idempotency record and immutable outbox event must use the journal's service-stamped `accepted_at`, including in PostgreSQL replica mode.
 23. The journal `created_at` and every entry `created_at` must equal that same `accepted_at`, including in PostgreSQL replica mode.
 24. A synthetic logical backup must restore every financial-core table, verification view and reviewed database policy to an exact canonical state in a disposable database.
+25. A truncated logical backup must fail restoration atomically and leave no partial `financial_core` schema in its disposable database.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -270,7 +271,7 @@ The posting-rule registry regression exports every policy field from PostgreSQL 
 
 The runtime privilege regression creates an ephemeral `NOLOGIN`, `NOINHERIT`, non-owner role in the synthetic test database. It proves the exact posting transaction can commit with the proposed grants while direct configuration writes, `UPDATE`, `DELETE`, `TRUNCATE` and trigger-disabling DDL fail before reaching application code.
 
-The logical backup/restore regression dumps only the synthetic `financial_core` schema, restores it into a disposable database and reruns the exact trigger, function, constraint, relation and access-control policies. A canonical snapshot then requires every base table and both verification views to match the source byte-for-byte after JSON normalization. This is dev-only recoverability evidence; it does not satisfy production RPO/RTO, retention, encryption, HA or D-017 restore-drill approval.
+The logical backup/restore regression dumps only the synthetic `financial_core` schema. It first truncates a copy of the archive and requires `pg_restore --single-transaction` to reject it without leaving a partial schema. It then restores the intact archive into a separate disposable database and reruns the exact trigger, function, constraint, relation and access-control policies. A canonical snapshot requires every base table and both verification views to match the source byte-for-byte after JSON normalization. This is dev-only recoverability evidence; it does not satisfy production RPO/RTO, retention, encryption, HA or D-017 restore-drill approval.
 
 ## Finance approval gate
 

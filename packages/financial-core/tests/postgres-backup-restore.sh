@@ -8,23 +8,37 @@ set -euo pipefail
 : "${PGDATABASE:=ledger_test}"
 : "${PGPASSWORD:=ledger_test}"
 : "${RESTORE_DATABASE:=${PGDATABASE}_restore_test}"
+: "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup.XXXXXX.dump")"
 
-if [[ "$RESTORE_DATABASE" == "$PGDATABASE" ]]; then
-  echo "Restore database must differ from the source database." >&2
+validate_restore_database() {
+  local database="$1"
+  if [[ "$database" == "$PGDATABASE" ]]; then
+    echo "Restore database must differ from the source database." >&2
+    exit 1
+  fi
+  if [[ ! "$database" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    echo "Restore database must be a PostgreSQL identifier." >&2
+    exit 1
+  fi
+  if [[ "$database" != *_restore_test ]]; then
+    echo "Restore database must use the disposable _restore_test suffix." >&2
+    exit 1
+  fi
+}
+
+validate_restore_database "$RESTORE_DATABASE"
+validate_restore_database "$CORRUPT_RESTORE_DATABASE"
+
+if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]]; then
+  echo "Corrupt and valid restore databases must differ." >&2
   exit 1
 fi
-if [[ ! "$RESTORE_DATABASE" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
-  echo "Restore database must be a PostgreSQL identifier." >&2
-  exit 1
-fi
-if [[ "$RESTORE_DATABASE" != *_restore_test ]]; then
-  echo "Restore database must use the disposable _restore_test suffix." >&2
-  exit 1
-fi
+
+backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup.XXXXXX.dump")"
+corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-corrupt.XXXXXX.dump")"
 
 run_pg_tool() {
   if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
@@ -46,14 +60,16 @@ run_psql() {
 }
 
 drop_restore_database() {
+  local database="$1"
   run_pg_tool \
     dropdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
-      --if-exists --force "$RESTORE_DATABASE"
+      --if-exists --force "$database"
 }
 
 cleanup() {
-  drop_restore_database
-  rm -f "$backup_path"
+  drop_restore_database "$RESTORE_DATABASE"
+  drop_restore_database "$CORRUPT_RESTORE_DATABASE"
+  rm -f "$backup_path" "$corrupt_backup_path"
 }
 trap cleanup EXIT
 
@@ -65,13 +81,54 @@ snapshot() {
     -f tests/postgres-state-snapshot.sql
 }
 
-drop_restore_database
+drop_restore_database "$RESTORE_DATABASE"
+drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 run_pg_tool \
   pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
     --format=custom \
     --schema=financial_core \
     --no-owner \
     >"$backup_path"
+
+run_pg_tool pg_restore --list <"$backup_path" >/dev/null
+
+backup_size="$(wc -c <"$backup_path")"
+if (( backup_size < 2 )); then
+  echo "Financial-core backup is unexpectedly empty." >&2
+  exit 1
+fi
+cp "$backup_path" "$corrupt_backup_path"
+truncate -s "$((backup_size / 2))" "$corrupt_backup_path"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$CORRUPT_RESTORE_DATABASE"
+
+set +e
+corrupt_restore_output="$(
+  run_pg_tool \
+    pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+      -d "$CORRUPT_RESTORE_DATABASE" \
+      --exit-on-error \
+      --single-transaction \
+      --no-owner \
+      <"$corrupt_backup_path" 2>&1
+)"
+corrupt_restore_status=$?
+set -e
+
+printf '%s\n' "$corrupt_restore_output"
+if [[ "$corrupt_restore_status" -eq 0 ]]; then
+  echo "Corrupted financial-core backup unexpectedly restored." >&2
+  exit 1
+fi
+
+run_psql "$CORRUPT_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT pg_catalog.to_regnamespace('financial_core') IS NULL;" \
+  | grep -Fx "t"
+
+echo "postgres-backup-corruption-ok"
 
 run_pg_tool \
   createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$RESTORE_DATABASE"
