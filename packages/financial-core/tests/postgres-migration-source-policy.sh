@@ -78,6 +78,29 @@ assert_source_policy_rejected \
   "PostgreSQL migration must record exactly one canonical history row: 0002_ledger_verification_views.sql" \
   "$scratch/duplicate-history"
 
+mkdir "$scratch/dynamic-history-rewrite"
+cp -R "$workspace/migrations/." "$scratch/dynamic-history-rewrite/"
+sed -i \
+  '/^COMMIT;$/i\
+DO $migration_policy_bypass$\
+BEGIN\
+  EXECUTE $sql$ALTER TABLE financial_core.schema_migrations DISABLE TRIGGER schema_migrations_append_only$sql$;\
+  EXECUTE $sql$UPDATE financial_core.schema_migrations SET migration_name = migration_name$sql$;\
+END;\
+$migration_policy_bypass$;' \
+  "$scratch/dynamic-history-rewrite/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must change history only through canonical history rows: 0002_ledger_verification_views.sql" \
+  "$scratch/dynamic-history-rewrite"
+
+mkdir "$scratch/harmless-history-text"
+cp -R "$workspace/migrations/." "$scratch/harmless-history-text/"
+sed -i \
+  "/^COMMIT;$/i /* UPDATE financial_core.schema_migrations SET migration_name = migration_name; */\\nSELECT 'ALTER TABLE financial_core.schema_migrations DISABLE TRIGGER schema_migrations_append_only;';\\nDO \\\$harmless_history_text\\\$\\nBEGIN\\n  EXECUTE 'SELECT 1';\\n  RAISE NOTICE 'UPDATE financial_core.schema_migrations SET migration_name = migration_name';\\nEND;\\n\\\$harmless_history_text\\\$;" \
+  "$scratch/harmless-history-text/0002_ledger_verification_views.sql"
+node "$workspace/scripts/verify-postgres-migration-source-policy.mjs" \
+  "$scratch/harmless-history-text"
+
 mkdir "$scratch/non-contiguous"
 cp -R "$workspace/migrations/." "$scratch/non-contiguous/"
 mv \
