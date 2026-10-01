@@ -771,3 +771,83 @@ describe("audit fail-closed boundary", () => {
     });
   });
 });
+
+describe("OIDC browser transaction boundary", () => {
+  it("rejects callbacks not bound to the browser that initiated login", async () => {
+    const isolated = createBackofficeServer({
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: [origin],
+      allowDevLogin: false,
+      sessionTtlSeconds: 900,
+      audit: {
+        storage: "memory",
+        retentionDays: 30
+      },
+      stepUp: {
+        provider: "synthetic-dev",
+        challengeTtlSeconds: 300,
+        grantTtlSeconds: 60,
+        maxAttempts: 3
+      },
+      signing: {
+        backend: "ephemeral-dev",
+        rotationSeconds: 900,
+        retainedVerificationKeys: 2
+      },
+      oidc: {
+        issuer: "https://identity.example.test",
+        authorizationEndpoint: "https://identity.example.test/authorize",
+        tokenEndpoint: "http://127.0.0.1:1/token",
+        jwksUri: "https://identity.example.test/jwks",
+        clientId: "solidchange-backoffice",
+        clientSecret: "",
+        redirectUri: `${origin}/bff/auth/callback`,
+        roleClaim: "groups",
+        roleMap: { compliance: "compliance-lead" }
+      }
+    });
+    await new Promise<void>((resolve) => isolated.listen(0, "127.0.0.1", resolve));
+    const address = isolated.address();
+    if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+    const isolatedBaseUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const login = await fetch(`${isolatedBaseUrl}/bff/auth/login`, {
+        redirect: "manual"
+      });
+      assert.equal(login.status, 302);
+      const location = login.headers.get("location");
+      const setCookie = login.headers.get("set-cookie");
+      assert.ok(location);
+      assert.ok(setCookie);
+      const state = new URL(location).searchParams.get("state");
+      assert.ok(state);
+      assert.match(
+        setCookie,
+        new RegExp(`^solidchange_bo_oidc_transaction=${state}; HttpOnly; SameSite=Lax;`)
+      );
+
+      const missingCookie = await fetch(
+        `${isolatedBaseUrl}/bff/auth/callback?code=synthetic&state=${state}`
+      );
+      assert.equal(missingCookie.status, 400);
+      assert.deepEqual(await missingCookie.json(), { error: "oidc_callback_rejected" });
+
+      const mismatchedCookie = await fetch(
+        `${isolatedBaseUrl}/bff/auth/callback?code=synthetic&state=${state}`,
+        {
+          headers: {
+            cookie: "solidchange_bo_oidc_transaction=other-state"
+          }
+        }
+      );
+      assert.equal(mismatchedCookie.status, 400);
+      assert.deepEqual(await mismatchedCookie.json(), { error: "oidc_callback_rejected" });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        isolated.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+});
