@@ -2,6 +2,8 @@
 
 Lifecycle controls, approval boundaries and production stop conditions are defined in the proposed [regulated data lifecycle baseline](data-lifecycle.md). This register does not set retention periods or authorize processing.
 
+Identity, privileged-access and restricted-data authorization controls are defined in the proposed [access-control baseline](access-control.md). That baseline does not grant production access.
+
 ## Classification
 
 | Class | Examples | Minimum handling |

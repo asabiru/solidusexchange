@@ -184,6 +184,7 @@ Synthetic tests, green CI and a successful dev restore do not satisfy these cond
 | Release control | release authorization baseline |
 | Audit accountability | audit evidence baseline |
 | Data lifecycle | data lifecycle baseline and data classification register |
+| Identity and access | access-control baseline |
 | Decisions and approvals | decision register and Phase 0 evidence index |
 
 ## Review rule
