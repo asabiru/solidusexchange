@@ -99,15 +99,54 @@ relation_rows AS (
     jsonb_agg(row_data ORDER BY sort_key COLLATE "C") AS rows
   FROM state_rows
   GROUP BY relation_name
+),
+sequence_rows AS (
+  SELECT jsonb_build_object(
+    'sequence_name', sequence.sequencename,
+    'data_type', sequence.data_type,
+    'start_value', sequence.start_value,
+    'minimum_value', sequence.min_value,
+    'maximum_value', sequence.max_value,
+    'increment', sequence.increment_by,
+    'cycle', sequence.cycle,
+    'cache_size', sequence.cache_size,
+    'last_value',
+    ((xpath('/row/last_value/text()', state.value))[1]::TEXT)::BIGINT,
+    'is_called',
+    ((xpath('/row/is_called/text()', state.value))[1]::TEXT)::BOOLEAN
+  ) AS value
+  FROM pg_catalog.pg_sequences AS sequence
+  CROSS JOIN LATERAL pg_catalog.query_to_xml(
+    format(
+      'SELECT last_value, is_called FROM %I.%I',
+      sequence.schemaname,
+      sequence.sequencename
+    ),
+    FALSE,
+    TRUE,
+    ''
+  ) AS state(value)
+  WHERE sequence.schemaname = 'financial_core'
 )
 SELECT jsonb_build_object(
   'format',
-  'financial-core-state-v1',
+  'financial-core-state-v2',
   'relations',
   jsonb_object_agg(
     names.relation_name,
     COALESCE(rows.rows, '[]'::JSONB)
     ORDER BY names.relation_name
+  ),
+  'sequences',
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        sequence_rows.value
+        ORDER BY sequence_rows.value ->> 'sequence_name' COLLATE "C"
+      )
+      FROM sequence_rows
+    ),
+    '[]'::JSONB
   )
 )::TEXT
 FROM relation_names AS names
