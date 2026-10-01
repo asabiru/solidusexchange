@@ -30,6 +30,7 @@ import {
 } from "./step-up.js";
 
 const sessionCookie = "solidchange_bo_session";
+const oidcTransactionCookie = "solidchange_bo_oidc_transaction";
 const validRoles = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
@@ -57,6 +58,16 @@ function redirect(response: ServerResponse, location: string): void {
   response.statusCode = 302;
   response.setHeader("location", location);
   response.end();
+}
+
+function appendCookie(response: ServerResponse, value: string): void {
+  const current = response.getHeader("set-cookie");
+  const cookies = Array.isArray(current)
+    ? current.map(String)
+    : current === undefined
+      ? []
+      : [String(current)];
+  response.setHeader("set-cookie", [...cookies, value]);
 }
 
 function parseCookies(request: IncomingMessage): Readonly<Record<string, string>> {
@@ -127,13 +138,34 @@ export function createBackofficeServer(
       `Max-Age=${config.sessionTtlSeconds}`
     ];
     if (secure) flags.push("Secure");
-    response.setHeader("set-cookie", flags.join("; "));
+    appendCookie(response, flags.join("; "));
   }
 
   function clearSessionCookie(response: ServerResponse): void {
-    response.setHeader(
-      "set-cookie",
+    appendCookie(
+      response,
       `${sessionCookie}=; HttpOnly; SameSite=Strict; Path=/bff; Max-Age=0`
+    );
+  }
+
+  function setOidcTransactionCookie(response: ServerResponse, state: string): void {
+    const flags = [
+      `${oidcTransactionCookie}=${encodeURIComponent(state)}`,
+      "HttpOnly",
+      "SameSite=Lax",
+      "Path=/bff/auth/callback",
+      "Max-Age=300"
+    ];
+    if (config.oidc && new URL(config.oidc.redirectUri).protocol === "https:") {
+      flags.push("Secure");
+    }
+    appendCookie(response, flags.join("; "));
+  }
+
+  function clearOidcTransactionCookie(response: ServerResponse): void {
+    appendCookie(
+      response,
+      `${oidcTransactionCookie}=; HttpOnly; SameSite=Lax; Path=/bff/auth/callback; Max-Age=0`
     );
   }
 
@@ -231,6 +263,7 @@ export function createBackofficeServer(
           verifier,
           expiresAt: Date.now() + 5 * 60 * 1_000
         });
+        setOidcTransactionCookie(response, state);
         redirect(response, authorizationUrl(config.oidc, state, nonce, verifier));
         return;
       }
@@ -247,11 +280,19 @@ export function createBackofficeServer(
         }
         const code = url.searchParams.get("code");
         const state = url.searchParams.get("state");
-        const pending = state ? pendingLogins.take(state) : undefined;
-        if (!code || !pending) {
+        const transactionState = parseCookies(request)[oidcTransactionCookie];
+        if (!code || !state || transactionState !== state) {
+          clearOidcTransactionCookie(response);
           json(response, 400, { error: "oidc_callback_rejected" });
           return;
         }
+        const pending = pendingLogins.take(state);
+        if (!pending) {
+          clearOidcTransactionCookie(response);
+          json(response, 400, { error: "oidc_callback_rejected" });
+          return;
+        }
+        clearOidcTransactionCookie(response);
         const idToken = await exchangeAuthorizationCode(config.oidc, code, pending.verifier);
         const identity = await verifyIdToken(idToken, config.oidc, pending.nonce);
         createSession(response, identity);
