@@ -68,6 +68,9 @@ jobs:
       - name: Verify PostgreSQL migration source catalog
         run: bash tests/postgres-migration-source-catalog.sh
 
+      - name: Verify PostgreSQL migration source policy
+        run: bash tests/postgres-migration-source-policy.sh
+
       - name: Apply PostgreSQL migrations
         run: |
           for migration in migrations/*.sql; do

@@ -49,8 +49,8 @@ assert(packageJson.dependencies === undefined, "Financial core must remain depen
 assert(packageJson.devDependencies === undefined, "Financial core must remain dependency-free");
 assert(
   packageJson.scripts?.["verify:migrations"] ===
-    "node scripts/verify-postgres-migration-source-catalog.mjs",
-  "Financial core must verify the exact migration source catalog"
+    "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs",
+  "Financial core must verify the exact migration source catalog and policy"
 );
 assert(
   packageJson.scripts?.verify?.includes("npm run verify:migrations"),
@@ -607,6 +607,30 @@ for (const [fixture, evidence] of [
     "tests/postgres-migration-source-catalog.sh",
     "postgres-migration-source-catalog-negative-ok"
   ],
+  [
+    "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration source versions must form a contiguous sequence starting at 0001"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration must contain exactly one top-level BEGIN and COMMIT transaction boundary"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration history row must match its filename"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "0012_ledger_acceptance_seal.sql"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "PostgreSQL migration must record exactly one canonical history row"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "postgres-migration-source-policy-negative-ok"
+  ],
   ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
   ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
   ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
@@ -797,6 +821,7 @@ for (const required of [
   "synthetic logical backup/restore",
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
   "SHA-256 migration source catalog",
+  "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {
@@ -822,6 +847,7 @@ for (const required of [
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
   "tests/postgres-migration-source-catalog.sh",
+  "tests/postgres-migration-source-policy.sh",
   "tests/postgres-migration-history.sh",
   "tests/postgres-constraint-catalog.sh",
   "tests/postgres-relation-catalog.sh",
