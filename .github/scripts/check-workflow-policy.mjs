@@ -4,6 +4,7 @@ import path from "node:path";
 
 const SHA_REF = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[^@\s]+)*@[0-9a-f]{40}$/i;
 const DOCKER_DIGEST = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/i;
+const FLOW_USES_KEY = /^-\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
@@ -85,6 +86,13 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
     const trimmed = line.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (FLOW_USES_KEY.test(trimmed)) {
+      errors.push(
+        `${fileName}:${index + 1}: flow-style uses mappings are not allowed`,
+      );
       continue;
     }
 
