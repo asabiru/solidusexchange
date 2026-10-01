@@ -225,6 +225,14 @@ function checkOpenApi() {
     parameters.IdempotencyKey?.schema?.$ref === "#/components/schemas/IdempotencyKey",
     "IdempotencyKey must use canonical IdempotencyKey schema"
   );
+  const idempotencyKeySchema = openapi.components?.schemas?.IdempotencyKey;
+  assert(
+    idempotencyKeySchema?.type === "string"
+      && idempotencyKeySchema.minLength === 16
+      && idempotencyKeySchema.maxLength === 128
+      && idempotencyKeySchema.pattern === "^[A-Za-z0-9._:-]+$",
+    "Canonical IdempotencyKey constraints must remain pinned"
+  );
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
