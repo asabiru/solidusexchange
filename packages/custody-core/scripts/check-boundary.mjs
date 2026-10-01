@@ -180,6 +180,9 @@ const backupRestore = read("packages/custody-core/tests/postgres-backup-restore.
 for (const required of [
   "--schema=custody_core",
   "--single-transaction",
+  "Corrupted custody-core backup unexpectedly restored.",
+  "Corrupted custody-core restore left a partial schema.",
+  "custody-postgres-backup-corruption-ok",
   "PGDATABASE=\"$RESTORE_DATABASE\"",
   "bash tests/postgres-catalog.sh",
   "Restored custody-core state differs from the source state.",
