@@ -6,7 +6,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 
 | Evidence | Owner | Required content | Current state |
 |---|---|---|---|
-| Decision register | CTO / Legal / MLRO | D-001…D-014 decisions or safe assumptions | Drafted; approvals pending |
+| Decision register | CTO / Legal / MLRO | D-001…D-018 decisions or safe assumptions | Drafted; approvals pending |
 | Architecture ADR | CTO / Security | Context map, trust zones, prohibited paths | Proposed |
 | Legacy inventory | Architecture / Finance / Security | Routes, data, providers, jobs, secrets surfaces | Static repository inventory complete |
 | Migration boundary | Financial Core / Finance / Compliance | Mapping, opening journals, reconciliation, rollback | Proposed |
