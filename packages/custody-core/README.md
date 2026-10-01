@@ -49,7 +49,7 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, always-enabled mutation triggers, function definitions, ownership and access controls. Unexpected DDL, disabled triggers, public access, function-security drift or removed constraints fail closed.
 
-`tests/postgres-backup-restore.sh` proves that a backup taken during an uncommitted custody projection contains the complete pre-transaction state, requires a truncated archive to fail without leaving a partial schema, restores the intact archive atomically into a disposable database, reruns the exact installed-catalog policy and compares a deterministic outbox snapshot with the source. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
+`tests/postgres-backup-restore.sh` proves that a backup taken during an uncommitted custody projection contains the complete pre-transaction state, requires a truncated archive to fail without leaving a partial schema, restores the intact archive atomically into a disposable database, reruns the exact installed-catalog policy and compares a deterministic outbox snapshot with the source. The restored database must then accept and exactly replay a new synthetic projection without changing the source database. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
 
 ## Verification
 
