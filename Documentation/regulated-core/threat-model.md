@@ -182,6 +182,7 @@ Synthetic tests, green CI and a successful dev restore do not satisfy these cond
 | Supply chain | workflow policy and pinned CI/deployment actions |
 | Incident readiness | incident response baseline |
 | Release control | release authorization baseline |
+| Audit accountability | audit evidence baseline |
 | Decisions and approvals | decision register and Phase 0 evidence index |
 
 ## Review rule
