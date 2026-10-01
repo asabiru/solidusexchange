@@ -11,6 +11,7 @@ set -euo pipefail
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
 : "${OCCUPIED_RESTORE_DATABASE:=${PGDATABASE}_occupied_restore_test}"
+: "${PARTIAL_RESTORE_DATABASE:=${PGDATABASE}_partial_restore_test}"
 : "${PSQL_DOCKER_IMAGE:=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297}"
 
 export PGPASSWORD
@@ -36,6 +37,7 @@ validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
 validate_restore_database "$OCCUPIED_RESTORE_DATABASE"
+validate_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
@@ -46,7 +48,12 @@ if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$OCCUPIED_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
-  [[ "$OCCUPIED_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]]; then
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$OCCUPIED_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
@@ -55,6 +62,7 @@ workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope_test_schema="custody_core_backup_scope_test"
 backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup.XXXXXX.dump")"
 corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-corrupt.XXXXXX.dump")"
+partial_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-partial.XXXXXX.dump")"
 consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-consistency.XXXXXX.dump")"
 chain_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-chain.XXXXXX.dump")"
 consistency_log="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-consistency.XXXXXX.log")"
@@ -96,6 +104,7 @@ cleanup() {
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
   drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
+  drop_restore_database "$PARTIAL_RESTORE_DATABASE"
   run_psql "$PGDATABASE" \
     -v ON_ERROR_STOP=1 \
     -c "DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;" \
@@ -103,6 +112,7 @@ cleanup() {
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
+    "$partial_backup_path" \
     "$consistency_backup_path" \
     "$chain_backup_path" \
     "$consistency_log"
@@ -202,6 +212,7 @@ drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
 drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
+drop_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 run_psql "$PGDATABASE" \
   -v ON_ERROR_STOP=1 \
@@ -345,6 +356,69 @@ if [[ "$(run_psql "$CORRUPT_RESTORE_DATABASE" -Atq -c "SELECT to_regnamespace('c
 fi
 
 echo "custody-postgres-backup-corruption-ok"
+
+run_pg_tool \
+  pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+    --format=custom \
+    --schema=custody_core \
+    --exclude-table-data=custody_core.custody_projection_outbox \
+    --no-owner \
+    >"$partial_backup_path"
+
+run_pg_tool pg_restore --list <"$partial_backup_path" >/dev/null
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PARTIAL_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$PARTIAL_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$partial_backup_path"
+
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$PARTIAL_RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-catalog.sh
+
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$PARTIAL_RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-migration-history.sh
+
+partial_snapshot="$(snapshot "$PARTIAL_RESTORE_DATABASE")"
+partial_digest="$(
+  printf '%s' "$partial_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$partial_snapshot" == "$source_snapshot" ]]; then
+  echo "Partial custody restore unexpectedly matched the source recovery state." >&2
+  exit 1
+fi
+
+run_psql "$PARTIAL_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      count(*) = 0
+    FROM custody_core.custody_projection_outbox;
+  " \
+  | grep -Fx "t"
+
+source_after_partial_restore="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_partial_restore" != "$source_snapshot" ]]; then
+  echo "Partial custody restore regression changed the source state." >&2
+  exit 1
+fi
+
+printf 'custody-postgres-backup-partial-restore-negative-ok %s\n' "$partial_digest"
 
 run_pg_tool \
   createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$RESTORE_DATABASE"
