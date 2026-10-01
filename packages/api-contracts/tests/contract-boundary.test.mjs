@@ -125,6 +125,16 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened platform constraints",
+  "Canonical Platform enum",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    delete openapi.components.parameters.Platform.schema.enum;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects weakened request ID schemas",
   "RequestId must use canonical UuidV7 schema",
   (scratch) => {

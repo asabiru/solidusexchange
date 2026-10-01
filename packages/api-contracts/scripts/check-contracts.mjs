@@ -224,6 +224,16 @@ function checkOpenApi() {
       && clientVersionSchema.maxLength === 64,
     "Canonical ClientVersion constraints must remain pinned"
   );
+  const platformSchema = parameters.Platform?.schema;
+  assert(
+    platformSchema?.type === "string",
+    "Canonical Platform type must remain pinned"
+  );
+  sameSet(
+    platformSchema.enum ?? [],
+    ["web", "ios", "android", "telegram-mini-app", "operator-web", "service"],
+    "Canonical Platform enum"
+  );
   assert(
     parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",
     "RequestId must use canonical UuidV7 schema"
