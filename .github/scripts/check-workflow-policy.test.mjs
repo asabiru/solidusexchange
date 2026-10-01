@@ -53,8 +53,8 @@ test("rejects flow-style steps that hide mutable external action refs", () => {
   }
 });
 
-test("rejects flow-style jobs with quoted IDs that hide mutable reusable workflow refs", () => {
-  for (const jobId of ["'call-external'", '"call-external"']) {
+test("rejects flow-style jobs with valid ID syntaxes that hide mutable reusable workflow refs", () => {
+  for (const jobId of ["call-external", "'call-external'", '"call-external"']) {
     const errors = validateWorkflowText(`name: Policy fixture
 on: pull_request
 
