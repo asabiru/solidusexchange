@@ -197,6 +197,39 @@ for (const required of [
   );
 }
 
+const migrationSourcePolicy = read(
+  "packages/custody-core/scripts/verify-postgres-migration-source-policy.mjs"
+);
+for (const required of [
+  "PostgreSQL custody migration filename is not canonical",
+  "PostgreSQL custody migration source versions must form a contiguous sequence starting at 0001",
+  "PostgreSQL custody migration must contain exactly one top-level BEGIN and COMMIT transaction boundary",
+  "PostgreSQL custody migration must not execute psql meta-commands",
+  "custody-postgres-migration-source-policy-ok"
+]) {
+  assert(
+    migrationSourcePolicy.includes(required),
+    `Custody migration source policy is missing evidence: ${required}`
+  );
+}
+
+const migrationSourcePolicyTests = read(
+  "packages/custody-core/tests/postgres-migration-source-policy.sh"
+);
+for (const required of [
+  "Invalid custody migration source policy unexpectedly passed.",
+  "ROLLBACK;",
+  "\\\\ir unreviewed.sql",
+  "1_custody_projection_outbox.sql",
+  "0002_custody_projection_outbox.sql",
+  "custody-postgres-migration-source-policy-negative-ok"
+]) {
+  assert(
+    migrationSourcePolicyTests.includes(required),
+    `Custody migration source policy tests are missing evidence: ${required}`
+  );
+}
+
 const stateSnapshot = read("packages/custody-core/tests/postgres-state-snapshot.sql");
 for (const required of [
   "custody-core-state-v1",
