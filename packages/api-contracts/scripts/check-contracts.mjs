@@ -217,6 +217,13 @@ function checkOpenApi() {
     assert(parameters[name]?.in === "header", `${name} must remain a header parameter`);
     assert(parameters[name]?.name === headerName, `${name} must use ${headerName}`);
   }
+  const clientVersionSchema = parameters.ClientVersion?.schema;
+  assert(
+    clientVersionSchema?.type === "string"
+      && clientVersionSchema.minLength === 1
+      && clientVersionSchema.maxLength === 64,
+    "Canonical ClientVersion constraints must remain pinned"
+  );
   assert(
     parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",
     "RequestId must use canonical UuidV7 schema"
