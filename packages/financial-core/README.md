@@ -102,6 +102,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 33. New migration-history rows must be the next sequential version, encode that version in `migration_name`, and have a later finite `applied_at`; the guard remains active in replica mode.
 34. Every reviewed SQL migration source file must retain its exact canonical name and SHA-256 digest; changed, missing or extra migration files fail before database application.
 35. Migration source filenames must form a contiguous sequence from `0001`; every file must use one outer `BEGIN`/`COMMIT` transaction and record exactly one history row matching its filename and numeric version.
+36. Migration sources must not contain psql meta-commands or additional transaction-control statements that could escape the reviewed atomic boundary.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -308,7 +309,7 @@ The finite-timestamp regression proves all 13 PostgreSQL timestamp constraints r
 
 The migration source catalog pins the exact file name and SHA-256 digest of every reviewed SQL migration from `0001` through `0011`. Canonical verification runs before database application, while disposable copies prove that changing a historical file, removing a migration or adding an unreviewed SQL file fails closed.
 
-The migration source policy independently requires contiguous numeric filenames, one outer transaction boundary and one canonical `schema_migrations` row per file. Disposable copies prove that a missing `BEGIN`, a history-row mismatch and a skipped source version all fail before database application.
+The migration source policy independently requires contiguous numeric filenames, one outer transaction boundary and one canonical `schema_migrations` row per file. It also rejects psql meta-commands and additional transaction-control statements that could execute unreviewed input or escape the atomic boundary. Disposable copies prove that a missing `BEGIN`, hidden `ROLLBACK`, psql include, history-row mismatch, duplicate history row and skipped source version all fail before database application.
 
 The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0011` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed. Migration `0011` additionally rejects skipped versions, mismatched numeric name prefixes and stale application timestamps at insert time, including replica mode.
 

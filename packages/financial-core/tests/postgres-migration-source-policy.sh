@@ -42,6 +42,24 @@ assert_source_policy_rejected \
   "PostgreSQL migration must contain exactly one top-level BEGIN and COMMIT transaction boundary: 0001_ledger_foundation.sql" \
   "$scratch/non-atomic"
 
+mkdir "$scratch/hidden-rollback"
+cp -R "$workspace/migrations/." "$scratch/hidden-rollback/"
+sed -i \
+  "/^COMMIT;$/i ROLLBACK;" \
+  "$scratch/hidden-rollback/0001_ledger_foundation.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must contain exactly one top-level BEGIN and COMMIT transaction boundary: 0001_ledger_foundation.sql" \
+  "$scratch/hidden-rollback"
+
+mkdir "$scratch/psql-meta-command"
+cp -R "$workspace/migrations/." "$scratch/psql-meta-command/"
+sed -i \
+  '/^COMMIT;$/i\\\\ir unreviewed.sql' \
+  "$scratch/psql-meta-command/0001_ledger_foundation.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must not execute psql meta-commands: 0001_ledger_foundation.sql" \
+  "$scratch/psql-meta-command"
+
 mkdir "$scratch/wrong-history"
 cp -R "$workspace/migrations/." "$scratch/wrong-history/"
 sed -i \
