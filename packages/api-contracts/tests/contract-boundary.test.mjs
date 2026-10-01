@@ -125,6 +125,16 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened canonical request ID constraints",
+  "Canonical UuidV7 constraints must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UuidV7.pattern = ".*";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects weakened idempotency key schemas",
   "IdempotencyKey must use canonical IdempotencyKey schema",
   (scratch) => {

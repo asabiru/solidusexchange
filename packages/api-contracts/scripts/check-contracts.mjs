@@ -221,6 +221,13 @@ function checkOpenApi() {
     parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",
     "RequestId must use canonical UuidV7 schema"
   );
+  const uuidV7Schema = openapi.components?.schemas?.UuidV7;
+  assert(
+    uuidV7Schema?.type === "string"
+      && uuidV7Schema.format === "uuid"
+      && uuidV7Schema.pattern === "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+    "Canonical UuidV7 constraints must remain pinned"
+  );
   assert(
     parameters.IdempotencyKey?.schema?.$ref === "#/components/schemas/IdempotencyKey",
     "IdempotencyKey must use canonical IdempotencyKey schema"
