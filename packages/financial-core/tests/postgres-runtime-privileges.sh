@@ -48,6 +48,44 @@ expect_denied() {
   grep -F "$expected" <<<"$output"
 }
 
+verify_runtime_catalog() {
+  run_psql \
+    -v ON_ERROR_STOP=1 \
+    -v "ledger_runtime_role=$runtime_role" \
+    -Atq \
+    -f tests/postgres-runtime-privilege-catalog.sql \
+    | node scripts/verify-postgres-runtime-privilege-catalog.mjs
+}
+
+assert_runtime_catalog_rejected() {
+  local statement="$1"
+  local output
+  local status
+
+  set +e
+  output="$(
+    run_psql \
+      -v ON_ERROR_STOP=1 \
+      -v "ledger_runtime_role=$runtime_role" \
+      -Atq \
+      -c "BEGIN; $statement" \
+      -f tests/postgres-runtime-privilege-catalog.sql \
+      -c "ROLLBACK;" \
+      | node scripts/verify-postgres-runtime-privilege-catalog.mjs 2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Runtime privilege drift unexpectedly matched the reviewed profile." >&2
+    exit 1
+  fi
+  grep -F \
+    "PostgreSQL runtime writer privileges differ from the reviewed least-privilege profile" \
+    <<<"$output"
+}
+
 run_psql -v ON_ERROR_STOP=1 -c "
   CREATE ROLE $runtime_role
     NOLOGIN
@@ -63,6 +101,24 @@ run_psql \
   -v ON_ERROR_STOP=1 \
   -v "ledger_runtime_role=$runtime_role" \
   -f tests/runtime-writer-grants.sql
+
+verify_runtime_catalog
+
+assert_runtime_catalog_rejected \
+  "GRANT INSERT ON TABLE financial_core.schema_migrations TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT SELECT ON TABLE financial_core.ledger_outbox_delivery_attempts TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT UPDATE (actor_id) ON TABLE financial_core.ledger_journals TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT SELECT ON TABLE financial_core.ledger_entries TO $runtime_role WITH GRANT OPTION;"
+assert_runtime_catalog_rejected \
+  "GRANT EXECUTE ON FUNCTION financial_core.reject_mutation() TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT INSERT ON TABLE financial_core.ledger_accounts TO PUBLIC;"
+
+verify_runtime_catalog
+echo "postgres-runtime-privilege-catalog-negative-ok"
 
 run_psql -v ON_ERROR_STOP=1 -Atq -c "
   SELECT CASE
@@ -313,6 +369,12 @@ expect_denied \
   "runtime DDL" \
   "must be owner of table ledger_entries" \
   "ALTER TABLE financial_core.ledger_entries DISABLE TRIGGER ALL;"
+
+expect_denied \
+  "runtime migration history INSERT" \
+  "permission denied for table schema_migrations" \
+  "INSERT INTO financial_core.schema_migrations (version, migration_name)
+   VALUES (12, '0012_runtime_forged_migration');"
 
 expect_denied \
   "runtime configuration INSERT" \
