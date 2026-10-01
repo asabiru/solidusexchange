@@ -187,6 +187,8 @@ for (const required of [
   "Restored custody continuity test changed the source state.",
   "Restored custody state did not advance after a new projection.",
   "custody-postgres-backup-continuity-ok",
+  "Second-generation custody restore differs from the active restored state.",
+  "custody-postgres-backup-chain-ok",
   "Corrupted custody-core backup unexpectedly restored.",
   "Corrupted custody-core restore left a partial schema.",
   "custody-postgres-backup-corruption-ok",
