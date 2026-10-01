@@ -81,7 +81,7 @@ assert_runtime_catalog_rejected() {
     exit 1
   fi
   grep -F \
-    "PostgreSQL custody runtime writer privileges differ from the reviewed least-privilege profile" \
+    "PostgreSQL custody runtime role or privileges differ from the reviewed least-privilege profile" \
     <<<"$output"
 }
 
@@ -119,6 +119,16 @@ assert_runtime_catalog_rejected \
 assert_runtime_catalog_rejected \
   "ALTER DEFAULT PRIVILEGES IN SCHEMA custody_core
      GRANT SELECT ON TABLES TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role LOGIN;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role SUPERUSER;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role INHERIT;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role SET search_path = public;"
+assert_runtime_catalog_rejected \
+  "GRANT $PGUSER TO $runtime_role;"
 
 verify_runtime_catalog
 echo "custody-postgres-runtime-privilege-catalog-negative-ok"

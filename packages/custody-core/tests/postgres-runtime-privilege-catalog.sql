@@ -5,9 +5,19 @@ SELECT 1 / 0;
 \endif
 
 WITH runtime_role AS (
-  SELECT role.oid
-    FROM pg_catalog.pg_roles AS role
-   WHERE role.rolname = :'custody_runtime_role'
+  SELECT
+    role.oid,
+    role.rolsuper,
+    role.rolinherit,
+    role.rolcreaterole,
+    role.rolcreatedb,
+    role.rolcanlogin,
+    role.rolreplication,
+    role.rolconnlimit,
+    role.rolbypassrls,
+    role.rolconfig
+  FROM pg_catalog.pg_roles AS role
+  WHERE role.rolname = :'custody_runtime_role'
 ),
 grantees (oid, label) AS (
   SELECT runtime_role.oid, 'runtime' FROM runtime_role
@@ -158,9 +168,92 @@ default_privileges AS (
     ON grantees.oid = acl.grantee
   WHERE default_acl.defaclnamespace = 0
      OR namespace.nspname = 'custody_core'
+),
+runtime_memberships AS (
+  SELECT
+    granted_role.rolname::TEXT AS role_name,
+    membership.admin_option,
+    membership.inherit_option,
+    membership.set_option
+  FROM pg_catalog.pg_auth_members AS membership
+  JOIN runtime_role
+    ON runtime_role.oid = membership.member
+  JOIN pg_catalog.pg_roles AS granted_role
+    ON granted_role.oid = membership.roleid
+),
+runtime_ownership AS (
+  SELECT
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_database AS database
+      JOIN runtime_role
+        ON runtime_role.oid = database.datdba
+      WHERE database.datname = current_database()
+    ) AS database,
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_namespace AS namespace
+      JOIN runtime_role
+        ON runtime_role.oid = namespace.nspowner
+      WHERE namespace.nspname = 'custody_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_class AS relation
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = relation.relnamespace
+      JOIN runtime_role
+        ON runtime_role.oid = relation.relowner
+      WHERE namespace.nspname = 'custody_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc AS procedure
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = procedure.pronamespace
+      JOIN runtime_role
+        ON runtime_role.oid = procedure.proowner
+      WHERE namespace.nspname = 'custody_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_type AS type
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = type.typnamespace
+      JOIN runtime_role
+        ON runtime_role.oid = type.typowner
+      WHERE namespace.nspname = 'custody_core'
+    ) AS custody_objects
 )
 SELECT jsonb_build_object(
-  'runtime_role_exists', EXISTS (SELECT 1 FROM runtime_role),
+  'runtime_role', COALESCE(
+    (
+      SELECT jsonb_build_object(
+        'exists', TRUE,
+        'superuser', runtime_role.rolsuper,
+        'inherit', runtime_role.rolinherit,
+        'create_role', runtime_role.rolcreaterole,
+        'create_database', runtime_role.rolcreatedb,
+        'can_login', runtime_role.rolcanlogin,
+        'replication', runtime_role.rolreplication,
+        'connection_limit', runtime_role.rolconnlimit,
+        'bypass_row_security', runtime_role.rolbypassrls,
+        'configuration', COALESCE(to_jsonb(runtime_role.rolconfig), '[]'::JSONB),
+        'memberships', COALESCE(
+          (
+            SELECT jsonb_agg(
+              to_jsonb(runtime_memberships)
+              ORDER BY runtime_memberships.role_name COLLATE "C"
+            )
+            FROM runtime_memberships
+          ),
+          '[]'::JSONB
+        ),
+        'owns_database', runtime_ownership.database,
+        'owns_custody_objects', runtime_ownership.custody_objects
+      )
+      FROM runtime_role
+      CROSS JOIN runtime_ownership
+    ),
+    jsonb_build_object('exists', FALSE)
+  ),
   'grants', COALESCE(
     (
       SELECT jsonb_agg(
