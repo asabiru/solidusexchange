@@ -2,6 +2,10 @@
 
 No vendor in this document is approved. Repository adapter presence is not selection evidence.
 
+Scorecards are evidence inputs to the proposed
+[third-party risk baseline](third-party-risk.md). A completed scorecard does not
+authorize a contract, credential, data transfer or production integration.
+
 ## Universal mandatory gates
 
 | Gate | Evidence |
