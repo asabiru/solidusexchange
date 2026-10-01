@@ -1,0 +1,49 @@
+name: Custody Core CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/custody-core/**"
+      - "Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md"
+      - "Documentation/regulated-core/decision-register.md"
+      - ".github/workflows/custody-core-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/custody-core/**"
+      - "Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md"
+      - "Documentation/regulated-core/decision-register.md"
+      - ".github/workflows/custody-core-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/custody-core
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: packages/custody-core/package-lock.json
+
+      - name: Install locked package
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Verify custody boundary
+        run: npm run verify

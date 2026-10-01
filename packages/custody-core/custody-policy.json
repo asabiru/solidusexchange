@@ -1,0 +1,31 @@
+{
+  "policy_version": "custody-dev-v1",
+  "runtime_boundary": "dev-dry-run",
+  "execution_authority": false,
+  "production_signing_enabled": false,
+  "key_material_allowed": false,
+  "minimum_approvals": 2,
+  "approval_ttl_seconds": 900,
+  "maximum_intent_ttl_seconds": 300,
+  "required_approval_roles": [
+    "custody_maker",
+    "custody_checker"
+  ],
+  "allowed_assets": [
+    {
+      "asset": "TON",
+      "network": "TON_TESTNET",
+      "maximum_scale": 9
+    },
+    {
+      "asset": "USDT",
+      "network": "TON_TESTNET",
+      "maximum_scale": 6
+    },
+    {
+      "asset": "USDT",
+      "network": "TRON_TESTNET",
+      "maximum_scale": 6
+    }
+  ]
+}
