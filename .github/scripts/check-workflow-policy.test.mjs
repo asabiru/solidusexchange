@@ -4,10 +4,15 @@ import test from "node:test";
 import { validateWorkflowText } from "./check-workflow-policy.mjs";
 
 const checkoutSha = "fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09";
+const validationTriggers = `on:
+  pull_request:
+  push:
+    branches:
+      - main`;
 
 function workflow(step, permissions = "permissions:\n  contents: read") {
   return `name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 ${permissions}
 
@@ -18,6 +23,79 @@ jobs:
 ${step}
 `;
 }
+
+test("rejects validation workflows missing required pull request or main push triggers", () => {
+  const valid = workflow("      - uses: ./local-action");
+
+  for (const mutation of [
+    valid.replace("  pull_request:\n", ""),
+    valid.replace("  push:\n    branches:\n      - main\n", ""),
+    valid.replace("      - main", "      - feature"),
+    valid.replace("  pull_request:", "  pull_request: false"),
+  ]) {
+    const errors = validateWorkflowText(mutation);
+
+    assert.match(
+      errors.join("\n"),
+      /validation workflow must run for (pull requests|pushes to main)|push branches must include main|trigger must use a block mapping/,
+    );
+  }
+});
+
+test("accepts unfiltered main pushes and the approved manual deployment trigger", () => {
+  assert.deepEqual(
+    validateWorkflowText(
+      workflow("      - uses: ./local-action").replace(
+        "  push:\n    branches:\n      - main",
+        "  push:",
+      ),
+    ),
+    [],
+  );
+
+  assert.deepEqual(
+    validateWorkflowText(
+      `name: Deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: ./local-action
+`,
+      ".github/workflows/deploy.yml",
+    ),
+    [],
+  );
+});
+
+test("normalizes quoted trigger keys without changing unrelated YAML", () => {
+  const errors = validateWorkflowText(
+    workflow("      - uses: ./local-action")
+      .replace("on:", String.raw`"o\u006e":`)
+      .replace("  pull_request:", "  'pull_request':")
+      .replace("  push:", String.raw`  "pu\u0073h":`)
+      .replace("    branches:", "    'branches':"),
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("rejects workflow_dispatch outside the approved manual workflow", () => {
+  const errors = validateWorkflowText(
+    workflow("      - uses: ./local-action").replace(
+      "  pull_request:",
+      "  workflow_dispatch:\n  pull_request:",
+    ),
+  );
+
+  assert.match(errors.join("\n"), /workflow_dispatch is only allowed/);
+});
 
 test("accepts pinned actions with least privilege and ephemeral checkout credentials", () => {
   const errors = validateWorkflowText(
@@ -82,7 +160,7 @@ test("rejects anchored flow-style steps that hide mutable external action refs",
 test("rejects flow-style jobs with valid ID syntaxes that hide mutable reusable workflow refs", () => {
   for (const jobId of ["call-external", "'call-external'", '"call-external"']) {
     const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -100,7 +178,7 @@ jobs:
 
 test("rejects anchored flow-style jobs that hide mutable reusable workflow refs", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -118,7 +196,7 @@ jobs:
 test("rejects block-style jobs with quoted uses keys hiding mutable reusable workflow refs", () => {
   for (const usesKey of ["'uses'", '"uses"']) {
     const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -134,7 +212,7 @@ jobs:
 
 test("accepts unrelated flow-style jobs with quoted IDs", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -157,7 +235,7 @@ test("accepts unrelated anchored flow-style steps and aliases", () => {
 
 test("accepts unrelated anchored flow-style jobs and aliases", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -173,7 +251,7 @@ jobs:
 test("accepts block-style local reusable workflow jobs", () => {
   for (const usesKey of ["uses", "'uses'", '"uses"']) {
     const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -189,7 +267,7 @@ jobs:
 
 test("accepts quoted keys unrelated to workflow policy", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -209,7 +287,7 @@ jobs:
 
 test("accepts escaped quoted keys unrelated to workflow policy", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
@@ -227,7 +305,7 @@ jobs:
 
 test("accepts unrelated flow-style list data", () => {
   const errors = validateWorkflowText(`name: Policy fixture
-on: pull_request
+${validationTriggers}
 
 permissions:
   contents: read
