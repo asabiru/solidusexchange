@@ -44,7 +44,6 @@ function dollarQuoteDelimiterAt(source, offset) {
 function analyzeSql(source) {
   const masked = [...source];
   const dollarQuotedBodies = [];
-  const literals = [];
   let index = 0;
 
   function mask(start, end) {
@@ -77,12 +76,10 @@ function analyzeSql(source) {
       mask(start, index);
     } else if (source[index] === "'") {
       const start = index;
-      let value = "";
       const usesBackslashEscapes = start > 0 && /e/iu.test(source[start - 1]);
       index += 1;
       while (index < source.length) {
         if (source[index] === "'" && source[index + 1] === "'") {
-          value += "'";
           index += 2;
         } else if (source[index] === "'") {
           index += 1;
@@ -92,14 +89,11 @@ function analyzeSql(source) {
           source[index] === "\\" &&
           index + 1 < source.length
         ) {
-          value += source[index + 1];
           index += 2;
         } else {
-          value += source[index];
           index += 1;
         }
       }
-      literals.push({ start, value });
       mask(start, index);
     } else if (source[index] === '"') {
       index += 1;
@@ -121,13 +115,11 @@ function analyzeSql(source) {
         const bodyEnd = source.indexOf(delimiter, bodyStart);
         if (bodyEnd === -1) {
           const value = source.slice(bodyStart);
-          dollarQuotedBodies.push(value);
-          literals.push({ start, value });
+          dollarQuotedBodies.push({ start, value });
           index = source.length;
         } else {
           const value = source.slice(bodyStart, bodyEnd);
-          dollarQuotedBodies.push(value);
-          literals.push({ start, value });
+          dollarQuotedBodies.push({ start, value });
           index = bodyEnd + delimiter.length;
         }
         mask(start, index);
@@ -139,8 +131,7 @@ function analyzeSql(source) {
 
   return {
     masked: masked.join(""),
-    dollarQuotedBodies,
-    literals
+    dollarQuotedBodies
   };
 }
 
@@ -166,20 +157,20 @@ function containsHistoryChange(source) {
   return historyChangePattern.test(analyzeSql(source).masked);
 }
 
-function containsDynamicHistoryChange(source) {
-  return analyzeSql(source).dollarQuotedBodies.some((body) => {
-    const analysis = analyzeSql(body);
-    return [...analysis.masked.matchAll(/\bEXECUTE\b(?!\s+FUNCTION\b)/giu)].some(
-      (execute) =>
-        analysis.literals.some(
-          (literal) =>
-            literal.start >= execute.index + execute[0].length &&
-            /^[\s(]*(?:E\s*)?$/iu.test(
-              analysis.masked.slice(execute.index + execute[0].length, literal.start)
-            ) &&
-            containsHistoryChange(literal.value)
-        )
-    );
+function containsDynamicSql(source) {
+  const sourceAnalysis = analyzeSql(source);
+  return sourceAnalysis.dollarQuotedBodies.some(({ start, value }) => {
+    const statementStart = sourceAnalysis.masked.lastIndexOf(";", start - 1) + 1;
+    const statementPrefix = sourceAnalysis.masked.slice(statementStart, start).trim();
+    if (
+      !/^(?:DO\b|CREATE(?:\s+OR\s+REPLACE)?\s+(?:FUNCTION|PROCEDURE)\b)/iu.test(
+        statementPrefix
+      )
+    ) {
+      return false;
+    }
+    const analysis = analyzeSql(value);
+    return /\bEXECUTE\b(?!\s+FUNCTION\b)/iu.test(analysis.masked);
   });
 }
 
@@ -244,8 +235,8 @@ for (const { name, migrationName, version } of migrations) {
     `PostgreSQL migration must change history only through canonical history rows: ${name}`
   );
   assert(
-    !containsDynamicHistoryChange(source),
-    `PostgreSQL migration must change history only through canonical history rows: ${name}`
+    !containsDynamicSql(source),
+    `PostgreSQL migration must not execute dynamic SQL in procedural bodies: ${name}`
   );
   assert.deepStrictEqual(
     [Number(historyRows[0][1]), historyRows[0][2]],
