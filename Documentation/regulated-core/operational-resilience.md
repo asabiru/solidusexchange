@@ -16,8 +16,8 @@ audit or compliance integrity.
 It is not a production continuity plan, disaster-recovery runbook, service-level
 commitment or approval to provision infrastructure. Exact topology, regions,
 capacity, monitoring, backup retention, RPO/RTO, providers, contact paths and
-recovery commands remain blocked by D-008, D-015, D-017, D-018 and the affected
-domain approvals.
+recovery commands remain blocked by D-008, D-015, D-016, D-017, D-018 and the
+affected domain approvals.
 
 ## Principles
 
