@@ -8,6 +8,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - All data is synthetic, deeply frozen at runtime and exposed only through the read-only BFF.
 - OIDC uses Authorization Code with PKCE; OIDC tokens remain in the BFF.
 - OIDC callback state is bound to the initiating browser with a short-lived `HttpOnly` transaction cookie.
+- OIDC URLs require HTTPS outside loopback development, and the callback must use the exact allowed backoffice origin and path.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
 - Read-only API envelopes are signed with versioned ephemeral Ed25519 keys and bound to their resource, key ID and key version.
