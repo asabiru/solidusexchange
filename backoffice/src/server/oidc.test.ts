@@ -75,6 +75,43 @@ describe("OIDC boundary", () => {
     });
   });
 
+  it("rejects duplicate signing keys with the same kid regardless of JWKS order", async () => {
+    const signer = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const other = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "duplicate-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-duplicate",
+      aud: config.clientId,
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-duplicate",
+      groups: ["compliance"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      signer.privateKey
+    ).toString("base64url");
+    const idToken = `${header}.${claims}.${signature}`;
+    const signerJwk = {
+      ...signer.publicKey.export({ format: "jwk" }),
+      kid: "duplicate-key"
+    };
+    const otherJwk = {
+      ...other.publicKey.export({ format: "jwk" }),
+      kid: "duplicate-key"
+    };
+
+    for (const keys of [[signerJwk, otherJwk], [otherJwk, signerJwk]]) {
+      await assert.rejects(
+        verifyIdToken(idToken, config, "nonce-duplicate", { keys }),
+        /signing key is ambiguous/
+      );
+    }
+  });
+
   it("rejects unsupported critical protected header parameters", async () => {
     const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const header = encode({
