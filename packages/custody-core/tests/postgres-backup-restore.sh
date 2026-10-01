@@ -52,6 +52,7 @@ if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
 fi
 
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+scope_test_schema="custody_core_backup_scope_test"
 backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup.XXXXXX.dump")"
 corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-corrupt.XXXXXX.dump")"
 consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/custody-core-backup-consistency.XXXXXX.dump")"
@@ -95,6 +96,10 @@ cleanup() {
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
   drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
+  run_psql "$PGDATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -c "DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;" \
+    >/dev/null 2>&1 || true
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
@@ -110,6 +115,17 @@ snapshot() {
     -v ON_ERROR_STOP=1 \
     -Atq \
     -f tests/postgres-state-snapshot.sql
+}
+
+scope_snapshot() {
+  local database="$1"
+  run_psql "$database" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -c "
+      SELECT jsonb_agg(to_jsonb(sentinel) ORDER BY marker COLLATE \"C\")::text
+      FROM ${scope_test_schema}.sentinel;
+    "
 }
 
 occupied_snapshot() {
@@ -186,6 +202,19 @@ drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
 drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
+
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -c "
+    DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;
+    CREATE SCHEMA ${scope_test_schema};
+    CREATE TABLE ${scope_test_schema}.sentinel (
+      marker text PRIMARY KEY,
+      payload jsonb NOT NULL
+    );
+    INSERT INTO ${scope_test_schema}.sentinel (marker, payload)
+    VALUES ('source-only', '{\"scope\":\"source\"}');
+  "
 
 pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
 
@@ -272,6 +301,12 @@ run_pg_tool \
 
 run_pg_tool pg_restore --list <"$backup_path" >/dev/null
 
+if run_pg_tool pg_restore --list <"$backup_path" |
+  grep -Fq "$scope_test_schema"; then
+  echo "Custody backup unexpectedly contains unrelated source state." >&2
+  exit 1
+fi
+
 backup_size="$(wc -c <"$backup_path")"
 if (( backup_size < 2 )); then
   echo "Custody-core backup is unexpectedly empty." >&2
@@ -313,6 +348,20 @@ echo "custody-postgres-backup-corruption-ok"
 
 run_pg_tool \
   createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$RESTORE_DATABASE"
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -c "
+    CREATE SCHEMA ${scope_test_schema};
+    CREATE TABLE ${scope_test_schema}.sentinel (
+      marker text PRIMARY KEY,
+      payload jsonb NOT NULL
+    );
+    INSERT INTO ${scope_test_schema}.sentinel (marker, payload)
+    VALUES ('target-only', '{\"scope\":\"target\"}');
+  "
+
+target_scope_snapshot="$(scope_snapshot "$RESTORE_DATABASE")"
+
 run_pg_tool \
   pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
     -d "$RESTORE_DATABASE" \
@@ -341,6 +390,29 @@ if [[ "$restored_snapshot" != "$source_snapshot" ]]; then
 fi
 
 printf 'custody-postgres-backup-restore-ok %s\n' "$restored_digest"
+
+restored_scope_snapshot="$(scope_snapshot "$RESTORE_DATABASE")"
+if [[ "$restored_scope_snapshot" != "$target_scope_snapshot" ]]; then
+  echo "Custody restore changed unrelated target state." >&2
+  exit 1
+fi
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      count(*) = 1
+      AND bool_and(marker = 'target-only')
+      AND bool_and(payload = '{\"scope\":\"target\"}'::jsonb)
+    FROM ${scope_test_schema}.sentinel;
+  " \
+  | grep -Fx "t"
+
+scope_digest="$(
+  printf '%s' "$restored_scope_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+printf 'custody-postgres-backup-scope-isolation-ok %s\n' "$scope_digest"
 
 run_psql "$RESTORE_DATABASE" \
   -v ON_ERROR_STOP=1 \
