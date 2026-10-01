@@ -48,10 +48,125 @@ function expectedHistoryRows(version) {
   return [[version, migrationName]];
 }
 
+function normalizeSqlSource(source) {
+  let normalized = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const next = source[index];
+    const afterNext = source[index + 1];
+
+    if (next === "-" && afterNext === "-") {
+      normalized += "  ";
+      index += 2;
+      while (index < source.length && source[index] !== "\n") {
+        normalized += " ";
+        index += 1;
+      }
+      continue;
+    }
+
+    if (next === "/" && afterNext === "*") {
+      normalized += "  ";
+      index += 2;
+      let depth = 1;
+      while (index < source.length && depth > 0) {
+        if (source[index] === "/" && source[index + 1] === "*") {
+          normalized += "  ";
+          index += 2;
+          depth += 1;
+          continue;
+        }
+        if (source[index] === "*" && source[index + 1] === "/") {
+          normalized += "  ";
+          index += 2;
+          depth -= 1;
+          continue;
+        }
+        normalized += source[index] === "\n" ? "\n" : " ";
+        index += 1;
+      }
+      assert.equal(depth, 0, "PostgreSQL custody migration contains an unterminated block comment");
+      continue;
+    }
+
+    if (next === "'") {
+      normalized += next;
+      index += 1;
+      while (index < source.length) {
+        normalized += source[index];
+        if (source[index] === "'") {
+          if (source[index + 1] === "'") {
+            normalized += source[index + 1];
+            index += 2;
+            continue;
+          }
+          index += 1;
+          break;
+        }
+        index += 1;
+      }
+      continue;
+    }
+
+    if (next === "\"") {
+      let identifier = "";
+      let quotedIdentifier = next;
+      index += 1;
+      while (index < source.length) {
+        quotedIdentifier += source[index];
+        if (source[index] === "\"") {
+          if (source[index + 1] === "\"") {
+            identifier += "\"";
+            quotedIdentifier += source[index + 1];
+            index += 2;
+            continue;
+          }
+          index += 1;
+          break;
+        }
+        identifier += source[index];
+        index += 1;
+      }
+      normalized +=
+        identifier === "custody_core" || identifier === "schema_migrations"
+          ? identifier
+          : quotedIdentifier;
+      continue;
+    }
+
+    if ((next === "U" || next === "u") && afterNext === "&" && source[index + 2] === "\"") {
+      assert.fail("PostgreSQL custody migration source policy does not allow Unicode-escaped identifiers");
+    }
+
+    if (next === "$") {
+      const match = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/u.exec(source.slice(index));
+      if (match) {
+        const delimiter = match[0];
+        const closeIndex = source.indexOf(delimiter, index + delimiter.length);
+        assert(
+          closeIndex !== -1,
+          "PostgreSQL custody migration contains an unterminated dollar-quoted string"
+        );
+        const endIndex = closeIndex + delimiter.length;
+        normalized += source.slice(index, endIndex);
+        index = endIndex;
+        continue;
+      }
+    }
+
+    normalized += next;
+    index += 1;
+  }
+
+  return normalized;
+}
+
 for (const { name, version } of migrations) {
   const source = readFileSync(join(migrationDirectory, name), "utf8");
+  const executableSource = normalizeSqlSource(source);
   const transactionControls =
-    source.match(
+    executableSource.match(
       /^[ \t]*(?:BEGIN(?:\s+(?:WORK|TRANSACTION)(?:\s+[^;\n]+)?)?|START\s+TRANSACTION(?:\s+[^;\n]+)?|COMMIT(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|COMMIT\s+PREPARED\s+'[^']+'|END\s+(?:WORK|TRANSACTION)(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|ROLLBACK\s+PREPARED\s+'[^']+'|ABORT(?:\s+(?:WORK|TRANSACTION))?|SAVEPOINT\s+[a-z_][a-z0-9_]*|RELEASE(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|PREPARE\s+TRANSACTION\s+'[^']+')[ \t]*;[ \t]*$/gimu
     ) ?? [];
   const normalizedTransactionControls = transactionControls.map((statement) =>
@@ -59,21 +174,23 @@ for (const { name, version } of migrations) {
   );
 
   assert(
-    source.trimStart().startsWith("BEGIN;") &&
-      source.trimEnd().endsWith("COMMIT;") &&
+    executableSource.trimStart().startsWith("BEGIN;") &&
+      executableSource.trimEnd().endsWith("COMMIT;") &&
       normalizedTransactionControls.length === 2 &&
       normalizedTransactionControls[0] === "BEGIN;" &&
       normalizedTransactionControls[1] === "COMMIT;",
     `PostgreSQL custody migration must contain exactly one top-level BEGIN and COMMIT transaction boundary: ${name}`
   );
   assert.equal(
-    (source.match(/^[ \t]*\\\S+/gmu) ?? []).length,
+    (executableSource.match(/^[ \t]*\\\S+/gmu) ?? []).length,
     0,
     `PostgreSQL custody migration must not execute psql meta-commands: ${name}`
   );
 
   const historyTableDefinitions =
-    source.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?custody_core\.schema_migrations\b/giu) ?? [];
+    executableSource.match(
+      /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?custody_core\s*\.\s*schema_migrations\b/giu
+    ) ?? [];
   assert.equal(
     historyTableDefinitions.length,
     version === historyBootstrapVersion ? 1 : 0,
@@ -81,17 +198,17 @@ for (const { name, version } of migrations) {
   );
 
   const historyWrites =
-    source.match(
-      /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE(?:\s+TABLE)?|COPY|ALTER\s+TABLE(?:\s+ONLY)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)\s+custody_core\.schema_migrations\b/giu
+    executableSource.match(
+      /\b(?:INSERT\s+INTO(?:\s+ONLY)?|UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?(?:\s+ONLY)?|COPY|ALTER\s+TABLE(?:\s+ONLY)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)\s+custody_core\s*\.\s*schema_migrations\b/giu
     ) ?? [];
   const historyRows = [
-    ...source.matchAll(
-      /INSERT\s+INTO\s+custody_core\.schema_migrations\s*\(\s*version\s*,\s*migration_name\s*\)\s*VALUES\s*\(\s*([0-9]+)\s*,\s*'([a-z0-9_]+)'\s*\)\s*;/giu
+    ...executableSource.matchAll(
+      /INSERT\s+INTO\s+custody_core\s*\.\s*schema_migrations\s*\(\s*version\s*,\s*migration_name\s*\)\s*VALUES\s*\(\s*([0-9]+)\s*,\s*'([a-z0-9_]+)'\s*\)\s*;/giu
     )
   ];
   const historyTableAlterations =
-    source.match(
-      /ALTER\s+TABLE(?:\s+ONLY)?\s+custody_core\.schema_migrations\s+ENABLE\s+ALWAYS\s+TRIGGER\s+schema_migrations_[a-z_]+\s*;/giu
+    executableSource.match(
+      /ALTER\s+TABLE(?:\s+ONLY)?\s+custody_core\s*\.\s*schema_migrations\s+ENABLE\s+ALWAYS\s+TRIGGER\s+schema_migrations_[a-z_]+\s*;/giu
     ) ?? [];
 
   assert.equal(
