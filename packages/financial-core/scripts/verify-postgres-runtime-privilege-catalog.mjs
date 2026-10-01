@@ -36,6 +36,7 @@ const expected = {
           : [grant("table", table, "SELECT")]
       )
   ],
+  memberships: [],
   runtime_role_exists: true
 };
 

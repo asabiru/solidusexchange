@@ -116,6 +116,11 @@ assert_runtime_catalog_rejected \
   "GRANT EXECUTE ON FUNCTION financial_core.reject_mutation() TO $runtime_role;"
 assert_runtime_catalog_rejected \
   "GRANT INSERT ON TABLE financial_core.ledger_accounts TO PUBLIC;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_runtime_parent_test NOLOGIN;
+   GRANT INSERT ON TABLE financial_core.schema_migrations
+     TO financial_core_runtime_parent_test;
+   GRANT financial_core_runtime_parent_test TO $runtime_role;"
 
 verify_runtime_catalog
 echo "postgres-runtime-privilege-catalog-negative-ok"

@@ -438,6 +438,10 @@ for (const [fixture, evidence] of [
     "tests/postgres-runtime-privileges.sh",
     "GRANT UPDATE (actor_id) ON TABLE financial_core.ledger_journals TO $runtime_role"
   ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "GRANT financial_core_runtime_parent_test TO $runtime_role"
+  ],
   ["tests/postgres-runtime-privileges.sh", "WITH GRANT OPTION"],
   [
     "tests/postgres-runtime-privileges.sh",
@@ -448,6 +452,7 @@ for (const [fixture, evidence] of [
     "postgres-runtime-privilege-catalog-negative-ok"
   ],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.aclexplode(attribute.attacl)"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_auth_members"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_default_acl"],
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",
