@@ -198,8 +198,10 @@ export async function verifyIdToken(
       if (!response.ok) throw new Error("OIDC JWKS request failed");
       return await response.json() as JsonWebKeySet;
     });
-  const jwk = jwks.keys.find((candidate) => candidate.kid === header.kid);
-  if (!jwk) throw new Error("OIDC signing key was not found");
+  const matchingKeys = jwks.keys.filter((candidate) => candidate.kid === header.kid);
+  if (matchingKeys.length === 0) throw new Error("OIDC signing key was not found");
+  if (matchingKeys.length > 1) throw new Error("OIDC signing key is ambiguous");
+  const jwk = matchingKeys[0];
   if (
     (jwk.use !== undefined && jwk.use !== "sig")
     || (jwk.alg !== undefined && jwk.alg !== header.alg)
