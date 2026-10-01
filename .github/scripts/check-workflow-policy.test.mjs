@@ -63,6 +63,14 @@ test("rejects flow-style steps that hide mutable external action refs", () => {
   }
 });
 
+test("rejects anchored flow-style steps that hide mutable external action refs", () => {
+  const errors = validateWorkflowText(
+    workflow("      - &setup-node { uses: actions/setup-node@v4 }"),
+  );
+
+  assert.match(errors.join("\n"), /flow-style uses mappings are not allowed/);
+});
+
 test("rejects flow-style jobs with valid ID syntaxes that hide mutable reusable workflow refs", () => {
   for (const jobId of ["call-external", "'call-external'", '"call-external"']) {
     const errors = validateWorkflowText(`name: Policy fixture
@@ -80,6 +88,23 @@ jobs:
       /flow-style reusable workflow jobs are not allowed/,
     );
   }
+});
+
+test("rejects anchored flow-style jobs that hide mutable reusable workflow refs", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  call-external: &external { uses: example/repository/.github/workflows/reusable.yml@main }
+`);
+
+  assert.match(
+    errors.join("\n"),
+    /flow-style reusable workflow jobs are not allowed/,
+  );
 });
 
 test("rejects block-style jobs with quoted uses keys hiding mutable reusable workflow refs", () => {
@@ -108,6 +133,30 @@ permissions:
 
 jobs:
   'build-job': { runs-on: ubuntu-latest, steps: [{ run: "echo policy fixture" }] }
+`);
+
+  assert.deepEqual(errors, []);
+});
+
+test("accepts unrelated anchored flow-style steps and aliases", () => {
+  const errors = validateWorkflowText(
+    workflow(`      - &echo-step { name: Echo, run: echo policy fixture }
+      - *echo-step`),
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("accepts unrelated anchored flow-style jobs and aliases", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  build: &base-job { runs-on: ubuntu-latest, steps: [{ run: "echo policy fixture" }] }
+  verify: *base-job
 `);
 
   assert.deepEqual(errors, []);
