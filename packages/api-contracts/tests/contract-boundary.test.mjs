@@ -125,6 +125,18 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened idempotency key schemas",
+  "IdempotencyKey must use canonical IdempotencyKey schema",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.IdempotencyKey.schema = {
+      type: "string"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {
