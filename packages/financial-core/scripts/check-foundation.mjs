@@ -429,6 +429,30 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
   ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"],
+  ["tests/postgres-runtime-privileges.sh", "verify_runtime_catalog"],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "GRANT INSERT ON TABLE financial_core.schema_migrations TO $runtime_role"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "GRANT UPDATE (actor_id) ON TABLE financial_core.ledger_journals TO $runtime_role"
+  ],
+  ["tests/postgres-runtime-privileges.sh", "WITH GRANT OPTION"],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "permission denied for table schema_migrations"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "postgres-runtime-privilege-catalog-negative-ok"
+  ],
+  ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.aclexplode(attribute.attacl)"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_default_acl"],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    "PostgreSQL runtime writer privileges differ from the reviewed least-privilege profile"
+  ],
   ["tests/postgres-owner-truncate-guard.sh", "TRUNCATE TABLE"],
   ["tests/postgres-owner-truncate-guard.sh", "postgres-owner-truncate-guard-ok"],
   ["tests/postgres-immutability-catalog.sql", "pg_catalog.pg_trigger"],
@@ -835,6 +859,7 @@ for (const required of [
   "SHA-256 migration source catalog",
   "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
   "psql meta-commands и дополнительные transaction-control statements запрещены",
+  "runtime writer test profile точно совпадает с reviewed least-privilege catalog",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {
