@@ -14,6 +14,7 @@ set -euo pipefail
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+scope_test_schema="financial_core_backup_scope_test"
 
 validate_restore_database() {
   local database="$1"
@@ -88,6 +89,10 @@ cleanup() {
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
+  run_psql "$PGDATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -c "DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;" \
+    >/dev/null 2>&1 || true
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
@@ -103,6 +108,17 @@ snapshot() {
     -v ON_ERROR_STOP=1 \
     -Atq \
     -f tests/postgres-state-snapshot.sql
+}
+
+scope_snapshot() {
+  local database="$1"
+  run_psql "$database" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -c "
+      SELECT jsonb_agg(to_jsonb(sentinel) ORDER BY marker)::text
+      FROM ${scope_test_schema}.sentinel;
+    "
 }
 
 wait_for_advisory_lock() {
@@ -126,6 +142,19 @@ drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
+
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -c "
+    DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;
+    CREATE SCHEMA ${scope_test_schema};
+    CREATE TABLE ${scope_test_schema}.sentinel (
+      marker text PRIMARY KEY,
+      payload jsonb NOT NULL
+    );
+    INSERT INTO ${scope_test_schema}.sentinel (marker, payload)
+    VALUES ('source-only', '{\"scope\":\"source\"}');
+  "
 
 pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
 
@@ -289,6 +318,19 @@ echo "postgres-backup-corruption-ok"
 
 run_pg_tool \
   createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$RESTORE_DATABASE"
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -c "
+    CREATE SCHEMA ${scope_test_schema};
+    CREATE TABLE ${scope_test_schema}.sentinel (
+      marker text PRIMARY KEY,
+      payload jsonb NOT NULL
+    );
+    INSERT INTO ${scope_test_schema}.sentinel (marker, payload)
+    VALUES ('target-only', '{\"scope\":\"target\"}');
+  "
+
+target_scope_snapshot="$(scope_snapshot "$RESTORE_DATABASE")"
 run_pg_tool \
   pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DATABASE" \
     --exit-on-error \
@@ -318,6 +360,12 @@ restored_digest="$(printf '%s' "$restored_snapshot" | sha256sum | cut -d ' ' -f 
 if [[ "$restored_snapshot" != "$source_snapshot" ]]; then
   echo "Restored financial-core state differs from the source state." >&2
   printf 'source=%s\nrestored=%s\n' "$source_digest" "$restored_digest" >&2
+  exit 1
+fi
+
+restored_scope_snapshot="$(scope_snapshot "$RESTORE_DATABASE")"
+if [[ "$restored_scope_snapshot" != "$target_scope_snapshot" ]]; then
+  echo "Restore changed unrelated target state." >&2
   exit 1
 fi
 
@@ -356,7 +404,17 @@ if [[ "$collision_snapshot" != "$restored_snapshot" ]]; then
   exit 1
 fi
 
+collision_scope_snapshot="$(scope_snapshot "$RESTORE_DATABASE")"
+if [[ "$collision_scope_snapshot" != "$target_scope_snapshot" ]]; then
+  echo "Rejected restore changed unrelated target state." >&2
+  exit 1
+fi
+
 printf 'postgres-backup-collision-ok %s\n' "$collision_digest"
+scope_digest="$(
+  printf '%s' "$collision_scope_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+printf 'postgres-backup-scope-isolation-ok %s\n' "$scope_digest"
 
 run_psql "$RESTORE_DATABASE" \
   -v ON_ERROR_STOP=1 \
