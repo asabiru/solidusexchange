@@ -75,6 +75,46 @@ describe("OIDC boundary", () => {
     });
   });
 
+  it("rejects subject identifiers outside the OIDC ASCII and length limits", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "subject-key" });
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const subject of ["opérateur", "a".repeat(256)]) {
+      const claims = encode({
+        iss: config.issuer,
+        sub: subject,
+        aud: config.clientId,
+        exp: now + 300,
+        iat: now,
+        nonce: "nonce-subject",
+        groups: ["compliance"]
+      });
+      const signature = sign(
+        "RSA-SHA256",
+        Buffer.from(`${header}.${claims}`),
+        pair.privateKey
+      ).toString("base64url");
+
+      await assert.rejects(
+        verifyIdToken(
+          `${header}.${claims}.${signature}`,
+          config,
+          "nonce-subject",
+          {
+            keys: [
+              {
+                ...pair.publicKey.export({ format: "jwk" }),
+                kid: "subject-key"
+              }
+            ]
+          }
+        ),
+        /token claims are malformed/
+      );
+    }
+  });
+
   it("rejects duplicate signing keys with the same kid regardless of JWKS order", async () => {
     const signer = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const other = generateKeyPairSync("rsa", { modulusLength: 2048 });
