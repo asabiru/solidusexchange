@@ -78,6 +78,7 @@ Stack traces, internal exception messages, secrets and raw provider responses ar
 - Monetary values are decimal strings, never floating-point JSON numbers.
 - References replace raw wallet addresses, KYC documents and provider payloads.
 - Events state facts that occurred; they do not grant approval or execution authority.
+- `CustodyIntentPrepared` records only a reference-based, testnet unsigned intent with exact policy and approval digests; it cannot authorize signing or broadcast.
 - Breaking payload changes require a new `event_version` and a compatibility window.
 
 ## Compatibility

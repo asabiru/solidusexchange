@@ -287,8 +287,12 @@ const prohibitedFields = new Set([
   "phone",
   "private_key",
   "provider_payload",
+  "raw_transaction",
   "raw_provider_payload",
   "secret",
+  "seed",
+  "signature",
+  "signed_transaction",
   "wallet_address"
 ]);
 
@@ -348,6 +352,67 @@ function checkEvents() {
       `${event.event_type}.payload`
     );
   }
+
+  const withdrawalApproved = examples.find((event) => event.event_type === "WithdrawalApproved");
+  const custodyIntent = examples.find((event) => event.event_type === "CustodyIntentPrepared");
+  const withdrawalBroadcast = examples.find((event) => event.event_type === "WithdrawalBroadcast");
+  const custodyCatalog = catalog.events.find((event) => event.name === "CustodyIntentPrepared");
+  const custodySchema = eventSchema.$defs.custodyIntentPrepared;
+
+  assert(custodyCatalog.owner === "custody-orchestrator", "Custody intent owner must remain custody-orchestrator");
+  assert(
+    custodyCatalog.data_classification === "highly-confidential",
+    "Custody intent classification must remain highly-confidential"
+  );
+  assert(
+    custodySchema.properties.execution_authority.const === false,
+    "Custody intent schema must prohibit execution authority"
+  );
+  assert(
+    custodySchema.properties.production_signing_enabled.const === false,
+    "Custody intent schema must prohibit production signing"
+  );
+  assert(
+    custodySchema.properties.status.const === "unsigned_intent_ready",
+    "Custody intent schema must remain unsigned"
+  );
+  assert(
+    custodySchema.properties.network.pattern === "^[A-Z0-9]+_TESTNET$",
+    "Custody intent schema must remain testnet-only"
+  );
+  assert(custodyIntent.actor.type === "service", "Custody intent must be produced by a service actor");
+  assert(custodyIntent.payload.network.endsWith("_TESTNET"), "Custody intent must remain testnet-only");
+  assert(custodyIntent.payload.execution_authority === false, "Custody intent must not grant execution authority");
+  assert(
+    custodyIntent.payload.production_signing_enabled === false,
+    "Custody intent must not enable production signing"
+  );
+  assert(
+    custodyIntent.payload.status === "unsigned_intent_ready",
+    "Custody intent must remain unsigned"
+  );
+  assert(
+    custodyIntent.causation_id === withdrawalApproved.event_id,
+    "Custody intent must be caused by withdrawal approval evidence"
+  );
+  assert(
+    withdrawalBroadcast.causation_id === custodyIntent.event_id,
+    "Withdrawal broadcast example must follow the prepared custody intent"
+  );
+  assert(
+    custodyIntent.aggregate_id === withdrawalApproved.aggregate_id
+      && custodyIntent.aggregate_id === withdrawalBroadcast.aggregate_id,
+    "Custody intent must preserve the withdrawal aggregate"
+  );
+  assert(
+    custodyIntent.correlation_id === withdrawalApproved.correlation_id
+      && custodyIntent.correlation_id === withdrawalBroadcast.correlation_id,
+    "Custody intent must preserve withdrawal correlation"
+  );
+  assert(
+    Date.parse(custodyIntent.payload.expires_at) > Date.parse(custodyIntent.occurred_at),
+    "Custody intent expiry must follow preparation time"
+  );
 
   verifyReferences(eventSchema, schemaPath);
   verifyAmountSchemas(eventSchema);
