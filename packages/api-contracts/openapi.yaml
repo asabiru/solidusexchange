@@ -332,10 +332,7 @@
         "required": true,
         "description": "Required for future command requests. The key is scoped to actor, operation and canonical payload digest.",
         "schema": {
-          "type": "string",
-          "minLength": 16,
-          "maxLength": 128,
-          "pattern": "^[A-Za-z0-9._:-]+$"
+          "$ref": "#/components/schemas/IdempotencyKey"
         }
       }
     },
@@ -361,6 +358,12 @@
         "type": "string",
         "format": "uuid",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "IdempotencyKey": {
+        "type": "string",
+        "minLength": 16,
+        "maxLength": 128,
+        "pattern": "^[A-Za-z0-9._:-]+$"
       },
       "ApiMetadata": {
         "type": "object",

@@ -221,6 +221,10 @@ function checkOpenApi() {
     parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",
     "RequestId must use canonical UuidV7 schema"
   );
+  assert(
+    parameters.IdempotencyKey?.schema?.$ref === "#/components/schemas/IdempotencyKey",
+    "IdempotencyKey must use canonical IdempotencyKey schema"
+  );
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
