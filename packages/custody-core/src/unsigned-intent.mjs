@@ -60,7 +60,20 @@ const restrictedFields = new Set([
 ]);
 const referencePattern = /^[a-z][a-z0-9_]{2,127}$/u;
 const digestPattern = /^[0-9a-f]{64}$/u;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const decimalPattern = /^(?:0|[1-9][0-9]*)(?:\.([0-9]+))?$/u;
+const intentKeys = [
+  "approval_evidence_digest",
+  "approvals",
+  "command",
+  "execution_authority",
+  "intent_digest",
+  "key_material_present",
+  "policy_digest",
+  "production_signing_enabled",
+  "runtime_boundary",
+  "status"
+];
 
 function fail(message) {
   throw new Error(message);
@@ -136,6 +149,10 @@ function assertReference(value, label, prefix) {
   assert(value.startsWith(prefix), `${label} must start with ${prefix}`);
 }
 
+function assertUuid(value, label) {
+  assert(typeof value === "string" && uuidPattern.test(value), `${label} must be a canonical UUID`);
+}
+
 function assertPolicy(policy) {
   assertExactKeys(policy, policyKeys, "policy");
   assert(policy.policy_version === "custody-dev-v1", "custody policy version is not supported");
@@ -186,7 +203,7 @@ function assertCommand(command, policy, now) {
   assertReference(command.legal_entity_id, "legal_entity_id", "legal_entity_");
   assertReference(command.destination_reference, "destination_reference", "destination_ref_");
   assertReference(command.idempotency_key, "idempotency_key", "custody_idempotency_");
-  assertReference(command.correlation_id, "correlation_id", "correlation_");
+  assertUuid(command.correlation_id, "correlation_id");
   assert(command.policy_version === policy.policy_version, "command policy version mismatch");
 
   const assetPolicy = policy.allowed_assets.find(
@@ -261,10 +278,10 @@ function deepFreeze(value) {
   return value;
 }
 
-function calculateIntentDigest(command, policy) {
+function calculateIntentDigest(command, policyDigest) {
   return digest({
     command,
-    policy_digest: digest(policy)
+    policy_digest: policyDigest
   });
 }
 
@@ -274,7 +291,48 @@ export function computeIntentDigest(command, policy) {
   assertPolicy(policy);
   assertExactKeys(command, commandKeys, "command");
   assert(command.policy_version === policy.policy_version, "command policy version mismatch");
-  return calculateIntentDigest(command, policy);
+  return calculateIntentDigest(command, digest(policy));
+}
+
+export function verifyUnsignedTransactionIntent({
+  intent,
+  now = new Date(),
+  policy
+}) {
+  assertNoRestrictedMaterial(intent, "intent");
+  assertNoRestrictedMaterial(policy, "policy");
+  assertExactKeys(intent, intentKeys, "intent");
+  assertPolicy(policy);
+  assert(now instanceof Date && Number.isFinite(now.getTime()), "now must be a valid Date");
+  assert(intent.runtime_boundary === "dev-dry-run", "intent runtime must remain dev-dry-run");
+  assert(intent.status === "unsigned_intent_ready", "intent must remain unsigned");
+  assert(intent.execution_authority === false, "intent execution authority must remain disabled");
+  assert(intent.production_signing_enabled === false, "intent production signing must remain disabled");
+  assert(intent.key_material_present === false, "intent must not contain key material");
+  assert(digestPattern.test(intent.policy_digest), "intent policy_digest must be SHA-256");
+  assert(digestPattern.test(intent.intent_digest), "intent intent_digest must be SHA-256");
+  const policyDigest = digest(policy);
+  assert(intent.policy_digest === policyDigest, "intent policy digest does not match custody policy");
+  assert(
+    intent.intent_digest === calculateIntentDigest(intent.command, policyDigest),
+    "intent digest does not match sealed command and policy"
+  );
+  const timing = assertCommand(intent.command, policy, now.getTime());
+  assert(Array.isArray(intent.approvals), "intent approvals must be an array");
+  assertApprovals(intent.approvals, intent.intent_digest, policy, timing, now.getTime());
+  assert(
+    intent.approval_evidence_digest === digest(intent.approvals),
+    "intent approval evidence digest does not match approvals"
+  );
+
+  const orderedApprovals = [...intent.approvals].sort((left, right) =>
+    `${left.role}:${left.approval_id}`.localeCompare(`${right.role}:${right.approval_id}`)
+  );
+  assert(
+    JSON.stringify(intent.approvals) === JSON.stringify(orderedApprovals),
+    "intent approvals must remain canonically ordered"
+  );
+  return intent;
 }
 
 export function prepareUnsignedTransactionIntent({
@@ -290,7 +348,7 @@ export function prepareUnsignedTransactionIntent({
   const nowTimestamp = now.getTime();
   const timing = assertCommand(command, policy, nowTimestamp);
   const policyDigest = digest(policy);
-  const intentDigest = calculateIntentDigest(command, policy);
+  const intentDigest = calculateIntentDigest(command, policyDigest);
   assertApprovals(approvals, intentDigest, policy, timing, nowTimestamp);
 
   const orderedApprovals = approvals

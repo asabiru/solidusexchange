@@ -31,6 +31,26 @@ for (const required of [
   assert(source.includes(required), `Custody source is missing evidence: ${required}`);
 }
 
+const eventSource = read("packages/custody-core/src/custody-event.mjs");
+for (const required of [
+  "verifyUnsignedTransactionIntent",
+  'event_type: "CustodyIntentPrepared"',
+  'status: "unsigned_intent_ready"',
+  "execution_authority: false",
+  "production_signing_enabled: false"
+]) {
+  assert(eventSource.includes(required), `Custody event source is missing evidence: ${required}`);
+}
+for (const prohibited of [
+  "destination_reference:",
+  "private_key",
+  "raw_transaction",
+  "signature",
+  "signed_transaction"
+]) {
+  assert(!eventSource.includes(prohibited), `Custody event source contains prohibited material: ${prohibited}`);
+}
+
 const tests = read("packages/custody-core/tests/unsigned-intent.test.mjs");
 for (const required of [
   "rejects missing maker-checker quorum",
@@ -42,6 +62,18 @@ for (const required of [
   "rejects custody policy containing key material"
 ]) {
   assert(tests.includes(required), `Custody tests are missing evidence: ${required}`);
+}
+
+const eventTests = read("packages/custody-core/tests/custody-event.test.mjs");
+for (const required of [
+  "projects an immutable reference-only CustodyIntentPrepared event",
+  "matches the canonical API domain event contract",
+  "rejects tampered intent evidence",
+  "rejects invalid event identity and causation",
+  "rejects events before approvals or after intent expiry",
+  "rejects policy drift and signing-enabled policy"
+]) {
+  assert(eventTests.includes(required), `Custody event tests are missing evidence: ${required}`);
 }
 
 const readme = read("packages/custody-core/README.md");
