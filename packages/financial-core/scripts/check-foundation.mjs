@@ -607,6 +607,13 @@ for (const [fixture, evidence] of [
     "tests/postgres-migration-history.sh",
     "postgres-migration-history-negative-ok"
   ],
+  ["tests/postgres-migration-history.sh", "ROLLBACK_DATABASE"],
+  ["tests/postgres-migration-history.sh", "SELECT 1 / 0;"],
+  [
+    "tests/postgres-migration-history.sh",
+    "to_regclass('financial_core.ledger_account_projections') IS NULL"
+  ],
+  ["tests/postgres-migration-history.sh", "postgres-migration-rollback-ok"],
   [
     "scripts/verify-postgres-migration-source-catalog.mjs",
     "PostgreSQL migration source files differ from canonical manifest"
@@ -856,6 +863,7 @@ for (const required of [
   "Security approver:",
   "synthetic logical backup/restore",
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
+  "failed migration полностью откатывает schema objects и history row",
   "SHA-256 migration source catalog",
   "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
   "psql meta-commands и дополнительные transaction-control statements запрещены",

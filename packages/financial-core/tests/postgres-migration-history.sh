@@ -8,6 +8,7 @@ set -euo pipefail
 : "${PGDATABASE:=ledger_test}"
 : "${PGPASSWORD:=ledger_test}"
 : "${OUT_OF_ORDER_DATABASE:=${PGDATABASE}_migration_order_test}"
+: "${ROLLBACK_DATABASE:=${PGDATABASE}_migration_rollback_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,6 +25,19 @@ if [[ "$OUT_OF_ORDER_DATABASE" != *_migration_order_test ]]; then
   echo "Out-of-order database must use the disposable _migration_order_test suffix." >&2
   exit 1
 fi
+if [[ "$ROLLBACK_DATABASE" == "$PGDATABASE" ]]; then
+  echo "Rollback database must differ from the canonical database." >&2
+  exit 1
+fi
+if [[ ! "$ROLLBACK_DATABASE" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+  echo "Rollback database must be a PostgreSQL identifier." >&2
+  exit 1
+fi
+if [[ "$ROLLBACK_DATABASE" != *_migration_rollback_test ]]; then
+  echo "Rollback database must use the disposable _migration_rollback_test suffix." >&2
+  exit 1
+fi
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/solidchange-migration-rollback.XXXXXX")"
 
 run_pg_tool() {
   if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
@@ -50,8 +64,16 @@ drop_out_of_order_database() {
       --if-exists --force "$OUT_OF_ORDER_DATABASE"
 }
 
+drop_rollback_database() {
+  run_pg_tool \
+    dropdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+      --if-exists --force "$ROLLBACK_DATABASE"
+}
+
 cleanup() {
   drop_out_of_order_database >/dev/null 2>&1 || true
+  drop_rollback_database >/dev/null 2>&1 || true
+  rm -rf "$scratch"
 }
 trap cleanup EXIT
 
@@ -172,6 +194,78 @@ assert_out_of_order_history_rejected() {
   echo "postgres-migration-order-negative-ok"
 }
 
+assert_failed_migration_rolled_back() {
+  local failed_migration="$scratch/0002_ledger_verification_views.sql"
+  local output
+  local status
+
+  drop_rollback_database
+  run_pg_tool \
+    createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+      "$ROLLBACK_DATABASE"
+  run_psql "$ROLLBACK_DATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -f migrations/0001_ledger_foundation.sql \
+    >/dev/null
+
+  sed \
+    '/^COMMIT;$/i SELECT 1 / 0;' \
+    migrations/0002_ledger_verification_views.sql \
+    >"$failed_migration"
+
+  set +e
+  output="$(
+    run_psql "$ROLLBACK_DATABASE" \
+      -v ON_ERROR_STOP=1 \
+      <"$failed_migration" \
+      2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Intentionally failed PostgreSQL migration unexpectedly committed." >&2
+    exit 1
+  fi
+  grep -F "division by zero" <<<"$output"
+
+  run_psql "$ROLLBACK_DATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -c "
+      SELECT
+        (
+          SELECT array_agg(version ORDER BY version) = ARRAY[1]
+          FROM financial_core.schema_migrations
+        )
+        AND to_regclass('financial_core.ledger_account_projections') IS NULL
+        AND to_regclass('financial_core.ledger_trial_balance') IS NULL;
+    " \
+    | grep -Fx "t"
+
+  run_psql "$ROLLBACK_DATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -f migrations/0002_ledger_verification_views.sql \
+    >/dev/null
+  run_psql "$ROLLBACK_DATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -c "
+      SELECT
+        (
+          SELECT array_agg(version ORDER BY version) = ARRAY[1, 2]
+          FROM financial_core.schema_migrations
+        )
+        AND to_regclass('financial_core.ledger_account_projections') IS NOT NULL
+        AND to_regclass('financial_core.ledger_trial_balance') IS NOT NULL;
+    " \
+    | grep -Fx "t"
+
+  drop_rollback_database
+  echo "postgres-migration-rollback-ok"
+}
+
 verify_history
 
 assert_history_rejected \
@@ -209,6 +303,8 @@ assert_sequence_rejected \
    VALUES (13, '0013_replica_skip');"
 
 verify_history
+
+assert_failed_migration_rolled_back
 
 assert_out_of_order_history_rejected
 
