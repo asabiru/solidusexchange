@@ -53,6 +53,38 @@ test("rejects flow-style steps that hide mutable external action refs", () => {
   }
 });
 
+test("rejects flow-style jobs that hide mutable reusable workflow refs", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  call-external: { uses: example/repository/.github/workflows/reusable.yml@main }
+`);
+
+  assert.match(
+    errors.join("\n"),
+    /flow-style reusable workflow jobs are not allowed/,
+  );
+});
+
+test("accepts block-style local reusable workflow jobs", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  call-local:
+    uses: ./.github/workflows/reusable.yml
+`);
+
+  assert.deepEqual(errors, []);
+});
+
 test("accepts unrelated flow-style list data", () => {
   const errors = validateWorkflowText(`name: Policy fixture
 on: pull_request

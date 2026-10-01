@@ -5,6 +5,8 @@ import path from "node:path";
 const SHA_REF = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[^@\s]+)*@[0-9a-f]{40}$/i;
 const DOCKER_DIGEST = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/i;
 const FLOW_USES_KEY = /^-\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
+const FLOW_JOB_USES_KEY =
+  /^[A-Za-z_][A-Za-z0-9_-]*:\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
@@ -80,12 +82,36 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
   const errors = [];
   const rootPermissions = [];
+  let jobsIndent = -1;
+  let jobIndent = -1;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     const trimmed = line.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const indent = indentation(line);
+    if (indent === 0 && /^jobs:\s*(?:#.*)?$/.test(trimmed)) {
+      jobsIndent = indent;
+      jobIndent = -1;
+    } else if (jobsIndent !== -1 && indent <= jobsIndent) {
+      jobsIndent = -1;
+      jobIndent = -1;
+    } else if (jobsIndent !== -1 && jobIndent === -1) {
+      jobIndent = indent;
+    }
+
+    if (
+      jobsIndent !== -1 &&
+      indent === jobIndent &&
+      FLOW_JOB_USES_KEY.test(trimmed)
+    ) {
+      errors.push(
+        `${fileName}:${index + 1}: flow-style reusable workflow jobs are not allowed`,
+      );
       continue;
     }
 
@@ -96,7 +122,6 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       continue;
     }
 
-    const indent = indentation(line);
     const permissionsMatch = line.match(/^(\s*)permissions:\s*(.*?)\s*$/);
     if (permissionsMatch) {
       if (indent !== 0) {
