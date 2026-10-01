@@ -115,6 +115,26 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects operation-specific error envelopes",
+  "Error response must use canonical Error schema",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.responses["401"] = {
+      description: "Unsafe inline error",
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            additionalProperties: true
+          }
+        }
+      }
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects event execution authority",
   "Events must not grant execution authority",
   (scratch) => {

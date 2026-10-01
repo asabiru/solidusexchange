@@ -191,6 +191,17 @@ function checkOpenApi() {
 
       const success = operation.responses?.["200"];
       assert(success?.headers?.["X-Request-Id"], `Success response must echo X-Request-Id: ${operation.operationId}`);
+      for (const [status, response] of Object.entries(operation.responses ?? {})) {
+        if (status.startsWith("2")) continue;
+        const resolvedResponse = response.$ref
+          ? resolveRef(path, response.$ref).value
+          : response;
+        assert(
+          resolvedResponse.content?.["application/json"]?.schema?.$ref
+            === "#/components/schemas/Error",
+          `Error response must use canonical Error schema: ${operation.operationId} ${status}`
+        );
+      }
     }
   }
 
