@@ -135,6 +135,10 @@ function normalizeSqlSource(source) {
       continue;
     }
 
+    if ((next === "U" || next === "u") && afterNext === "&" && source[index + 2] === "\"") {
+      assert.fail("PostgreSQL custody migration source policy does not allow Unicode-escaped identifiers");
+    }
+
     if (next === "$") {
       const match = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/u.exec(source.slice(index));
       if (match) {
