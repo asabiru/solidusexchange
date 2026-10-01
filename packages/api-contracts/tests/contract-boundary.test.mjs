@@ -221,6 +221,20 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects alternate protected error response media types",
+  "Error response media types for getCustomerSession 401",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.responses.Unauthenticated.content["text/html"] = {
+      schema: {
+        type: "string"
+      }
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects event execution authority",
   "Events must not grant execution authority",
   (scratch) => {
