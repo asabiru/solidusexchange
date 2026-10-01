@@ -93,6 +93,16 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects request context outside headers",
+  "RequestId must remain a header parameter",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.RequestId.in = "query";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {

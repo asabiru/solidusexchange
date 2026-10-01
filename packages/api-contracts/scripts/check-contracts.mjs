@@ -208,6 +208,7 @@ function checkOpenApi() {
   const parameters = openapi.components?.parameters ?? {};
   for (const name of ["RequestId", "ClientVersion", "Platform", "IdempotencyKey"]) {
     assert(parameters[name]?.required === true, `${name} must be required when used`);
+    assert(parameters[name]?.in === "header", `${name} must remain a header parameter`);
   }
   assert(parameters.IdempotencyKey.name === "Idempotency-Key", "Idempotency-Key component is missing");
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
