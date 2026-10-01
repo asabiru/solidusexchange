@@ -341,6 +341,9 @@ for (const required of [
   "custody migration applied_at must be later than installed version 2",
   "SET session_replication_role = replica;",
   "custody migration history is append-only",
+  "assert_failed_history_bootstrap_rolled_back",
+  "Intentionally failed PostgreSQL custody migration unexpectedly committed.",
+  "custody-postgres-migration-rollback-ok",
   "custody-postgres-migration-sequence-guard-ok",
   "custody-postgres-migration-history-negative-ok"
 ]) {
