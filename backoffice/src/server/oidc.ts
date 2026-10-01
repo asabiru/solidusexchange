@@ -118,8 +118,12 @@ function validateClaims(
     typeof claims.iss !== "string"
     || typeof claims.sub !== "string"
     || claims.sub.length === 0
+    || claims.sub.length > 255
+    || [...claims.sub].some((character) => character.charCodeAt(0) > 0x7f)
     || typeof claims.exp !== "number"
+    || !Number.isFinite(claims.exp)
     || typeof claims.iat !== "number"
+    || !Number.isFinite(claims.iat)
     || typeof claims.nonce !== "string"
     || audience.length === 0
   ) {

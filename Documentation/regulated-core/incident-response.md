@@ -16,6 +16,11 @@ Provider assessment, monitoring, cooperation and exit requirements are defined
 in the proposed [third-party risk baseline](third-party-risk.md). Provider
 communications remain claims until bound to preserved evidence.
 
+Business-service impact tolerances, degraded modes, capacity, continuity and
+recovery exercises are defined in the proposed
+[operational-resilience baseline](operational-resilience.md). An incident
+resume decision cannot substitute for missing resilience approval.
+
 ## Objectives
 
 1. Protect customers and prevent additional unauthorized activity.
@@ -244,6 +249,11 @@ Before production approval, tabletop and recovery exercises must cover:
 8. outage with missing telemetry and uncertain accepted-command state.
 
 Each exercise must produce a timeline, evidence manifest, decision log, unresolved gaps and owners. At least one exercise must use an isolated restore and independent financial reconciliation.
+
+The operational-resilience baseline adds service-specific outage, dependency,
+capacity and return-to-normal scenarios. The same exercise may satisfy both
+baselines only when its evidence covers both incident authority and complete
+business-service recovery.
 
 ## Production stop conditions
 

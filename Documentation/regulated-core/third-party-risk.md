@@ -326,6 +326,16 @@ contract, credential, data transfer, production connection or failover; waive
 reconciliation; make a regulated decision; or approve its own provider or
 service identity.
 
+External model, hosting, annotation and evaluation providers must also satisfy
+the proposed [AI-governance baseline](ai-governance.md). Provider model cards
+and benchmark claims do not replace capability-specific evaluation and human
+control evidence.
+
+Business-service dependency mapping, impact tolerances, degraded operation,
+capacity and continuity exercises must also satisfy the proposed
+[operational-resilience baseline](operational-resilience.md). A provider
+scorecard or contractual SLO alone is not internal recovery evidence.
+
 ## Approval dependencies
 
 Production use remains blocked until:

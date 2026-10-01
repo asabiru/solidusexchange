@@ -318,6 +318,9 @@ AI cannot:
 - make final regulated, financial, custody, privacy or security decisions.
 
 Any AI access is purpose-limited, time-bound, audited and approved like other workload access.
+Capability identities, tool allowlists, human confirmation and independent
+authorization requirements are defined in the proposed
+[AI-governance baseline](ai-governance.md).
 
 ## Minimum misuse-case tests
 

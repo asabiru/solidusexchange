@@ -263,6 +263,64 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects alternate protected error response media types",
+  "Error response media types for getCustomerSession 401",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.responses.Unauthenticated.content["text/html"] = {
+      schema: {
+        type: "string"
+      }
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects alternate protected success statuses",
+  "Success response statuses for getCustomerSession",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.responses["201"] =
+      structuredClone(
+        openapi.paths["/api/v1/customer/session"].get.responses["200"]
+      );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects alternate protected success response media types",
+  "Success response media types for getCustomerSession 200",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.responses["200"].content[
+      "text/html"
+    ] = {
+      schema: {
+        type: "string"
+      }
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects noncanonical protected success response schemas",
+  "Success response must use canonical schema: getCustomerSession 200",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.responses[
+      "200"
+    ].content["application/json"].schema = {
+      type: "object",
+      additionalProperties: true
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects event execution authority",
   "Events must not grant execution authority",
   (scratch) => {

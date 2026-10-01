@@ -22,6 +22,10 @@ function encode(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
+function encodeJson(value: string): string {
+  return Buffer.from(value).toString("base64url");
+}
+
 describe("OIDC boundary", () => {
   it("builds an authorization-code request with PKCE and nonce", () => {
     const url = new URL(authorizationUrl(config, "state-1", "nonce-1", "verifier-1"));
@@ -73,6 +77,46 @@ describe("OIDC boundary", () => {
       name: "Test Operator",
       role: "compliance-lead"
     });
+  });
+
+  it("rejects subject identifiers outside the OIDC ASCII and length limits", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "subject-key" });
+    const now = Math.floor(Date.now() / 1000);
+
+    for (const subject of ["opérateur", "a".repeat(256)]) {
+      const claims = encode({
+        iss: config.issuer,
+        sub: subject,
+        aud: config.clientId,
+        exp: now + 300,
+        iat: now,
+        nonce: "nonce-subject",
+        groups: ["compliance"]
+      });
+      const signature = sign(
+        "RSA-SHA256",
+        Buffer.from(`${header}.${claims}`),
+        pair.privateKey
+      ).toString("base64url");
+
+      await assert.rejects(
+        verifyIdToken(
+          `${header}.${claims}.${signature}`,
+          config,
+          "nonce-subject",
+          {
+            keys: [
+              {
+                ...pair.publicKey.export({ format: "jwk" }),
+                kid: "subject-key"
+              }
+            ]
+          }
+        ),
+        /token claims are malformed/
+      );
+    }
   });
 
   it("rejects duplicate signing keys with the same kid regardless of JWKS order", async () => {
@@ -294,6 +338,67 @@ describe("OIDC boundary", () => {
       }),
       /token claims are not valid/
     );
+  });
+
+  it("rejects signed tokens with malformed or future NumericDate claims", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "numeric-date-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const commonClaims = `"iss":"${config.issuer}","aud":"${config.clientId}",`
+      + `"groups":["compliance"]`;
+    const cases = [
+      {
+        nonce: "nonce-exp-infinite",
+        claims: `{"sub":"operator-exp-infinite",${commonClaims},`
+          + `"exp":1e400,"iat":${now},"nonce":"nonce-exp-infinite"}`,
+        error: /token claims are malformed/
+      },
+      {
+        nonce: "nonce-iat-infinite",
+        claims: `{"sub":"operator-iat-infinite",${commonClaims},`
+          + `"exp":${now + 300},"iat":-1e400,"nonce":"nonce-iat-infinite"}`,
+        error: /token claims are malformed/
+      },
+      {
+        nonce: "nonce-nbf-infinite",
+        claims: `{"sub":"operator-nbf-infinite",${commonClaims},`
+          + `"exp":${now + 300},"iat":${now},"nbf":-1e400,`
+          + `"nonce":"nonce-nbf-infinite"}`,
+        error: /token claims are not valid/
+      },
+      {
+        nonce: "nonce-iat-future",
+        claims: `{"sub":"operator-iat-future",${commonClaims},`
+          + `"exp":${now + 300},"iat":${now + 61},"nonce":"nonce-iat-future"}`,
+        error: /token claims are not valid/
+      }
+    ];
+
+    for (const entry of cases) {
+      const claims = encodeJson(entry.claims);
+      const signature = sign(
+        "RSA-SHA256",
+        Buffer.from(`${header}.${claims}`),
+        pair.privateKey
+      ).toString("base64url");
+
+      await assert.rejects(
+        verifyIdToken(
+          `${header}.${claims}.${signature}`,
+          config,
+          entry.nonce,
+          {
+            keys: [
+              {
+                ...pair.publicKey.export({ format: "jwk" }),
+                kid: "numeric-date-key"
+              }
+            ]
+          }
+        ),
+        entry.error
+      );
+    }
   });
 
   it("rejects a signed token from a JWK reserved for encryption", async () => {

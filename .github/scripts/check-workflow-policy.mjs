@@ -10,6 +10,19 @@ const FLOW_JOB_USES_KEY =
   /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const BLOCK_USES_KEY = /^\s*(?:-\s*)?(?:uses|"uses"|'uses')\s*:\s*(.+)$/;
 const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
+const SINGLE_QUOTED_KEY = /'((?:[^']|'')*)'(\s*:)/g;
+const POLICY_KEYS = new Set(["uses", "permissions", "with", "persist-credentials"]);
+const TRIGGER_KEYS = new Set([
+  "on",
+  "pull_request",
+  "push",
+  "workflow_dispatch",
+  "branches",
+  "branches-ignore",
+]);
+const EVENT_KEYS = new Set(["pull_request", "push", "workflow_dispatch"]);
+const BRANCH_KEYS = new Set(["branches", "branches-ignore"]);
+const MANUAL_WORKFLOWS = new Set([".github/workflows/deploy.yml"]);
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
@@ -36,21 +49,29 @@ function decodeDoubleQuotedKey(value) {
   );
 }
 
-function normalizePolicyKeys(line) {
-  return line.replace(DOUBLE_QUOTED_KEY, (match, value, separator) => {
-    const decoded = decodeDoubleQuotedKey(value);
-    return decoded === "uses" || decoded === "permissions"
-      ? `${decoded}${separator}`
-      : match;
-  });
+function normalizeKeys(line, keys) {
+  return line
+    .replace(DOUBLE_QUOTED_KEY, (match, value, separator) => {
+      const decoded = decodeDoubleQuotedKey(value);
+      return keys.has(decoded) ? `${decoded}${separator}` : match;
+    })
+    .replace(SINGLE_QUOTED_KEY, (match, value, separator) => {
+      const decoded = value.replace(/''/g, "'");
+      return keys.has(decoded) ? `${decoded}${separator}` : match;
+    });
 }
 
-function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
-  const errors = [];
-  let withIndex = -1;
+function normalizePolicyKeys(line) {
+  return normalizeKeys(line, POLICY_KEYS);
+}
 
-  for (let index = usesIndex + 1; index < lines.length; index += 1) {
-    const line = lines[index];
+function childMappings(lines, parentIndex, keys) {
+  const mappings = [];
+  const parentIndent = indentation(lines[parentIndex]);
+  let childIndent = -1;
+
+  for (let index = parentIndex + 1; index < lines.length; index += 1) {
+    const line = normalizeKeys(lines[index], TRIGGER_KEYS);
     const trimmed = line.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
@@ -58,24 +79,164 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
     }
 
     const indent = indentation(line);
-    if (indent < usesIndent || (indent === usesIndent && !trimmed.startsWith("with:"))) {
+    if (indent <= parentIndent) {
       break;
     }
 
-    if (indent === usesIndent && trimmed === "with:") {
-      withIndex = index;
-      break;
+    if (childIndent === -1) {
+      childIndent = indent;
+    }
+
+    if (indent !== childIndent) {
+      continue;
+    }
+
+    const match = trimmed.match(/^([A-Za-z_-]+):\s*(.*?)\s*$/);
+    if (!keys || (match && keys.has(match[1]))) {
+      mappings.push({
+        index,
+        indent,
+        name: match?.[1],
+        value: match ? scalar(match[2]) : trimmed,
+      });
     }
   }
 
-  if (withIndex === -1) {
+  return mappings;
+}
+
+function childListValues(lines, parentIndex) {
+  const values = [];
+  const parentIndent = indentation(lines[parentIndex]);
+
+  for (let index = parentIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indentation(line) <= parentIndent) {
+      break;
+    }
+
+    const match = trimmed.match(/^-\s*(.+)$/);
+    if (match) {
+      values.push(scalar(match[1]));
+    }
+  }
+
+  return values;
+}
+
+function triggerErrors(lines, fileName) {
+  const errors = [];
+  const onMappings = lines.flatMap((line, index) => {
+    const normalized = normalizeKeys(line, TRIGGER_KEYS);
+    const match =
+      indentation(normalized) === 0
+        ? normalized.trim().match(/^on:\s*(.*?)\s*$/)
+        : null;
+    return match ? [{ index, value: scalar(match[1]) }] : [];
+  });
+
+  if (onMappings.length !== 1 || onMappings[0].value) {
+    return [`${fileName}: workflow must declare one block-style top-level on mapping`];
+  }
+
+  const directEvents = childMappings(lines, onMappings[0].index);
+  const events = directEvents.filter(({ name }) => EVENT_KEYS.has(name));
+  const eventCount = (name) => events.filter((event) => event.name === name).length;
+
+  for (const event of events.filter(({ value }) => value)) {
+    errors.push(
+      `${fileName}:${event.index + 1}: ${event.name} trigger must use a block mapping`,
+    );
+  }
+
+  if (MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/"))) {
+    if (
+      directEvents.length !== 1 ||
+      eventCount("workflow_dispatch") !== 1
+    ) {
+      errors.push(`${fileName}: approved manual workflow must use only workflow_dispatch`);
+    }
+    return errors;
+  }
+
+  if (eventCount("pull_request") !== 1) {
+    errors.push(`${fileName}: validation workflow must run for pull requests`);
+  }
+  if (eventCount("push") !== 1) {
+    errors.push(`${fileName}: validation workflow must run for pushes to main`);
+  }
+  if (eventCount("workflow_dispatch") !== 0) {
+    errors.push(`${fileName}: workflow_dispatch is only allowed for approved manual workflows`);
+  }
+
+  const push = events.find((event) => event.name === "push");
+  if (!push || push.value) {
+    return errors;
+  }
+
+  const filters = childMappings(lines, push.index, BRANCH_KEYS);
+  const branches = filters.filter(({ name }) => name === "branches");
+  if (filters.some(({ name }) => name === "branches-ignore")) {
+    errors.push(`${fileName}:${push.index + 1}: push trigger must include main explicitly`);
+  } else if (branches.length > 0) {
+    const branchValues =
+      branches.length === 1 && !branches[0].value
+        ? childListValues(lines, branches[0].index)
+        : [];
+    const mainCount = branchValues.filter((branch) => branch === "main").length;
+    if (branches.length !== 1 || branches[0].value || mainCount !== 1) {
+      errors.push(`${fileName}:${push.index + 1}: push branches must include main exactly once`);
+    }
+  }
+
+  return errors;
+}
+
+function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
+  const withMappings = [];
+
+  for (let index = usesIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = normalizePolicyKeys(line).trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const indent = indentation(line);
+    if (indent < usesIndent) {
+      break;
+    }
+
+    if (indent === usesIndent) {
+      const withMatch = trimmed.match(/^with:\s*(.*)$/);
+      if (withMatch) {
+        withMappings.push({ index, value: scalar(withMatch[1]) });
+      }
+    }
+  }
+
+  if (withMappings.length === 0) {
     return [`${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false`];
   }
 
+  if (withMappings.length !== 1 || withMappings[0].value) {
+    return [
+      `${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false exactly once`,
+    ];
+  }
+
+  const withIndex = withMappings[0].index;
   const values = [];
   for (let index = withIndex + 1; index < lines.length; index += 1) {
     const line = lines[index];
-    const trimmed = line.trim();
+    const trimmed = normalizePolicyKeys(line).trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
@@ -91,6 +252,7 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
     }
   }
 
+  const errors = [];
   if (values.length !== 1 || values[0].value !== "false") {
     errors.push(
       `${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false exactly once`,
@@ -102,7 +264,7 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
 
 export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
-  const errors = [];
+  const errors = triggerErrors(lines, fileName);
   const rootPermissions = [];
   let jobsIndent = -1;
   let jobIndent = -1;
