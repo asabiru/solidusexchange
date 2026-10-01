@@ -17,6 +17,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Incident response baseline | Security / SRE / Legal / MLRO | Severity, roles, evidence, containment, recovery and notification gates | Proposed; domain approvals pending |
 | Release authorization baseline | SRE / Security / CTO | Artifact provenance, approval binding, enablement, rollback and NO-GO gates | Proposed; D-015/D-018 and domain approvals pending |
 | Audit evidence baseline | Security / Compliance / SRE | Event semantics, actor/policy binding, append-only integrity, access/export and retention | Proposed; identity, retention and key-custody approvals pending |
+| Data lifecycle baseline | Legal / Privacy / MLRO / Finance / Security | Retention triggers, holds, correction, disposal, processors, copies and recovery behavior | Proposed; schedule, location, processor and legal-basis approvals pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
