@@ -219,7 +219,7 @@ assert_failed_history_bootstrap_rolled_back() {
           'schema_migrations_append_only',
           'schema_migrations_reject_truncate',
           'schema_migrations_validate_sequence'
-        ];
+        ]::name[];
     " \
     | grep -Fx "t"
 
