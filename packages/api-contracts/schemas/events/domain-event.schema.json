@@ -39,6 +39,7 @@
         "WithdrawalRequested",
         "WithdrawalHeld",
         "WithdrawalApproved",
+        "CustodyIntentPrepared",
         "WithdrawalBroadcast",
         "PaymentConfirmed",
         "PaymentRefunded",
@@ -367,6 +368,28 @@
           },
           "payload": {
             "$ref": "#/$defs/withdrawalApproved"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "event_type": {
+            "const": "CustodyIntentPrepared"
+          }
+        },
+        "required": [
+          "event_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "aggregate_type": {
+            "const": "withdrawal"
+          },
+          "payload": {
+            "$ref": "#/$defs/custodyIntentPrepared"
           }
         }
       }
@@ -851,6 +874,60 @@
         },
         "evidence_digest": {
           "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "custodyIntentPrepared": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "withdrawal_id",
+        "custody_intent_id",
+        "intent_digest",
+        "policy_digest",
+        "approval_evidence_digest",
+        "asset",
+        "network",
+        "expires_at",
+        "status",
+        "execution_authority",
+        "production_signing_enabled"
+      ],
+      "properties": {
+        "withdrawal_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "custody_intent_id": {
+          "$ref": "#/$defs/identifier"
+        },
+        "intent_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "policy_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "approval_evidence_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "asset": {
+          "$ref": "#/$defs/assetCode"
+        },
+        "network": {
+          "type": "string",
+          "pattern": "^[A-Z0-9]+_TESTNET$"
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "status": {
+          "const": "unsigned_intent_ready"
+        },
+        "execution_authority": {
+          "const": false
+        },
+        "production_signing_enabled": {
+          "const": false
         }
       }
     },

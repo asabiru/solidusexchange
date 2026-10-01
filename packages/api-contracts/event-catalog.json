@@ -88,6 +88,13 @@
       "data_classification": "highly-confidential"
     },
     {
+      "name": "CustodyIntentPrepared",
+      "current_version": 1,
+      "aggregate_type": "withdrawal",
+      "owner": "custody-orchestrator",
+      "data_classification": "highly-confidential"
+    },
+    {
       "name": "WithdrawalBroadcast",
       "current_version": 1,
       "aggregate_type": "withdrawal",

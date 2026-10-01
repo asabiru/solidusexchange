@@ -285,6 +285,36 @@
     }
   },
   {
+    "event_id": "018f3f8a-0017-7000-8000-000000000017",
+    "event_type": "CustodyIntentPrepared",
+    "event_version": 1,
+    "occurred_at": "2026-09-25T12:11:30Z",
+    "producer": "custody-orchestrator",
+    "aggregate_type": "withdrawal",
+    "aggregate_id": "withdrawal_001",
+    "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
+    "causation_id": "018f3f8a-0012-7000-8000-000000000012",
+    "idempotency_key": "custody-intent-demo-001",
+    "actor": {
+      "type": "service",
+      "subject": "custody_orchestrator"
+    },
+    "data_classification": "highly-confidential",
+    "payload": {
+      "withdrawal_id": "withdrawal_001",
+      "custody_intent_id": "custody_intent_001",
+      "intent_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "policy_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "approval_evidence_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "asset": "USDT",
+      "network": "TRON_TESTNET",
+      "expires_at": "2026-09-25T12:16:30Z",
+      "status": "unsigned_intent_ready",
+      "execution_authority": false,
+      "production_signing_enabled": false
+    }
+  },
+  {
     "event_id": "018f3f8a-0013-7000-8000-000000000013",
     "event_type": "WithdrawalBroadcast",
     "event_version": 1,
@@ -293,7 +323,7 @@
     "aggregate_type": "withdrawal",
     "aggregate_id": "withdrawal_001",
     "correlation_id": "018f3f8a-4000-7000-8000-000000000004",
-    "causation_id": "018f3f8a-0012-7000-8000-000000000012",
+    "causation_id": "018f3f8a-0017-7000-8000-000000000017",
     "idempotency_key": "broadcast-demo-001",
     "actor": {
       "type": "service",
