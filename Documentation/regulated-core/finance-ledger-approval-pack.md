@@ -24,7 +24,7 @@
 | Legal entity | Journal и все accounts/entries находятся внутри одной legal entity | Runtime validation и composite foreign keys |
 | Precision | Суммы используют canonical decimal strings / PostgreSQL `NUMERIC`, scale 0–18 и limit 78 whole-plus-fraction digits с учётом сохранённых fractional zeros | JS boundary tests, SQL boundary/rejection fixtures и migration `0003` |
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
-| Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal; все сохранённые timestamps конечны; migration history точно совпадает с reviewed manifest, новые records принимаются только последовательно, а SQL sources закреплены exact SHA-256 catalog | Posting command, migrations и smoke/timeline/finiteness/migration-source/history rejection tests |
+| Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal; все сохранённые timestamps конечны; migration history точно совпадает с reviewed manifest, новые records принимаются только последовательно, failed migration полностью откатывает schema objects и history row, а SQL sources закреплены exact SHA-256 catalog | Posting command, migrations и smoke/timeline/finiteness/migration-source/history rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
 | Dev recoverability | Synthetic backup сохраняет только committed state и не переносит unrelated schemas; restore сохраняет unrelated target state и exact ledger/views/policy, отклоняет occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, scope isolation, consistency/collision/continuity/chained recovery и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
@@ -80,6 +80,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 22. каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary, sequential filename и ровно одну history row, совпадающую с filename/version.
 23. psql meta-commands и дополнительные transaction-control statements запрещены, чтобы migration не мог подключить unreviewed source или выйти из atomic boundary.
 24. runtime writer test profile точно совпадает с reviewed least-privilege catalog: лишние grants на migration history, unreviewed relations, columns, functions, grant option или `PUBLIC` writes отклоняются verifier, а прямой forged migration-history insert получает permission denied. Это synthetic evidence, а не runtime writer provisioning.
+25. failed migration полностью откатывает schema objects и history row; после injected failure canonical migration применяется чисто без ручной очистки.
 
 ## Approval effect
 

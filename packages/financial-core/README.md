@@ -38,7 +38,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
 | `tests/postgres-migration-source-catalog.sh` | Exact SQL migration file-name and SHA-256 catalog with negative drift evidence |
 | `tests/postgres-migration-source-policy.sh` | Sequential file, atomic transaction and canonical history-row policy |
-| `tests/postgres-migration-history.sh` | Exact migration manifest, chronology, insert guard and rejected drift evidence |
+| `tests/postgres-migration-history.sh` | Exact migration manifest, chronology, insert guard, failed-transaction rollback and rejected drift evidence |
 | `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
@@ -313,7 +313,7 @@ The migration source catalog pins the exact file name and SHA-256 digest of ever
 
 The migration source policy independently requires contiguous numeric filenames, one outer transaction boundary and one canonical `schema_migrations` row per file. It also rejects psql meta-commands and additional transaction-control statements that could execute unreviewed input or escape the atomic boundary. Disposable copies prove that a missing `BEGIN`, hidden `ROLLBACK`, psql include, history-row mismatch, duplicate history row and skipped source version all fail before database application.
 
-The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0011` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed. Migration `0011` additionally rejects skipped versions, mismatched numeric name prefixes and stale application timestamps at insert time, including replica mode.
+The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0011` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database injects a failure after migration `0002` creates both verification views and records its history row; connection rollback must leave neither views nor history behind, and the canonical migration must then apply cleanly. A separate disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed. Migration `0011` additionally rejects skipped versions, mismatched numeric name prefixes and stale application timestamps at insert time, including replica mode.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
