@@ -90,6 +90,34 @@ for (const required of [
   assert(readme.includes(required), `Custody README is missing boundary: ${required}`);
 }
 
+const migration = read(
+  "packages/custody-core/migrations/0001_custody_projection_outbox.sql"
+);
+for (const required of [
+  "CREATE TABLE custody_core.custody_projection_outbox",
+  "custody projection idempotency conflict",
+  "custody projection identity conflict",
+  "custody projection outbox is append-only",
+  "ENABLE ALWAYS TRIGGER",
+  "production_signing_enabled"
+]) {
+  assert(migration.includes(required), `Custody migration is missing evidence: ${required}`);
+}
+
+const postgresTests = read("packages/custody-core/tests/postgres-outbox.sql");
+for (const required of [
+  "exact custody projection replay was not recognized",
+  "null request digest replay was accepted",
+  "changed idempotent replay was accepted",
+  "duplicate approval source identity was accepted",
+  "mainnet custody projection was accepted",
+  "signing-enabled custody projection was accepted",
+  "custody outbox truncate was accepted",
+  "replica-mode custody outbox update was accepted"
+]) {
+  assert(postgresTests.includes(required), `Custody PostgreSQL tests are missing evidence: ${required}`);
+}
+
 const adr = read("Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md");
 for (const required of [
   "Status: Proposed",

@@ -43,12 +43,15 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `createCustodyProjectionRegistry` provides a synchronous dev-only replay boundary around that projection. An exact canonical replay returns the original immutable event. Reuse of an idempotency key with changed evidence, or reuse of an event, approval event, withdrawal or custody intent identity under another projection, fails closed. This in-memory evidence does not replace a future durable production outbox.
 
+`migrations/0001_custody_projection_outbox.sql` adds PostgreSQL evidence for the same contract. The append-only outbox accepts only the exact unsigned testnet event shape, recognizes exact concurrent replays, rejects changed idempotency evidence and enforces unique event, approval-source, withdrawal and custody-intent identities. It is still a dev-only reference migration: runtime roles, production infrastructure and operational authorization are intentionally absent.
+
 ## Verification
 
 ```bash
 npm ci
 npm run verify
 npm audit --audit-level=moderate
+bash tests/postgres-outbox.sh
 ```
 
 No test or approval in this package authorizes HSM/MPC provisioning, production keys, customer withdrawals, transaction signing or broadcast.
