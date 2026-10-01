@@ -113,6 +113,18 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened client version constraints",
+  "Canonical ClientVersion constraints must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.ClientVersion.schema = {
+      type: "integer"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects weakened request ID schemas",
   "RequestId must use canonical UuidV7 schema",
   (scratch) => {
