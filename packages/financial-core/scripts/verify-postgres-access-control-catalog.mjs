@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 const expectedCatalogSha256 =
-  "64db1d5d815e6792e9ba5112c58a8b407f7a611f8da87df011a25ba99be4532d";
+  "31b1118b44c3a3c0d968db5baef6577fa287ba80aa1289194f56be3678cfde1a";
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -24,7 +24,7 @@ for await (const chunk of process.stdin) {
 const actual = JSON.parse(input);
 assert.equal(actual.schemas.length, 1, "Unexpected PostgreSQL schema ACL count");
 assert.equal(actual.relations.length, 13, "Unexpected PostgreSQL relation ACL count");
-assert.equal(actual.functions.length, 7, "Unexpected PostgreSQL function ACL count");
+assert.equal(actual.functions.length, 8, "Unexpected PostgreSQL function ACL count");
 assert.equal(actual.columns.length, 102, "Unexpected PostgreSQL column ACL count");
 assert.equal(
   actual.default_privileges.length,

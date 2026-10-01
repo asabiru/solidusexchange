@@ -91,6 +91,30 @@ assert_history_rejected() {
     <<<"$output"
 }
 
+assert_sequence_rejected() {
+  local expected="$1"
+  local statement="$2"
+  local output
+  local status
+
+  set +e
+  output="$(
+    run_psql "$PGDATABASE" \
+      -v ON_ERROR_STOP=1 \
+      -c "$statement" \
+      2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Invalid PostgreSQL migration sequence unexpectedly committed." >&2
+    exit 1
+  fi
+  grep -F "$expected" <<<"$output"
+}
+
 assert_out_of_order_history_rejected() {
   local migration
   local output
@@ -106,6 +130,7 @@ assert_out_of_order_history_rejected() {
     "0008_ledger_acceptance_artifact_guard.sql"
     "0009_ledger_acceptance_timeline_guard.sql"
     "0010_ledger_finite_timestamp_guard.sql"
+    "0011_ledger_migration_sequence_guard.sql"
   )
 
   drop_out_of_order_database
@@ -150,11 +175,42 @@ assert_out_of_order_history_rejected() {
 verify_history
 
 assert_history_rejected \
-  "INSERT INTO financial_core.schema_migrations (version, migration_name)
+  "ALTER TABLE financial_core.schema_migrations
+     DISABLE TRIGGER schema_migrations_validate_sequence;
+   INSERT INTO financial_core.schema_migrations (version, migration_name)
    VALUES (9999, '9999_unreviewed_migration');"
+
+verify_history
+
+assert_sequence_rejected \
+  "migration version 13 must follow installed version 11 with version 12" \
+  "INSERT INTO financial_core.schema_migrations (version, migration_name)
+   VALUES (13, '0013_skipped_migration');"
+
+assert_sequence_rejected \
+  "migration name 0013_wrong_version must encode version 12" \
+  "INSERT INTO financial_core.schema_migrations (version, migration_name)
+   VALUES (12, '0013_wrong_version');"
+
+assert_sequence_rejected \
+  "migration applied_at must be later than installed version 11" \
+  "INSERT INTO financial_core.schema_migrations (
+     version,
+     migration_name,
+     applied_at
+   )
+   SELECT 12, '0012_stale_timestamp', max(applied_at)
+   FROM financial_core.schema_migrations;"
+
+assert_sequence_rejected \
+  "migration version 13 must follow installed version 11 with version 12" \
+  "SET session_replication_role = replica;
+   INSERT INTO financial_core.schema_migrations (version, migration_name)
+   VALUES (13, '0013_replica_skip');"
 
 verify_history
 
 assert_out_of_order_history_rejected
 
+echo "postgres-migration-sequence-guard-ok"
 echo "postgres-migration-history-negative-ok"

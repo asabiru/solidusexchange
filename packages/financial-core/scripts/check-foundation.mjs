@@ -101,6 +101,9 @@ const acceptanceTimelineGuardMigration = read(
 const finiteTimestampGuardMigration = read(
   "migrations/0010_ledger_finite_timestamp_guard.sql"
 );
+const migrationSequenceGuardMigration = read(
+  "migrations/0011_ledger_migration_sequence_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -111,12 +114,26 @@ const migrations = [
   replicaReferenceGuardMigration,
   acceptanceArtifactGuardMigration,
   acceptanceTimelineGuardMigration,
-  finiteTimestampGuardMigration
+  finiteTimestampGuardMigration,
+  migrationSequenceGuardMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
   "Financial core migrations must not modify role-level default privileges"
 );
+for (const required of [
+  "CREATE FUNCTION financial_core.validate_migration_sequence",
+  "CREATE TRIGGER schema_migrations_validate_sequence",
+  "ENABLE ALWAYS TRIGGER schema_migrations_validate_sequence",
+  "migration version % must follow installed version % with version %",
+  "migration name % must encode version %",
+  "migration applied_at must be later than installed version %"
+]) {
+  assert(
+    migrationSequenceGuardMigration.includes(required),
+    `Migration sequence guard is missing ${required}`
+  );
+}
 for (const required of [
   "CREATE SCHEMA financial_core",
   "CREATE TABLE financial_core.ledger_assets",
@@ -519,7 +536,7 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-migration-history.mjs",
-    "0010_ledger_finite_timestamp_guard"
+    "0011_ledger_migration_sequence_guard"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -536,6 +553,22 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-migration-history.sh",
     "postgres-migration-order-negative-ok"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "migration version 13 must follow installed version 11 with version 12"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "migration name 0013_wrong_version must encode version 12"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "SET session_replication_role = replica"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "postgres-migration-sequence-guard-ok"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -729,7 +762,7 @@ for (const required of [
   "CTO approver:",
   "Security approver:",
   "synthetic logical backup/restore",
-  "migration history точно соответствует migrations `0001`–`0010` и порядку их применения",
+  "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {

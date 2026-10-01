@@ -28,6 +28,10 @@ const sourceHashes = [
   [
     "validate_entry_amount",
     "2e2f6652dd1c9895f6849cfb1de46c5f5a6498c0fe000646157dc509832240bf"
+  ],
+  [
+    "validate_migration_sequence",
+    "fa98923be37da20c3bad269e4e99774b533520b8d62fca9d028adb0a96c59842"
   ]
 ];
 
