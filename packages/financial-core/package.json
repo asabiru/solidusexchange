@@ -10,6 +10,6 @@
     "check": "node scripts/check-foundation.mjs",
     "test": "node --test tests/*.test.mjs",
     "verify": "npm run check && npm run verify:migrations && npm test",
-    "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs"
+    "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
   }
 }
