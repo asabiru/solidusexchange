@@ -20,9 +20,14 @@ for await (const chunk of process.stdin) {
 
 const actual = JSON.parse(input);
 assert.deepStrictEqual(
-  actual,
+  actual.history,
   expectedHistory,
   "PostgreSQL migration history differs from canonical manifest"
+);
+assert.equal(
+  actual.applied_in_version_order,
+  true,
+  "PostgreSQL migrations were not applied in canonical version order"
 );
 
 console.log("postgres-migration-history-ok");
