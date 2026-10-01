@@ -692,6 +692,14 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration must change history only through canonical history rows"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration must not use unreviewable procedural SQL"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-policy.mjs",
     "PostgreSQL migration must not execute psql meta-commands"
   ],
   [
@@ -709,6 +717,18 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-migration-source-policy.sh",
     "PostgreSQL migration must record exactly one canonical history row"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "migration_policy_bypass"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "concatenated-dynamic-history-rewrite"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "single-quoted-dynamic-history-rewrite"
   ],
   [
     "tests/postgres-migration-source-policy.sh",
