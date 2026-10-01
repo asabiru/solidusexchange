@@ -72,6 +72,7 @@ The release record stores references and digests, not secrets. Rebuilding from t
 | Contracts | API/event compatibility evidence and consumer impact |
 | Financial | Ledger/posting/reconciliation evidence for every affected financial behavior |
 | Custody | Intent/policy/approval/signer evidence for every affected custody behavior |
+| Audit | Event-schema compatibility, chain/checkpoint continuity and access/export impact |
 | Data/privacy | Classification, processor, location, retention and migration impact |
 | Security | Threat IDs, abuse-case tests, privilege changes and residual risk |
 | Operations | Monitoring, SLO, alert ownership, capacity and incident-response updates |
