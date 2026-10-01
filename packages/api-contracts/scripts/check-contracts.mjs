@@ -89,6 +89,38 @@ function sameSet(left, right, label) {
   );
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+const boundedString = { type: "string", minLength: 1, maxLength: 128 };
+const protectedViewSchemas = {
+  SessionView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["subject", "actor_type", "scopes", "expires_at"],
+    properties: {
+      subject: boundedString,
+      actor_type: { type: "string", enum: ["customer", "operator", "service"] },
+      scopes: { type: "array", uniqueItems: true, items: boundedString },
+      expires_at: { type: "string", format: "date-time" }
+    }
+  },
+  CapabilitiesView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["capabilities", "commands_enabled"],
+    properties: {
+      capabilities: { type: "array", uniqueItems: true, items: boundedString },
+      commands_enabled: { const: false }
+    }
+  }
+};
+
 function refs(operation) {
   return new Set(
     (operation.parameters ?? [])
@@ -288,6 +320,12 @@ function checkOpenApi() {
       && idempotencyKeySchema.pattern === "^[A-Za-z0-9._:-]+$",
     "Canonical IdempotencyKey constraints must remain pinned"
   );
+  for (const [name, expected] of Object.entries(protectedViewSchemas)) {
+    assert(
+      canonicalJson(openapi.components?.schemas?.[name]) === canonicalJson(expected),
+      `Canonical ${name} schema must remain pinned`
+    );
+  }
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
