@@ -46,6 +46,8 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/postgres-acceptance-artifact-integrity.sh` | Normal and replica-mode rejection of mismatched acceptance timestamps |
+| `tests/postgres-state-snapshot.sql` | Canonical financial-core tables and verification-view state snapshot |
+| `tests/postgres-backup-restore.sh` | Synthetic logical backup/restore state and policy parity regression |
 | `tests/runtime-writer-grants.sql` | Test-only least-privilege profile for a future non-owner posting role |
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
@@ -80,6 +82,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 21. The financial-core schema, relations and functions remain migration-owner controlled with no `PUBLIC`, non-owner or column-specific grants and no migration-owner default-ACL overrides.
 22. The idempotency record and immutable outbox event must use the journal's service-stamped `accepted_at`, including in PostgreSQL replica mode.
 23. The journal `created_at` and every entry `created_at` must equal that same `accepted_at`, including in PostgreSQL replica mode.
+24. A synthetic logical backup must restore every financial-core table, verification view and reviewed database policy to an exact canonical state in a disposable database.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -230,6 +233,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-backup-restore.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-runtime-privileges.sh
 ```
 
@@ -258,6 +269,8 @@ The acceptance-artifact regression proves that journal, entry, idempotency and o
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
 The runtime privilege regression creates an ephemeral `NOLOGIN`, `NOINHERIT`, non-owner role in the synthetic test database. It proves the exact posting transaction can commit with the proposed grants while direct configuration writes, `UPDATE`, `DELETE`, `TRUNCATE` and trigger-disabling DDL fail before reaching application code.
+
+The logical backup/restore regression dumps only the synthetic `financial_core` schema, restores it into a disposable database and reruns the exact trigger, function, constraint, relation and access-control policies. A canonical snapshot then requires every base table and both verification views to match the source byte-for-byte after JSON normalization. This is dev-only recoverability evidence; it does not satisfy production RPO/RTO, retention, encryption, HA or D-017 restore-drill approval.
 
 ## Finance approval gate
 

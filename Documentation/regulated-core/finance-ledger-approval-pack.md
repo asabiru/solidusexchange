@@ -26,6 +26,7 @@
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
 | Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal | Posting command, migrations и smoke/rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
+| Dev recoverability | Synthetic logical backup/restore сохраняет точное состояние ledger, views и reviewed database policy в отдельной disposable DB | `postgres-backup-restore.sh` и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
 
 ## Ограничение posting rules
@@ -65,6 +66,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 8. `ledger_trial_balance.difference = 0` и `balanced = true`;
 9. update/delete immutable records отклоняются;
 10. views работают как `security_invoker` и не дают `PUBLIC` privileges.
+11. synthetic logical backup/restore возвращает то же canonical ledger state и exact database policy; production retention, encryption, RPO/RTO и restore drill остаются отдельным D-017 gate.
 
 ## Approval effect
 
