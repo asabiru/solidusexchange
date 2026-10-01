@@ -39,6 +39,16 @@ test("rejects mutable external action refs", () => {
   assert.match(errors.join("\n"), /full 40-character commit SHA/);
 });
 
+test("rejects block-style steps with quoted uses keys hiding mutable external refs", () => {
+  for (const usesKey of ["'uses'", '"uses"']) {
+    const errors = validateWorkflowText(
+      workflow(`      - ${usesKey}: actions/setup-node@v4`),
+    );
+
+    assert.match(errors.join("\n"), /full 40-character commit SHA/);
+  }
+});
+
 test("rejects flow-style steps that hide mutable external action refs", () => {
   for (const step of [
     "{ uses: actions/setup-node@v4 }",
@@ -72,6 +82,23 @@ jobs:
   }
 });
 
+test("rejects block-style jobs with quoted uses keys hiding mutable reusable workflow refs", () => {
+  for (const usesKey of ["'uses'", '"uses"']) {
+    const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  call-external:
+    ${usesKey}: example/repository/.github/workflows/reusable.yml@main
+`);
+
+    assert.match(errors.join("\n"), /full 40-character commit SHA/);
+  }
+});
+
 test("accepts unrelated flow-style jobs with quoted IDs", () => {
   const errors = validateWorkflowText(`name: Policy fixture
 on: pull_request
@@ -87,7 +114,8 @@ jobs:
 });
 
 test("accepts block-style local reusable workflow jobs", () => {
-  const errors = validateWorkflowText(`name: Policy fixture
+  for (const usesKey of ["uses", "'uses'", '"uses"']) {
+    const errors = validateWorkflowText(`name: Policy fixture
 on: pull_request
 
 permissions:
@@ -95,7 +123,28 @@ permissions:
 
 jobs:
   call-local:
-    uses: ./.github/workflows/reusable.yml
+    ${usesKey}: ./.github/workflows/reusable.yml
+`);
+
+    assert.deepEqual(errors, []);
+  }
+});
+
+test("accepts quoted keys unrelated to workflow policy", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+'env':
+  "POLICY_FIXTURE": quoted
+
+jobs:
+  verify:
+    'runs-on': ubuntu-latest
+    steps:
+      - "run": echo policy fixture
 `);
 
   assert.deepEqual(errors, []);
@@ -131,9 +180,11 @@ test("rejects excessive workflow permissions", () => {
 });
 
 test("rejects checkout credentials unless persistence is explicitly disabled", () => {
-  const errors = validateWorkflowText(
-    workflow(`      - uses: actions/checkout@${checkoutSha}`),
-  );
+  for (const usesKey of ["uses", "'uses'", '"uses"']) {
+    const errors = validateWorkflowText(
+      workflow(`      - ${usesKey}: actions/checkout@${checkoutSha}`),
+    );
 
-  assert.match(errors.join("\n"), /persist-credentials: false/);
+    assert.match(errors.join("\n"), /persist-credentials: false/);
+  }
 });
