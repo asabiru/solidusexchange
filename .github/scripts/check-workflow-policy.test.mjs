@@ -254,6 +254,19 @@ test("rejects excessive workflow permissions", () => {
   assert.match(errors.join("\n"), /permissions must be exactly contents: read/);
 });
 
+test("rejects double-quoted escaped job-level permissions", () => {
+  const errors = validateWorkflowText(
+    workflow(String.raw`      - run: echo policy fixture`).replace(
+      "    runs-on: ubuntu-latest",
+      String.raw`    "permi\u0073sions":
+      contents: write
+    runs-on: ubuntu-latest`,
+    ),
+  );
+
+  assert.match(errors.join("\n"), /job-level permissions are not allowed/);
+});
+
 test("rejects checkout credentials unless persistence is explicitly disabled", () => {
   for (const usesKey of ["uses", "'uses'", '"uses"']) {
     const errors = validateWorkflowText(
