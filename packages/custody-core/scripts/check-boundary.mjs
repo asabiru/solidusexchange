@@ -167,6 +167,36 @@ for (const required of [
   assert(catalogTests.includes(required), `Custody catalog tests are missing evidence: ${required}`);
 }
 
+const migrationSourceCatalog = read(
+  "packages/custody-core/scripts/verify-postgres-migration-source-catalog.mjs"
+);
+for (const required of [
+  "0001_custody_projection_outbox.sql",
+  "2c0ee1744180763f0d76a0f0282fd2797c826a622164a04b6d6e0a4eab3b1202",
+  "PostgreSQL custody migration source files differ from canonical manifest",
+  "PostgreSQL custody migration source digest differs for"
+]) {
+  assert(
+    migrationSourceCatalog.includes(required),
+    `Custody migration source catalog is missing evidence: ${required}`
+  );
+}
+
+const migrationSourceTests = read(
+  "packages/custody-core/tests/postgres-migration-source-catalog.sh"
+);
+for (const required of [
+  "Invalid custody migration source catalog unexpectedly passed.",
+  "-- unreviewed source drift",
+  "9999_unreviewed_migration.sql",
+  "custody-postgres-migration-source-catalog-negative-ok"
+]) {
+  assert(
+    migrationSourceTests.includes(required),
+    `Custody migration source tests are missing evidence: ${required}`
+  );
+}
+
 const stateSnapshot = read("packages/custody-core/tests/postgres-state-snapshot.sql");
 for (const required of [
   "custody-core-state-v1",
@@ -218,5 +248,6 @@ for (const required of [
 const workflow = read(".github/workflows/custody-core-ci.yml");
 assert(workflow.includes("npm run verify"));
 assert(workflow.includes("npm audit --audit-level=moderate"));
+assert(workflow.includes("bash tests/postgres-migration-source-catalog.sh"));
 
 console.log("custody-boundary-ok");
