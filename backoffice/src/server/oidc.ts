@@ -186,6 +186,9 @@ export async function verifyIdToken(
   ) {
     throw new Error("OIDC signing algorithm is not allowed");
   }
+  if (header.crit !== undefined) {
+    throw new Error("OIDC critical protected header parameters are not supported");
+  }
   if (!isRecord(claims)) throw new Error("OIDC token claims are malformed");
 
   const jwks: JsonWebKeySet = suppliedJwks ?? await fetch(config.jwksUri, {

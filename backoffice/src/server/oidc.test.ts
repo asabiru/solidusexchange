@@ -75,6 +75,41 @@ describe("OIDC boundary", () => {
     });
   });
 
+  it("rejects unsupported critical protected header parameters", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({
+      alg: "RS256",
+      kid: "critical-key",
+      crit: ["tenant"],
+      tenant: "operators"
+    });
+    const now = Math.floor(Date.now() / 1000);
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-critical",
+      aud: config.clientId,
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-critical",
+      groups: ["compliance"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      pair.privateKey
+    ).toString("base64url");
+
+    await assert.rejects(
+      verifyIdToken(
+        `${header}.${claims}.${signature}`,
+        config,
+        "nonce-critical",
+        { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "critical-key" }] }
+      ),
+      /critical protected header parameters are not supported/
+    );
+  });
+
   it("rejects identities without an approved role mapping", async () => {
     const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const header = encode({ alg: "RS256", kid: "test-key" });
