@@ -47,6 +47,44 @@ expect_denied() {
   grep -F "$expected" <<<"$output"
 }
 
+verify_runtime_catalog() {
+  psql_command \
+    -v ON_ERROR_STOP=1 \
+    -v "custody_runtime_role=$runtime_role" \
+    -Atq \
+    -f tests/postgres-runtime-privilege-catalog.sql \
+    | node scripts/verify-postgres-runtime-privilege-catalog.mjs
+}
+
+assert_runtime_catalog_rejected() {
+  local statement="$1"
+  local output
+  local status
+
+  set +e
+  output="$(
+    psql_command \
+      -v ON_ERROR_STOP=1 \
+      -v "custody_runtime_role=$runtime_role" \
+      -Atq \
+      -c "BEGIN; $statement" \
+      -f tests/postgres-runtime-privilege-catalog.sql \
+      -c "ROLLBACK;" \
+      | node scripts/verify-postgres-runtime-privilege-catalog.mjs 2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Custody runtime privilege drift unexpectedly matched the reviewed profile." >&2
+    exit 1
+  fi
+  grep -F \
+    "PostgreSQL custody runtime writer privileges differ from the reviewed least-privilege profile" \
+    <<<"$output"
+}
+
 psql_command -v ON_ERROR_STOP=1 -c "
   CREATE ROLE $runtime_role
     NOLOGIN
@@ -62,6 +100,28 @@ psql_command \
   -v ON_ERROR_STOP=1 \
   -v "custody_runtime_role=$runtime_role" \
   -f tests/runtime-writer-grants.sql
+
+verify_runtime_catalog
+
+assert_runtime_catalog_rejected \
+  "GRANT SELECT ON TABLE custody_core.custody_projection_outbox TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT UPDATE (request_digest) ON TABLE custody_core.custody_projection_outbox TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT EXECUTE ON FUNCTION custody_core.record_custody_projection(jsonb, text)
+     TO $runtime_role WITH GRANT OPTION;"
+assert_runtime_catalog_rejected \
+  "GRANT EXECUTE ON FUNCTION custody_core.reject_outbox_mutation() TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT USAGE ON TYPE custody_core.custody_projection_outbox TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT SELECT ON TABLE custody_core.schema_migrations TO PUBLIC;"
+assert_runtime_catalog_rejected \
+  "ALTER DEFAULT PRIVILEGES IN SCHEMA custody_core
+     GRANT SELECT ON TABLES TO $runtime_role;"
+
+verify_runtime_catalog
+echo "custody-postgres-runtime-privilege-catalog-negative-ok"
 
 psql_command -v ON_ERROR_STOP=1 -Atq -c "
   SELECT CASE
