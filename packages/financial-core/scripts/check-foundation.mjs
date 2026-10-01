@@ -47,6 +47,15 @@ const packageJson = readJson("package.json");
 assert(packageJson.private === true, "Financial core package must remain private");
 assert(packageJson.dependencies === undefined, "Financial core must remain dependency-free");
 assert(packageJson.devDependencies === undefined, "Financial core must remain dependency-free");
+assert(
+  packageJson.scripts?.["verify:migrations"] ===
+    "node scripts/verify-postgres-migration-source-catalog.mjs",
+  "Financial core must verify the exact migration source catalog"
+);
+assert(
+  packageJson.scripts?.verify?.includes("npm run verify:migrations"),
+  "Financial core verification must include migration source hashes"
+);
 
 const chart = readJson("chart-of-accounts.json");
 validateChart(chart);
@@ -574,6 +583,30 @@ for (const [fixture, evidence] of [
     "tests/postgres-migration-history.sh",
     "postgres-migration-history-negative-ok"
   ],
+  [
+    "scripts/verify-postgres-migration-source-catalog.mjs",
+    "PostgreSQL migration source files differ from canonical manifest"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-catalog.mjs",
+    "PostgreSQL migration source digest differs for"
+  ],
+  [
+    "scripts/verify-postgres-migration-source-catalog.mjs",
+    "0011_ledger_migration_sequence_guard.sql"
+  ],
+  [
+    "tests/postgres-migration-source-catalog.sh",
+    "unreviewed source drift"
+  ],
+  [
+    "tests/postgres-migration-source-catalog.sh",
+    "9999_unreviewed_migration.sql"
+  ],
+  [
+    "tests/postgres-migration-source-catalog.sh",
+    "postgres-migration-source-catalog-negative-ok"
+  ],
   ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
   ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
   ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
@@ -763,6 +796,7 @@ for (const required of [
   "Security approver:",
   "synthetic logical backup/restore",
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
+  "SHA-256 migration source catalog",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {
@@ -787,6 +821,7 @@ for (const required of [
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
+  "tests/postgres-migration-source-catalog.sh",
   "tests/postgres-migration-history.sh",
   "tests/postgres-constraint-catalog.sh",
   "tests/postgres-relation-catalog.sh",

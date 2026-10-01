@@ -24,7 +24,7 @@
 | Legal entity | Journal и все accounts/entries находятся внутри одной legal entity | Runtime validation и composite foreign keys |
 | Precision | Суммы используют canonical decimal strings / PostgreSQL `NUMERIC`, scale 0–18 и limit 78 whole-plus-fraction digits с учётом сохранённых fractional zeros | JS boundary tests, SQL boundary/rejection fixtures и migration `0003` |
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
-| Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal; все сохранённые timestamps конечны; migration history точно совпадает с reviewed manifest, а новые records принимаются только последовательно | Posting command, migrations и smoke/timeline/finiteness/migration-history rejection tests |
+| Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal; все сохранённые timestamps конечны; migration history точно совпадает с reviewed manifest, новые records принимаются только последовательно, а SQL sources закреплены exact SHA-256 catalog | Posting command, migrations и smoke/timeline/finiteness/migration-source/history rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
 | Dev recoverability | Synthetic backup сохраняет только committed state и не переносит unrelated schemas; restore сохраняет unrelated target state и exact ledger/views/policy, отклоняет occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, scope isolation, consistency/collision/continuity/chained recovery и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
@@ -76,6 +76,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 18. все 13 PostgreSQL timestamp constraints отклоняют `infinity` и `-infinity`, включая replica mode.
 19. установленная PostgreSQL migration history точно соответствует migrations `0001`–`0011` и порядку их применения; synthetic extra record и out-of-order application отклоняются verifier.
 20. новые migration records отклоняются до записи при пропуске версии, несовпадении numeric prefix или stale `applied_at`, включая replica mode.
+21. SHA-256 migration source catalog отклоняет изменённый historical SQL, отсутствующий migration и лишний unreviewed migration до применения к базе.
 
 ## Approval effect
 
