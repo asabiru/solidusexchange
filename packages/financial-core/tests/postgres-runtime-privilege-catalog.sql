@@ -5,9 +5,18 @@ SELECT 1 / 0;
 \endif
 
 WITH runtime_role AS (
-  SELECT role.oid
-    FROM pg_catalog.pg_roles AS role
-   WHERE role.rolname = :'ledger_runtime_role'
+  SELECT
+    role.oid,
+    role.rolsuper,
+    role.rolinherit,
+    role.rolcreaterole,
+    role.rolcreatedb,
+    role.rolcanlogin,
+    role.rolreplication,
+    role.rolbypassrls,
+    role.rolconfig
+  FROM pg_catalog.pg_roles AS role
+  WHERE role.rolname = :'ledger_runtime_role'
 ),
 runtime_memberships AS (
   SELECT
@@ -173,9 +182,69 @@ default_privileges AS (
     ON grantees.oid = acl.grantee
   WHERE default_acl.defaclnamespace = 0
      OR namespace.nspname = 'financial_core'
+),
+runtime_ownership AS (
+  SELECT
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_database AS database
+      JOIN runtime_role
+        ON runtime_role.oid = database.datdba
+      WHERE database.datname = current_database()
+    ) AS database,
+    EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_namespace AS namespace
+      JOIN runtime_role
+        ON runtime_role.oid = namespace.nspowner
+      WHERE namespace.nspname = 'financial_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_class AS relation
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = relation.relnamespace
+      JOIN runtime_role
+        ON runtime_role.oid = relation.relowner
+      WHERE namespace.nspname = 'financial_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc AS procedure
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = procedure.pronamespace
+      JOIN runtime_role
+        ON runtime_role.oid = procedure.proowner
+      WHERE namespace.nspname = 'financial_core'
+    ) OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_type AS type
+      JOIN pg_catalog.pg_namespace AS namespace
+        ON namespace.oid = type.typnamespace
+      JOIN runtime_role
+        ON runtime_role.oid = type.typowner
+      WHERE namespace.nspname = 'financial_core'
+    ) AS financial_objects
 )
 SELECT jsonb_build_object(
-  'runtime_role_exists', EXISTS (SELECT 1 FROM runtime_role),
+  'runtime_role', COALESCE(
+    (
+      SELECT jsonb_build_object(
+        'exists', TRUE,
+        'superuser', runtime_role.rolsuper,
+        'inherit', runtime_role.rolinherit,
+        'create_role', runtime_role.rolcreaterole,
+        'create_database', runtime_role.rolcreatedb,
+        'can_login', runtime_role.rolcanlogin,
+        'replication', runtime_role.rolreplication,
+        'bypass_row_security', runtime_role.rolbypassrls,
+        'configuration', COALESCE(to_jsonb(runtime_role.rolconfig), '[]'::JSONB),
+        'owns_database', runtime_ownership.database,
+        'owns_financial_objects', runtime_ownership.financial_objects
+      )
+      FROM runtime_role
+      CROSS JOIN runtime_ownership
+    ),
+    jsonb_build_object('exists', FALSE)
+  ),
   'memberships', COALESCE(
     (
       SELECT jsonb_agg(

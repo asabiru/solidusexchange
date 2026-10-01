@@ -22,12 +22,14 @@ BEGIN
     SELECT 1
       FROM pg_catalog.pg_roles
      WHERE rolname = runtime_role
+       AND rolcanlogin = FALSE
        AND rolsuper = FALSE
        AND rolcreatedb = FALSE
        AND rolcreaterole = FALSE
        AND rolinherit = FALSE
        AND rolreplication = FALSE
        AND rolbypassrls = FALSE
+       AND rolconfig IS NULL
   ) THEN
     RAISE EXCEPTION 'runtime writer must be an existing unprivileged role';
   END IF;

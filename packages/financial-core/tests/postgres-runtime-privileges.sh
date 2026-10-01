@@ -82,7 +82,7 @@ assert_runtime_catalog_rejected() {
     exit 1
   fi
   grep -F \
-    "PostgreSQL runtime writer privileges differ from the reviewed least-privilege profile" \
+    "PostgreSQL runtime role or privileges differ from the reviewed least-privilege profile" \
     <<<"$output"
 }
 
@@ -121,6 +121,12 @@ assert_runtime_catalog_rejected \
    GRANT INSERT ON TABLE financial_core.schema_migrations
      TO financial_core_runtime_parent_test;
    GRANT financial_core_runtime_parent_test TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role LOGIN;"
+assert_runtime_catalog_rejected \
+  "ALTER ROLE $runtime_role SET search_path = public;"
+assert_runtime_catalog_rejected \
+  "ALTER SCHEMA financial_core OWNER TO $runtime_role;"
 
 verify_runtime_catalog
 echo "postgres-runtime-privilege-catalog-negative-ok"

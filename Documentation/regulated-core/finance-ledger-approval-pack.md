@@ -79,7 +79,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 21. SHA-256 migration source catalog отклоняет изменённый historical SQL, отсутствующий migration и лишний unreviewed migration до применения к базе.
 22. каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary, sequential filename и ровно одну history row, совпадающую с filename/version.
 23. psql meta-commands и дополнительные transaction-control statements запрещены, чтобы migration не мог подключить unreviewed source или выйти из atomic boundary.
-24. runtime writer test profile точно совпадает с reviewed least-privilege catalog: parent-role membership, лишние grants на migration history, unreviewed relations, columns, functions, grant option или `PUBLIC` writes отклоняются verifier, а прямой forged migration-history insert получает permission denied. Это synthetic evidence, а не runtime writer provisioning.
+24. runtime writer test profile точно совпадает с reviewed least-privilege catalog: role capabilities, settings, ownership, parent-role membership, лишние grants на migration history, unreviewed relations, columns, functions, grant option или `PUBLIC` writes отклоняются verifier, а прямой forged migration-history insert получает permission denied. Это synthetic evidence, а не runtime writer provisioning.
 25. failed migration полностью откатывает schema objects и history row; после injected failure canonical migration применяется чисто без ручной очистки.
 26. restored и second-generation databases обязаны пройти exact migration-history verifier; synthetic unreviewed history drift отклоняется и полностью откатывается.
 
