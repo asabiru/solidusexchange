@@ -99,6 +99,7 @@ for (const required of [
   "custody projection identity conflict",
   "custody projection outbox is append-only",
   "ENABLE ALWAYS TRIGGER",
+  "SECURITY DEFINER",
   "production_signing_enabled"
 ]) {
   assert(migration.includes(required), `Custody migration is missing evidence: ${required}`);
@@ -116,6 +117,30 @@ for (const required of [
   "replica-mode custody outbox update was accepted"
 ]) {
   assert(postgresTests.includes(required), `Custody PostgreSQL tests are missing evidence: ${required}`);
+}
+
+const runtimeGrants = read("packages/custody-core/tests/runtime-writer-grants.sql");
+for (const required of [
+  "custody runtime writer must not be the migration owner",
+  "custody runtime writer must be an existing unprivileged role",
+  "custody runtime writer must not inherit or assume another role",
+  "custody runtime writer must not own custody_core objects",
+  "GRANT EXECUTE ON FUNCTION custody_core.record_custody_projection(jsonb, text)",
+  "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA custody_core"
+]) {
+  assert(runtimeGrants.includes(required), `Custody runtime grants are missing evidence: ${required}`);
+}
+
+const runtimeTests = read("packages/custody-core/tests/postgres-runtime-privileges.sh");
+for (const required of [
+  "custody-runtime-privilege-shape-ok",
+  "direct custody outbox select",
+  "direct custody outbox insert",
+  "custody schema object creation",
+  "custody trigger disable",
+  "custody-postgres-runtime-privileges-ok"
+]) {
+  assert(runtimeTests.includes(required), `Custody runtime tests are missing evidence: ${required}`);
 }
 
 const adr = read("Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md");
