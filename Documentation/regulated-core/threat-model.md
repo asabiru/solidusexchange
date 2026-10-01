@@ -183,6 +183,7 @@ Synthetic tests, green CI and a successful dev restore do not satisfy these cond
 | Incident readiness | incident response baseline |
 | Release control | release authorization baseline |
 | Audit accountability | audit evidence baseline |
+| Data lifecycle | data lifecycle baseline and data classification register |
 | Decisions and approvals | decision register and Phase 0 evidence index |
 
 ## Review rule

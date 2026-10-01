@@ -26,6 +26,7 @@
 | [Incident response](incident-response.md) | Severity, human authority, evidence preservation, recovery and notification dependencies |
 | [Release authorization](release-authorization.md) | Immutable artifacts, evidence bundles, human approvals, enablement and rollback gates |
 | [Audit evidence](audit-evidence.md) | Actor, authorization, append-only integrity, access/export, retention and recovery gates |
+| [Data lifecycle](data-lifecycle.md) | Retention policy, legal hold, correction, disposal, processors and recovery gates |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
 | [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 
