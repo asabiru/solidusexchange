@@ -69,6 +69,16 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects anonymous security alternatives",
+  "Security must contain exactly one CustomerBearer requirement",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.security.push({});
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {

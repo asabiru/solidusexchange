@@ -150,13 +150,23 @@ function checkOpenApi() {
         `Read-only operation must not require Idempotency-Key: ${operation.operationId}`
       );
       if (pathName !== "/api/v1/meta") {
-        assert(Array.isArray(operation.security) && operation.security.length > 0, `Missing security: ${operation.operationId}`);
         const expectedScheme = pathName.startsWith("/api/v1/customer/")
           ? "CustomerBearer"
           : "OperatorBearer";
         assert(
-          Object.hasOwn(operation.security[0], expectedScheme),
-          `Wrong security boundary for ${operation.operationId}`
+          Array.isArray(operation.security) && operation.security.length === 1,
+          `Security must contain exactly one ${expectedScheme} requirement: ${operation.operationId}`
+        );
+        const securityRequirement = operation.security[0];
+        sameSet(
+          Object.keys(securityRequirement),
+          [expectedScheme],
+          `Security schemes for ${operation.operationId}`
+        );
+        assert(
+          Array.isArray(securityRequirement[expectedScheme])
+            && securityRequirement[expectedScheme].length === 0,
+          `Bearer security scopes must be empty: ${operation.operationId}`
         );
         assert(
           requestHeaders.has("#/components/parameters/ClientVersion"),
