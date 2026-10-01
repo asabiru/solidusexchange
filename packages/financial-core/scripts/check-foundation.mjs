@@ -620,8 +620,20 @@ for (const [fixture, evidence] of [
     "PostgreSQL migration history row must match its filename"
   ],
   [
+    "scripts/verify-postgres-migration-source-policy.mjs",
+    "PostgreSQL migration must not execute psql meta-commands"
+  ],
+  [
     "tests/postgres-migration-source-policy.sh",
     "0012_ledger_acceptance_seal.sql"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "ROLLBACK;"
+  ],
+  [
+    "tests/postgres-migration-source-policy.sh",
+    "\\\\ir unreviewed.sql"
   ],
   [
     "tests/postgres-migration-source-policy.sh",
@@ -822,6 +834,7 @@ for (const required of [
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
   "SHA-256 migration source catalog",
   "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
+  "psql meta-commands и дополнительные transaction-control statements запрещены",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {

@@ -29,15 +29,26 @@ assert.deepStrictEqual(
 
 for (const { name, migrationName, version } of migrations) {
   const source = readFileSync(join(migrationDirectory, name), "utf8");
-  const transactionBegins = source.match(/^[ \t]*BEGIN;[ \t]*$/gmu) ?? [];
-  const transactionCommits = source.match(/^[ \t]*COMMIT;[ \t]*$/gmu) ?? [];
+  const transactionControls =
+    source.match(
+      /^[ \t]*(?:BEGIN(?:\s+(?:WORK|TRANSACTION)(?:\s+[^;\n]+)?)?|START\s+TRANSACTION(?:\s+[^;\n]+)?|COMMIT(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|COMMIT\s+PREPARED\s+'[^']+'|END\s+(?:WORK|TRANSACTION)(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|ROLLBACK\s+PREPARED\s+'[^']+'|ABORT(?:\s+(?:WORK|TRANSACTION))?|SAVEPOINT\s+[a-z_][a-z0-9_]*|RELEASE(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|PREPARE\s+TRANSACTION\s+'[^']+')[ \t]*;[ \t]*$/gimu
+    ) ?? [];
+  const normalizedTransactionControls = transactionControls.map((statement) =>
+    statement.trim().replace(/\s+/gu, " ").toUpperCase()
+  );
 
   assert(
     source.trimStart().startsWith("BEGIN;") &&
       source.trimEnd().endsWith("COMMIT;") &&
-      transactionBegins.length === 1 &&
-      transactionCommits.length === 1,
+      normalizedTransactionControls.length === 2 &&
+      normalizedTransactionControls[0] === "BEGIN;" &&
+      normalizedTransactionControls[1] === "COMMIT;",
     `PostgreSQL migration must contain exactly one top-level BEGIN and COMMIT transaction boundary: ${name}`
+  );
+  assert.equal(
+    (source.match(/^[ \t]*\\\S+/gmu) ?? []).length,
+    0,
+    `PostgreSQL migration must not execute psql meta-commands: ${name}`
   );
 
   const historyRows = [

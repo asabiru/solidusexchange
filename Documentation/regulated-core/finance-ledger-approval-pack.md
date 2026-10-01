@@ -78,6 +78,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 20. новые migration records отклоняются до записи при пропуске версии, несовпадении numeric prefix или stale `applied_at`, включая replica mode.
 21. SHA-256 migration source catalog отклоняет изменённый historical SQL, отсутствующий migration и лишний unreviewed migration до применения к базе.
 22. каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary, sequential filename и ровно одну history row, совпадающую с filename/version.
+23. psql meta-commands и дополнительные transaction-control statements запрещены, чтобы migration не мог подключить unreviewed source или выйти из atomic boundary.
 
 ## Approval effect
 
