@@ -22,6 +22,7 @@ BEGIN
     SELECT 1
     FROM pg_catalog.pg_roles
     WHERE rolname = runtime_role
+      AND rolcanlogin = false
       AND rolsuper = false
       AND rolcreatedb = false
       AND rolcreaterole = false

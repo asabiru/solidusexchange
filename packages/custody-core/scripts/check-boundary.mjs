@@ -123,6 +123,7 @@ const runtimeGrants = read("packages/custody-core/tests/runtime-writer-grants.sq
 for (const required of [
   "custody runtime writer must not be the migration owner",
   "custody runtime writer must be an existing unprivileged role",
+  "rolcanlogin = false",
   "custody runtime writer must not inherit or assume another role",
   "custody runtime writer must not own custody_core objects",
   "GRANT EXECUTE ON FUNCTION custody_core.record_custody_projection(jsonb, text)",
@@ -140,6 +141,9 @@ for (const required of [
   "GRANT USAGE ON TYPE custody_core.custody_projection_outbox TO $runtime_role",
   "ALTER DEFAULT PRIVILEGES IN SCHEMA custody_core",
   "GRANT SELECT ON TABLE custody_core.schema_migrations TO PUBLIC",
+  "ALTER ROLE $runtime_role LOGIN",
+  "ALTER ROLE $runtime_role SUPERUSER",
+  "GRANT $PGUSER TO $runtime_role",
   "custody-postgres-runtime-privilege-catalog-negative-ok",
   "custody-runtime-privilege-shape-ok",
   "direct custody outbox select",
@@ -159,6 +163,9 @@ const runtimePrivilegeCatalog = read(
 for (const required of [
   "pg_catalog.aclexplode(attribute.attacl)",
   "pg_catalog.pg_default_acl",
+  "pg_catalog.pg_auth_members",
+  "role.rolcanlogin",
+  "'owns_custody_objects'",
   "namespace.nspname = 'custody_core'",
   "grantees.label AS grantee"
 ]) {
@@ -173,7 +180,10 @@ const runtimePrivilegeVerifier = read(
 );
 for (const required of [
   "record_custody_projection(p_event_document jsonb, p_request_digest text)",
-  "PostgreSQL custody runtime writer privileges differ from the reviewed least-privilege profile",
+  "can_login: false",
+  "memberships: []",
+  "owns_custody_objects: false",
+  "PostgreSQL custody runtime role or privileges differ from the reviewed least-privilege profile",
   "custody-postgres-runtime-privilege-catalog-ok"
 ]) {
   assert(
