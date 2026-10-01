@@ -507,6 +507,23 @@ for (const [fixture, evidence] of [
     "ledger_journal_seals_sealed_at_finite"
   ],
   ["tests/postgres-finite-timestamps.sh", "postgres-finite-timestamps-ok"],
+  ["tests/postgres-migration-history.sql", "financial_core.schema_migrations"],
+  [
+    "scripts/verify-postgres-migration-history.mjs",
+    "PostgreSQL migration history differs from canonical manifest"
+  ],
+  [
+    "scripts/verify-postgres-migration-history.mjs",
+    "0010_ledger_finite_timestamp_guard"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "9999_unreviewed_migration"
+  ],
+  [
+    "tests/postgres-migration-history.sh",
+    "postgres-migration-history-negative-ok"
+  ],
   ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
   ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
   ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
@@ -695,6 +712,7 @@ for (const required of [
   "CTO approver:",
   "Security approver:",
   "synthetic logical backup/restore",
+  "migration history точно соответствует migrations `0001`–`0010`",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {
@@ -719,6 +737,7 @@ for (const required of [
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
+  "tests/postgres-migration-history.sh",
   "tests/postgres-constraint-catalog.sh",
   "tests/postgres-relation-catalog.sh",
   "tests/postgres-access-control-catalog.sh",

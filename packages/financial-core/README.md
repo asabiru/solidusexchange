@@ -35,6 +35,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
+| `tests/postgres-migration-history.sh` | Exact installed migration manifest and rejected extra-history evidence |
 | `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
@@ -94,6 +95,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 29. Reapplying a logical backup to an occupied financial-core target must fail atomically without changing its canonical state.
 30. A financial-core logical backup must neither copy unrelated source schemas nor alter unrelated state already present in the restore target.
 31. Every persisted financial-core timestamp must be finite; PostgreSQL positive and negative infinity are rejected even in replica mode.
+32. Installed migration versions and names must exactly match the reviewed canonical manifest; missing, renamed, reordered or extra history fails verification.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -136,6 +138,14 @@ for migration in migrations/*.sql; do
     psql -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 \
     < "$migration"
 done
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-migration-history.sh
 
 PGHOST=127.0.0.1 \
 PGPORT=55432 \
@@ -286,6 +296,8 @@ The replica reference-integrity regression accounts for PostgreSQL suppressing i
 The acceptance-artifact regression proves that journal, entry, idempotency and outbox timestamps cannot diverge from the journal acceptance timestamp in either normal or replica mode. The rejected transactions are synthetic and do not provision runtime or production roles.
 
 The finite-timestamp regression proves all 13 PostgreSQL timestamp constraints reject `infinity` and `-infinity` while replica mode is active. Exact catalog verification makes removal or weakening of any one constraint fail CI.
+
+The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0010` in canonical order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
