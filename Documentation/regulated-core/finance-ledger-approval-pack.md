@@ -26,7 +26,7 @@
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
 | Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal | Posting command, migrations и smoke/rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
-| Dev recoverability | Synthetic backup сохраняет только committed state; restore сохраняет exact ledger/views/policy, отклоняет occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, consistency/collision/continuity/chained recovery и canonical state snapshot; это не production RPO/RTO или D-017 approval |
+| Dev recoverability | Synthetic backup сохраняет только committed state и не переносит unrelated schemas; restore сохраняет unrelated target state и exact ledger/views/policy, отклоняет occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, scope isolation, consistency/collision/continuity/chained recovery и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
 
 ## Ограничение posting rules
@@ -72,6 +72,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 14. после exact restore restored database принимает новый complete journal, корректно обновляет projections/trial balance и не изменяет source database.
 15. active restored database создаёт second-generation backup, который восстанавливает полный post-recovery state и exact database policy.
 16. повторный restore в occupied financial-core target отклоняется атомарно и не изменяет canonical state.
+17. schema-scoped backup не переносит unrelated source schema и не изменяет unrelated state в restore target.
 
 ## Approval effect
 
