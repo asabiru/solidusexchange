@@ -108,4 +108,4 @@ npm ci
 npm test
 ```
 
-The checker verifies local references, namespace/version rules, exact customer/operator security requirements, required headers, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, anonymous-security-alternative, remote-reference, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.
+The checker verifies local references, namespace/version rules, canonical bearer scheme definitions, exact customer/operator security requirements, required headers, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, authentication-scheme, anonymous-security-alternative, remote-reference, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.
