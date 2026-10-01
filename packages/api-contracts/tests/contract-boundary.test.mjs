@@ -113,6 +113,18 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects weakened request ID schemas",
+  "RequestId must use canonical UuidV7 schema",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.RequestId.schema = {
+      type: "string"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects remote references",
   "Remote $ref is prohibited",
   (scratch) => {

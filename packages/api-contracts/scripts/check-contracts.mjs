@@ -217,6 +217,10 @@ function checkOpenApi() {
     assert(parameters[name]?.in === "header", `${name} must remain a header parameter`);
     assert(parameters[name]?.name === headerName, `${name} must use ${headerName}`);
   }
+  assert(
+    parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",
+    "RequestId must use canonical UuidV7 schema"
+  );
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
