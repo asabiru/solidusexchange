@@ -47,6 +47,8 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `tests/runtime-writer-grants.sql` defines the dev-only least-privilege writer contract. A validated unprivileged role receives only schema usage and execution of the fixed-search-path `record_custody_projection` security boundary; it cannot read or mutate the outbox directly, create schema objects or disable triggers.
 
+`tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, always-enabled mutation triggers, function definitions, ownership and access controls. Unexpected DDL, disabled triggers, public access, function-security drift or removed constraints fail closed.
+
 ## Verification
 
 ```bash
@@ -54,6 +56,7 @@ npm ci
 npm run verify
 npm audit --audit-level=moderate
 bash tests/postgres-outbox.sh
+bash tests/postgres-catalog.sh
 bash tests/postgres-runtime-privileges.sh
 ```
 

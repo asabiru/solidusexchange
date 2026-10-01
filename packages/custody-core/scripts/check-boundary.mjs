@@ -143,6 +143,30 @@ for (const required of [
   assert(runtimeTests.includes(required), `Custody runtime tests are missing evidence: ${required}`);
 }
 
+const catalogQuery = read("packages/custody-core/tests/postgres-catalog.sql");
+for (const required of [
+  "definition_sha256",
+  "source_sha256",
+  "security_definer",
+  "default_privileges",
+  "trigger_record.tgenabled"
+]) {
+  assert(catalogQuery.includes(required), `Custody catalog query is missing evidence: ${required}`);
+}
+
+const catalogTests = read("packages/custody-core/tests/postgres-catalog.sh");
+for (const required of [
+  "Custody PostgreSQL catalog drift unexpectedly passed",
+  "DISABLE TRIGGER custody_projection_outbox_append_only",
+  "GRANT SELECT ON custody_core.custody_projection_outbox TO PUBLIC",
+  "SECURITY INVOKER",
+  "RESET search_path",
+  "DROP CONSTRAINT custody_projection_network_testnet",
+  "custody-postgres-catalog-negative-ok"
+]) {
+  assert(catalogTests.includes(required), `Custody catalog tests are missing evidence: ${required}`);
+}
+
 const adr = read("Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md");
 for (const required of [
   "Status: Proposed",
