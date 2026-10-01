@@ -6,7 +6,7 @@ const SHA_REF = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[^@\s]+)*@[0-9a-f]{40}$/i
 const DOCKER_DIGEST = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/i;
 const FLOW_USES_KEY = /^-\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const FLOW_JOB_USES_KEY =
-  /^[A-Za-z_][A-Za-z0-9_-]*:\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
+  /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
