@@ -758,6 +758,20 @@ for (const [fixture, evidence] of [
   ["tests/postgres-backup-restore.sh", "postgres-backup-collision-ok"],
   ["tests/postgres-backup-restore.sh", "postgres-backup-scope-isolation-ok"],
   ["tests/postgres-backup-restore.sh", "postgres-backup-continuity-ok"],
+  ["tests/postgres-backup-restore.sh", "STALE_CHAIN_RESTORE_DATABASE"],
+  [
+    "tests/postgres-backup-restore.sh",
+    "Stale first-generation financial-core restore unexpectedly matched the active recovery state."
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "Stale first-generation financial-core restore differs from its canonical recovery point."
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "Stale financial-core restore regression changed the source state."
+  ],
+  ["tests/postgres-backup-restore.sh", "postgres-backup-stale-chain-negative-ok"],
   ["tests/postgres-backup-restore.sh", "Second-generation restore differs from the active restored state."],
   ["tests/postgres-backup-restore.sh", "postgres-backup-chain-ok"],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_constraint"],

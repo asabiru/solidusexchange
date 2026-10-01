@@ -11,6 +11,7 @@ set -euo pipefail
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
+: "${STALE_CHAIN_RESTORE_DATABASE:=${PGDATABASE}_stale_chain_restore_test}"
 : "${PARTIAL_RESTORE_DATABASE:=${PGDATABASE}_partial_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
@@ -37,6 +38,7 @@ validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
+validate_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 validate_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
@@ -45,10 +47,15 @@ if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$STALE_CHAIN_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
-  [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]]; then
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
@@ -96,6 +103,7 @@ cleanup() {
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
+  drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
   drop_restore_database "$PARTIAL_RESTORE_DATABASE"
   run_psql "$PGDATABASE" \
     -v ON_ERROR_STOP=1 \
@@ -203,6 +211,7 @@ drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
+drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 drop_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 run_psql "$PGDATABASE" \
@@ -615,6 +624,55 @@ continuity_snapshot="$(snapshot "$RESTORE_DATABASE")"
 continuity_digest="$(
   printf '%s' "$continuity_snapshot" | sha256sum | cut -d ' ' -f 1
 )"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$STALE_CHAIN_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$STALE_CHAIN_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$backup_path"
+
+for check in "${catalog_checks[@]}"; do
+  PGDATABASE="$STALE_CHAIN_RESTORE_DATABASE" bash "$check"
+done
+
+verify_migration_history "$STALE_CHAIN_RESTORE_DATABASE"
+
+stale_chain_snapshot="$(snapshot "$STALE_CHAIN_RESTORE_DATABASE")"
+stale_chain_digest="$(
+  printf '%s' "$stale_chain_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$stale_chain_snapshot" == "$continuity_snapshot" ]]; then
+  echo "Stale first-generation financial-core restore unexpectedly matched the active recovery state." >&2
+  exit 1
+fi
+
+if [[ "$stale_chain_snapshot" != "$restored_snapshot" ]]; then
+  echo "Stale first-generation financial-core restore differs from its canonical recovery point." >&2
+  exit 1
+fi
+
+run_psql "$STALE_CHAIN_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT count(*) = 0
+    FROM financial_core.ledger_journals
+    WHERE journal_id = 'bc000000-0000-4000-8000-0000000000b1';
+  " \
+  | grep -Fx "t"
+
+source_after_stale_chain_restore="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_stale_chain_restore" != "$source_snapshot" ]]; then
+  echo "Stale financial-core restore regression changed the source state." >&2
+  exit 1
+fi
+
+printf 'postgres-backup-stale-chain-negative-ok %s\n' "$stale_chain_digest"
 
 run_pg_tool \
   pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DATABASE" \
