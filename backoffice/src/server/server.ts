@@ -97,6 +97,16 @@ function exactOrigin(request: IncomingMessage, config: ServerConfig): string | u
   return origin && config.allowedOrigins.includes(origin) ? origin : undefined;
 }
 
+function exactLoopbackOrigin(request: IncomingMessage, config: ServerConfig): boolean {
+  const origin = exactOrigin(request, config);
+  if (!origin) return false;
+  try {
+    return isLoopback(new URL(origin).host);
+  } catch {
+    return false;
+  }
+}
+
 async function readJson(request: IncomingMessage): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -305,7 +315,7 @@ export function createBackofficeServer(
           !config.allowDevLogin
           || !isLoopback(config.host)
           || !isLoopbackAddress(request.socket.remoteAddress)
-          || !exactOrigin(request, config)
+          || !exactLoopbackOrigin(request, config)
         ) {
           json(response, 404, { error: "not_found" });
           return;

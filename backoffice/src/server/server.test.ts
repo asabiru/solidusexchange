@@ -695,6 +695,56 @@ describe("backoffice BFF", () => {
     });
     assert.equal(response.status, 404);
   });
+
+  it("rejects dev login from a configured non-loopback origin", async () => {
+    const publicOrigin = "https://operators.example.test";
+    const isolated = createBackofficeServer({
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: [publicOrigin],
+      allowDevLogin: true,
+      sessionTtlSeconds: 900,
+      audit: {
+        storage: "memory",
+        retentionDays: 30
+      },
+      stepUp: {
+        provider: "synthetic-dev",
+        challengeTtlSeconds: 300,
+        grantTtlSeconds: 60,
+        maxAttempts: 3
+      },
+      signing: {
+        backend: "ephemeral-dev",
+        rotationSeconds: 900,
+        retainedVerificationKeys: 2
+      }
+    });
+    await new Promise<void>((resolve) => isolated.listen(0, "127.0.0.1", resolve));
+    const address = isolated.address();
+    if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/bff/auth/dev-session`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: publicOrigin
+          },
+          body: JSON.stringify({ role: "compliance-lead" })
+        }
+      );
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+      assert.equal(response.headers.get("set-cookie"), null);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        isolated.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
 });
 
 describe("audit fail-closed boundary", () => {
