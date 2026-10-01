@@ -15,6 +15,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Vendor scorecards | Procurement / domain owner | Bank, issuer, KYC/KYT, HSM, cloud, liquidity | Template drafted; evaluations open |
 | Threat model | Security / Architecture | Abuse cases, trust boundaries, mitigations | Proposed; Security/Architecture approval pending |
 | Incident response baseline | Security / SRE / Legal / MLRO | Severity, roles, evidence, containment, recovery and notification gates | Proposed; domain approvals pending |
+| Release authorization baseline | SRE / Security / CTO | Artifact provenance, approval binding, enablement, rollback and NO-GO gates | Proposed; D-015/D-018 and domain approvals pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist

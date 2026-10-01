@@ -181,6 +181,7 @@ Synthetic tests, green CI and a successful dev restore do not satisfy these cond
 | Data handling | data classification register |
 | Supply chain | workflow policy and pinned CI/deployment actions |
 | Incident readiness | incident response baseline |
+| Release control | release authorization baseline |
 | Decisions and approvals | decision register and Phase 0 evidence index |
 
 ## Review rule

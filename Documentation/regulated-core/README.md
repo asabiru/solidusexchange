@@ -24,6 +24,7 @@
 | [Vendor scorecards](vendor-scorecards.md) | Единые критерии bank/HSM/KYC/KYT/cloud/liquidity/issuer |
 | [Threat model](threat-model.md) | Trust zones, abuse cases, controls, residual requirements и production stop conditions |
 | [Incident response](incident-response.md) | Severity, human authority, evidence preservation, recovery and notification dependencies |
+| [Release authorization](release-authorization.md) | Immutable artifacts, evidence bundles, human approvals, enablement and rollback gates |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
 | [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 
