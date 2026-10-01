@@ -79,6 +79,23 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects protected operations hidden behind path item references",
+  "Path item $ref is prohibited: /api/v1/customer/session",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = structuredClone(
+      openapi.paths["/api/v1/customer/session"].get
+    );
+    operation.security = [];
+    openapi.components.pathItems = { CustomerSession: { get: operation } };
+    openapi.paths["/api/v1/customer/session"] = {
+      $ref: "#/components/pathItems/CustomerSession"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects weakened authentication scheme definitions",
   "CustomerBearer must remain an HTTP security scheme",
   (scratch) => {

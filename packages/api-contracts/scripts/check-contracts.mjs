@@ -182,6 +182,7 @@ function checkOpenApi() {
   ]);
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {
     assert(pathName.startsWith("/api/v1/"), `Unversioned API path: ${pathName}`);
+    assert(!Object.hasOwn(pathItem, "$ref"), `Path item $ref is prohibited: ${pathName}`);
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!methodNames.has(method)) continue;
       assert(method === "get", `Mutation method is prohibited in this slice: ${method.toUpperCase()} ${pathName}`);
