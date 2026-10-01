@@ -95,6 +95,9 @@ const replicaReferenceGuardMigration = read(
 const acceptanceArtifactGuardMigration = read(
   "migrations/0008_ledger_acceptance_artifact_guard.sql"
 );
+const acceptanceTimelineGuardMigration = read(
+  "migrations/0009_ledger_acceptance_timeline_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -103,7 +106,8 @@ const migrations = [
   replicationGuardMigration,
   invariantReplicationGuardMigration,
   replicaReferenceGuardMigration,
-  acceptanceArtifactGuardMigration
+  acceptanceArtifactGuardMigration,
+  acceptanceTimelineGuardMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
@@ -337,6 +341,18 @@ for (const required of [
     `Acceptance artifact guard is missing ${required}`
   );
 }
+for (const required of [
+  "CREATE OR REPLACE FUNCTION financial_core.assert_journal_complete",
+  "target_journal.created_at IS DISTINCT FROM target_journal.accepted_at",
+  "created_at IS DISTINCT FROM target_journal.accepted_at",
+  "creation timestamp does not match acceptance timestamp",
+  "entry timestamp does not match acceptance timestamp"
+]) {
+  assert(
+    acceptanceTimelineGuardMigration.includes(required),
+    `Acceptance timeline guard is missing ${required}`
+  );
+}
 
 for (const [fixture, evidence] of [
   ["tests/postgres-reject-late-entry.sql", "sequence_number"],
@@ -440,6 +456,14 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-acceptance-artifact-integrity.sh",
     "ledger_outbox_events acceptance timestamp does not match journal"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "creation timestamp does not match acceptance timestamp"
+  ],
+  [
+    "tests/postgres-acceptance-artifact-integrity.sh",
+    "entry timestamp does not match acceptance timestamp"
   ],
   [
     "tests/postgres-acceptance-artifact-integrity.sh",

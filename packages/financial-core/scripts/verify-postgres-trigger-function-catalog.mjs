@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 const sourceHashes = [
   [
     "assert_journal_complete",
-    "1d70130dc19cf7d041476ea7698b2c59a13301633a43b0a5d7bc586cb5b626fb"
+    "4e1a98ab0f8c17b5f8766964a6e5dcad8c544c6a42de6cf93ca5189b505d074d"
   ],
   [
     "reject_mutation",
