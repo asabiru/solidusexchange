@@ -22,6 +22,7 @@
 | [Product/risk matrix](product-risk-matrix.md) | V1 hypotheses, exclusions и approval gates |
 | [Data classification](data-classification-register.md) | Классы данных, processors и retention questions |
 | [Vendor scorecards](vendor-scorecards.md) | Единые критерии bank/HSM/KYC/KYT/cloud/liquidity/issuer |
+| [Threat model](threat-model.md) | Trust zones, abuse cases, controls, residual requirements и production stop conditions |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
 | [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 

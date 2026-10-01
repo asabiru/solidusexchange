@@ -13,7 +13,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Product/risk matrix | Product / Compliance / Risk | Countries, assets, limits, customer types, exclusions | Drafted; blocked on D-001/D-010/D-014 |
 | Data processing register | Legal / Privacy / Security | PII classes, locations, processors, retention | Drafted; approvals open |
 | Vendor scorecards | Procurement / domain owner | Bank, issuer, KYC/KYT, HSM, cloud, liquidity | Template drafted; evaluations open |
-| Threat model | Security / Architecture | Abuse cases, trust boundaries, mitigations | Required before executable adapters |
+| Threat model | Security / Architecture | Abuse cases, trust boundaries, mitigations | Proposed; Security/Architecture approval pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
