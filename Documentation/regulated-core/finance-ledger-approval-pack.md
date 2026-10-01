@@ -26,7 +26,7 @@
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
 | Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal; все сохранённые timestamps конечны; migration history точно совпадает с reviewed manifest, новые records принимаются только последовательно, failed migration полностью откатывает schema objects и history row, а SQL sources закреплены exact SHA-256 catalog | Posting command, migrations и smoke/timeline/finiteness/migration-source/history rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
-| Dev recoverability | Synthetic backup сохраняет только committed state и не переносит unrelated schemas; restore сохраняет unrelated target state и exact ledger/views/policy, подтверждает canonical migration history, отклоняет occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, scope isolation, consistency/collision/continuity/chained recovery, restored-history rejection и canonical state snapshot; это не production RPO/RTO или D-017 approval |
+| Dev recoverability | Synthetic backup сохраняет только committed state и не переносит unrelated schemas; restore сохраняет unrelated target state и exact ledger/views/policy, подтверждает canonical migration history, отклоняет structurally valid incomplete recovery и occupied target без изменений, принимает новый journal и создаёт повторно восстанавливаемый backup | `postgres-backup-restore.sh`, scope isolation, consistency/partial-state/collision/continuity/chained recovery, restored-history rejection и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
 
 ## Ограничение posting rules
@@ -82,6 +82,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 24. runtime writer test profile точно совпадает с reviewed least-privilege catalog: role capabilities, settings, ownership, parent-role membership, лишние grants на migration history, unreviewed relations, columns, functions, grant option или `PUBLIC` writes отклоняются verifier, а прямой forged migration-history insert получает permission denied. Это synthetic evidence, а не runtime writer provisioning.
 25. failed migration полностью откатывает schema objects и history row; после injected failure canonical migration применяется чисто без ручной очистки.
 26. restored и second-generation databases обязаны пройти exact migration-history verifier; synthetic unreviewed history drift отклоняется и полностью откатывается.
+27. structurally valid backup без committed outbox data проходит catalog и migration-history проверки, но отклоняется canonical state snapshot как incomplete recovery.
 
 ## Approval effect
 

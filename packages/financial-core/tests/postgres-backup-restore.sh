@@ -11,6 +11,7 @@ set -euo pipefail
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
+: "${PARTIAL_RESTORE_DATABASE:=${PGDATABASE}_partial_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,19 +37,25 @@ validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
+validate_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
-  [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]]; then
+  [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
 
 backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup.XXXXXX.dump")"
 corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-corrupt.XXXXXX.dump")"
+partial_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-partial.XXXXXX.dump")"
 consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.dump")"
 chain_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-chain.XXXXXX.dump")"
 consistency_log="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.log")"
@@ -89,6 +96,7 @@ cleanup() {
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
+  drop_restore_database "$PARTIAL_RESTORE_DATABASE"
   run_psql "$PGDATABASE" \
     -v ON_ERROR_STOP=1 \
     -c "DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;" \
@@ -96,6 +104,7 @@ cleanup() {
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
+    "$partial_backup_path" \
     "$consistency_backup_path" \
     "$chain_backup_path" \
     "$consistency_log"
@@ -180,10 +189,21 @@ wait_for_advisory_lock() {
   return 1
 }
 
+catalog_checks=(
+  tests/postgres-owner-truncate-guard.sh
+  tests/postgres-immutability-catalog.sh
+  tests/postgres-trigger-function-catalog.sh
+  tests/postgres-invariant-trigger-catalog.sh
+  tests/postgres-constraint-catalog.sh
+  tests/postgres-relation-catalog.sh
+  tests/postgres-access-control-catalog.sh
+)
+
 drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
+drop_restore_database "$PARTIAL_RESTORE_DATABASE"
 
 run_psql "$PGDATABASE" \
   -v ON_ERROR_STOP=1 \
@@ -320,6 +340,9 @@ run_pg_tool \
 
 run_pg_tool pg_restore --list <"$backup_path" >/dev/null
 
+source_snapshot="$(snapshot "$PGDATABASE")"
+source_digest="$(printf '%s' "$source_snapshot" | sha256sum | cut -d ' ' -f 1)"
+
 backup_size="$(wc -c <"$backup_path")"
 if (( backup_size < 2 )); then
   echo "Financial-core backup is unexpectedly empty." >&2
@@ -358,6 +381,58 @@ run_psql "$CORRUPT_RESTORE_DATABASE" \
 
 echo "postgres-backup-corruption-ok"
 
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT count(*) > 0 FROM financial_core.ledger_outbox_events;" \
+  | grep -Fx "t"
+
+run_pg_tool \
+  pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+    --format=custom \
+    --schema=financial_core \
+    --exclude-table-data=financial_core.ledger_outbox_events \
+    --no-owner \
+    >"$partial_backup_path"
+
+run_pg_tool pg_restore --list <"$partial_backup_path" >/dev/null
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$PARTIAL_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$PARTIAL_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$partial_backup_path"
+
+for check in "${catalog_checks[@]}"; do
+  PGDATABASE="$PARTIAL_RESTORE_DATABASE" bash "$check"
+done
+verify_migration_history "$PARTIAL_RESTORE_DATABASE"
+
+partial_snapshot="$(snapshot "$PARTIAL_RESTORE_DATABASE")"
+partial_digest="$(printf '%s' "$partial_snapshot" | sha256sum | cut -d ' ' -f 1)"
+
+if [[ "$partial_snapshot" == "$source_snapshot" ]]; then
+  echo "Incomplete financial-core restore unexpectedly matched the source recovery state." >&2
+  exit 1
+fi
+
+run_psql "$PARTIAL_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT count(*) = 0 FROM financial_core.ledger_outbox_events;" \
+  | grep -Fx "t"
+
+source_after_partial_restore="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_partial_restore" != "$source_snapshot" ]]; then
+  echo "Incomplete recovery regression changed the source state." >&2
+  exit 1
+fi
+
+printf 'postgres-backup-partial-restore-negative-ok %s\n' "$partial_digest"
+
 run_pg_tool \
   createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$RESTORE_DATABASE"
 run_psql "$RESTORE_DATABASE" \
@@ -380,16 +455,6 @@ run_pg_tool \
     --no-owner \
     <"$backup_path"
 
-catalog_checks=(
-  tests/postgres-owner-truncate-guard.sh
-  tests/postgres-immutability-catalog.sh
-  tests/postgres-trigger-function-catalog.sh
-  tests/postgres-invariant-trigger-catalog.sh
-  tests/postgres-constraint-catalog.sh
-  tests/postgres-relation-catalog.sh
-  tests/postgres-access-control-catalog.sh
-)
-
 for check in "${catalog_checks[@]}"; do
   PGDATABASE="$RESTORE_DATABASE" bash "$check"
 done
@@ -397,9 +462,7 @@ done
 verify_migration_history "$RESTORE_DATABASE"
 assert_restored_history_drift_rejected "$RESTORE_DATABASE"
 
-source_snapshot="$(snapshot "$PGDATABASE")"
 restored_snapshot="$(snapshot "$RESTORE_DATABASE")"
-source_digest="$(printf '%s' "$source_snapshot" | sha256sum | cut -d ' ' -f 1)"
 restored_digest="$(printf '%s' "$restored_snapshot" | sha256sum | cut -d ' ' -f 1)"
 
 if [[ "$restored_snapshot" != "$source_snapshot" ]]; then

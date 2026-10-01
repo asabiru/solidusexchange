@@ -728,6 +728,18 @@ for (const [fixture, evidence] of [
   ["tests/postgres-backup-restore.sh", "--single-transaction"],
   ["tests/postgres-backup-restore.sh", "to_regnamespace('financial_core') IS NULL"],
   ["tests/postgres-backup-restore.sh", "postgres-backup-corruption-ok"],
+  [
+    "tests/postgres-backup-restore.sh",
+    "--exclude-table-data=financial_core.ledger_outbox_events"
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "Incomplete financial-core restore unexpectedly matched the source recovery state."
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "postgres-backup-partial-restore-negative-ok"
+  ],
   ["tests/postgres-backup-restore.sh", "verify_migration_history"],
   ["tests/postgres-backup-restore.sh", "0012_unreviewed_restore_drift"],
   [
@@ -901,6 +913,7 @@ for (const required of [
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
   "failed migration полностью откатывает schema objects и history row",
   "restored и second-generation databases обязаны пройти exact migration-history verifier",
+  "structurally valid backup без committed outbox data проходит catalog и migration-history проверки, но отклоняется canonical state snapshot",
   "SHA-256 migration source catalog",
   "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
   "psql meta-commands и дополнительные transaction-control statements запрещены",
