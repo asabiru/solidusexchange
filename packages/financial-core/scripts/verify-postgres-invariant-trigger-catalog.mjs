@@ -22,6 +22,11 @@ const immediateTriggers = [
     "ledger_outbox_delivery_attempts",
     "ledger_delivery_attempts_validate_outbox",
     "validate_delivery_attempt_reference"
+  ],
+  [
+    "schema_migrations",
+    "schema_migrations_validate_sequence",
+    "validate_migration_sequence"
   ]
 ];
 

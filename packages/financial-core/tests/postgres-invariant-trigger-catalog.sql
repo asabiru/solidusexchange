@@ -41,6 +41,7 @@ WHERE relation_namespace.nspname = 'financial_core'
     'validate_acceptance_artifact_timestamp',
     'validate_account',
     'validate_delivery_attempt_reference',
-    'validate_entry_amount'
+    'validate_entry_amount',
+    'validate_migration_sequence'
   )
   AND trigger.tgisinternal = FALSE;

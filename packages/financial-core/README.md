@@ -32,10 +32,11 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0008_ledger_acceptance_artifact_guard.sql` | Journal acceptance timestamp binding for idempotency and outbox artifacts |
 | `migrations/0009_ledger_acceptance_timeline_guard.sql` | Journal and entry timestamps bound to the immutable acceptance timeline |
 | `migrations/0010_ledger_finite_timestamp_guard.sql` | Finite-time constraints for every persisted PostgreSQL timestamp |
+| `migrations/0011_ledger_migration_sequence_guard.sql` | Always-enabled sequential migration insert guard |
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
-| `tests/postgres-migration-history.sh` | Exact installed migration manifest, application order and rejected drift evidence |
+| `tests/postgres-migration-history.sh` | Exact migration manifest, chronology, insert guard and rejected drift evidence |
 | `tests/postgres-chart-of-accounts.sh` | Exact JSON-to-PostgreSQL account-definition round-trip |
 | `tests/postgres-posting-rule-registry.sh` | Exact JSON-to-PostgreSQL posting-rule registry comparison |
 | `tests/postgres-concurrency.sh` | Overlapping acceptance and late-entry race regression |
@@ -96,6 +97,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 30. A financial-core logical backup must neither copy unrelated source schemas nor alter unrelated state already present in the restore target.
 31. Every persisted financial-core timestamp must be finite; PostgreSQL positive and negative infinity are rejected even in replica mode.
 32. Installed migration versions and names must exactly match the reviewed canonical manifest and their `applied_at` chronology must follow version order; missing, renamed, out-of-order or extra history fails verification.
+33. New migration-history rows must be the next sequential version, encode that version in `migration_name`, and have a later finite `applied_at`; the guard remains active in replica mode.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -281,13 +283,13 @@ The owner truncation regression exercises every append-only configuration and le
 
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
 
-The trigger-function catalog regression requires an exact match for all seven installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
+The trigger-function catalog regression requires an exact match for all eight installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
 
 The constraint catalog regression requires an exact match for all 96 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
 The relation catalog regression requires an exact match for all 11 logged tables, both security-invoker verification views and all 102 exposed columns. It covers relation persistence, access method, row-security and replica-identity state; view definitions; and column order, types, nullability, defaults, identity/generated flags, collation, storage and compression. It also proves critical journal, entry and outbox `NOT NULL` requirements reject null writes in replica mode.
 
-The access-control catalog regression requires the schema, all 13 relations and all seven trigger functions to retain migration-owner ownership and their exact owner-only ACLs. It also requires all 102 visible columns to have no column-specific grants and no global or financial-core default-ACL overrides for the migration owner. Financial-core migrations intentionally avoid role-level `ALTER DEFAULT PRIVILEGES`, which could affect future objects outside this package; every created object instead revokes `PUBLIC` access in its migration transaction. Transactional negative probes prove that schema, relation, column or function grants to `PUBLIC` change the digest and fail verification without provisioning a runtime or production role.
+The access-control catalog regression requires the schema, all 13 relations and all eight trigger functions to retain migration-owner ownership and their exact owner-only ACLs. It also requires all 102 visible columns to have no column-specific grants and no global or financial-core default-ACL overrides for the migration owner. Financial-core migrations intentionally avoid role-level `ALTER DEFAULT PRIVILEGES`, which could affect future objects outside this package; every created object instead revokes `PUBLIC` access in its migration transaction. Transactional negative probes prove that schema, relation, column or function grants to `PUBLIC` change the digest and fail verification without provisioning a runtime or production role.
 
 The invariant-trigger catalog regression requires all 11 user-defined insert and acceptance triggers to remain `ENABLE ALWAYS` with their exact timing, deferral and function bindings. It then proves invalid account ownership, excessive precision, post-seal entries and incomplete journals are rejected after switching the session to replica mode.
 
@@ -297,7 +299,7 @@ The acceptance-artifact regression proves that journal, entry, idempotency and o
 
 The finite-timestamp regression proves all 13 PostgreSQL timestamp constraints reject `infinity` and `-infinity` while replica mode is active. Exact catalog verification makes removal or weakening of any one constraint fail CI.
 
-The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0010` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed.
+The migration-history regression requires the installed version/name rows to exactly match migrations `0001` through `0011` and their `applied_at` chronology to follow version order. A transactional synthetic extra row must make the verifier fail, after which rollback and a second canonical verification prove the database history remains unchanged. A disposable database applies migrations `0003` and `0002` in reverse order before completing the manifest; the exact names remain present, but chronology verification must fail closed. Migration `0011` additionally rejects skipped versions, mismatched numeric name prefixes and stale application timestamps at insert time, including replica mode.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 

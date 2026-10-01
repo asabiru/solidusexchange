@@ -54,8 +54,8 @@ assert_infinite_timestamp_rejected \
       migration_name,
       applied_at
     ) VALUES (
-      10000,
-      'finite-timestamp-negative-probe',
+      12,
+      '0012_finite_timestamp_probe',
       'infinity'
     );
   "
