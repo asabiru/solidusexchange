@@ -75,6 +75,7 @@ The release record stores references and digests, not secrets. Rebuilding from t
 | Audit | Event-schema compatibility, chain/checkpoint continuity and access/export impact |
 | Data/privacy | Classification, processor, location, retention and migration impact |
 | Security | Threat IDs, abuse-case tests, privilege changes and residual risk |
+| AI | Capability/release identity, data/tool scope, evaluation, human control, monitoring and withdrawal evidence |
 | Operations | Approved operational-resilience service version, monitoring, SLO, impact tolerance, capacity, continuity exercise and incident-response updates |
 | Rollback | Technical rollback and business recovery criteria tested against the candidate |
 
