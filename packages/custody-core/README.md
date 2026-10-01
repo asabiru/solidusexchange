@@ -41,6 +41,8 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `createCustodyIntentPreparedEvent` projects a verified envelope into the canonical additive domain event contract. Aggregate, correlation and idempotency values are derived from the sealed command; causation is derived from a verified canonical `WithdrawalApproved` event, while only the new UUIDv7 event ID and timestamp are supplied by the outbox boundary. The approval event must preserve withdrawal aggregate/correlation, summarize the exact approval evidence digest and occur after the individual approvals. The custody event excludes destination references, individual approvals and all signing material.
 
+`createCustodyProjectionRegistry` provides a synchronous dev-only replay boundary around that projection. An exact canonical replay returns the original immutable event. Reuse of an idempotency key with changed evidence, or reuse of an event, approval event, withdrawal or custody intent identity under another projection, fails closed. This in-memory evidence does not replace a future durable production outbox.
+
 ## Verification
 
 ```bash

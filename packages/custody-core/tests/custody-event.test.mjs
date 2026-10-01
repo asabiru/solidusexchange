@@ -4,7 +4,10 @@ import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { createCustodyIntentPreparedEvent } from "../src/custody-event.mjs";
+import {
+  createCustodyIntentPreparedEvent,
+  createCustodyProjectionRegistry
+} from "../src/custody-event.mjs";
 import {
   computeIntentDigest,
   prepareUnsignedTransactionIntent
@@ -15,7 +18,7 @@ const repositoryRoot = resolve(root, "..", "..");
 const policy = JSON.parse(readFileSync(join(root, "custody-policy.json"), "utf8"));
 const now = new Date("2026-10-01T12:02:00.000Z");
 
-function preparedIntent() {
+function preparedIntent(commandOverrides = {}) {
   const command = {
     amount: "25.000001",
     asset: "USDT",
@@ -28,7 +31,8 @@ function preparedIntent() {
     legal_entity_id: "legal_entity_001",
     network: "TRON_TESTNET",
     policy_version: "custody-dev-v1",
-    withdrawal_id: "withdrawal_001"
+    withdrawal_id: "withdrawal_001",
+    ...commandOverrides
   };
   const intentDigest = computeIntentDigest(command, policy);
   return prepareUnsignedTransactionIntent({
@@ -120,6 +124,142 @@ test("projects an immutable reference-only CustodyIntentPrepared event", () => {
   assert(!Object.hasOwn(event.payload, "approvals"));
   assert(Object.isFrozen(event));
   assert(Object.isFrozen(event.payload));
+});
+
+test("returns the original event for an exact custody projection replay", () => {
+  const registry = createCustodyProjectionRegistry();
+  const intent = preparedIntent();
+  const request = {
+    context: context(),
+    intent,
+    policy,
+    withdrawalApprovedEvent: withdrawalApprovedEvent(intent)
+  };
+  const first = registry.project(request);
+  const replay = registry.project({
+    context: {
+      occurred_at: request.context.occurred_at,
+      event_id: request.context.event_id
+    },
+    intent: {
+      ...request.intent,
+      command: { ...request.intent.command }
+    },
+    policy: { ...request.policy },
+    withdrawalApprovedEvent: {
+      ...request.withdrawalApprovedEvent,
+      actor: { ...request.withdrawalApprovedEvent.actor },
+      payload: { ...request.withdrawalApprovedEvent.payload }
+    }
+  });
+
+  assert.equal(replay, first);
+});
+
+test("rejects conflicting custody projection replays", () => {
+  const registry = createCustodyProjectionRegistry();
+  const intent = preparedIntent();
+  registry.project({
+    context: context(),
+    intent,
+    policy,
+    withdrawalApprovedEvent: withdrawalApprovedEvent(intent)
+  });
+
+  assert.throws(
+    () =>
+      registry.project({
+        context: context({
+          event_id: "018f3f8a-0018-7000-8000-000000000018"
+        }),
+        intent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(intent)
+      }),
+    /idempotency key was reused with different evidence/u
+  );
+});
+
+test("rejects duplicate custody projection identities", () => {
+  const firstIntent = preparedIntent();
+  const firstRequest = {
+    context: context(),
+    intent: firstIntent,
+    policy,
+    withdrawalApprovedEvent: withdrawalApprovedEvent(firstIntent)
+  };
+  const secondIntent = preparedIntent({
+    idempotency_key: "custody_idempotency_002",
+    intent_id: "custody_intent_002"
+  });
+
+  const duplicateEventRegistry = createCustodyProjectionRegistry();
+  duplicateEventRegistry.project(firstRequest);
+  assert.throws(
+    () =>
+      duplicateEventRegistry.project({
+        context: context(),
+        intent: secondIntent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(secondIntent, {
+          event_id: "018f3f8a-0019-7000-8000-000000000019"
+        })
+      }),
+    /event_id has already been projected/u
+  );
+
+  const duplicateApprovalRegistry = createCustodyProjectionRegistry();
+  duplicateApprovalRegistry.project(firstRequest);
+  assert.throws(
+    () =>
+      duplicateApprovalRegistry.project({
+        context: context({
+          event_id: "018f3f8a-0018-7000-8000-000000000018"
+        }),
+        intent: secondIntent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(secondIntent)
+      }),
+    /WithdrawalApproved event has already been projected/u
+  );
+
+  const duplicateWithdrawalRegistry = createCustodyProjectionRegistry();
+  duplicateWithdrawalRegistry.project(firstRequest);
+  assert.throws(
+    () =>
+      duplicateWithdrawalRegistry.project({
+        context: context({
+          event_id: "018f3f8a-0018-7000-8000-000000000018"
+        }),
+        intent: secondIntent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(secondIntent, {
+          event_id: "018f3f8a-0019-7000-8000-000000000019"
+        })
+      }),
+    /withdrawal already has a custody projection/u
+  );
+
+  const duplicateIntentRegistry = createCustodyProjectionRegistry();
+  duplicateIntentRegistry.project(firstRequest);
+  const reusedIntent = preparedIntent({
+    idempotency_key: "custody_idempotency_002",
+    withdrawal_id: "withdrawal_002"
+  });
+  assert.throws(
+    () =>
+      duplicateIntentRegistry.project({
+        context: context({
+          event_id: "018f3f8a-0018-7000-8000-000000000018"
+        }),
+        intent: reusedIntent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(reusedIntent, {
+          event_id: "018f3f8a-0019-7000-8000-000000000019"
+        })
+      }),
+    /custody intent already has a projection/u
+  );
 });
 
 test("matches the canonical API domain event contract", () => {

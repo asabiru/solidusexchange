@@ -34,6 +34,7 @@ for (const required of [
 const eventSource = read("packages/custody-core/src/custody-event.mjs");
 for (const required of [
   "verifyUnsignedTransactionIntent",
+  "createCustodyProjectionRegistry",
   'event_type: "CustodyIntentPrepared"',
   'status: "unsigned_intent_ready"',
   "execution_authority: false",
@@ -67,6 +68,9 @@ for (const required of [
 const eventTests = read("packages/custody-core/tests/custody-event.test.mjs");
 for (const required of [
   "projects an immutable reference-only CustodyIntentPrepared event",
+  "returns the original event for an exact custody projection replay",
+  "rejects conflicting custody projection replays",
+  "rejects duplicate custody projection identities",
   "matches the canonical API domain event contract",
   "rejects tampered intent evidence",
   "rejects invalid or reused event identity",
