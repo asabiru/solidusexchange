@@ -31,6 +31,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `migrations/0007_ledger_replica_reference_guard.sql` | Critical foreign-key references mirrored by always-enabled user triggers |
 | `migrations/0008_ledger_acceptance_artifact_guard.sql` | Journal acceptance timestamp binding for idempotency and outbox artifacts |
 | `migrations/0009_ledger_acceptance_timeline_guard.sql` | Journal and entry timestamps bound to the immutable acceptance timeline |
+| `migrations/0010_ledger_finite_timestamp_guard.sql` | Finite-time constraints for every persisted PostgreSQL timestamp |
 | `tests/command-digest-vector.json` | Canonical command consumed by JavaScript and PostgreSQL digest evidence |
 | `tests/ledger.test.mjs` | Posting, boundary, idempotency and precision tests |
 | `tests/postgres-smoke.sql` | Accepted balanced-journal migration test |
@@ -46,6 +47,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-invariant-trigger-catalog.sh` | Exact invariant-trigger policy and replica-mode rejection evidence |
 | `tests/postgres-replica-reference-integrity.sh` | Replica-mode critical reference-integrity rejection evidence |
 | `tests/postgres-acceptance-artifact-integrity.sh` | Normal and replica-mode rejection of mismatched acceptance timestamps |
+| `tests/postgres-finite-timestamps.sh` | Replica-mode rejection of PostgreSQL positive and negative infinity timestamps |
 | `tests/postgres-state-snapshot.sql` | Canonical financial-core tables and verification-view state snapshot |
 | `tests/postgres-backup-consistency.sql` | Uncommitted balanced journal fixture held open during a logical backup |
 | `tests/postgres-backup-continuity.sql` | Post-restore journal acceptance and read-model continuity fixture |
@@ -91,6 +93,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 28. An active restored database must produce a second-generation logical backup that restores the complete post-recovery state and reviewed database policy exactly.
 29. Reapplying a logical backup to an occupied financial-core target must fail atomically without changing its canonical state.
 30. A financial-core logical backup must neither copy unrelated source schemas nor alter unrelated state already present in the restore target.
+31. Every persisted financial-core timestamp must be finite; PostgreSQL positive and negative infinity are rejected even in replica mode.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 
@@ -108,7 +111,7 @@ The future posting service must use one transaction:
 6. insert the acceptance seal with the command digest and final entry count;
 7. commit after deferred database invariants pass.
 
-The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. An entry statement that overlaps creation of its parent journal waits for the foreign key and fails closed because that statement cannot adopt the concurrently committed parent. Any entry statement started after acceptance sees the seal and is rejected by the append trigger. The migrations grant no runtime writer. The test-only grant profile proves that a non-owner role can accept a complete journal without receiving mutation, truncation, configuration or DDL powers; it is not deployment provisioning and is not applied by migrations. A future environment-specific role may receive an independently reviewed profile only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event. The journal `created_at`, every entry `created_at`, idempotency `first_seen_at`, outbox `created_at` and acceptance seal `sealed_at` must all equal the journal `accepted_at`, so one committed acceptance cannot contain conflicting audit timestamps.
+The posting service, not its caller, stamps `accepted_at`. Migration `0003` refuses to auto-seal pre-existing journals because their original command-to-entry binding cannot be reconstructed safely. An entry statement that overlaps creation of its parent journal waits for the foreign key and fails closed because that statement cannot adopt the concurrently committed parent. Any entry statement started after acceptance sees the seal and is rejected by the append trigger. The migrations grant no runtime writer. The test-only grant profile proves that a non-owner role can accept a complete journal without receiving mutation, truncation, configuration or DDL powers; it is not deployment provisioning and is not applied by migrations. A future environment-specific role may receive an independently reviewed profile only after D-009, threat-model and deployment approvals. Outbox payloads contain only the journal ID and command digest; delivery state is represented by append-only delivery attempts rather than mutation of the event. The journal `created_at`, every entry `created_at`, idempotency `first_seen_at`, outbox `created_at` and acceptance seal `sealed_at` must all equal the journal `accepted_at`, so one committed acceptance cannot contain conflicting audit timestamps. Every timestamp column additionally rejects PostgreSQL `infinity` and `-infinity`, preventing non-finite audit or configuration time from satisfying equality-based controls.
 
 ## Local verification
 
@@ -225,6 +228,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-finite-timestamps.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-posting-rule-registry.sh
 
 PGHOST=127.0.0.1 \
@@ -262,7 +273,7 @@ The immutability catalog regression reads the installed PostgreSQL trigger metad
 
 The trigger-function catalog regression requires an exact match for all seven installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
 
-The constraint catalog regression requires an exact match for all 83 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
+The constraint catalog regression requires an exact match for all 96 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
 The relation catalog regression requires an exact match for all 11 logged tables, both security-invoker verification views and all 102 exposed columns. It covers relation persistence, access method, row-security and replica-identity state; view definitions; and column order, types, nullability, defaults, identity/generated flags, collation, storage and compression. It also proves critical journal, entry and outbox `NOT NULL` requirements reject null writes in replica mode.
 
@@ -273,6 +284,8 @@ The invariant-trigger catalog regression requires all 11 user-defined insert and
 The replica reference-integrity regression accounts for PostgreSQL suppressing internal foreign-key triggers in replica mode. Always-enabled user triggers mirror the critical acceptance references and reject missing account definitions, assets, posting rules, journals, matching ledger accounts and outbox events. This is synthetic database evidence, not approval to configure replication or production roles.
 
 The acceptance-artifact regression proves that journal, entry, idempotency and outbox timestamps cannot diverge from the journal acceptance timestamp in either normal or replica mode. The rejected transactions are synthetic and do not provision runtime or production roles.
+
+The finite-timestamp regression proves all 13 PostgreSQL timestamp constraints reject `infinity` and `-infinity` while replica mode is active. Exact catalog verification makes removal or weakening of any one constraint fail CI.
 
 The posting-rule registry regression exports every policy field from PostgreSQL in deterministic C-collation order and requires deep equality with the flattened canonical JSON registry. A missing, extra or changed SQL rule fails CI rather than silently diverging from the JavaScript boundary.
 
