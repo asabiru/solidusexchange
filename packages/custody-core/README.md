@@ -39,6 +39,8 @@ It returns an immutable envelope with:
 
 Raw destination addresses are replaced by `destination_reference`; exact address ownership remains inside the future custody/signer trust zone. Missing approvals, reused human subjects, stale evidence, command or policy digest drift, mainnet assets and signing-enabled policy fail closed.
 
+`createCustodyIntentPreparedEvent` projects a verified envelope into the canonical additive domain event contract. Aggregate, correlation and idempotency values are derived from the sealed command; only UUIDv7 event/causation IDs and the event timestamp are supplied by the outbox boundary. The event excludes destination references, individual approvals and all signing material.
+
 ## Verification
 
 ```bash

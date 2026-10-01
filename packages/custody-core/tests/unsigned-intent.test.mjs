@@ -17,7 +17,7 @@ function command(overrides = {}) {
   return {
     amount: "25.000001",
     asset: "USDT",
-    correlation_id: "correlation_withdrawal_001",
+    correlation_id: "018f3f8a-4000-7000-8000-000000000004",
     created_at: "2026-10-01T12:00:00.000Z",
     destination_reference: "destination_ref_001",
     expires_at: "2026-10-01T12:05:00.000Z",
@@ -185,6 +185,21 @@ test("rejects mainnet and unapproved asset combinations", () => {
         policy
       }),
     /outside the dev custody allowlist/u
+  );
+});
+
+test("rejects non-UUID correlation identifiers", () => {
+  const custodyCommand = command({ correlation_id: "correlation_withdrawal_001" });
+  const intentDigest = computeIntentDigest(custodyCommand, policy);
+  assert.throws(
+    () =>
+      prepareUnsignedTransactionIntent({
+        approvals: approvals(intentDigest),
+        command: custodyCommand,
+        now,
+        policy
+      }),
+    /correlation_id must be a canonical UUID/u
   );
 });
 
