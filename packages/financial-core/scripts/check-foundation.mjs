@@ -469,6 +469,16 @@ for (const [fixture, evidence] of [
     "tests/postgres-acceptance-artifact-integrity.sh",
     "postgres-acceptance-artifact-integrity-ok"
   ],
+  ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
+  ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
+  ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
+  ["tests/postgres-state-snapshot.sql", "ledger_trial_balance"],
+  ["tests/postgres-backup-restore.sh", "pg_dump"],
+  ["tests/postgres-backup-restore.sh", "pg_restore"],
+  ["tests/postgres-backup-restore.sh", "*_restore_test"],
+  ["tests/postgres-backup-restore.sh", "tests/postgres-state-snapshot.sql"],
+  ["tests/postgres-backup-restore.sh", "tests/postgres-access-control-catalog.sh"],
+  ["tests/postgres-backup-restore.sh", "postgres-backup-restore-ok"],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_constraint"],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_index"],
   ["tests/postgres-constraint-catalog.sql", "pg_catalog.pg_get_constraintdef"],
@@ -603,6 +613,7 @@ for (const required of [
   "## Explicit exclusions",
   "Runtime boundary: `dev-dry-run`",
   "PostgreSQL remains the proposed target under D-009",
+  "logical backup/restore regression",
   "Finance approval gate",
   "Session D"
 ]) {
@@ -617,6 +628,7 @@ for (const required of [
   "Finance approver:",
   "CTO approver:",
   "Security approver:",
+  "synthetic logical backup/restore",
   "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`",
   "## NO-GO"
 ]) {
@@ -647,6 +659,7 @@ for (const required of [
   "tests/postgres-invariant-trigger-catalog.sh",
   "tests/postgres-replica-reference-integrity.sh",
   "tests/postgres-acceptance-artifact-integrity.sh",
+  "tests/postgres-backup-restore.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
