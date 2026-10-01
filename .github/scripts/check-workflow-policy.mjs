@@ -88,6 +88,13 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       continue;
     }
 
+    if (/^-\s*\{/.test(trimmed)) {
+      errors.push(
+        `${fileName}:${index + 1}: flow-style sequence mappings are not allowed`,
+      );
+      continue;
+    }
+
     const indent = indentation(line);
     const permissionsMatch = line.match(/^(\s*)permissions:\s*(.*?)\s*$/);
     if (permissionsMatch) {

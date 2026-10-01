@@ -39,6 +39,14 @@ test("rejects mutable external action refs", () => {
   assert.match(errors.join("\n"), /full 40-character commit SHA/);
 });
 
+test("rejects flow-style steps that hide mutable external action refs", () => {
+  const errors = validateWorkflowText(
+    workflow("      - { uses: actions/setup-node@v4 }"),
+  );
+
+  assert.match(errors.join("\n"), /flow-style sequence mappings are not allowed/);
+});
+
 test("rejects excessive workflow permissions", () => {
   const errors = validateWorkflowText(
     workflow("      - uses: ./local-action", "permissions:\n  contents: write"),
