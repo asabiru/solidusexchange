@@ -52,7 +52,8 @@ Protected requests use:
 - `Authorization`;
 - `X-Request-Id`;
 - `X-Client-Version`;
-- `X-Platform`.
+- `X-Platform`;
+- `X-Device-Id`, an opaque random UUIDv4 installation identifier that must not encode hardware identifiers, customer PII or provider data.
 
 `Idempotency-Key` is defined as a required reusable component for future commands but is not attached to the current read-only paths.
 
@@ -108,4 +109,4 @@ npm ci
 npm test
 ```
 
-The checker verifies local references, namespace/version rules, canonical bearer scheme definitions, exact customer/operator security requirements, required headers and request ID schema, canonical error responses, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, authentication-scheme, anonymous-security-alternative, request-header-schema, remote-reference, operation-error-envelope, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.
+The checker verifies local references, namespace/version rules, canonical bearer scheme definitions, exact customer/operator security requirements, required headers and canonical request metadata schemas, canonical error responses, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Positive and negative tests prove canonical device metadata is accepted while missing or weakened request device identifiers fail closed alongside the existing financial-command, HTTP method, authentication-scheme, anonymous-security-alternative, request-header-schema, remote-reference, operation-error-envelope, error-envelope, execution-authority and prohibited-field boundaries.

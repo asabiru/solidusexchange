@@ -46,6 +46,13 @@ function assertRejected(name, expected, mutate) {
   });
 }
 
+test("accepts canonical request device metadata", () => {
+  const result = spawnSync(process.execPath, [checker, root], {
+    encoding: "utf8"
+  });
+  assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+});
+
 assertRejected(
   "rejects enabled financial commands",
   "Financial commands must remain disabled",
@@ -130,6 +137,41 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     delete openapi.components.parameters.Platform.schema.enum;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects missing device identifiers on protected requests",
+  "Missing X-Device-Id",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/session"].get.parameters =
+      openapi.paths["/api/v1/customer/session"].get.parameters.filter(
+        (parameter) => parameter.$ref !== "#/components/parameters/DeviceId"
+      );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects weakened request device ID schemas",
+  "DeviceId must use canonical DeviceId schema",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.DeviceId.schema = {
+      type: "string"
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects weakened canonical device ID constraints",
+  "Canonical DeviceId constraints must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DeviceId.pattern = ".*";
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );
