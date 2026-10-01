@@ -47,7 +47,7 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `migrations/0002_custody_migration_history.sql` adds installed migration-history evidence in `custody_core.schema_migrations`. It records the pre-history `0001` baseline and itself, rejects skipped, duplicate, misnamed or non-increasing history rows through an always-enabled sequence guard, and makes history append-only even in replica mode. Version `0001` predates the history table; its row is recorded when `0002` bootstraps history, so its `applied_at` reflects the bootstrap, not the original install.
 
-`tests/postgres-migration-history.sh` compares the installed history with the exact canonical manifest and requires strictly increasing `applied_at` in version order. Unreviewed rows, reordered timestamps, sequence violations, replica-mode bypass and history mutation fail closed.
+`tests/postgres-migration-history.sh` compares the installed history with the exact canonical manifest and requires strictly increasing `applied_at` in version order. Unreviewed rows, reordered timestamps, sequence violations, replica-mode bypass and history mutation fail closed. A disposable database injects a failure after migration `0002` creates its history table, functions, triggers and both canonical history rows; transaction rollback must leave every `0002` object and history effect absent while preserving the `0001` custody outbox, after which the canonical migration must apply cleanly with the exact history and trigger set.
 
 `tests/postgres-migration-source-catalog.sh` pins the exact ordered migration filenames and SHA-256 digests. Changed, missing or unexpected SQL migration sources fail closed before database execution.
 
