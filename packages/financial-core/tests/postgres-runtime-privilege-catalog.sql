@@ -9,6 +9,21 @@ WITH runtime_role AS (
     FROM pg_catalog.pg_roles AS role
    WHERE role.rolname = :'ledger_runtime_role'
 ),
+runtime_memberships AS (
+  SELECT
+    parent_role.rolname::TEXT AS parent_role,
+    grantor_role.rolname::TEXT AS grantor,
+    membership.admin_option,
+    membership.inherit_option,
+    membership.set_option
+  FROM pg_catalog.pg_auth_members AS membership
+  JOIN runtime_role
+    ON runtime_role.oid = membership.member
+  JOIN pg_catalog.pg_roles AS parent_role
+    ON parent_role.oid = membership.roleid
+  JOIN pg_catalog.pg_roles AS grantor_role
+    ON grantor_role.oid = membership.grantor
+),
 grantees (oid, label) AS (
   SELECT runtime_role.oid, 'runtime' FROM runtime_role
   UNION ALL
@@ -161,6 +176,21 @@ default_privileges AS (
 )
 SELECT jsonb_build_object(
   'runtime_role_exists', EXISTS (SELECT 1 FROM runtime_role),
+  'memberships', COALESCE(
+    (
+      SELECT jsonb_agg(
+        to_jsonb(runtime_memberships)
+        ORDER BY
+          runtime_memberships.parent_role COLLATE "C",
+          runtime_memberships.grantor COLLATE "C",
+          runtime_memberships.admin_option,
+          runtime_memberships.inherit_option,
+          runtime_memberships.set_option
+      )
+      FROM runtime_memberships
+    ),
+    '[]'::JSONB
+  ),
   'grants', COALESCE(
     (
       SELECT jsonb_agg(
