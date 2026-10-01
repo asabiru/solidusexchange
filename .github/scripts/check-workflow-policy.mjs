@@ -9,6 +9,7 @@ const FLOW_USES_KEY =
 const FLOW_JOB_USES_KEY =
   /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const BLOCK_USES_KEY = /^\s*(?:-\s*)?(?:uses|"uses"|'uses')\s*:\s*(.+)$/;
+const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
@@ -23,6 +24,24 @@ function scalar(value) {
   }
 
   return withoutComment;
+}
+
+function decodesToUses(value) {
+  const decoded = value.replace(
+    /\\(?:x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8}))/g,
+    (escape, short, long, full) => {
+      const codePoint = Number.parseInt(short ?? long ?? full, 16);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : escape;
+    },
+  );
+
+  return decoded === "uses";
+}
+
+function normalizeUsesKeys(line) {
+  return line.replace(DOUBLE_QUOTED_KEY, (match, value, separator) =>
+    decodesToUses(value) ? `uses${separator}` : match,
+  );
 }
 
 function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
@@ -89,7 +108,8 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    const trimmed = line.trim();
+    const policyLine = normalizeUsesKeys(line);
+    const trimmed = policyLine.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
@@ -171,7 +191,7 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       }
     }
 
-    const usesMatch = line.match(BLOCK_USES_KEY);
+    const usesMatch = policyLine.match(BLOCK_USES_KEY);
     if (!usesMatch) {
       continue;
     }
@@ -197,7 +217,7 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
     }
 
     if (action.toLowerCase().startsWith("actions/checkout@")) {
-      const usesIndent = /^\s*-\s*(?:uses|"uses"|'uses')\s*:/.test(line)
+      const usesIndent = /^\s*-\s*(?:uses|"uses"|'uses')\s*:/.test(policyLine)
         ? indent + 2
         : indent;
       errors.push(...checkoutCredentialErrors(lines, index, usesIndent, fileName));

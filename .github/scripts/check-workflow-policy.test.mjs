@@ -49,6 +49,14 @@ test("rejects block-style steps with quoted uses keys hiding mutable external re
   }
 });
 
+test("rejects double-quoted escaped uses keys hiding mutable external refs", () => {
+  const errors = validateWorkflowText(
+    workflow(String.raw`      - "u\u0073es": actions/setup-node@v4`),
+  );
+
+  assert.match(errors.join("\n"), /full 40-character commit SHA/);
+});
+
 test("rejects flow-style steps that hide mutable external action refs", () => {
   for (const step of [
     "{ uses: actions/setup-node@v4 }",
@@ -194,6 +202,24 @@ jobs:
     'runs-on': ubuntu-latest
     steps:
       - "run": echo policy fixture
+`);
+
+  assert.deepEqual(errors, []);
+});
+
+test("accepts escaped quoted keys unrelated to workflow policy", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - "na\\u006de": Echo
+        run: echo policy fixture
 `);
 
   assert.deepEqual(errors, []);
