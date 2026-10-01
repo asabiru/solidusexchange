@@ -10,6 +10,8 @@ const FLOW_JOB_USES_KEY =
   /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const BLOCK_USES_KEY = /^\s*(?:-\s*)?(?:uses|"uses"|'uses')\s*:\s*(.+)$/;
 const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
+const SINGLE_QUOTED_KEY = /'((?:[^']|'')*)'(\s*:)/g;
+const POLICY_KEYS = new Set(["uses", "permissions", "with", "persist-credentials"]);
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
@@ -37,45 +39,56 @@ function decodeDoubleQuotedKey(value) {
 }
 
 function normalizePolicyKeys(line) {
-  return line.replace(DOUBLE_QUOTED_KEY, (match, value, separator) => {
-    const decoded = decodeDoubleQuotedKey(value);
-    return decoded === "uses" || decoded === "permissions"
-      ? `${decoded}${separator}`
-      : match;
-  });
+  return line
+    .replace(DOUBLE_QUOTED_KEY, (match, value, separator) => {
+      const decoded = decodeDoubleQuotedKey(value);
+      return POLICY_KEYS.has(decoded) ? `${decoded}${separator}` : match;
+    })
+    .replace(SINGLE_QUOTED_KEY, (match, value, separator) => {
+      const decoded = value.replace(/''/g, "'");
+      return POLICY_KEYS.has(decoded) ? `${decoded}${separator}` : match;
+    });
 }
 
 function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
-  const errors = [];
-  let withIndex = -1;
+  const withMappings = [];
 
   for (let index = usesIndex + 1; index < lines.length; index += 1) {
     const line = lines[index];
-    const trimmed = line.trim();
+    const trimmed = normalizePolicyKeys(line).trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
     }
 
     const indent = indentation(line);
-    if (indent < usesIndent || (indent === usesIndent && !trimmed.startsWith("with:"))) {
+    if (indent < usesIndent) {
       break;
     }
 
-    if (indent === usesIndent && trimmed === "with:") {
-      withIndex = index;
-      break;
+    if (indent === usesIndent) {
+      const withMatch = trimmed.match(/^with:\s*(.*)$/);
+      if (withMatch) {
+        withMappings.push({ index, value: scalar(withMatch[1]) });
+      }
     }
   }
 
-  if (withIndex === -1) {
+  if (withMappings.length === 0) {
     return [`${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false`];
   }
 
+  if (withMappings.length !== 1 || withMappings[0].value) {
+    return [
+      `${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false exactly once`,
+    ];
+  }
+
+  const withIndex = withMappings[0].index;
   const values = [];
   for (let index = withIndex + 1; index < lines.length; index += 1) {
     const line = lines[index];
-    const trimmed = line.trim();
+    const trimmed = normalizePolicyKeys(line).trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
       continue;
@@ -91,6 +104,7 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
     }
   }
 
+  const errors = [];
   if (values.length !== 1 || values[0].value !== "false") {
     errors.push(
       `${fileName}:${usesIndex + 1}: actions/checkout must set persist-credentials: false exactly once`,

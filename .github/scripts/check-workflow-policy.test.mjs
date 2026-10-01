@@ -276,3 +276,50 @@ test("rejects checkout credentials unless persistence is explicitly disabled", (
     assert.match(errors.join("\n"), /persist-credentials: false/);
   }
 });
+
+test("accepts quoted and escaped checkout credential keys", () => {
+  for (const step of [
+    `      - uses: actions/checkout@${checkoutSha}
+        'with':
+          'persist-credentials': false`,
+    `      - uses: actions/checkout@${checkoutSha}
+        "with":
+          "persist-credentials": false`,
+    String.raw`      - uses: actions/checkout@${checkoutSha}
+        "w\u0069th":
+          "persist-credentia\u006cs": false`,
+  ]) {
+    assert.deepEqual(validateWorkflowText(workflow(step)), []);
+  }
+});
+
+test("rejects quoted or escaped duplicate with mappings overriding checkout hardening", () => {
+  for (const withKey of ["'with'", '"with"', String.raw`"w\u0069th"`]) {
+    const errors = validateWorkflowText(
+      workflow(`      - uses: actions/checkout@${checkoutSha}
+        with:
+          persist-credentials: false
+        ${withKey}:
+          persist-credentials: true`),
+    );
+
+    assert.match(errors.join("\n"), /persist-credentials: false exactly once/);
+  }
+});
+
+test("rejects quoted or escaped duplicate checkout credential inputs", () => {
+  for (const persistKey of [
+    "'persist-credentials'",
+    '"persist-credentials"',
+    String.raw`"persist-credentia\u006cs"`,
+  ]) {
+    const errors = validateWorkflowText(
+      workflow(`      - uses: actions/checkout@${checkoutSha}
+        with:
+          persist-credentials: false
+          ${persistKey}: true`),
+    );
+
+    assert.match(errors.join("\n"), /persist-credentials: false exactly once/);
+  }
+});
