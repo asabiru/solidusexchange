@@ -69,7 +69,8 @@ for (const required of [
   "projects an immutable reference-only CustodyIntentPrepared event",
   "matches the canonical API domain event contract",
   "rejects tampered intent evidence",
-  "rejects invalid event identity and causation",
+  "rejects invalid or reused event identity",
+  "rejects withdrawal approval continuity drift",
   "rejects events before approvals or after intent expiry",
   "rejects policy drift and signing-enabled policy"
 ]) {
