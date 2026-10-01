@@ -72,6 +72,12 @@ expect_catalog_drift \
   "ALTER TABLE custody_core.custody_projection_outbox DROP CONSTRAINT custody_projection_network_testnet;"
 expect_catalog_drift \
   "CREATE INDEX custody_projection_bypass ON custody_core.custody_projection_outbox (asset);"
+expect_catalog_drift \
+  "ALTER TABLE custody_core.schema_migrations DISABLE TRIGGER schema_migrations_validate_sequence;"
+expect_catalog_drift \
+  "GRANT SELECT ON custody_core.schema_migrations TO PUBLIC;"
+expect_catalog_drift \
+  "ALTER TABLE custody_core.schema_migrations DROP CONSTRAINT schema_migrations_applied_at_finite;"
 
 verify_catalog
 

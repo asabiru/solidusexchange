@@ -77,9 +77,29 @@ psql_command -v ON_ERROR_STOP=1 -Atq -c "
         'custody_core.custody_projection_outbox',
         'DELETE, TRUNCATE, TRIGGER'
       )
+      AND NOT has_any_column_privilege(
+        '$runtime_role',
+        'custody_core.schema_migrations',
+        'SELECT, INSERT, UPDATE, REFERENCES'
+      )
+      AND NOT has_table_privilege(
+        '$runtime_role',
+        'custody_core.schema_migrations',
+        'DELETE, TRUNCATE, TRIGGER'
+      )
       AND has_function_privilege(
         '$runtime_role',
         'custody_core.record_custody_projection(jsonb, text)',
+        'EXECUTE'
+      )
+      AND NOT has_function_privilege(
+        '$runtime_role',
+        'custody_core.validate_migration_sequence()',
+        'EXECUTE'
+      )
+      AND NOT has_function_privilege(
+        '$runtime_role',
+        'custody_core.reject_migration_history_mutation()',
         'EXECUTE'
       )
       AND NOT has_function_privilege(
@@ -177,6 +197,14 @@ expect_denied \
   "direct custody outbox truncate" \
   "permission denied for table custody_projection_outbox" \
   "TRUNCATE custody_core.custody_projection_outbox;"
+expect_denied \
+  "direct custody migration history select" \
+  "permission denied for table schema_migrations" \
+  "SELECT * FROM custody_core.schema_migrations;"
+expect_denied \
+  "direct custody migration history insert" \
+  "permission denied for table schema_migrations" \
+  "INSERT INTO custody_core.schema_migrations (version, migration_name) VALUES (3, '0003_runtime_bypass');"
 expect_denied \
   "custody schema object creation" \
   "permission denied for schema custody_core" \

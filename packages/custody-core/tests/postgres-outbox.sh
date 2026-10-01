@@ -22,7 +22,9 @@ psql_command() {
   fi
 }
 
-psql_command -v ON_ERROR_STOP=1 -f migrations/0001_custody_projection_outbox.sql
+for migration in migrations/[0-9][0-9][0-9][0-9]_*.sql; do
+  psql_command -v ON_ERROR_STOP=1 -f "$migration"
+done
 psql_command -v ON_ERROR_STOP=1 -f tests/postgres-outbox.sql
 
 concurrent_event='{

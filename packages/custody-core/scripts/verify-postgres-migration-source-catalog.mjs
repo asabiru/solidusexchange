@@ -8,6 +8,10 @@ const expectedSources = [
   [
     "0001_custody_projection_outbox.sql",
     "2c0ee1744180763f0d76a0f0282fd2797c826a622164a04b6d6e0a4eab3b1202"
+  ],
+  [
+    "0002_custody_migration_history.sql",
+    "8cec61ccf50fd42ba823398b7f670ce61a0f45ab0ec4e1707d498e7cf929d3c4"
   ]
 ];
 

@@ -138,6 +138,8 @@ for (const required of [
   "direct custody outbox insert",
   "custody schema object creation",
   "custody trigger disable",
+  "direct custody migration history select",
+  "direct custody migration history insert",
   "custody-postgres-runtime-privileges-ok"
 ]) {
   assert(runtimeTests.includes(required), `Custody runtime tests are missing evidence: ${required}`);
@@ -162,6 +164,8 @@ for (const required of [
   "SECURITY INVOKER",
   "RESET search_path",
   "DROP CONSTRAINT custody_projection_network_testnet",
+  "DISABLE TRIGGER schema_migrations_validate_sequence",
+  "GRANT SELECT ON custody_core.schema_migrations TO PUBLIC",
   "custody-postgres-catalog-negative-ok"
 ]) {
   assert(catalogTests.includes(required), `Custody catalog tests are missing evidence: ${required}`);
@@ -173,6 +177,8 @@ const migrationSourceCatalog = read(
 for (const required of [
   "0001_custody_projection_outbox.sql",
   "2c0ee1744180763f0d76a0f0282fd2797c826a622164a04b6d6e0a4eab3b1202",
+  "0002_custody_migration_history.sql",
+  "8cec61ccf50fd42ba823398b7f670ce61a0f45ab0ec4e1707d498e7cf929d3c4",
   "PostgreSQL custody migration source files differ from canonical manifest",
   "PostgreSQL custody migration source digest differs for"
 ]) {
@@ -205,6 +211,10 @@ for (const required of [
   "PostgreSQL custody migration source versions must form a contiguous sequence starting at 0001",
   "PostgreSQL custody migration must contain exactly one top-level BEGIN and COMMIT transaction boundary",
   "PostgreSQL custody migration must not execute psql meta-commands",
+  "const historyBootstrapVersion = 2;",
+  "PostgreSQL custody migration history rows must match canonical source history",
+  "PostgreSQL custody migration must change history only through canonical history rows",
+  "PostgreSQL custody migration history table must be created only by the history bootstrap migration",
   "custody-postgres-migration-source-policy-ok"
 ]) {
   assert(
@@ -221,7 +231,11 @@ for (const required of [
   "ROLLBACK;",
   "\\\\ir unreviewed.sql",
   "1_custody_projection_outbox.sql",
-  "0002_custody_projection_outbox.sql",
+  "0003_custody_migration_history.sql",
+  "PostgreSQL custody migration source policy requires the history bootstrap migration 0002",
+  "PostgreSQL custody migration history rows must match canonical source history",
+  "PostgreSQL custody migration must change history only through canonical history rows",
+  "PostgreSQL custody migration history table must be created only by the history bootstrap migration",
   "custody-postgres-migration-source-policy-negative-ok"
 ]) {
   assert(
@@ -230,10 +244,80 @@ for (const required of [
   );
 }
 
+const historyMigration = read(
+  "packages/custody-core/migrations/0002_custody_migration_history.sql"
+);
+for (const required of [
+  "CREATE TABLE custody_core.schema_migrations",
+  "schema_migrations_applied_at_finite",
+  "custody migration history is append-only",
+  "CREATE TRIGGER schema_migrations_validate_sequence",
+  "ENABLE ALWAYS TRIGGER schema_migrations_validate_sequence",
+  "ENABLE ALWAYS TRIGGER schema_migrations_append_only",
+  "ENABLE ALWAYS TRIGGER schema_migrations_reject_truncate",
+  "VALUES (1, '0001_custody_projection_outbox');",
+  "VALUES (2, '0002_custody_migration_history');"
+]) {
+  assert(
+    historyMigration.includes(required),
+    `Custody migration history migration is missing evidence: ${required}`
+  );
+}
+
+const migrationHistory = read(
+  "packages/custody-core/scripts/verify-postgres-migration-history.mjs"
+);
+for (const required of [
+  '{ migration_name: "0001_custody_projection_outbox", version: 1 }',
+  '{ migration_name: "0002_custody_migration_history", version: 2 }',
+  "PostgreSQL custody migration history differs from canonical manifest",
+  "PostgreSQL custody migrations were not applied in canonical version order",
+  "custody-postgres-migration-history-ok"
+]) {
+  assert(
+    migrationHistory.includes(required),
+    `Custody migration history verifier is missing evidence: ${required}`
+  );
+}
+
+const migrationHistoryQuery = read(
+  "packages/custody-core/tests/postgres-migration-history.sql"
+);
+for (const required of [
+  "custody_core.schema_migrations",
+  "applied_in_version_order"
+]) {
+  assert(
+    migrationHistoryQuery.includes(required),
+    `Custody migration history query is missing evidence: ${required}`
+  );
+}
+
+const migrationHistoryTests = read(
+  "packages/custody-core/tests/postgres-migration-history.sh"
+);
+for (const required of [
+  "9999_unreviewed_migration",
+  "DISABLE TRIGGER schema_migrations_append_only",
+  "custody migration version 4 must follow installed version 2 with version 3",
+  "custody migration name 0004_wrong_version must encode version 3",
+  "custody migration applied_at must be later than installed version 2",
+  "SET session_replication_role = replica;",
+  "custody migration history is append-only",
+  "custody-postgres-migration-sequence-guard-ok",
+  "custody-postgres-migration-history-negative-ok"
+]) {
+  assert(
+    migrationHistoryTests.includes(required),
+    `Custody migration history tests are missing evidence: ${required}`
+  );
+}
+
 const stateSnapshot = read("packages/custody-core/tests/postgres-state-snapshot.sql");
 for (const required of [
-  "custody-core-state-v1",
+  "custody-core-state-v2",
   "custody_projection_outbox",
+  "schema_migrations",
   "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"
 ]) {
   assert(stateSnapshot.includes(required), `Custody state snapshot is missing evidence: ${required}`);
@@ -263,6 +347,7 @@ for (const required of [
   "custody-postgres-backup-corruption-ok",
   "PGDATABASE=\"$RESTORE_DATABASE\"",
   "bash tests/postgres-catalog.sh",
+  "bash tests/postgres-migration-history.sh",
   "Restored custody-core state differs from the source state.",
   "custody-postgres-backup-restore-ok"
 ]) {
@@ -282,5 +367,7 @@ const workflow = read(".github/workflows/custody-core-ci.yml");
 assert(workflow.includes("npm run verify"));
 assert(workflow.includes("npm audit --audit-level=moderate"));
 assert(workflow.includes("bash tests/postgres-migration-source-catalog.sh"));
+assert(workflow.includes("bash tests/postgres-migration-source-policy.sh"));
+assert(workflow.includes("bash tests/postgres-migration-history.sh"));
 
 console.log("custody-boundary-ok");
