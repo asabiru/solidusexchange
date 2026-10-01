@@ -323,6 +323,41 @@ fi
 
 printf 'postgres-backup-restore-ok %s\n' "$restored_digest"
 
+set +e
+restore_collision_output="$(
+  run_pg_tool \
+    pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DATABASE" \
+      --exit-on-error \
+      --single-transaction \
+      --no-owner \
+      <"$backup_path" 2>&1
+)"
+restore_collision_status=$?
+set -e
+
+printf '%s\n' "$restore_collision_output"
+if [[ "$restore_collision_status" -eq 0 ]]; then
+  echo "Backup unexpectedly restored into an occupied financial-core target." >&2
+  exit 1
+fi
+
+collision_snapshot="$(snapshot "$RESTORE_DATABASE")"
+collision_digest="$(
+  printf '%s' "$collision_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$collision_snapshot" != "$restored_snapshot" ]]; then
+  echo "Rejected restore changed the occupied financial-core target." >&2
+  printf \
+    'before=%s\nafter=%s\n' \
+    "$restored_digest" \
+    "$collision_digest" \
+    >&2
+  exit 1
+fi
+
+printf 'postgres-backup-collision-ok %s\n' "$collision_digest"
+
 run_psql "$RESTORE_DATABASE" \
   -v ON_ERROR_STOP=1 \
   -f tests/postgres-backup-continuity.sql
