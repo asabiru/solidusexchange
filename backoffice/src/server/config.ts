@@ -73,7 +73,35 @@ function parseRoleMap(value: string | undefined): Readonly<Record<string, Operat
   return roleMap;
 }
 
-function loadOidcConfig(): OidcConfig | undefined {
+function parseOidcUrl(
+  name: string,
+  value: string,
+  allowLoopbackHttp: boolean
+): URL {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${name} must be an absolute HTTP(S) URL`);
+  }
+  if (
+    !["http:", "https:"].includes(url.protocol)
+    || url.username
+    || url.password
+    || url.hash
+  ) {
+    throw new Error(`${name} must be an absolute HTTP(S) URL without credentials or fragments`);
+  }
+  if (
+    url.protocol !== "https:"
+    && (!allowLoopbackHttp || !isLoopbackHostname(url.hostname))
+  ) {
+    throw new Error(`${name} must use HTTPS except for loopback development`);
+  }
+  return url;
+}
+
+function loadOidcConfig(allowedOrigins: readonly string[]): OidcConfig | undefined {
   const values = {
     issuer: requiredOidcValue("BACKOFFICE_OIDC_ISSUER"),
     authorizationEndpoint: requiredOidcValue("BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT"),
@@ -91,6 +119,48 @@ function loadOidcConfig(): OidcConfig | undefined {
   if (configured.length === 0) return undefined;
   if (configured.length !== 6) {
     throw new Error("OIDC configuration is incomplete");
+  }
+
+  const allowLoopbackHttp = allowedOrigins.every((origin) => {
+    const url = new URL(origin);
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+  });
+  const issuer = parseOidcUrl(
+    "BACKOFFICE_OIDC_ISSUER",
+    values.issuer as string,
+    allowLoopbackHttp
+  );
+  parseOidcUrl(
+    "BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT",
+    values.authorizationEndpoint as string,
+    allowLoopbackHttp
+  );
+  parseOidcUrl(
+    "BACKOFFICE_OIDC_TOKEN_ENDPOINT",
+    values.tokenEndpoint as string,
+    allowLoopbackHttp
+  );
+  parseOidcUrl(
+    "BACKOFFICE_OIDC_JWKS_URI",
+    values.jwksUri as string,
+    allowLoopbackHttp
+  );
+  const redirectUri = parseOidcUrl(
+    "BACKOFFICE_OIDC_REDIRECT_URI",
+    values.redirectUri as string,
+    allowLoopbackHttp
+  );
+  if (issuer.search) {
+    throw new Error("BACKOFFICE_OIDC_ISSUER must not contain a query");
+  }
+  if (
+    !allowedOrigins.includes(redirectUri.origin)
+    || redirectUri.pathname !== "/bff/auth/callback"
+    || redirectUri.search
+  ) {
+    throw new Error(
+      "BACKOFFICE_OIDC_REDIRECT_URI must be the exact /bff/auth/callback URL on an allowed origin"
+    );
   }
 
   return {
@@ -234,6 +304,6 @@ export function loadServerConfig(): ServerConfig {
     audit: loadAuditConfig(),
     stepUp: loadStepUpConfig(),
     signing: loadSigningConfig(),
-    oidc: loadOidcConfig()
+    oidc: loadOidcConfig(allowedOrigins)
   };
 }

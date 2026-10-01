@@ -11,7 +11,16 @@ const configurationEnvironment = [
   "BACKOFFICE_STEP_UP_GRANT_TTL_SECONDS",
   "BACKOFFICE_STEP_UP_MAX_ATTEMPTS",
   "BACKOFFICE_SIGNING_ROTATION_SECONDS",
-  "BACKOFFICE_SIGNING_RETAINED_KEYS"
+  "BACKOFFICE_SIGNING_RETAINED_KEYS",
+  "BACKOFFICE_OIDC_ISSUER",
+  "BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT",
+  "BACKOFFICE_OIDC_TOKEN_ENDPOINT",
+  "BACKOFFICE_OIDC_JWKS_URI",
+  "BACKOFFICE_OIDC_CLIENT_ID",
+  "BACKOFFICE_OIDC_CLIENT_SECRET",
+  "BACKOFFICE_OIDC_REDIRECT_URI",
+  "BACKOFFICE_OIDC_ROLE_CLAIM",
+  "BACKOFFICE_OIDC_ROLE_MAP_JSON"
 ] as const;
 const original = Object.fromEntries(
   configurationEnvironment.map((name) => [name, process.env[name]])
@@ -24,6 +33,20 @@ afterEach(() => {
     else process.env[name] = value;
   }
 });
+
+function configureOidc(baseUrl: string, redirectOrigin: string): void {
+  process.env.BACKOFFICE_OIDC_ISSUER = baseUrl;
+  process.env.BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT = `${baseUrl}/authorize`;
+  process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT = `${baseUrl}/token`;
+  process.env.BACKOFFICE_OIDC_JWKS_URI = `${baseUrl}/jwks`;
+  process.env.BACKOFFICE_OIDC_CLIENT_ID = "solidchange-backoffice";
+  delete process.env.BACKOFFICE_OIDC_CLIENT_SECRET;
+  process.env.BACKOFFICE_OIDC_REDIRECT_URI =
+    `${redirectOrigin}/bff/auth/callback`;
+  delete process.env.BACKOFFICE_OIDC_ROLE_CLAIM;
+  process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON =
+    JSON.stringify({ compliance: "compliance-lead" });
+}
 
 describe("audit configuration", () => {
   it("uses an explicit non-durable development default", () => {
@@ -107,5 +130,72 @@ describe("audit configuration", () => {
       "https://operators.example.test",
       "https://audit.example.test"
     ]);
+  });
+});
+
+describe("OIDC configuration", () => {
+  it("accepts HTTPS identity endpoints on the configured callback boundary", () => {
+    const operatorOrigin = "https://operators.example.test";
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
+    configureOidc("https://identity.example.test", operatorOrigin);
+
+    assert.deepEqual(loadServerConfig().oidc, {
+      issuer: "https://identity.example.test",
+      authorizationEndpoint: "https://identity.example.test/authorize",
+      tokenEndpoint: "https://identity.example.test/token",
+      jwksUri: "https://identity.example.test/jwks",
+      clientId: "solidchange-backoffice",
+      clientSecret: "",
+      redirectUri: `${operatorOrigin}/bff/auth/callback`,
+      roleClaim: "groups",
+      roleMap: { compliance: "compliance-lead" }
+    });
+  });
+
+  it("permits plaintext OIDC only inside a loopback development boundary", () => {
+    const operatorOrigin = "http://127.0.0.1:4173";
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
+    configureOidc("http://localhost:5556", operatorOrigin);
+
+    assert.equal(
+      loadServerConfig().oidc?.tokenEndpoint,
+      "http://localhost:5556/token"
+    );
+
+    process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT =
+      "http://identity.example.test/token";
+    assert.throws(
+      () => loadServerConfig(),
+      /BACKOFFICE_OIDC_TOKEN_ENDPOINT must use HTTPS/
+    );
+
+    const publicOperatorOrigin = "https://operators.example.test";
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = publicOperatorOrigin;
+    configureOidc("https://identity.example.test", publicOperatorOrigin);
+    process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT = "http://localhost:5556/token";
+    assert.throws(
+      () => loadServerConfig(),
+      /BACKOFFICE_OIDC_TOKEN_ENDPOINT must use HTTPS/
+    );
+  });
+
+  it("rejects callbacks outside the configured session origin and path", () => {
+    const operatorOrigin = "https://operators.example.test";
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
+    configureOidc("https://identity.example.test", operatorOrigin);
+
+    process.env.BACKOFFICE_OIDC_REDIRECT_URI =
+      "https://untrusted.example.test/bff/auth/callback";
+    assert.throws(
+      () => loadServerConfig(),
+      /exact \/bff\/auth\/callback URL on an allowed origin/
+    );
+
+    process.env.BACKOFFICE_OIDC_REDIRECT_URI =
+      `${operatorOrigin}/different/callback`;
+    assert.throws(
+      () => loadServerConfig(),
+      /exact \/bff\/auth\/callback URL on an allowed origin/
+    );
   });
 });
