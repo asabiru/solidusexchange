@@ -198,7 +198,8 @@ for (const required of [
   "source_sha256",
   "security_definer",
   "default_privileges",
-  "trigger_record.tgenabled"
+  "trigger_record.tgenabled",
+  "pg_get_triggerdef"
 ]) {
   assert(catalogQuery.includes(required), `Custody catalog query is missing evidence: ${required}`);
 }
@@ -207,6 +208,7 @@ const catalogTests = read("packages/custody-core/tests/postgres-catalog.sh");
 for (const required of [
   "Custody PostgreSQL catalog drift unexpectedly passed",
   "DISABLE TRIGGER custody_projection_outbox_append_only",
+  "WHEN (false)",
   "GRANT SELECT ON custody_core.custody_projection_outbox TO PUBLIC",
   "SECURITY INVOKER",
   "RESET search_path",

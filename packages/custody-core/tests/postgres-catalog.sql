@@ -302,7 +302,16 @@ trigger_rows AS (
       CASE WHEN (trigger_record.tgtype::integer & 32) <> 0 THEN 'TRUNCATE' END
     ], NULL)),
     'function_schema', function_namespace.nspname,
-    'function_name', trigger_function.proname
+    'function_name', trigger_function.proname,
+    'definition_sha256', pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          pg_catalog.pg_get_triggerdef(trigger_record.oid, FALSE),
+          'UTF8'
+        )
+      ),
+      'hex'
+    )
   ) AS value
   FROM pg_catalog.pg_trigger AS trigger_record
   JOIN pg_catalog.pg_class AS relation

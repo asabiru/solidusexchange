@@ -63,6 +63,16 @@ expect_catalog_drift \
 expect_catalog_drift \
   "ALTER TABLE custody_core.custody_projection_outbox DISABLE TRIGGER custody_projection_outbox_append_only;"
 expect_catalog_drift \
+  "DROP TRIGGER custody_projection_outbox_append_only
+     ON custody_core.custody_projection_outbox;
+   CREATE TRIGGER custody_projection_outbox_append_only
+   BEFORE UPDATE OR DELETE ON custody_core.custody_projection_outbox
+   FOR EACH ROW
+   WHEN (false)
+   EXECUTE FUNCTION custody_core.reject_outbox_mutation();
+   ALTER TABLE custody_core.custody_projection_outbox
+     ENABLE ALWAYS TRIGGER custody_projection_outbox_append_only;"
+expect_catalog_drift \
   "GRANT SELECT ON custody_core.custody_projection_outbox TO PUBLIC;"
 expect_catalog_drift \
   "ALTER FUNCTION custody_core.record_custody_projection(jsonb, text) SECURITY INVOKER;"
