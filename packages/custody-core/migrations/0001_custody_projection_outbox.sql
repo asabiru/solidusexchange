@@ -209,6 +209,7 @@ RETURNS TABLE (
   replayed boolean
 )
 LANGUAGE plpgsql
+SECURITY DEFINER
 SET search_path = pg_catalog, custody_core
 AS $$
 DECLARE
