@@ -196,6 +196,13 @@ function checkOpenApi() {
         const resolvedResponse = response.$ref
           ? resolveRef(path, response.$ref).value
           : response;
+        if (pathName !== "/api/v1/meta") {
+          sameSet(
+            Object.keys(resolvedResponse.content ?? {}),
+            ["application/json"],
+            `Error response media types for ${operation.operationId} ${status}`
+          );
+        }
         assert(
           resolvedResponse.content?.["application/json"]?.schema?.$ref
             === "#/components/schemas/Error",
