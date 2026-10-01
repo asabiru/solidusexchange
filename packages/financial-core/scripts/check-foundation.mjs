@@ -704,10 +704,13 @@ for (const [fixture, evidence] of [
     "tests/postgres-migration-source-policy.sh",
     "postgres-migration-source-policy-negative-ok"
   ],
-  ["tests/postgres-state-snapshot.sql", "financial-core-state-v1"],
+  ["tests/postgres-state-snapshot.sql", "financial-core-state-v2"],
   ["tests/postgres-state-snapshot.sql", "jsonb_agg(row_data ORDER BY sort_key COLLATE \"C\")"],
   ["tests/postgres-state-snapshot.sql", "ledger_account_projections"],
   ["tests/postgres-state-snapshot.sql", "ledger_trial_balance"],
+  ["tests/postgres-state-snapshot.sql", "pg_catalog.pg_sequences"],
+  ["tests/postgres-state-snapshot.sql", "pg_catalog.query_to_xml"],
+  ["tests/postgres-state-snapshot.sql", "'SELECT last_value, is_called FROM %I.%I'"],
   ["tests/postgres-backup-consistency.sql", "pg_advisory_lock(390039)"],
   ["tests/postgres-backup-consistency.sql", "backup-consistency-demo-001"],
   ["tests/postgres-backup-consistency.sql", "pg_sleep(10)"],
@@ -740,6 +743,20 @@ for (const [fixture, evidence] of [
     "tests/postgres-backup-restore.sh",
     "postgres-backup-partial-restore-negative-ok"
   ],
+  ["tests/postgres-backup-restore.sh", "SEQUENCE_STATE_RESTORE_DATABASE"],
+  [
+    "tests/postgres-backup-restore.sh",
+    "SEQUENCE SET financial_core backup_sequence_state_probe"
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "Restore without sequence state unexpectedly matched the source recovery state."
+  ],
+  [
+    "tests/postgres-backup-restore.sh",
+    "postgres-backup-sequence-state-negative-ok"
+  ],
+  ["tests/postgres-backup-restore.sh", "postgres-backup-sequence-continuity-ok"],
   ["tests/postgres-backup-restore.sh", "verify_migration_history"],
   ["tests/postgres-backup-restore.sh", "0012_unreviewed_restore_drift"],
   [

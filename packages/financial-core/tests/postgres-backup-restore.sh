@@ -13,10 +13,12 @@ set -euo pipefail
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
 : "${STALE_CHAIN_RESTORE_DATABASE:=${PGDATABASE}_stale_chain_restore_test}"
 : "${PARTIAL_RESTORE_DATABASE:=${PGDATABASE}_partial_restore_test}"
+: "${SEQUENCE_STATE_RESTORE_DATABASE:=${PGDATABASE}_sequence_state_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 scope_test_schema="financial_core_backup_scope_test"
+sequence_probe="financial_core.backup_sequence_state_probe"
 
 validate_restore_database() {
   local database="$1"
@@ -40,6 +42,7 @@ validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
 validate_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 validate_restore_database "$PARTIAL_RESTORE_DATABASE"
+validate_restore_database "$SEQUENCE_STATE_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
@@ -55,7 +58,13 @@ if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
   [[ "$PARTIAL_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
-  [[ "$PARTIAL_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]]; then
+  [[ "$PARTIAL_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$STALE_CHAIN_RESTORE_DATABASE" ]] ||
+  [[ "$SEQUENCE_STATE_RESTORE_DATABASE" == "$PARTIAL_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
@@ -65,6 +74,7 @@ corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-corrupt.XXX
 partial_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-partial.XXXXXX.dump")"
 consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.dump")"
 chain_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-chain.XXXXXX.dump")"
+sequence_state_list="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-sequence-state.XXXXXX.list")"
 consistency_log="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.log")"
 consistency_writer_pid=""
 
@@ -87,6 +97,30 @@ run_psql() {
     psql -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$database" "$@"
 }
 
+restore_without_sequence_state() {
+  if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
+    docker run --rm -i --network host \
+      -e PGPASSWORD="$PGPASSWORD" \
+      -v "$workspace:/workspace:ro" -w /workspace \
+      -v "$sequence_state_list:/sequence-state.list:ro" \
+      "$PSQL_DOCKER_IMAGE" \
+      pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+        -d "$SEQUENCE_STATE_RESTORE_DATABASE" \
+        --exit-on-error \
+        --single-transaction \
+        --no-owner \
+        --use-list=/sequence-state.list
+  else
+    PGPASSWORD="$PGPASSWORD" \
+      pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+        -d "$SEQUENCE_STATE_RESTORE_DATABASE" \
+        --exit-on-error \
+        --single-transaction \
+        --no-owner \
+        --use-list="$sequence_state_list"
+  fi
+}
+
 drop_restore_database() {
   local database="$1"
   run_pg_tool \
@@ -105,9 +139,13 @@ cleanup() {
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
   drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
   drop_restore_database "$PARTIAL_RESTORE_DATABASE"
+  drop_restore_database "$SEQUENCE_STATE_RESTORE_DATABASE"
   run_psql "$PGDATABASE" \
     -v ON_ERROR_STOP=1 \
-    -c "DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;" \
+    -c "
+      DROP SEQUENCE IF EXISTS ${sequence_probe};
+      DROP SCHEMA IF EXISTS ${scope_test_schema} CASCADE;
+    " \
     >/dev/null 2>&1 || true
   rm -f \
     "$backup_path" \
@@ -115,6 +153,7 @@ cleanup() {
     "$partial_backup_path" \
     "$consistency_backup_path" \
     "$chain_backup_path" \
+    "$sequence_state_list" \
     "$consistency_log"
 }
 trap cleanup EXIT
@@ -213,6 +252,7 @@ drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
 drop_restore_database "$STALE_CHAIN_RESTORE_DATABASE"
 drop_restore_database "$PARTIAL_RESTORE_DATABASE"
+drop_restore_database "$SEQUENCE_STATE_RESTORE_DATABASE"
 
 run_psql "$PGDATABASE" \
   -v ON_ERROR_STOP=1 \
@@ -225,6 +265,9 @@ run_psql "$PGDATABASE" \
     );
     INSERT INTO ${scope_test_schema}.sentinel (marker, payload)
     VALUES ('source-only', '{\"scope\":\"source\"}');
+    CREATE SEQUENCE ${sequence_probe} AS BIGINT START WITH 1;
+    SELECT pg_catalog.setval('${sequence_probe}', 41, TRUE);
+    REVOKE ALL ON SEQUENCE ${sequence_probe} FROM PUBLIC;
   "
 
 pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
@@ -351,6 +394,48 @@ run_pg_tool pg_restore --list <"$backup_path" >/dev/null
 
 source_snapshot="$(snapshot "$PGDATABASE")"
 source_digest="$(printf '%s' "$source_snapshot" | sha256sum | cut -d ' ' -f 1)"
+
+run_pg_tool pg_restore --list <"$backup_path" >"$sequence_state_list"
+sequence_set_pattern="SEQUENCE SET financial_core backup_sequence_state_probe"
+if [[ "$(grep -cF "$sequence_set_pattern" "$sequence_state_list")" -ne 1 ]]; then
+  echo "Financial-core backup sequence state entry is missing or ambiguous." >&2
+  exit 1
+fi
+sed -i "/$sequence_set_pattern/s/^/;/" "$sequence_state_list"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    "$SEQUENCE_STATE_RESTORE_DATABASE"
+restore_without_sequence_state <"$backup_path"
+
+for check in "${catalog_checks[@]}"; do
+  PGDATABASE="$SEQUENCE_STATE_RESTORE_DATABASE" bash "$check"
+done
+verify_migration_history "$SEQUENCE_STATE_RESTORE_DATABASE"
+
+sequence_state_snapshot="$(snapshot "$SEQUENCE_STATE_RESTORE_DATABASE")"
+sequence_state_digest="$(
+  printf '%s' "$sequence_state_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$sequence_state_snapshot" == "$source_snapshot" ]]; then
+  echo "Restore without sequence state unexpectedly matched the source recovery state." >&2
+  exit 1
+fi
+
+run_psql "$SEQUENCE_STATE_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT pg_catalog.nextval('${sequence_probe}') = 1;" \
+  | grep -Fx "t"
+
+source_after_sequence_state_restore="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_sequence_state_restore" != "$source_snapshot" ]]; then
+  echo "Sequence-state recovery regression changed the source state." >&2
+  exit 1
+fi
+
+printf 'postgres-backup-sequence-state-negative-ok %s\n' "$sequence_state_digest"
 
 backup_size="$(wc -c <"$backup_path")"
 if (( backup_size < 2 )); then
@@ -535,6 +620,12 @@ printf 'postgres-backup-scope-isolation-ok %s\n' "$scope_digest"
 
 run_psql "$RESTORE_DATABASE" \
   -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT pg_catalog.nextval('${sequence_probe}') = 42;" \
+  | grep -Fx "t"
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
   -f tests/postgres-backup-continuity.sql
 
 run_psql "$RESTORE_DATABASE" \
@@ -713,3 +804,11 @@ if [[ "$chain_snapshot" != "$continuity_snapshot" ]]; then
 fi
 
 printf 'postgres-backup-chain-ok %s\n' "$chain_digest"
+
+run_psql "$CHAIN_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "SELECT pg_catalog.nextval('${sequence_probe}') = 43;" \
+  | grep -Fx "t"
+
+echo "postgres-backup-sequence-continuity-ok"
