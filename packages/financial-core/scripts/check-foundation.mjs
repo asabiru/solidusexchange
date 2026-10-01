@@ -698,6 +698,12 @@ for (const [fixture, evidence] of [
   ["tests/postgres-backup-restore.sh", "--single-transaction"],
   ["tests/postgres-backup-restore.sh", "to_regnamespace('financial_core') IS NULL"],
   ["tests/postgres-backup-restore.sh", "postgres-backup-corruption-ok"],
+  ["tests/postgres-backup-restore.sh", "verify_migration_history"],
+  ["tests/postgres-backup-restore.sh", "0012_unreviewed_restore_drift"],
+  [
+    "tests/postgres-backup-restore.sh",
+    "postgres-backup-migration-history-negative-ok"
+  ],
   ["tests/postgres-backup-restore.sh", "tests/postgres-state-snapshot.sql"],
   ["tests/postgres-backup-restore.sh", "tests/postgres-backup-continuity.sql"],
   ["tests/postgres-backup-restore.sh", "tests/postgres-access-control-catalog.sh"],
@@ -864,6 +870,7 @@ for (const required of [
   "synthetic logical backup/restore",
   "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
   "failed migration полностью откатывает schema objects и history row",
+  "restored и second-generation databases обязаны пройти exact migration-history verifier",
   "SHA-256 migration source catalog",
   "каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary",
   "psql meta-commands и дополнительные transaction-control statements запрещены",
