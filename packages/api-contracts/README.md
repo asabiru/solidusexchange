@@ -24,6 +24,7 @@ The legacy Laravel routes and the dev-only backoffice BFF are not implementation
 | `examples/domain-events.json` | Synthetic, non-PII examples for contract checks |
 | `COMPATIBILITY.md` | API and event evolution, deprecation and review rules |
 | `scripts/check-contracts.mjs` | Dependency-free structural and safety checks |
+| `tests/contract-boundary.test.mjs` | Fail-closed mutation tests for contract safety boundaries |
 
 `openapi.yaml` uses JSON syntax, which is valid YAML 1.2, so CI can parse it without installing a YAML dependency.
 
@@ -107,4 +108,4 @@ npm ci
 npm test
 ```
 
-The checker verifies local references, namespace/version rules, required headers, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names.
+The checker verifies local references, namespace/version rules, required headers, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, remote-reference, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.

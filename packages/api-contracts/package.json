@@ -8,6 +8,6 @@
   },
   "scripts": {
     "check": "node scripts/check-contracts.mjs",
-    "test": "npm run check"
+    "test": "npm run check && node --test tests/*.test.mjs"
   }
 }
