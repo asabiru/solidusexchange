@@ -272,3 +272,40 @@ if [[ "$restored_snapshot" != "$source_snapshot" ]]; then
 fi
 
 printf 'custody-postgres-backup-restore-ok %s\n' "$restored_digest"
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -f tests/postgres-backup-continuity.sql
+
+run_psql "$RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      count(*) = 1
+      AND bool_and(request_digest = repeat('8', 64))
+      AND bool_and(event_document -> 'payload' ->> 'status' = 'unsigned_intent_ready')
+      AND bool_and(event_document -> 'payload' -> 'execution_authority' = 'false'::jsonb)
+      AND bool_and(event_document -> 'payload' -> 'production_signing_enabled' = 'false'::jsonb)
+    FROM custody_core.custody_projection_outbox
+    WHERE event_id = '018f3f8a-0061-7000-8000-000000000061';
+  " \
+  | grep -Fx "t"
+
+source_after_continuity="$(snapshot "$PGDATABASE")"
+if [[ "$source_after_continuity" != "$source_snapshot" ]]; then
+  echo "Restored custody continuity test changed the source state." >&2
+  exit 1
+fi
+
+restored_continuity_snapshot="$(snapshot "$RESTORE_DATABASE")"
+restored_continuity_digest="$(
+  printf '%s' "$restored_continuity_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$restored_continuity_snapshot" == "$restored_snapshot" ]]; then
+  echo "Restored custody state did not advance after a new projection." >&2
+  exit 1
+fi
+
+printf 'custody-postgres-backup-continuity-ok %s\n' "$restored_continuity_digest"
