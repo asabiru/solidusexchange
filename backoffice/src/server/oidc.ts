@@ -128,7 +128,10 @@ function validateClaims(
   if (claims.iss !== config.issuer || !audience.includes(config.clientId)) {
     throw new Error("OIDC issuer or audience mismatch");
   }
-  if (audience.length > 1 && claims.azp !== config.clientId) {
+  if (
+    (audience.length > 1 || claims.azp !== undefined)
+    && claims.azp !== config.clientId
+  ) {
     throw new Error("OIDC authorized party mismatch");
   }
   if (
