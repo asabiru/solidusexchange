@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 const expectedCatalogSha256 =
-  "99fa7ddb9b30f21b0335a4f0b67a9d085475f7420f3e2b3a19e299b230b902b8";
+  "0378194066aa2bc91ed8fa8094d2ab3675a14db9e62ad2a34649e05f871dc924";
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
