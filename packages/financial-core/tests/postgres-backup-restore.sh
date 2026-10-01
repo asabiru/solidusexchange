@@ -10,6 +10,7 @@ set -euo pipefail
 : "${RESTORE_DATABASE:=${PGDATABASE}_restore_test}"
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
+: "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -33,10 +34,14 @@ validate_restore_database() {
 validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
+validate_restore_database "$CHAIN_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
-  [[ "$CONSISTENCY_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]]; then
+  [[ "$CONSISTENCY_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
@@ -44,6 +49,7 @@ fi
 backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup.XXXXXX.dump")"
 corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-corrupt.XXXXXX.dump")"
 consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.dump")"
+chain_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-chain.XXXXXX.dump")"
 consistency_log="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.log")"
 consistency_writer_pid=""
 
@@ -81,10 +87,12 @@ cleanup() {
   drop_restore_database "$RESTORE_DATABASE"
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
+  drop_restore_database "$CHAIN_RESTORE_DATABASE"
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
     "$consistency_backup_path" \
+    "$chain_backup_path" \
     "$consistency_log"
 }
 trap cleanup EXIT
@@ -117,6 +125,7 @@ wait_for_advisory_lock() {
 drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
+drop_restore_database "$CHAIN_RESTORE_DATABASE"
 
 pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
 
@@ -400,3 +409,46 @@ run_psql "$PGDATABASE" \
   | grep -Fx "t"
 
 echo "postgres-backup-continuity-ok"
+
+continuity_snapshot="$(snapshot "$RESTORE_DATABASE")"
+continuity_digest="$(
+  printf '%s' "$continuity_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+run_pg_tool \
+  pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$RESTORE_DATABASE" \
+    --format=custom \
+    --schema=financial_core \
+    --no-owner \
+    >"$chain_backup_path"
+
+run_pg_tool pg_restore --list <"$chain_backup_path" >/dev/null
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$CHAIN_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$CHAIN_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$chain_backup_path"
+
+for check in "${catalog_checks[@]}"; do
+  PGDATABASE="$CHAIN_RESTORE_DATABASE" bash "$check"
+done
+
+chain_snapshot="$(snapshot "$CHAIN_RESTORE_DATABASE")"
+chain_digest="$(printf '%s' "$chain_snapshot" | sha256sum | cut -d ' ' -f 1)"
+
+if [[ "$chain_snapshot" != "$continuity_snapshot" ]]; then
+  echo "Second-generation restore differs from the active restored state." >&2
+  printf \
+    'active_restore=%s\nsecond_restore=%s\n' \
+    "$continuity_digest" \
+    "$chain_digest" \
+    >&2
+  exit 1
+fi
+
+printf 'postgres-backup-chain-ok %s\n' "$chain_digest"
