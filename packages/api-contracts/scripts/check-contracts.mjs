@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(
+  process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), "..")
+);
 
 function fail(message) {
   throw new Error(message);
