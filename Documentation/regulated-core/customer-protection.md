@@ -22,7 +22,9 @@ Related controls are defined by the [product/risk matrix](product-risk-matrix.md
 [third-party risk](third-party-risk.md), [operational-resilience](operational-resilience.md),
 [AI-governance](ai-governance.md), [incident-response](incident-response.md),
 [audit-evidence](audit-evidence.md) and
-[release-authorization](release-authorization.md) baselines.
+[release-authorization](release-authorization.md) baselines. Customer asset
+segregation, entitlement and shortfall controls are defined by the
+[safeguarding](safeguarding.md) baseline.
 
 ## Principles
 

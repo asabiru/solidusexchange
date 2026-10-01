@@ -321,6 +321,36 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects enabled commands in canonical capabilities views",
+  "Canonical CapabilitiesView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CapabilitiesView.properties.commands_enabled.const = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical session views",
+  "Canonical SessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.SessionView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects removed canonical session view required fields",
+  "Canonical SessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.SessionView.required = ["subject"];
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects event execution authority",
   "Events must not grant execution authority",
   (scratch) => {

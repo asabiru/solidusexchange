@@ -23,6 +23,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Operational-resilience baseline | SRE / Security / business-service owners | Impact tolerances, degraded modes, capacity, dependency continuity, RPO/RTO, recovery and exercises | Proposed; D-008/D-015/D-017/D-018, service objectives and exercise approvals pending |
 | AI-governance baseline | MLRO / Security / Legal / domain owners | Capability inventory, human control, data/tool scope, evaluation, release, monitoring and withdrawal | Proposed; D-012 capability tests, provider/data and domain approvals pending |
 | Customer-protection baseline | Product / Legal / Compliance / Customer Operations | Disclosures, quotes, statuses, restrictions, support, complaints, remediation and customer-harm monitoring | Proposed; product scope, customer terms, complaint/remediation policy and domain approvals pending |
+| Safeguarding baseline | Finance / Legal / Compliance / Treasury / Custody | Customer asset segregation, entitlement, provider/custody evidence, reconciliation, shortfall and wind-down controls | Proposed; legal model, provider/custody scope, treasury policy, reconciliation and domain approvals pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
@@ -38,6 +39,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 - [ ] Critical business services, impact tolerances, degraded modes, capacity and continuity exercises are approved.
 - [ ] Every AI capability has approved human authority, data/tool boundaries, evaluation and withdrawal evidence.
 - [ ] Every customer journey has approved terms, price/fee semantics, status evidence, support, complaint and remediation paths.
+- [ ] Every customer asset scope has approved segregation, entitlement, reconciliation, treasury, custody and shortfall evidence.
 - [ ] Legacy schema is reproducible without relying on an unsanitized dump.
 - [ ] Any credential-like seeded fixture is removed or proven non-production and rotated.
 - [ ] Production provider work remains blocked until its vendor gate is complete.
