@@ -10,6 +10,7 @@ set -euo pipefail
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
 : "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 : "${CHAIN_RESTORE_DATABASE:=${PGDATABASE}_chain_restore_test}"
+: "${OCCUPIED_RESTORE_DATABASE:=${PGDATABASE}_occupied_restore_test}"
 : "${PSQL_DOCKER_IMAGE:=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297}"
 
 export PGPASSWORD
@@ -34,13 +35,18 @@ validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
 validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 validate_restore_database "$CHAIN_RESTORE_DATABASE"
+validate_restore_database "$OCCUPIED_RESTORE_DATABASE"
 
 if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CONSISTENCY_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
   [[ "$CHAIN_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
-  [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]]; then
+  [[ "$CHAIN_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]] ||
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$CONSISTENCY_RESTORE_DATABASE" ]] ||
+  [[ "$OCCUPIED_RESTORE_DATABASE" == "$CHAIN_RESTORE_DATABASE" ]]; then
   echo "Disposable restore databases must differ." >&2
   exit 1
 fi
@@ -88,6 +94,7 @@ cleanup() {
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
   drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
   drop_restore_database "$CHAIN_RESTORE_DATABASE"
+  drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
   rm -f \
     "$backup_path" \
     "$corrupt_backup_path" \
@@ -103,6 +110,58 @@ snapshot() {
     -v ON_ERROR_STOP=1 \
     -Atq \
     -f tests/postgres-state-snapshot.sql
+}
+
+occupied_snapshot() {
+  local database="$1"
+  run_psql "$database" \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -c "
+      SELECT jsonb_build_object(
+        'relations',
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'name', relation.relname,
+              'kind', relation.relkind
+            )
+            ORDER BY relation.relname COLLATE \"C\"
+          )
+          FROM pg_catalog.pg_class AS relation
+          JOIN pg_catalog.pg_namespace AS namespace
+            ON namespace.oid = relation.relnamespace
+          WHERE namespace.nspname = 'custody_core'
+            AND relation.relkind IN ('r', 'i')
+        ),
+        'columns',
+        (
+          SELECT jsonb_agg(
+            jsonb_build_object(
+              'relation', relation.relname,
+              'name', attribute.attname,
+              'type', pg_catalog.format_type(attribute.atttypid, attribute.atttypmod),
+              'not_null', attribute.attnotnull
+            )
+            ORDER BY relation.relname COLLATE \"C\", attribute.attnum
+          )
+          FROM pg_catalog.pg_attribute AS attribute
+          JOIN pg_catalog.pg_class AS relation
+            ON relation.oid = attribute.attrelid
+          JOIN pg_catalog.pg_namespace AS namespace
+            ON namespace.oid = relation.relnamespace
+          WHERE namespace.nspname = 'custody_core'
+            AND relation.relkind = 'r'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        'sentinel',
+        (
+          SELECT jsonb_agg(to_jsonb(sentinel) ORDER BY marker COLLATE \"C\")
+          FROM custody_core.restore_sentinel AS sentinel
+        )
+      )::text;
+    "
 }
 
 wait_for_advisory_lock() {
@@ -126,6 +185,7 @@ drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
 drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 drop_restore_database "$CHAIN_RESTORE_DATABASE"
+drop_restore_database "$OCCUPIED_RESTORE_DATABASE"
 
 pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
 
@@ -362,3 +422,73 @@ if [[ "$chain_snapshot" != "$restored_continuity_snapshot" ]]; then
 fi
 
 printf 'custody-postgres-backup-chain-ok %s\n' "$chain_digest"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$OCCUPIED_RESTORE_DATABASE"
+run_psql "$OCCUPIED_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -c "
+    CREATE SCHEMA custody_core;
+    CREATE TABLE custody_core.restore_sentinel (
+      marker text PRIMARY KEY,
+      payload jsonb NOT NULL
+    );
+    INSERT INTO custody_core.restore_sentinel (marker, payload)
+    VALUES ('target-before-restore', '{\"state\":\"preserve\"}');
+  "
+
+occupied_before="$(occupied_snapshot "$OCCUPIED_RESTORE_DATABASE")"
+occupied_before_digest="$(
+  printf '%s' "$occupied_before" | sha256sum | cut -d ' ' -f 1
+)"
+
+set +e
+occupied_restore_output="$(
+  run_pg_tool \
+    pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+      -d "$OCCUPIED_RESTORE_DATABASE" \
+      --exit-on-error \
+      --single-transaction \
+      --no-owner \
+      <"$backup_path" 2>&1
+)"
+occupied_restore_status=$?
+set -e
+
+if [[ "$occupied_restore_status" -eq 0 ]]; then
+  printf '%s\n' "$occupied_restore_output" >&2
+  echo "Custody backup unexpectedly restored into an occupied target." >&2
+  exit 1
+fi
+
+occupied_after="$(occupied_snapshot "$OCCUPIED_RESTORE_DATABASE")"
+occupied_after_digest="$(
+  printf '%s' "$occupied_after" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$occupied_after" != "$occupied_before" ]]; then
+  printf '%s\n' "$occupied_restore_output" >&2
+  echo "Rejected custody restore changed the occupied target." >&2
+  printf \
+    'before=%s\nafter=%s\n' \
+    "$occupied_before_digest" \
+    "$occupied_after_digest" \
+    >&2
+  exit 1
+fi
+
+run_psql "$OCCUPIED_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      to_regclass('custody_core.custody_projection_outbox') IS NULL
+      AND (
+        SELECT payload = '{\"state\":\"preserve\"}'::jsonb
+        FROM custody_core.restore_sentinel
+        WHERE marker = 'target-before-restore'
+      );
+  " \
+  | grep -Fx "t"
+
+printf 'custody-postgres-backup-collision-ok %s\n' "$occupied_after_digest"
