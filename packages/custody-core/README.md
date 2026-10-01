@@ -45,15 +45,19 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `migrations/0001_custody_projection_outbox.sql` adds PostgreSQL evidence for the same contract. The append-only outbox accepts only the exact unsigned testnet event shape, recognizes exact concurrent replays, rejects changed idempotency evidence and enforces unique event, approval-source, withdrawal and custody-intent identities. It is still a dev-only reference migration: production role provisioning, infrastructure and operational authorization are intentionally absent.
 
-`tests/postgres-migration-source-catalog.sh` pins the exact ordered migration filename and SHA-256 digest. Changed, missing or unexpected SQL migration sources fail closed before database execution.
+`migrations/0002_custody_migration_history.sql` adds installed migration-history evidence in `custody_core.schema_migrations`. It records the pre-history `0001` baseline and itself, rejects skipped, duplicate, misnamed or non-increasing history rows through an always-enabled sequence guard, and makes history append-only even in replica mode. Version `0001` predates the history table; its row is recorded when `0002` bootstraps history, so its `applied_at` reflects the bootstrap, not the original install.
 
-`tests/postgres-migration-source-policy.sh` requires canonical contiguous migration versions, exactly one outer `BEGIN`/`COMMIT` transaction and no psql meta-commands. Non-atomic, hidden rollback, non-canonical or skipped-version migration sources fail closed.
+`tests/postgres-migration-history.sh` compares the installed history with the exact canonical manifest and requires strictly increasing `applied_at` in version order. Unreviewed rows, reordered timestamps, sequence violations, replica-mode bypass and history mutation fail closed.
+
+`tests/postgres-migration-source-catalog.sh` pins the exact ordered migration filenames and SHA-256 digests. Changed, missing or unexpected SQL migration sources fail closed before database execution.
+
+`tests/postgres-migration-source-policy.sh` requires canonical contiguous migration versions, exactly one outer `BEGIN`/`COMMIT` transaction, no psql meta-commands and canonical history rows: `0001` records none, the `0002` history bootstrap alone creates the history table and records `0001` and `0002`, and every later migration records exactly its own filename. Non-atomic, hidden rollback, non-canonical, skipped-version, missing-bootstrap, mismatched-history or non-canonical history-write migration sources fail closed.
 
 `tests/runtime-writer-grants.sql` defines the dev-only least-privilege writer contract. A validated unprivileged role receives only schema usage and execution of the fixed-search-path `record_custody_projection` security boundary; it cannot read or mutate the outbox directly, create schema objects or disable triggers.
 
 `tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, always-enabled mutation triggers, function definitions, ownership and access controls. Unexpected DDL, disabled triggers, public access, function-security drift or removed constraints fail closed.
 
-`tests/postgres-backup-restore.sh` proves that a backup taken during an uncommitted custody projection contains the complete pre-transaction state, excludes unrelated source schemas, requires a truncated archive to fail without leaving a partial schema, restores the intact archive atomically into a disposable database without changing unrelated target state, reruns the exact installed-catalog policy and compares a deterministic outbox snapshot with the source. The restored database must then accept and exactly replay a new synthetic projection without changing the source database, and a second-generation backup of that active restore must reproduce the same state and catalog in another disposable database. A restore into a target with pre-existing custody state must fail atomically without changing that state. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
+`tests/postgres-backup-restore.sh` proves that a backup taken during an uncommitted custody projection contains the complete pre-transaction state, excludes unrelated source schemas, requires a truncated archive to fail without leaving a partial schema, restores the intact archive atomically into a disposable database without changing unrelated target state, reruns the exact installed-catalog and migration-history policies and compares a deterministic outbox and migration-history snapshot with the source. The restored database must then accept and exactly replay a new synthetic projection without changing the source database, and a second-generation backup of that active restore must reproduce the same state, catalog and migration history in another disposable database. A restore into a target with pre-existing custody state must fail atomically without changing that state. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
 
 ## Verification
 
@@ -64,6 +68,7 @@ npm audit --audit-level=moderate
 bash tests/postgres-migration-source-catalog.sh
 bash tests/postgres-migration-source-policy.sh
 bash tests/postgres-outbox.sh
+bash tests/postgres-migration-history.sh
 bash tests/postgres-catalog.sh
 bash tests/postgres-backup-restore.sh
 bash tests/postgres-runtime-privileges.sh

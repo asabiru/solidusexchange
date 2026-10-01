@@ -72,10 +72,62 @@ assert_source_policy_rejected \
 mkdir "$scratch/non-contiguous"
 cp -R "$workspace/migrations/." "$scratch/non-contiguous/"
 mv \
-  "$scratch/non-contiguous/0001_custody_projection_outbox.sql" \
-  "$scratch/non-contiguous/0002_custody_projection_outbox.sql"
+  "$scratch/non-contiguous/0002_custody_migration_history.sql" \
+  "$scratch/non-contiguous/0003_custody_migration_history.sql"
 assert_source_policy_rejected \
   "PostgreSQL custody migration source versions must form a contiguous sequence starting at 0001" \
   "$scratch/non-contiguous"
+
+mkdir "$scratch/missing-history-bootstrap"
+cp -R "$workspace/migrations/." "$scratch/missing-history-bootstrap/"
+rm "$scratch/missing-history-bootstrap/0002_custody_migration_history.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration source policy requires the history bootstrap migration 0002" \
+  "$scratch/missing-history-bootstrap"
+
+mkdir "$scratch/wrong-history"
+cp -R "$workspace/migrations/." "$scratch/wrong-history/"
+sed -i \
+  "s/VALUES (2, '0002_custody_migration_history');/VALUES (3, '0002_custody_migration_history');/" \
+  "$scratch/wrong-history/0002_custody_migration_history.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration history rows must match canonical source history: 0002_custody_migration_history.sql" \
+  "$scratch/wrong-history"
+
+mkdir "$scratch/missing-baseline-history"
+cp -R "$workspace/migrations/." "$scratch/missing-baseline-history/"
+sed -i \
+  "/^VALUES (1, '0001_custody_projection_outbox');$/d; /^INSERT INTO custody_core.schema_migrations (version, migration_name)$/{N; /\\nVALUES (2, /!d}" \
+  "$scratch/missing-baseline-history/0002_custody_migration_history.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration history rows must match canonical source history: 0002_custody_migration_history.sql" \
+  "$scratch/missing-baseline-history"
+
+mkdir "$scratch/pre-history-row"
+cp -R "$workspace/migrations/." "$scratch/pre-history-row/"
+sed -i \
+  "/^COMMIT;$/i INSERT INTO custody_core.schema_migrations (version, migration_name)\\nVALUES (1, '0001_custody_projection_outbox');" \
+  "$scratch/pre-history-row/0001_custody_projection_outbox.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration history rows must match canonical source history: 0001_custody_projection_outbox.sql" \
+  "$scratch/pre-history-row"
+
+mkdir "$scratch/history-rewrite"
+cp -R "$workspace/migrations/." "$scratch/history-rewrite/"
+sed -i \
+  "/^COMMIT;$/i UPDATE custody_core.schema_migrations SET applied_at = now();" \
+  "$scratch/history-rewrite/0002_custody_migration_history.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration must change history only through canonical history rows: 0002_custody_migration_history.sql" \
+  "$scratch/history-rewrite"
+
+mkdir "$scratch/duplicate-history-table"
+cp -R "$workspace/migrations/." "$scratch/duplicate-history-table/"
+sed -i \
+  "/^COMMIT;$/i CREATE TABLE IF NOT EXISTS custody_core.schema_migrations (version integer);" \
+  "$scratch/duplicate-history-table/0001_custody_projection_outbox.sql"
+assert_source_policy_rejected \
+  "PostgreSQL custody migration history table must be created only by the history bootstrap migration: 0001_custody_projection_outbox.sql" \
+  "$scratch/duplicate-history-table"
 
 echo "custody-postgres-migration-source-policy-negative-ok"

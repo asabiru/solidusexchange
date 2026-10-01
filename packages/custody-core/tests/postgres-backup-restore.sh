@@ -378,6 +378,14 @@ PGPASSWORD="$PGPASSWORD" \
 PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
   bash tests/postgres-catalog.sh
 
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-migration-history.sh
+
 restored_snapshot="$(snapshot "$RESTORE_DATABASE")"
 restored_digest="$(
   printf '%s' "$restored_snapshot" | sha256sum | cut -d ' ' -f 1
@@ -477,6 +485,14 @@ PGDATABASE="$CHAIN_RESTORE_DATABASE" \
 PGPASSWORD="$PGPASSWORD" \
 PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
   bash tests/postgres-catalog.sh
+
+PGHOST="$PGHOST" \
+PGPORT="$PGPORT" \
+PGUSER="$PGUSER" \
+PGDATABASE="$CHAIN_RESTORE_DATABASE" \
+PGPASSWORD="$PGPASSWORD" \
+PSQL_DOCKER_IMAGE="$PSQL_DOCKER_IMAGE" \
+  bash tests/postgres-migration-history.sh
 
 chain_snapshot="$(snapshot "$CHAIN_RESTORE_DATABASE")"
 chain_digest="$(
