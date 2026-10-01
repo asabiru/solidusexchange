@@ -26,22 +26,23 @@ function scalar(value) {
   return withoutComment;
 }
 
-function decodesToUses(value) {
-  const decoded = value.replace(
+function decodeDoubleQuotedKey(value) {
+  return value.replace(
     /\\(?:x([0-9a-fA-F]{2})|u([0-9a-fA-F]{4})|U([0-9a-fA-F]{8}))/g,
     (escape, short, long, full) => {
       const codePoint = Number.parseInt(short ?? long ?? full, 16);
       return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : escape;
     },
   );
-
-  return decoded === "uses";
 }
 
-function normalizeUsesKeys(line) {
-  return line.replace(DOUBLE_QUOTED_KEY, (match, value, separator) =>
-    decodesToUses(value) ? `uses${separator}` : match,
-  );
+function normalizePolicyKeys(line) {
+  return line.replace(DOUBLE_QUOTED_KEY, (match, value, separator) => {
+    const decoded = decodeDoubleQuotedKey(value);
+    return decoded === "uses" || decoded === "permissions"
+      ? `${decoded}${separator}`
+      : match;
+  });
 }
 
 function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
@@ -108,7 +109,7 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
-    const policyLine = normalizeUsesKeys(line);
+    const policyLine = normalizePolicyKeys(line);
     const trimmed = policyLine.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
@@ -144,7 +145,7 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       continue;
     }
 
-    const permissionsMatch = line.match(/^(\s*)permissions:\s*(.*?)\s*$/);
+    const permissionsMatch = policyLine.match(/^(\s*)permissions:\s*(.*?)\s*$/);
     if (permissionsMatch) {
       if (indent !== 0) {
         errors.push(`${fileName}:${index + 1}: job-level permissions are not allowed`);
