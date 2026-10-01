@@ -9,6 +9,7 @@ set -euo pipefail
 : "${PGPASSWORD:=ledger_test}"
 : "${RESTORE_DATABASE:=${PGDATABASE}_restore_test}"
 : "${CORRUPT_RESTORE_DATABASE:=${PGDATABASE}_corrupt_restore_test}"
+: "${CONSISTENCY_RESTORE_DATABASE:=${PGDATABASE}_consistency_restore_test}"
 
 PSQL_DOCKER_IMAGE="${PSQL_DOCKER_IMAGE:-}"
 workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -31,14 +32,20 @@ validate_restore_database() {
 
 validate_restore_database "$RESTORE_DATABASE"
 validate_restore_database "$CORRUPT_RESTORE_DATABASE"
+validate_restore_database "$CONSISTENCY_RESTORE_DATABASE"
 
-if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]]; then
-  echo "Corrupt and valid restore databases must differ." >&2
+if [[ "$CORRUPT_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$CONSISTENCY_RESTORE_DATABASE" == "$RESTORE_DATABASE" ]] ||
+  [[ "$CONSISTENCY_RESTORE_DATABASE" == "$CORRUPT_RESTORE_DATABASE" ]]; then
+  echo "Disposable restore databases must differ." >&2
   exit 1
 fi
 
 backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup.XXXXXX.dump")"
 corrupt_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-corrupt.XXXXXX.dump")"
+consistency_backup_path="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.dump")"
+consistency_log="$(mktemp "${TMPDIR:-/tmp}/financial-core-backup-consistency.XXXXXX.log")"
+consistency_writer_pid=""
 
 run_pg_tool() {
   if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
@@ -67,9 +74,18 @@ drop_restore_database() {
 }
 
 cleanup() {
+  if [[ -n "$consistency_writer_pid" ]] && kill -0 "$consistency_writer_pid" 2>/dev/null; then
+    kill "$consistency_writer_pid" 2>/dev/null || true
+    wait "$consistency_writer_pid" 2>/dev/null || true
+  fi
   drop_restore_database "$RESTORE_DATABASE"
   drop_restore_database "$CORRUPT_RESTORE_DATABASE"
-  rm -f "$backup_path" "$corrupt_backup_path"
+  drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
+  rm -f \
+    "$backup_path" \
+    "$corrupt_backup_path" \
+    "$consistency_backup_path" \
+    "$consistency_log"
 }
 trap cleanup EXIT
 
@@ -81,8 +97,140 @@ snapshot() {
     -f tests/postgres-state-snapshot.sql
 }
 
+wait_for_advisory_lock() {
+  local lock_key="$1"
+  local attempt
+  local acquired
+
+  for attempt in {1..100}; do
+    acquired="$(run_psql "$PGDATABASE" -Atq -c "SELECT pg_try_advisory_lock($lock_key);")"
+    if [[ "$acquired" == "f" ]]; then
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  echo "Timed out waiting for advisory lock $lock_key." >&2
+  return 1
+}
+
 drop_restore_database "$RESTORE_DATABASE"
 drop_restore_database "$CORRUPT_RESTORE_DATABASE"
+drop_restore_database "$CONSISTENCY_RESTORE_DATABASE"
+
+pre_transaction_snapshot="$(snapshot "$PGDATABASE")"
+
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -f tests/postgres-backup-consistency.sql \
+  >"$consistency_log" 2>&1 &
+consistency_writer_pid=$!
+
+wait_for_advisory_lock 390039
+
+run_pg_tool \
+  pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
+    --format=custom \
+    --schema=financial_core \
+    --no-owner \
+    >"$consistency_backup_path"
+
+wait "$consistency_writer_pid"
+consistency_writer_pid=""
+cat "$consistency_log"
+
+run_pg_tool \
+  createdb -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" "$CONSISTENCY_RESTORE_DATABASE"
+run_pg_tool \
+  pg_restore -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" \
+    -d "$CONSISTENCY_RESTORE_DATABASE" \
+    --exit-on-error \
+    --single-transaction \
+    --no-owner \
+    <"$consistency_backup_path"
+
+consistency_snapshot="$(snapshot "$CONSISTENCY_RESTORE_DATABASE")"
+pre_transaction_digest="$(
+  printf '%s' "$pre_transaction_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+consistency_digest="$(
+  printf '%s' "$consistency_snapshot" | sha256sum | cut -d ' ' -f 1
+)"
+
+if [[ "$consistency_snapshot" != "$pre_transaction_snapshot" ]]; then
+  echo "Concurrent backup contains a partial or unexpected ledger state." >&2
+  printf \
+    'before=%s\nrestored=%s\n' \
+    "$pre_transaction_digest" \
+    "$consistency_digest" \
+    >&2
+  exit 1
+fi
+
+run_psql "$PGDATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT
+      (
+        SELECT count(*)
+        FROM financial_core.ledger_journals
+        WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      ) = 1
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_entries
+        WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      ) = 2
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_idempotency_registry
+        WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      ) = 1
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_outbox_events
+        WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      ) = 1
+      AND (
+        SELECT count(*)
+        FROM financial_core.ledger_journal_seals
+        WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      ) = 1;
+  " \
+  | grep -Fx "t"
+
+run_psql "$CONSISTENCY_RESTORE_DATABASE" \
+  -v ON_ERROR_STOP=1 \
+  -Atq \
+  -c "
+    SELECT count(*) = 0
+    FROM (
+      SELECT journal_id
+      FROM financial_core.ledger_journals
+      WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_entries
+      WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_idempotency_registry
+      WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_outbox_events
+      WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+      UNION ALL
+      SELECT journal_id
+      FROM financial_core.ledger_journal_seals
+      WHERE journal_id = 'ac000000-0000-4000-8000-0000000000a1'
+    ) AS acceptance_artifacts;
+  " \
+  | grep -Fx "t"
+
+printf 'postgres-backup-consistency-ok %s\n' "$consistency_digest"
+
 run_pg_tool \
   pg_dump -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" \
     --format=custom \

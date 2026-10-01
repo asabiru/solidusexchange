@@ -26,7 +26,7 @@
 | Idempotency | Повтор идентичной команды возвращает исходный journal; изменённый payload отклоняется | In-memory tests и unique database registry |
 | Evidence | Actor, authorization, policy, source digest, correlation, immutable outbox и acceptance seal связаны с journal | Posting command, migrations и smoke/rejection tests |
 | Read models | Account projections и trial balance полностью пересобираются из immutable entries | Deterministic snapshot tests и read-only SQL views |
-| Dev recoverability | Synthetic logical backup/restore сохраняет точное состояние ledger, views и reviewed database policy; повреждённый archive отклоняется без partial schema | `postgres-backup-restore.sh` и canonical state snapshot; это не production RPO/RTO или D-017 approval |
+| Dev recoverability | Synthetic logical backup сохраняет только committed state при незавершённом journal; restore сохраняет exact ledger/views/policy, повреждённый archive отклоняется без partial schema | `postgres-backup-restore.sh`, concurrent fixture и canonical state snapshot; это не production RPO/RTO или D-017 approval |
 | Database direction | PostgreSQL остаётся только proposed default | D-009, ADR-0002 и migrations |
 
 ## Ограничение posting rules
@@ -68,6 +68,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 10. views работают как `security_invoker` и не дают `PUBLIC` privileges.
 11. synthetic logical backup/restore возвращает то же canonical ledger state и exact database policy; production retention, encryption, RPO/RTO и restore drill остаются отдельным D-017 gate.
 12. truncated backup не восстанавливается частично: `pg_restore --single-transaction` возвращает ошибку, а disposable database остаётся без `financial_core` schema.
+13. backup во время незавершённой journal acceptance восстанавливает точное committed состояние до транзакции и не содержит ни одного pending acceptance artifact.
 
 ## Approval effect
 
