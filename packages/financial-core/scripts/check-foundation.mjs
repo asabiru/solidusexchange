@@ -618,6 +618,22 @@ for (const [fixture, evidence] of [
     "tests/postgres-execution-surface-catalog.sh",
     "postgres-execution-surface-catalog-negative-ok"
   ],
+  ["tests/postgres-ledger-integrity.sql", "journal_unbalanced_asset"],
+  ["tests/postgres-ledger-integrity.sql", "journal_command_digest_reused"],
+  ["tests/postgres-ledger-integrity.sql", "entry_amount_nonfinite"],
+  ["tests/postgres-ledger-integrity.sql", "entry_reference"],
+  [
+    "scripts/verify-postgres-ledger-integrity.mjs",
+    "Persisted PostgreSQL ledger journals violate acceptance invariants"
+  ],
+  ["scripts/verify-postgres-ledger-integrity.mjs", "postgres-ledger-integrity-ok"],
+  ["tests/postgres-ledger-integrity.sh", "DISABLE TRIGGER"],
+  ["tests/postgres-ledger-integrity.sh", "SET LOCAL session_replication_role = replica"],
+  [
+    "tests/postgres-ledger-integrity.sh",
+    "writer reuses an accepted command digest for different journal content"
+  ],
+  ["tests/postgres-ledger-integrity.sh", "postgres-ledger-integrity-negative-ok"],
   ["tests/postgres-invariant-trigger-catalog.sql", "pg_catalog.pg_trigger"],
   [
     "scripts/verify-postgres-invariant-trigger-catalog.mjs",
@@ -1114,6 +1130,7 @@ for (const required of [
   "tests/postgres-acceptance-artifact-integrity.sh",
   "tests/postgres-finite-timestamps.sh",
   "tests/postgres-backup-restore.sh",
+  "tests/postgres-ledger-integrity.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);
