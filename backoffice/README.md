@@ -11,6 +11,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - OIDC URLs require HTTPS outside loopback development, and the callback must use the exact allowed backoffice origin and path.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
+- A new login revokes the prior session presented when login started (recorded in the server-side OIDC transaction, since the `Strict` cookie is not sent on the cross-site callback) or on the login request itself, together with any step-up grant bound to it.
 - Read-only API envelopes are signed with versioned ephemeral Ed25519 keys and bound to their resource, key ID and key version.
 - New envelopes use the active signing key; bounded retired keys remain verification-only during automatic development rotation.
 - Audit events form a verified SHA-256 chain behind an async store contract.
@@ -116,6 +117,7 @@ BACKOFFICE_APPROVED_DEVICE_DIGESTS=<sha256>,<sha256>
 - An unapproved device receives `403 {"error":"device_not_approved","deviceDigest":"..."}` and no session. `GET /bff/auth/device` returns the same digest. An administrator approves the device by adding that digest to `BACKOFFICE_APPROVED_DEVICE_DIGESTS` and restarting the BFF.
 - The allowlist holds only domain-separated SHA-256 digests, so the configuration cannot be used to forge a device cookie.
 - Sessions are bound to the device that created them: a session cookie presented without the same approved device cookie is treated as no session, and removing a digest revokes its sessions after restart.
+- A new login from a device revokes every other session bound to that device.
 - Enforcement with an empty allowlist denies every login. Approved digests without enforcement fail startup.
 
 This is a dev-only control on the synthetic BFF. The device cookie is an installation identifier, not device attestation or managed-device posture; the production device policy, approval workflow, audit of device decisions and new-device step-up remain subject to D-016 and human approval.

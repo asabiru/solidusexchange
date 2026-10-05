@@ -13,6 +13,7 @@ export interface OperatorSession {
 export interface PendingLogin {
   nonce: string;
   verifier: string;
+  previousSessionId?: string;
   expiresAt: number;
 }
 
@@ -50,5 +51,11 @@ export class ExpiringStore<T extends { expiresAt: number }> {
 
   delete(key: string): void {
     this.#entries.delete(key);
+  }
+
+  deleteWhere(predicate: (value: T) => boolean): void {
+    for (const [key, value] of this.#entries) {
+      if (predicate(value)) this.#entries.delete(key);
+    }
   }
 }
