@@ -428,6 +428,7 @@ for (const [fixture, evidence] of [
   ["tests/runtime-writer-grants.sql", "GRANT INSERT ON TABLE"],
   ["tests/runtime-writer-grants.sql", "rolcanlogin = FALSE"],
   ["tests/runtime-writer-grants.sql", "rolconfig IS NULL"],
+  ["tests/runtime-writer-grants.sql", "REVOKE TEMPORARY ON DATABASE :\"DBNAME\" FROM PUBLIC"],
   ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
   ["tests/postgres-runtime-privileges.sh", "DISABLE TRIGGER ALL"],
@@ -456,6 +457,14 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privileges.sh", "WITH GRANT OPTION"],
   [
     "tests/postgres-runtime-privileges.sh",
+    "GRANT TEMPORARY ON DATABASE \\\"$PGDATABASE\\\" TO PUBLIC"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "CREATE DOMAIN pg_temp.timestamptz AS pg_catalog.date"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
     "permission denied for table schema_migrations"
   ],
   [
@@ -465,6 +474,7 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.aclexplode(attribute.attacl)"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_auth_members"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_default_acl"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.acldefault('d', database.datdba)"],
   ["tests/postgres-runtime-privilege-catalog.sql", "role.rolcanlogin"],
   ["tests/postgres-runtime-privilege-catalog.sql", "'owns_financial_objects'"],
   [
@@ -474,6 +484,10 @@ for (const [fixture, evidence] of [
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",
     "configuration: []"
+  ],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    'grant("database", "current_database", "CONNECT", "public")'
   ],
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",

@@ -127,6 +127,10 @@ assert_runtime_catalog_rejected \
   "ALTER ROLE $runtime_role SET search_path = public;"
 assert_runtime_catalog_rejected \
   "ALTER SCHEMA financial_core OWNER TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT TEMPORARY ON DATABASE \"$PGDATABASE\" TO PUBLIC;"
+assert_runtime_catalog_rejected \
+  "GRANT CREATE ON DATABASE \"$PGDATABASE\" TO $runtime_role;"
 
 verify_runtime_catalog
 echo "postgres-runtime-privilege-catalog-negative-ok"
@@ -401,5 +405,10 @@ expect_denied \
      TRUE,
      'runtime-must-not-configure-assets'
    );"
+
+expect_denied \
+  "runtime temporary type shadowing" \
+  "permission denied to create temporary tables in database" \
+  "CREATE DOMAIN pg_temp.timestamptz AS pg_catalog.date;"
 
 echo "runtime-writer-privileges-ok"
