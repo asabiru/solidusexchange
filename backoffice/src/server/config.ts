@@ -31,6 +31,11 @@ export interface SigningConfig {
   retainedVerificationKeys: number;
 }
 
+export interface DeviceBindingConfig {
+  mode: "off" | "enforce";
+  approvedDeviceDigests: readonly string[];
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -40,6 +45,7 @@ export interface ServerConfig {
   audit: AuditConfig;
   stepUp: StepUpConfig;
   signing: SigningConfig;
+  deviceBinding?: DeviceBindingConfig;
   oidc?: OidcConfig;
 }
 
@@ -252,6 +258,27 @@ function loadSigningConfig(): SigningConfig {
   };
 }
 
+function loadDeviceBindingConfig(): DeviceBindingConfig {
+  const mode = process.env.BACKOFFICE_DEVICE_BINDING ?? "off";
+  if (mode !== "off" && mode !== "enforce") {
+    throw new Error("BACKOFFICE_DEVICE_BINDING must be off or enforce");
+  }
+  const digests = (process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS ?? "")
+    .split(",")
+    .map((digest) => digest.trim())
+    .filter(Boolean);
+  if (digests.some((digest) => !/^[0-9a-f]{64}$/.test(digest))) {
+    throw new Error("BACKOFFICE_APPROVED_DEVICE_DIGESTS must contain lowercase SHA-256 digests");
+  }
+  if (new Set(digests).size !== digests.length) {
+    throw new Error("BACKOFFICE_APPROVED_DEVICE_DIGESTS must not contain duplicates");
+  }
+  if (mode === "off" && digests.length > 0) {
+    throw new Error("BACKOFFICE_APPROVED_DEVICE_DIGESTS requires BACKOFFICE_DEVICE_BINDING=enforce");
+  }
+  return { mode, approvedDeviceDigests: digests };
+}
+
 export function loadServerConfig(): ServerConfig {
   if ((process.env.BACKOFFICE_MODE ?? "dev-dry-run") !== "dev-dry-run") {
     throw new Error("Backoffice BFF refuses to start outside dev-dry-run mode");
@@ -304,6 +331,7 @@ export function loadServerConfig(): ServerConfig {
     audit: loadAuditConfig(),
     stepUp: loadStepUpConfig(),
     signing: loadSigningConfig(),
+    deviceBinding: loadDeviceBindingConfig(),
     oidc: loadOidcConfig(allowedOrigins)
   };
 }

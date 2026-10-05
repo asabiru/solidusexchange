@@ -103,6 +103,23 @@ BACKOFFICE_SIGNING_RETAINED_KEYS=2
 
 Private signing material is never returned by the keyset endpoint. A production deployment requires a separately approved MFA provider, production IdP policy, KMS/HSM-backed signer, durable key version registry, rotation runbook and independently validated recovery procedure.
 
+## Operator device binding
+
+Device binding is off by default. With `BACKOFFICE_DEVICE_BINDING=enforce`, the BFF admits operator logins only from approved workstation installations:
+
+```text
+BACKOFFICE_DEVICE_BINDING=enforce
+BACKOFFICE_APPROVED_DEVICE_DIGESTS=<sha256>,<sha256>
+```
+
+- On first login the BFF issues a random UUIDv4 in the `solidchange_bo_device` cookie (`HttpOnly`, `SameSite=Lax` so it survives the OIDC redirect, `Path=/bff`, 400 days). Malformed values are replaced, never trusted.
+- An unapproved device receives `403 {"error":"device_not_approved","deviceDigest":"..."}` and no session. `GET /bff/auth/device` returns the same digest. An administrator approves the device by adding that digest to `BACKOFFICE_APPROVED_DEVICE_DIGESTS` and restarting the BFF.
+- The allowlist holds only domain-separated SHA-256 digests, so the configuration cannot be used to forge a device cookie.
+- Sessions are bound to the device that created them: a session cookie presented without the same approved device cookie is treated as no session, and removing a digest revokes its sessions after restart.
+- Enforcement with an empty allowlist denies every login. Approved digests without enforcement fail startup.
+
+This is a dev-only control on the synthetic BFF. The device cookie is an installation identifier, not device attestation or managed-device posture; the production device policy, approval workflow, audit of device decisions and new-device step-up remain subject to D-016 and human approval.
+
 ## OIDC configuration
 
 Configure all required values together; partial OIDC configuration fails startup:
@@ -134,6 +151,8 @@ BACKOFFICE_STEP_UP_GRANT_TTL_SECONDS
 BACKOFFICE_STEP_UP_MAX_ATTEMPTS
 BACKOFFICE_SIGNING_ROTATION_SECONDS
 BACKOFFICE_SIGNING_RETAINED_KEYS
+BACKOFFICE_DEVICE_BINDING
+BACKOFFICE_APPROVED_DEVICE_DIGESTS
 ```
 
 `BACKOFFICE_OIDC_ROLE_MAP_JSON` maps external groups to the explicit operator-role allowlist. Example:

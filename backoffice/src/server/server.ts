@@ -9,6 +9,7 @@ import {
   exchangeAuthorizationCode,
   verifyIdToken
 } from "./oidc.js";
+import { createDeviceId, deviceDigest, isDeviceId } from "./device.js";
 import { ExpiringStore, type OperatorSession, type PendingLogin } from "./session.js";
 import {
   EphemeralSigningKeyProvider,
@@ -31,6 +32,8 @@ import {
 
 const sessionCookie = "solidchange_bo_session";
 const oidcTransactionCookie = "solidchange_bo_oidc_transaction";
+const deviceCookie = "solidchange_bo_device";
+const deviceCookieMaxAgeSeconds = 400 * 24 * 60 * 60;
 const validRoles = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
@@ -137,6 +140,9 @@ export function createBackofficeServer(
     ?? new EphemeralSigningKeyProvider(config.signing.retainedVerificationKeys);
   const signer = new ResponseSigner(signingKeys);
   const stepUp = new SyntheticStepUpService(config.stepUp);
+  const deviceBinding = config.deviceBinding ?? { mode: "off", approvedDeviceDigests: [] };
+  const enforceDevices = deviceBinding.mode === "enforce";
+  const approvedDevices = new Set(deviceBinding.approvedDeviceDigests);
 
   function setSessionCookie(response: ServerResponse, session: OperatorSession): void {
     const secure = config.allowedOrigins.every((origin) => origin.startsWith("https://"));
@@ -179,9 +185,53 @@ export function createBackofficeServer(
     );
   }
 
+  function requestDeviceId(request: IncomingMessage): string | undefined {
+    const value = parseCookies(request)[deviceCookie];
+    return isDeviceId(value) ? value : undefined;
+  }
+
+  function ensureDeviceId(request: IncomingMessage, response: ServerResponse): string {
+    const existing = requestDeviceId(request);
+    if (existing) return existing;
+    const deviceId = createDeviceId();
+    const flags = [
+      `${deviceCookie}=${deviceId}`,
+      "HttpOnly",
+      "SameSite=Lax",
+      "Path=/bff",
+      `Max-Age=${deviceCookieMaxAgeSeconds}`
+    ];
+    if (config.allowedOrigins.every((origin) => origin.startsWith("https://"))) {
+      flags.push("Secure");
+    }
+    appendCookie(response, flags.join("; "));
+    return deviceId;
+  }
+
+  function deviceApproved(deviceId: string | undefined): boolean {
+    return deviceId !== undefined && approvedDevices.has(deviceDigest(deviceId));
+  }
+
+  function admittedDevice(
+    request: IncomingMessage,
+    response: ServerResponse
+  ): { deviceId?: string } | undefined {
+    if (!enforceDevices) return {};
+    const deviceId = ensureDeviceId(request, response);
+    if (deviceApproved(deviceId)) return { deviceId };
+    json(response, 403, {
+      error: "device_not_approved",
+      deviceDigest: deviceDigest(deviceId)
+    });
+    return undefined;
+  }
+
   function currentSession(request: IncomingMessage): OperatorSession | undefined {
     const id = parseCookies(request)[sessionCookie];
-    return id ? sessions.get(id) : undefined;
+    const session = id ? sessions.get(id) : undefined;
+    if (!session || !enforceDevices) return session;
+    const deviceId = requestDeviceId(request);
+    return session.deviceId === deviceId && deviceApproved(deviceId) ? session : undefined;
   }
 
   function createSession(
@@ -236,6 +286,7 @@ export function createBackofficeServer(
           mode: "dev-dry-run",
           oidcConfigured: Boolean(config.oidc),
           devLoginEnabled: config.allowDevLogin,
+          deviceBinding: deviceBinding.mode,
           dataSource: "synthetic",
           audit: {
             backend: audit.status.backend,
@@ -278,6 +329,20 @@ export function createBackofficeServer(
         return;
       }
 
+      if (request.method === "GET" && path === "/bff/auth/device") {
+        if (!enforceDevices) {
+          json(response, 200, { binding: "off" });
+          return;
+        }
+        const deviceId = ensureDeviceId(request, response);
+        json(response, 200, {
+          binding: "enforce",
+          deviceDigest: deviceDigest(deviceId),
+          approved: deviceApproved(deviceId)
+        });
+        return;
+      }
+
       if (request.method === "GET" && path === "/bff/auth/status") {
         json(response, 200, { authenticated: Boolean(currentSession(request)) });
         return;
@@ -303,9 +368,11 @@ export function createBackofficeServer(
           return;
         }
         clearOidcTransactionCookie(response);
+        const device = admittedDevice(request, response);
+        if (!device) return;
         const idToken = await exchangeAuthorizationCode(config.oidc, code, pending.verifier);
         const identity = await verifyIdToken(idToken, config.oidc, pending.nonce);
-        createSession(response, identity);
+        createSession(response, { ...identity, ...device });
         redirect(response, config.allowedOrigins[0]);
         return;
       }
@@ -331,11 +398,14 @@ export function createBackofficeServer(
           json(response, 400, { error: "unsupported_role" });
           return;
         }
+        const device = admittedDevice(request, response);
+        if (!device) return;
         const session = createSession(response, {
           subject: `dev:${profile.id}`,
           email: `${profile.id}@dev.solidchange.invalid`,
           name: profile.operator,
-          role: profile.id
+          role: profile.id,
+          ...device
         });
         signed(response, "auth/dev-session", {
           authenticated: true,

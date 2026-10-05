@@ -20,7 +20,9 @@ const configurationEnvironment = [
   "BACKOFFICE_OIDC_CLIENT_SECRET",
   "BACKOFFICE_OIDC_REDIRECT_URI",
   "BACKOFFICE_OIDC_ROLE_CLAIM",
-  "BACKOFFICE_OIDC_ROLE_MAP_JSON"
+  "BACKOFFICE_OIDC_ROLE_MAP_JSON",
+  "BACKOFFICE_DEVICE_BINDING",
+  "BACKOFFICE_APPROVED_DEVICE_DIGESTS"
 ] as const;
 const original = Object.fromEntries(
   configurationEnvironment.map((name) => [name, process.env[name]])
@@ -197,5 +199,49 @@ describe("OIDC configuration", () => {
       () => loadServerConfig(),
       /exact \/bff\/auth\/callback URL on an allowed origin/
     );
+  });
+});
+
+describe("operator device binding configuration", () => {
+  const digest = "a".repeat(64);
+
+  it("defaults to off without approved devices", () => {
+    delete process.env.BACKOFFICE_DEVICE_BINDING;
+    delete process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS;
+    assert.deepEqual(loadServerConfig().deviceBinding, {
+      mode: "off",
+      approvedDeviceDigests: []
+    });
+  });
+
+  it("loads approved device digests when enforced", () => {
+    process.env.BACKOFFICE_DEVICE_BINDING = "enforce";
+    process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS = ` ${digest}, ${"b".repeat(64)} `;
+    assert.deepEqual(loadServerConfig().deviceBinding, {
+      mode: "enforce",
+      approvedDeviceDigests: [digest, "b".repeat(64)]
+    });
+  });
+
+  it("allows enforcement with no approved devices, denying every login", () => {
+    process.env.BACKOFFICE_DEVICE_BINDING = "enforce";
+    delete process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS;
+    assert.deepEqual(loadServerConfig().deviceBinding?.approvedDeviceDigests, []);
+  });
+
+  it("rejects unknown modes, malformed or duplicate digests and unused approvals", () => {
+    const cases: readonly [string | undefined, string, RegExp][] = [
+      ["required", "", /BACKOFFICE_DEVICE_BINDING must be off or enforce/],
+      ["enforce", digest.toUpperCase(), /lowercase SHA-256 digests/],
+      ["enforce", "a".repeat(63), /lowercase SHA-256 digests/],
+      ["enforce", `${digest},${digest}`, /must not contain duplicates/],
+      [undefined, digest, /requires BACKOFFICE_DEVICE_BINDING=enforce/]
+    ];
+    for (const [mode, digests, message] of cases) {
+      if (mode === undefined) delete process.env.BACKOFFICE_DEVICE_BINDING;
+      else process.env.BACKOFFICE_DEVICE_BINDING = mode;
+      process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS = digests;
+      assert.throws(() => loadServerConfig(), message);
+    }
   });
 });
