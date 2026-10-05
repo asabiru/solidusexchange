@@ -257,7 +257,9 @@ export async function verifyIdToken(
       return await response.json() as JsonWebKeySet;
     });
   if (!isRecord(jwks) || !Array.isArray(jwks.keys)) throw new Error("OIDC JWKS is malformed");
-  const matchingKeys = jwks.keys.filter((candidate) => candidate.kid === header.kid);
+  const matchingKeys = jwks.keys.filter(
+    (candidate) => isRecord(candidate) && candidate.kid === header.kid
+  );
   if (matchingKeys.length === 0) throw new Error("OIDC signing key was not found");
   if (matchingKeys.length > 1) throw new Error("OIDC signing key is ambiguous");
   const jwk = matchingKeys[0];

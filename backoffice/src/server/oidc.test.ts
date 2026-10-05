@@ -639,8 +639,14 @@ describe("OIDC boundary", () => {
         /signing key is not allowed/
       );
     }
+    for (const jwks of [{}, { keys: "rsa-key" }, { keys: [null] }]) {
+      await assert.rejects(
+        verifyIdToken(token, config, "nonce-rsa", jwks as never),
+        /JWKS is malformed|signing key was not found/
+      );
+    }
     const identity = await verifyIdToken(token, config, "nonce-rsa", {
-      keys: [{ ...publicJwk, use: "sig", alg: "RS256", key_ops: ["verify"] }]
+      keys: [null as never, { ...publicJwk, use: "sig", alg: "RS256", key_ops: ["verify"] }]
     });
     assert.equal(identity.role, "compliance-lead");
   });
