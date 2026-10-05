@@ -20,6 +20,12 @@
       "verify": "npm run check && npm run verify:migrations && npm test",
       "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
     },
+    "packages/customer-api/package.json": {
+      "check": "node scripts/check-boundary.mjs",
+      "dev": "node src/server.mjs",
+      "mint-dev-token": "node scripts/mint-dev-token.mjs",
+      "test": "npm run check && node --test tests/*.test.mjs"
+    },
     "packages/financial-core/package.json": {
       "check": "node scripts/check-foundation.mjs",
       "test": "node --test tests/*.test.mjs",
@@ -107,6 +113,20 @@
       {
         "run": "bash tests/postgres-runtime-privileges.sh",
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/customer-api-ci.yml": [
+      {
+        "run": "working-directory: packages/customer-api"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm test"
       }
     ],
     ".github/workflows/deploy.yml": [],
@@ -369,6 +389,36 @@
     "packages/custody-core/tests/unsigned-intent.test.mjs": {
       "minLines": 297,
       "minCases": 13
+    },
+    "packages/customer-api/tests/auth-config.test.mjs": {
+      "minLines": 132,
+      "minCases": 11
+    },
+    "packages/customer-api/tests/capabilities.test.mjs": {
+      "minLines": 94,
+      "minCases": 7
+    },
+    "packages/customer-api/tests/contract-conformance.test.mjs": {
+      "minLines": 225,
+      "minCases": 13
+    },
+    "packages/customer-api/tests/contract-validator.mjs": {
+      "minLines": 256
+    },
+    "packages/customer-api/tests/contract-validator.test.mjs": {
+      "minLines": 135,
+      "minCases": 11
+    },
+    "packages/customer-api/tests/http-client.mjs": {
+      "minLines": 125
+    },
+    "packages/customer-api/tests/request-headers.test.mjs": {
+      "minLines": 191,
+      "minCases": 12
+    },
+    "packages/customer-api/tests/routing.test.mjs": {
+      "minLines": 179,
+      "minCases": 10
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44
