@@ -47,7 +47,7 @@ npm audit --audit-level=moderate
 npm run dev
 ```
 
-`npm run dev` starts Vite on port `4173` and the loopback BFF on port `4174`. It enables the synthetic dev-session endpoint only for configured loopback origins.
+`npm run dev` starts loopback-only Vite on port `4173` and the loopback BFF on port `4174`. It enables the synthetic dev-session endpoint only for configured loopback origins.
 
 ## Durable audit storage
 
