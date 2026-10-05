@@ -372,3 +372,72 @@ assertRejected(
     writeJson(scratch, "schemas/events/domain-event.schema.json", schema);
   }
 );
+
+const eventSchemaPath = "schemas/events/domain-event.schema.json";
+
+function mutateEventSchema(scratch, mutate) {
+  const schema = readJson(scratch, eventSchemaPath);
+  mutate(schema);
+  writeJson(scratch, eventSchemaPath, schema);
+}
+
+for (const field of ["correlation_id", "causation_id", "idempotency_key", "actor"]) {
+  assertRejected(
+    `rejects removed event envelope ${field} requirement`,
+    "Event envelope required fields",
+    (scratch) => mutateEventSchema(scratch, (schema) => {
+      schema.required = schema.required.filter((name) => name !== field);
+    })
+  );
+}
+
+assertRejected(
+  "rejects permissive event envelope",
+  "Event envelope must reject unknown top-level fields",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.additionalProperties = true;
+  })
+);
+
+assertRejected(
+  "rejects weakened event correlation schema",
+  "Canonical event correlation_id schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.properties.correlation_id = {};
+  })
+);
+
+assertRejected(
+  "rejects weakened event idempotency schema",
+  "Canonical event idempotency_key schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    delete schema.properties.idempotency_key.minLength;
+  })
+);
+
+assertRejected(
+  "rejects permissive event actor definition",
+  "Canonical event actor definition must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.actor.additionalProperties = true;
+  })
+);
+
+test("accepts optional event envelope fields and reordered required fields", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
+  try {
+    for (const path of contractFiles) {
+      cpSync(join(root, path), join(scratch, path), { recursive: true });
+    }
+    mutateEventSchema(scratch, (schema) => {
+      schema.required = [...schema.required].reverse();
+      schema.properties.trace_parent = { type: "string", maxLength: 128 };
+    });
+    const result = spawnSync(process.execPath, [checker, scratch], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
+});
