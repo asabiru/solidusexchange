@@ -129,9 +129,42 @@ function refs(operation) {
   );
 }
 
+const canonicalHeaderParameters = new Map([
+  ["x-request-id", "#/components/parameters/RequestId"],
+  ["x-client-version", "#/components/parameters/ClientVersion"],
+  ["x-platform", "#/components/parameters/Platform"],
+  ["x-device-id", "#/components/parameters/DeviceId"],
+  ["idempotency-key", "#/components/parameters/IdempotencyKey"]
+]);
+
+function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
+  for (const parameter of parameters ?? []) {
+    const resolved = parameter?.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
+    const canonical = canonicalHeaderParameters.get(String(resolved?.name ?? "").toLowerCase());
+    if (!canonical) continue;
+    assert(
+      canonicalJson(parameter) === canonicalJson({ $ref: canonical }),
+      `${resolved.name} must use only the canonical ${canonical} parameter: ${label}`
+    );
+  }
+}
+
+function verifyRequestIdResponseHeader(response, label) {
+  const headers = response?.headers ?? {};
+  for (const name of Object.keys(headers)) {
+    if (name.toLowerCase() !== "x-request-id") continue;
+    assert(name === "X-Request-Id", `Response request ID header must be spelled X-Request-Id: ${label}`);
+  }
+  assert(
+    canonicalJson(headers["X-Request-Id"]) === canonicalJson({ $ref: "#/components/headers/RequestId" }),
+    `Response must echo the canonical X-Request-Id header: ${label}`
+  );
+}
+
 function checkOpenApi() {
   const path = join(root, "openapi.yaml");
   const openapi = loadAbsolute(path);
+  assert(!Object.hasOwn(openapi, "webhooks"), "OpenAPI webhooks are prohibited in this slice");
   assert(openapi.openapi === "3.1.0", "OpenAPI version must be 3.1.0");
   assert(openapi.info?.version === "1.0.0-draft", "Contract version mismatch");
   assert(openapi["x-solidchange-runtime-boundary"] === "contract-only", "Runtime boundary must remain contract-only");
@@ -190,6 +223,7 @@ function checkOpenApi() {
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {
     assert(pathName.startsWith("/api/v1/"), `Unversioned API path: ${pathName}`);
     assert(!Object.hasOwn(pathItem, "$ref"), `Path item $ref is prohibited: ${pathName}`);
+    verifyCanonicalHeaderParameters(pathItem.parameters, path, pathName);
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!methodNames.has(method)) continue;
       assert(method === "get", `Mutation method is prohibited in this slice: ${method.toUpperCase()} ${pathName}`);
@@ -201,6 +235,15 @@ function checkOpenApi() {
         `Operation path is not pinned: ${operation.operationId} ${pathName}`
       );
 
+      assert(
+        !Object.hasOwn(operation, "requestBody"),
+        `Request bodies are prohibited in this slice: ${operation.operationId}`
+      );
+      assert(
+        !Object.hasOwn(operation, "callbacks"),
+        `Callbacks are prohibited in this slice: ${operation.operationId}`
+      );
+      verifyCanonicalHeaderParameters(operation.parameters, path, operation.operationId);
       const requestHeaders = refs(operation);
       assert(
         requestHeaders.has("#/components/parameters/RequestId"),
@@ -251,7 +294,7 @@ function checkOpenApi() {
       }
 
       const success = operation.responses?.["200"];
-      assert(success?.headers?.["X-Request-Id"], `Success response must echo X-Request-Id: ${operation.operationId}`);
+      verifyRequestIdResponseHeader(success, `${operation.operationId} 200`);
       if (pathName !== "/api/v1/meta") {
         const expectedSchema = protectedSuccessSchemas.get(operation.operationId);
         assert(expectedSchema, `Protected success schema is not pinned: ${operation.operationId}`);
@@ -287,10 +330,17 @@ function checkOpenApi() {
             === "#/components/schemas/Error",
           `Error response must use canonical Error schema: ${operation.operationId} ${status}`
         );
+        verifyRequestIdResponseHeader(resolvedResponse, `${operation.operationId} ${status}`);
       }
     }
   }
   sameSet(operationIds, pinnedOperationPaths.keys(), "Pinned API operations");
+  for (const name of ["pathItems", "callbacks", "requestBodies"]) {
+    assert(
+      !Object.hasOwn(openapi.components ?? {}, name),
+      `OpenAPI components.${name} are prohibited in this slice`
+    );
+  }
 
   const parameters = openapi.components?.parameters ?? {};
   const parameterNames = {
@@ -366,8 +416,16 @@ function checkOpenApi() {
   }
   assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
-    assert(response.headers?.["X-Request-Id"], `${name} response must echo X-Request-Id`);
+    verifyRequestIdResponseHeader(response, `${name} response`);
   }
+  const { description: _requestIdDescription, ...requestIdHeader } = openapi.components?.headers?.RequestId ?? {};
+  assert(
+    canonicalJson(requestIdHeader) === canonicalJson({
+      required: true,
+      schema: { $ref: "#/components/schemas/UuidV7" }
+    }),
+    "Canonical RequestId response header must remain required with the UuidV7 schema"
+  );
   verifyReferences(openapi, path);
 }
 
