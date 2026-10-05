@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
+import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import { describe, it } from "node:test";
 import type { OidcConfig } from "./config.js";
 import { authorizationUrl, createCodeChallenge, verifyIdToken } from "./oidc.js";
@@ -24,6 +24,30 @@ function encode(value: unknown): string {
 
 function encodeJson(value: string): string {
   return Buffer.from(value).toString("base64url");
+}
+
+function signedToken(
+  header: string,
+  claims: string,
+  privateKey: KeyObject,
+  algorithm: string | null = "RSA-SHA256"
+): string {
+  const signature = sign(algorithm, Buffer.from(`${header}.${claims}`), privateKey);
+  return `${header}.${claims}.${signature.toString("base64url")}`;
+}
+
+function hardeningClaims(nonce: string, extra: Record<string, unknown> = {}): string {
+  const now = Math.floor(Date.now() / 1000);
+  return encode({
+    iss: config.issuer,
+    sub: "operator-60",
+    aud: config.clientId,
+    exp: now + 300,
+    iat: now,
+    nonce,
+    groups: ["compliance"],
+    ...extra
+  });
 }
 
 describe("OIDC boundary", () => {
@@ -565,5 +589,169 @@ describe("OIDC boundary", () => {
       }),
       /signing key is not allowed/
     );
+  });
+
+  it("rejects RS256 tokens verified against non-RSA JWKs", async () => {
+    const header = encode({ alg: "RS256", kid: "ec-key" });
+    const claims = hardeningClaims("nonce-kty");
+    for (const namedCurve of ["P-256", "P-384", "secp256k1"]) {
+      const pair = generateKeyPairSync("ec", { namedCurve });
+      const token = signedToken(header, claims, pair.privateKey);
+      const jwk = { ...pair.publicKey.export({ format: "jwk" }), kid: "ec-key" };
+      for (const candidate of [jwk, { ...jwk, alg: "RS256", use: "sig" }, { ...jwk, kty: "RSA" }]) {
+        await assert.rejects(
+          verifyIdToken(token, config, "nonce-kty", { keys: [candidate] }),
+          /signing key is not allowed/
+        );
+      }
+    }
+    const ed25519 = generateKeyPairSync("ed25519");
+    await assert.rejects(
+      verifyIdToken(signedToken(header, claims, ed25519.privateKey, null), config, "nonce-kty", {
+        keys: [{ ...ed25519.publicKey.export({ format: "jwk" }), kid: "ec-key" }]
+      }),
+      /signing key is not allowed/
+    );
+  });
+
+  it("rejects weak RSA JWKs, private JWK members and extra key operations", async () => {
+    const header = encode({ alg: "RS256", kid: "rsa-key" });
+    const claims = hardeningClaims("nonce-rsa");
+    for (const modulusLength of [512, 1024, 2040]) {
+      const weak = generateKeyPairSync("rsa", { modulusLength });
+      await assert.rejects(
+        verifyIdToken(signedToken(header, claims, weak.privateKey), config, "nonce-rsa", {
+          keys: [{ ...weak.publicKey.export({ format: "jwk" }), kid: "rsa-key" }]
+        }),
+        /signing key is not allowed/
+      );
+    }
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const token = signedToken(header, claims, pair.privateKey);
+    const publicJwk = { ...pair.publicKey.export({ format: "jwk" }), kid: "rsa-key" };
+    for (const jwk of [
+      { ...pair.privateKey.export({ format: "jwk" }), kid: "rsa-key" },
+      { ...publicJwk, key_ops: ["verify", "encrypt"] },
+      { ...publicJwk, key_ops: ["verify", "verify"] }
+    ]) {
+      await assert.rejects(
+        verifyIdToken(token, config, "nonce-rsa", { keys: [jwk] }),
+        /signing key is not allowed/
+      );
+    }
+    for (const jwks of [{}, { keys: "rsa-key" }, { keys: [null] }]) {
+      await assert.rejects(
+        verifyIdToken(token, config, "nonce-rsa", jwks as never),
+        /JWKS is malformed|signing key was not found/
+      );
+    }
+    const identity = await verifyIdToken(token, config, "nonce-rsa", {
+      keys: [null as never, { ...publicJwk, use: "sig", alg: "RS256", key_ops: ["verify"] }]
+    });
+    assert.equal(identity.role, "compliance-lead");
+  });
+
+  it("rejects non-canonical base64url segments and oversized tokens", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const keys = [{ ...pair.publicKey.export({ format: "jwk" }), kid: "b64-key" }];
+    const header = encode({ alg: "RS256", kid: "b64-key" });
+    const claims = hardeningClaims("nonce-b64");
+    const signature = signedToken(header, claims, pair.privateKey).split(".")[2];
+    const flippedLast = signature.slice(0, -1) + (signature.endsWith("A") ? "B" : "A");
+    for (const variant of [
+      `${signature}=`,
+      `${signature}==`,
+      `${signature.slice(0, 8)}!${signature.slice(8)}`,
+      `${signature.slice(0, 8)} ${signature.slice(8)}`,
+      `${signature.slice(0, 8)}+/${signature.slice(8)}`,
+      flippedLast
+    ]) {
+      await assert.rejects(
+        verifyIdToken(`${header}.${claims}.${variant}`, config, "nonce-b64", { keys }),
+        /malformed|signature is invalid/
+      );
+    }
+    const headerJson = '{"alg":"RS256","kid":"b64-key","x":"??>"}';
+    for (const nonCanonicalHeader of [
+      `${encodeJson('{"alg":"RS256","kid":"b64-key"}')}=`,
+      Buffer.from(headerJson).toString("base64"),
+      `${encodeJson(headerJson).slice(0, -1)}${encodeJson(headerJson).endsWith("A") ? "B" : "A"}`
+    ]) {
+      await assert.rejects(
+        verifyIdToken(signedToken(nonCanonicalHeader, claims, pair.privateKey), config, "nonce-b64", {
+          keys
+        }),
+        /malformed/
+      );
+    }
+    const oversizedClaims = hardeningClaims("nonce-b64", { padding: "x".repeat(20_000) });
+    await assert.rejects(
+      verifyIdToken(signedToken(header, oversizedClaims, pair.privateKey), config, "nonce-b64", {
+        keys
+      }),
+      /too large/
+    );
+    const identity = await verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-b64", {
+      keys
+    });
+    assert.equal(identity.role, "compliance-lead");
+  });
+
+  it("rejects duplicate JSON members, invalid UTF-8 and key-carrying headers", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const keys = [{ ...pair.publicKey.export({ format: "jwk" }), kid: "json-key" }];
+    const now = Math.floor(Date.now() / 1000);
+    const common = [
+      `"iss":"${config.issuer}"`,
+      `"aud":"${config.clientId}"`,
+      `"exp":${now + 300}`,
+      `"iat":${now}`,
+      '"nonce":"nonce-json"'
+    ].join(",");
+    const header = encode({ alg: "RS256", kid: "json-key" });
+    const claims = encodeJson(`{${common},"sub":"op","groups":["compliance"]}`);
+    const cases: [string, string][] = [
+      [encodeJson('{"alg":"none","alg":"RS256","kid":"json-key"}'), claims],
+      [encodeJson('{"alg":"RS256","kid":"other","kid":"json-key"}'), claims],
+      [encodeJson('\ufeff{"alg":"RS256","kid":"json-key"}'), claims],
+      [header, encodeJson(`{${common},"sub":"a","sub":"op","groups":["compliance"]}`)],
+      [header, encodeJson(`{${common},"sub":"op","groups":["x"],"groups":["compliance"]}`)],
+      [header, encodeJson(`{${common},"sub":"op","\\u0067roups":["x"],"groups":["compliance"]}`)],
+      [header, encodeJson(`{${common},"sub":"op","groups":["compliance"],"x":{"a":1,"a" : 2}}`)],
+      [
+        header,
+        Buffer.concat([
+          Buffer.from(`{${common},"sub":"op","groups":["compliance"],"name":"`),
+          Buffer.from([0xff]),
+          Buffer.from('"}')
+        ]).toString("base64url")
+      ]
+    ];
+    for (const name of ["jku", "jwk", "x5u", "x5c", "b64"]) {
+      const value = name === "b64" ? false : "https://attacker.example.test/keys";
+      cases.push([encode({ alg: "RS256", kid: "json-key", [name]: value }), claims]);
+    }
+    for (const [tokenHeader, tokenClaims] of cases) {
+      await assert.rejects(
+        verifyIdToken(signedToken(tokenHeader, tokenClaims, pair.privateKey), config, "nonce-json", {
+          keys
+        }),
+        /malformed|duplicate JSON members|header parameter is not supported/
+      );
+    }
+    const allowedClaims = encodeJson(
+      `{${common},"sub":"op","groups":["compliance"],"n":[{"a":1},{"a":2}],"s":"\\"a\\":1"}`
+    );
+    const identity = await verifyIdToken(
+      signedToken(
+        encode({ alg: "RS256", kid: "json-key", typ: "JWT", x5t: "thumbprint" }),
+        allowedClaims,
+        pair.privateKey
+      ),
+      config,
+      "nonce-json",
+      { keys }
+    );
+    assert.equal(identity.role, "compliance-lead");
   });
 });
