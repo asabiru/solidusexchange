@@ -6,10 +6,10 @@ const expectedConstraintCounts = new Map([
   ["constraint_trigger", 5],
   ["foreign_key", 10],
   ["primary_key", 11],
-  ["unique", 8]
+  ["unique", 11]
 ]);
 const expectedCatalogSha256 =
-  "469ab6ddf7784d7b5402954d37a44b59aecf05b2c587fdb08f2bef9718b19096";
+  "6869090625181203697e140d01830b1e72fb56ce965b47a40e8ef261a18c8326";
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -29,8 +29,8 @@ for await (const chunk of process.stdin) {
 }
 
 const actual = JSON.parse(input);
-assert.equal(actual.constraints.length, 96, "Unexpected PostgreSQL constraint count");
-assert.equal(actual.indexes.length, 1, "Unexpected standalone PostgreSQL index count");
+assert.equal(actual.constraints.length, 99, "Unexpected PostgreSQL constraint count");
+assert.equal(actual.indexes.length, 2, "Unexpected standalone PostgreSQL index count");
 
 const actualConstraintCounts = new Map();
 for (const constraint of actual.constraints) {

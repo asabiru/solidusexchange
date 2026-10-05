@@ -48,6 +48,10 @@ const expectedSources = [
   [
     "0011_ledger_migration_sequence_guard.sql",
     "38edd8511b337a53acae0225afe57bba9151fb22c32c0f85689c78b4c7e7747f"
+  ],
+  [
+    "0012_ledger_command_digest_uniqueness.sql",
+    "f9ce165b0d4ef01b6ba02ce8f975b25a235e1821126fd105513c62e9465ff5db"
   ]
 ];
 

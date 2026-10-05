@@ -210,7 +210,7 @@ SET CONSTRAINTS ALL IMMEDIATE;" \
 assert_integrity_rejected \
   "migration owner disables completeness triggers for a two-entry unbalanced journal" \
   "$(toggle_completeness DISABLE)
-$(complete_journal 3 "repeat('3', 64)" 5 4)
+$(complete_journal 3 "repeat('b', 64)" 5 4)
 $(toggle_completeness 'ENABLE ALWAYS')" \
   journal_unbalanced_asset
 
@@ -222,8 +222,12 @@ $(toggle_completeness 'ENABLE ALWAYS')" \
   journal_seal
 
 assert_integrity_rejected \
-  "writer reuses an accepted command digest for different journal content" \
-  "$(complete_journal 5 "(SELECT command_digest FROM financial_core.ledger_journals WHERE journal_id = '70000000-0000-4000-8000-000000000007')" 7)
+  "migration owner drops digest uniqueness and reuses an accepted command digest for different journal content" \
+  "ALTER TABLE financial_core.ledger_journals DROP CONSTRAINT ledger_journals_command_digest_unique;
+ALTER TABLE financial_core.ledger_idempotency_registry DROP CONSTRAINT ledger_idempotency_command_digest_unique;
+ALTER TABLE financial_core.ledger_journal_seals DROP CONSTRAINT ledger_journal_seals_command_digest_unique;
+DROP INDEX financial_core.ledger_outbox_events_command_digest_unique;
+$(complete_journal 5 "(SELECT command_digest FROM financial_core.ledger_journals WHERE journal_id = '70000000-0000-4000-8000-000000000007')" 7)
 SET CONSTRAINTS ALL IMMEDIATE;" \
   journal_command_digest_reused
 

@@ -113,6 +113,9 @@ const finiteTimestampGuardMigration = read(
 const migrationSequenceGuardMigration = read(
   "migrations/0011_ledger_migration_sequence_guard.sql"
 );
+const commandDigestUniquenessMigration = read(
+  "migrations/0012_ledger_command_digest_uniqueness.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -124,7 +127,8 @@ const migrations = [
   acceptanceArtifactGuardMigration,
   acceptanceTimelineGuardMigration,
   finiteTimestampGuardMigration,
-  migrationSequenceGuardMigration
+  migrationSequenceGuardMigration,
+  commandDigestUniquenessMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
@@ -141,6 +145,18 @@ for (const required of [
   assert(
     migrationSequenceGuardMigration.includes(required),
     `Migration sequence guard is missing ${required}`
+  );
+}
+for (const required of [
+  "ADD CONSTRAINT ledger_journals_command_digest_unique\n  UNIQUE (command_digest)",
+  "ADD CONSTRAINT ledger_idempotency_command_digest_unique\n  UNIQUE (command_digest)",
+  "ADD CONSTRAINT ledger_journal_seals_command_digest_unique\n  UNIQUE (command_digest)",
+  "CREATE UNIQUE INDEX ledger_outbox_events_command_digest_unique",
+  "((payload ->> 'command_digest'))"
+]) {
+  assert(
+    commandDigestUniquenessMigration.includes(required),
+    `Command digest uniqueness migration is missing ${required}`
   );
 }
 for (const required of [
@@ -631,9 +647,31 @@ for (const [fixture, evidence] of [
   ["tests/postgres-ledger-integrity.sh", "SET LOCAL session_replication_role = replica"],
   [
     "tests/postgres-ledger-integrity.sh",
-    "writer reuses an accepted command digest for different journal content"
+    "migration owner drops digest uniqueness and reuses an accepted command digest for different journal content"
   ],
   ["tests/postgres-ledger-integrity.sh", "postgres-ledger-integrity-negative-ok"],
+  [
+    "tests/postgres-command-digest-uniqueness.sh",
+    "ledger_journals_command_digest_unique"
+  ],
+  [
+    "tests/postgres-command-digest-uniqueness.sh",
+    "ledger_idempotency_command_digest_unique"
+  ],
+  [
+    "tests/postgres-command-digest-uniqueness.sh",
+    "ledger_journal_seals_command_digest_unique"
+  ],
+  [
+    "tests/postgres-command-digest-uniqueness.sh",
+    "ledger_outbox_events_command_digest_unique"
+  ],
+  ["tests/postgres-command-digest-uniqueness.sh", "SET LOCAL ROLE $runtime_role"],
+  ["tests/postgres-command-digest-uniqueness.sh", "wait_for_advisory_lock"],
+  [
+    "tests/postgres-command-digest-uniqueness.sh",
+    "postgres-command-digest-uniqueness-ok"
+  ],
   ["tests/postgres-invariant-trigger-catalog.sql", "pg_catalog.pg_trigger"],
   [
     "scripts/verify-postgres-invariant-trigger-catalog.mjs",
@@ -716,7 +754,7 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-migration-history.mjs",
-    "0011_ledger_migration_sequence_guard"
+    "0012_ledger_command_digest_uniqueness"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -736,11 +774,11 @@ for (const [fixture, evidence] of [
   ],
   [
     "tests/postgres-migration-history.sh",
-    "migration version 13 must follow installed version 11 with version 12"
+    "migration version 14 must follow installed version 12 with version 13"
   ],
   [
     "tests/postgres-migration-history.sh",
-    "migration name 0013_wrong_version must encode version 12"
+    "migration name 0014_wrong_version must encode version 13"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -771,7 +809,7 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-migration-source-catalog.mjs",
-    "0011_ledger_migration_sequence_guard.sql"
+    "0012_ledger_command_digest_uniqueness.sql"
   ],
   [
     "tests/postgres-migration-source-catalog.sh",
@@ -903,7 +941,7 @@ for (const [fixture, evidence] of [
   ],
   ["tests/postgres-backup-restore.sh", "postgres-backup-sequence-continuity-ok"],
   ["tests/postgres-backup-restore.sh", "verify_migration_history"],
-  ["tests/postgres-backup-restore.sh", "0012_unreviewed_restore_drift"],
+  ["tests/postgres-backup-restore.sh", "0013_unreviewed_restore_drift"],
   [
     "tests/postgres-backup-restore.sh",
     "postgres-backup-migration-history-negative-ok"
@@ -1086,7 +1124,7 @@ for (const required of [
   "CTO approver:",
   "Security approver:",
   "synthetic logical backup/restore",
-  "migration history точно соответствует migrations `0001`–`0011` и порядку их применения",
+  "migration history точно соответствует migrations `0001`–`0012` и порядку их применения",
   "failed migration полностью откатывает schema objects и history row",
   "restored и second-generation databases обязаны пройти exact migration-history verifier",
   "structurally valid backup без committed outbox data проходит catalog и migration-history проверки, но отклоняется canonical state snapshot",
@@ -1131,6 +1169,7 @@ for (const required of [
   "tests/postgres-finite-timestamps.sh",
   "tests/postgres-backup-restore.sh",
   "tests/postgres-ledger-integrity.sh",
+  "tests/postgres-command-digest-uniqueness.sh",
   "tests/command-digest-vector.json"
 ]) {
   assert(workflow.includes(required), `Financial core CI is missing ${required}`);

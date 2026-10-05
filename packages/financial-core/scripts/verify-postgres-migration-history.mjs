@@ -11,7 +11,8 @@ const expectedHistory = [
   { migration_name: "0008_ledger_acceptance_artifact_guard", version: 8 },
   { migration_name: "0009_ledger_acceptance_timeline_guard", version: 9 },
   { migration_name: "0010_ledger_finite_timestamp_guard", version: 10 },
-  { migration_name: "0011_ledger_migration_sequence_guard", version: 11 }
+  { migration_name: "0011_ledger_migration_sequence_guard", version: 11 },
+  { migration_name: "0012_ledger_command_digest_uniqueness", version: 12 }
 ];
 
 let input = "";

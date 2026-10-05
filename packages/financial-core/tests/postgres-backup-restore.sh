@@ -186,7 +186,7 @@ assert_restored_history_drift_rejected() {
       printf '%s\n' \
         "BEGIN;" \
         "INSERT INTO financial_core.schema_migrations (version, migration_name)" \
-        "VALUES (12, '0012_unreviewed_restore_drift');"
+        "VALUES (13, '0013_unreviewed_restore_drift');"
       cat tests/postgres-migration-history.sql
       printf '%s\n' "ROLLBACK;"
     } | run_psql "$database" -v ON_ERROR_STOP=1 -Atq \
