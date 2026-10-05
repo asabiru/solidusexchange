@@ -1,0 +1,15 @@
+{
+  "name": "@solidchange/customer-api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18 <25"
+  },
+  "scripts": {
+    "check": "node scripts/check-boundary.mjs",
+    "dev": "node src/server.mjs",
+    "mint-dev-token": "node scripts/mint-dev-token.mjs",
+    "test": "npm run check && node --test tests/*.test.mjs"
+  }
+}
