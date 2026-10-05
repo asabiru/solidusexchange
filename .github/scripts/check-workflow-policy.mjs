@@ -4,6 +4,8 @@ import path from "node:path";
 
 const SHA_REF = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[^@\s]+)*@[0-9a-f]{40}$/i;
 const DOCKER_DIGEST = /^docker:\/\/[^@\s]+@sha256:[0-9a-f]{64}$/i;
+const IMAGE_DIGEST = /^[^@\s]+@sha256:[0-9a-f]{64}$/i;
+const LOCAL_REUSABLE_WORKFLOW = /^\.\/\.github\/workflows\/[^/]+\.ya?ml$/;
 const FLOW_USES_KEY =
   /^-\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const FLOW_JOB_USES_KEY =
@@ -18,6 +20,9 @@ const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
 const SINGLE_QUOTED_KEY = /'((?:[^']|'')*)'(\s*:)/g;
 const POLICY_KEYS = new Set(["uses", "permissions", "with", "persist-credentials"]);
 const EXECUTION_KEYS = new Set(["run", "if", "continue-on-error"]);
+const ANY_KEY = { has: () => true };
+const FLOW_IMAGE_KEY =
+  /[{,]\s*(?:\?\s+)?(?:&[^\s,[\]{}]+\s+)?(?:container|services)\s*:/;
 const EXECUTION_KEY_PREFIX = String.raw`(^-\s+|^|[{,]\s*)(?:\?\s+)?(?:&[^\s,[\]{}]+\s+)?`;
 const RUN_KEY = new RegExp(`${EXECUTION_KEY_PREFIX}run\\s*:(.*)$`);
 const IF_KEY = new RegExp(`${EXECUTION_KEY_PREFIX}if\\s*:`);
@@ -78,13 +83,13 @@ function normalizePolicyKeys(line) {
   return normalizeKeys(line, POLICY_KEYS);
 }
 
-function childMappings(lines, parentIndex, keys) {
+function childMappings(lines, parentIndex, keys, normalizedKeys = TRIGGER_KEYS) {
   const mappings = [];
   const parentIndent = indentation(lines[parentIndex]);
   let childIndent = -1;
 
   for (let index = parentIndex + 1; index < lines.length; index += 1) {
-    const line = normalizeKeys(lines[index], TRIGGER_KEYS);
+    const line = normalizeKeys(lines[index], normalizedKeys);
     const trimmed = line.trim();
 
     if (!trimmed || trimmed.startsWith("#")) {
@@ -104,7 +109,7 @@ function childMappings(lines, parentIndex, keys) {
       continue;
     }
 
-    const match = trimmed.match(/^([A-Za-z_-]+):\s*(.*?)\s*$/);
+    const match = trimmed.match(/^([A-Za-z0-9_-]+):\s*(.*?)\s*$/);
     if (!keys || (match && keys.has(match[1]))) {
       mappings.push({
         index,
@@ -342,6 +347,75 @@ function executionErrors(lines, fileName) {
   return errors;
 }
 
+function imageReferenceErrors(lines, mapping, fileName) {
+  const error = `${fileName}:${mapping.index + 1}: container and service images must use an immutable sha256 digest`;
+
+  if (mapping.value) {
+    return IMAGE_DIGEST.test(mapping.value) ? [] : [error];
+  }
+
+  const children = childMappings(lines, mapping.index, undefined, ANY_KEY);
+  const images = children.filter(({ name }) => name === "image");
+  if (
+    children.some(({ name }) => !name) ||
+    images.length !== 1 ||
+    !IMAGE_DIGEST.test(images[0].value)
+  ) {
+    return [error];
+  }
+
+  return [];
+}
+
+function containerErrors(lines, fileName) {
+  const errors = [];
+  const jobsLine = lines.findIndex((line) =>
+    /^jobs:\s*(?:#.*)?$/.test(normalizeKeys(line, ANY_KEY)),
+  );
+  if (jobsLine === -1) {
+    return errors;
+  }
+
+  for (const job of childMappings(lines, jobsLine, undefined, ANY_KEY)) {
+    const keys = childMappings(lines, job.index, undefined, ANY_KEY);
+    if (job.value || keys.some(({ name }) => !name)) {
+      const text = [lines[job.index]];
+      for (let index = job.index + 1; index < lines.length; index += 1) {
+        if (lines[index].trim() && indentation(lines[index]) <= job.indent) {
+          break;
+        }
+        text.push(lines[index]);
+      }
+      if (FLOW_IMAGE_KEY.test(normalizeKeys(text.join(" "), ANY_KEY))) {
+        errors.push(
+          `${fileName}:${job.index + 1}: container and services must use block mappings`,
+        );
+      }
+    }
+
+    for (const key of keys) {
+      if (key.name === "container") {
+        errors.push(...imageReferenceErrors(lines, key, fileName));
+      } else if (key.name === "services") {
+        const services = key.value
+          ? [{ ...key, name: undefined }]
+          : childMappings(lines, key.index, undefined, ANY_KEY);
+        for (const service of services) {
+          errors.push(
+            ...(service.name
+              ? imageReferenceErrors(lines, service, fileName)
+              : [
+                  `${fileName}:${service.index + 1}: services must be block mappings of named services`,
+                ]),
+          );
+        }
+      }
+    }
+  }
+
+  return errors;
+}
+
 function jobText(lines, jobIndex, jobIndent) {
   const parts = [normalizePolicyKeys(lines[jobIndex])];
 
@@ -365,10 +439,15 @@ function jobText(lines, jobIndex, jobIndent) {
 
 export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
-  const errors = [...triggerErrors(lines, fileName), ...executionErrors(lines, fileName)];
+  const errors = [
+    ...triggerErrors(lines, fileName),
+    ...executionErrors(lines, fileName),
+    ...containerErrors(lines, fileName),
+  ];
   const rootPermissions = [];
   let jobsIndent = -1;
   let jobIndent = -1;
+  let jobChildIndent = -1;
 
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
@@ -388,6 +467,12 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       jobIndent = -1;
     } else if (jobsIndent !== -1 && jobIndent === -1) {
       jobIndent = indent;
+    }
+
+    if (jobsIndent !== -1 && indent === jobIndent) {
+      jobChildIndent = -1;
+    } else if (jobsIndent !== -1 && indent > jobIndent && jobChildIndent === -1) {
+      jobChildIndent = indent;
     }
 
     if (
@@ -480,6 +565,12 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
 
     const action = scalar(usesMatch[1]);
     if (action.startsWith("./")) {
+      const jobLevel = indent === jobChildIndent && !trimmed.startsWith("-");
+      if (!jobLevel || !LOCAL_REUSABLE_WORKFLOW.test(action)) {
+        errors.push(
+          `${fileName}:${index + 1}: local actions are not allowed; only job-level reusable workflows in .github/workflows`,
+        );
+      }
       continue;
     }
 

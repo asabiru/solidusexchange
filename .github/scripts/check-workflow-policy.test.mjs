@@ -25,7 +25,7 @@ ${step}
 }
 
 test("rejects validation workflows missing required pull request or main push triggers", () => {
-  const valid = workflow("      - uses: ./local-action");
+  const valid = workflow("      - run: echo ok");
 
   for (const mutation of [
     valid.replace("  pull_request:\n", ""),
@@ -45,7 +45,7 @@ test("rejects validation workflows missing required pull request or main push tr
 test("accepts unfiltered main pushes and the approved manual deployment trigger", () => {
   assert.deepEqual(
     validateWorkflowText(
-      workflow("      - uses: ./local-action").replace(
+      workflow("      - run: echo ok").replace(
         "  push:\n    branches:\n      - main",
         "  push:",
       ),
@@ -66,7 +66,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: ./local-action
+      - run: echo ok
 `,
       ".github/workflows/deploy.yml",
     ),
@@ -86,7 +86,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: ./local-action
+      - run: echo ok
 `;
 
   for (const automaticTrigger of [
@@ -108,7 +108,7 @@ jobs:
 
 test("normalizes quoted trigger keys without changing unrelated YAML", () => {
   const errors = validateWorkflowText(
-    workflow("      - uses: ./local-action")
+    workflow("      - run: echo ok")
       .replace("on:", String.raw`"o\u006e":`)
       .replace("  pull_request:", "  'pull_request':")
       .replace("  push:", String.raw`  "pu\u0073h":`)
@@ -119,7 +119,7 @@ test("normalizes quoted trigger keys without changing unrelated YAML", () => {
 });
 
 test("rejects additional automatic triggers on validation workflows", () => {
-  const valid = workflow("      - uses: ./local-action");
+  const valid = workflow("      - run: echo ok");
 
   for (const extraTrigger of [
     "  schedule:\n    - cron: '0 0 * * *'\n",
@@ -143,7 +143,7 @@ test("rejects additional automatic triggers on validation workflows", () => {
 
 test("accepts filtered pull_request and push triggers on validation workflows", () => {
   const errors = validateWorkflowText(
-    workflow("      - uses: ./local-action")
+    workflow("      - run: echo ok")
       .replace(
         "  pull_request:\n",
         "  'pull_request':\n    # Path filters keep validation scoped.\n    paths:\n      - \"backoffice/**\"\n",
@@ -156,7 +156,7 @@ test("accepts filtered pull_request and push triggers on validation workflows", 
 
 test("rejects workflow_dispatch outside the approved manual workflow", () => {
   const errors = validateWorkflowText(
-    workflow("      - uses: ./local-action").replace(
+    workflow("      - run: echo ok").replace(
       "  pull_request:",
       "  workflow_dispatch:\n  pull_request:",
     ),
@@ -170,7 +170,6 @@ test("accepts pinned actions with least privilege and ephemeral checkout credent
     workflow(`      - uses: actions/checkout@${checkoutSha}
         with:
           persist-credentials: false
-      - uses: ./local-action
       - uses: docker://alpine@sha256:${"a".repeat(64)}`),
   );
 
@@ -333,6 +332,115 @@ jobs:
   }
 });
 
+test("rejects local actions whose contents bypass workflow policy", () => {
+  for (const step of [
+    "      - uses: ./.github/actions/unpinned",
+    "      - 'uses': ./local-action",
+    '      - "u\\u0073es": ./local-action',
+    "      - name: nested\n        uses: ./.github/workflows/action.yml",
+    "      - &step\n        uses: ./",
+  ]) {
+    assert.match(
+      validateWorkflowText(workflow(step)).join("\n"),
+      /local actions are not allowed/,
+      step,
+    );
+  }
+
+  for (const target of [
+    "./.github/actions/unpinned",
+    "./.github/workflows/../actions/unpinned.yml",
+    "./reusable.yml",
+  ]) {
+    assert.match(
+      jobsWorkflow(`  call-local:\n    uses: ${target}`).join("\n"),
+      /local actions are not allowed/,
+      target,
+    );
+  }
+});
+
+test("rejects mutable container and service images in any key spelling or placement", () => {
+  const digest = `postgres@sha256:${"a".repeat(64)}`;
+  for (const job of [
+    "    container: node:latest",
+    "    container:\n      image: node:latest",
+    "    container: { image: node }",
+    "    container:\n      { image: node }",
+    "    container: ${{ matrix.image }}",
+    "    container: *image",
+    `    container: node@sha256:${"a".repeat(64)}x`,
+    `    container:\n      image: ${digest}\n      image: node`,
+    '    "cont\\x61iner":\n      "im\\u0061ge": node',
+    "    services:\n      redis:\n        image: redis:7",
+    "    services:\n      redis: redis",
+    "    services:\n      redis: { image: redis }",
+    "    services: { redis: { image: redis } }",
+    "    services:\n      redis:\n        env:\n          A: b",
+    "    'services':\n      redis:\n        'image': redis",
+  ]) {
+    const errors = jobsWorkflow(
+      `  verify:\n    runs-on: ubuntu-latest\n${job}\n    steps:\n      - run: echo ok`,
+    );
+    assert.match(
+      errors.join("\n"),
+      /container and service images must use an immutable sha256 digest|services must be block mappings/,
+      job,
+    );
+  }
+
+  for (const job of [
+    "  verify: { runs-on: ubuntu-latest, container: node, steps: [{ run: echo ok }] }",
+    '  verify:\n    { runs-on: ubuntu-latest,\n      "services": { redis: { image: redis } }, steps: [{ run: echo ok }] }',
+    "  verify: &verify\n    runs-on: ubuntu-latest\n    container: node\n    steps:\n      - run: echo ok",
+  ]) {
+    assert.match(
+      jobsWorkflow(job).join("\n"),
+      /container and services must use block mappings|immutable sha256 digest/,
+      job,
+    );
+  }
+
+  assert.match(
+    validateWorkflowText(
+      workflow("      - run: echo ok")
+        .replace("jobs:", '"jobs":')
+        .replace("    steps:", "    container: node\n    steps:"),
+    ).join("\n"),
+    /immutable sha256 digest/,
+  );
+});
+
+test("accepts digest-pinned container and service images and unrelated image data", () => {
+  const digest = `postgres:16@sha256:${"a".repeat(64)}`;
+  const errors = jobsWorkflow(`  verify:
+    runs-on: ubuntu-latest
+    container:
+      image: ${digest}
+      options: --cpus 1
+    services:
+      postgres2:
+        image: "${digest}" # pinned
+        ports:
+          - 5432:5432
+    strategy:
+      matrix:
+        include: [{ image: node, container: node }]
+    steps:
+      - uses: actions/setup-node@${checkoutSha}
+        with:
+          container: node
+          image: node
+      - run: echo container: node
+  scalar:
+    runs-on: ubuntu-latest
+    container: ${digest}
+    steps:
+      - run: echo ok`);
+
+  assert.deepEqual(errors, []);
+});
+
 test("accepts quoted keys unrelated to workflow policy", () => {
   const errors = validateWorkflowText(`name: Policy fixture
 ${validationTriggers}
@@ -394,7 +502,7 @@ jobs:
 
 test("rejects excessive workflow permissions", () => {
   const errors = validateWorkflowText(
-    workflow("      - uses: ./local-action", "permissions:\n  contents: write"),
+    workflow("      - run: echo ok", "permissions:\n  contents: write"),
   );
 
   assert.match(errors.join("\n"), /permissions must be exactly contents: read/);
