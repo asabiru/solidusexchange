@@ -1,0 +1,32 @@
+{
+  "name": "@solidchange/miniapp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18 <25"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:web": "vite",
+    "dev:bff": "npm run build:bff && MINIAPP_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
+    "build": "tsc -b && npm run build:bff && vite build",
+    "build:bff": "tsc -p tsconfig.server.json",
+    "lint": "biome lint src scripts vite.config.ts",
+    "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
+    "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js"
+  },
+  "dependencies": {
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.2.4",
+    "@types/node": "24.3.0",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.2",
+    "typescript": "5.9.2",
+    "vite": "7.3.6"
+  }
+}
