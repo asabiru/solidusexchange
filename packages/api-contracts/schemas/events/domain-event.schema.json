@@ -124,6 +124,9 @@
           "aggregate_type": {
             "const": "user"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/userRegistered"
           }
@@ -145,6 +148,9 @@
         "properties": {
           "aggregate_type": {
             "const": "kyc_case"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/kycSubmitted"
@@ -168,6 +174,9 @@
           "aggregate_type": {
             "const": "kyc_case"
           },
+          "data_classification": {
+            "const": "highly-confidential"
+          },
           "payload": {
             "$ref": "#/$defs/kycVerified"
           }
@@ -189,6 +198,9 @@
         "properties": {
           "aggregate_type": {
             "const": "wallet"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/walletAddressAssigned"
@@ -212,6 +224,9 @@
           "aggregate_type": {
             "const": "deposit"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/depositDetected"
           }
@@ -233,6 +248,9 @@
         "properties": {
           "aggregate_type": {
             "const": "deposit"
+          },
+          "data_classification": {
+            "const": "confidential"
           },
           "payload": {
             "$ref": "#/$defs/depositConfirmed"
@@ -256,6 +274,9 @@
           "aggregate_type": {
             "const": "quote"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/quoteCreated"
           }
@@ -277,6 +298,9 @@
         "properties": {
           "aggregate_type": {
             "const": "exchange_order"
+          },
+          "data_classification": {
+            "const": "confidential"
           },
           "payload": {
             "$ref": "#/$defs/exchangeOrderCreated"
@@ -300,6 +324,9 @@
           "aggregate_type": {
             "const": "exchange_order"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/exchangeSettled"
           }
@@ -321,6 +348,9 @@
         "properties": {
           "aggregate_type": {
             "const": "withdrawal"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/withdrawalRequested"
@@ -344,6 +374,9 @@
           "aggregate_type": {
             "const": "withdrawal"
           },
+          "data_classification": {
+            "const": "highly-confidential"
+          },
           "payload": {
             "$ref": "#/$defs/withdrawalHeld"
           }
@@ -365,6 +398,9 @@
         "properties": {
           "aggregate_type": {
             "const": "withdrawal"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/withdrawalApproved"
@@ -388,6 +424,9 @@
           "aggregate_type": {
             "const": "withdrawal"
           },
+          "data_classification": {
+            "const": "highly-confidential"
+          },
           "payload": {
             "$ref": "#/$defs/custodyIntentPrepared"
           }
@@ -409,6 +448,9 @@
         "properties": {
           "aggregate_type": {
             "const": "withdrawal"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/withdrawalBroadcast"
@@ -432,6 +474,9 @@
           "aggregate_type": {
             "const": "payment"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/paymentConfirmed"
           }
@@ -454,6 +499,9 @@
           "aggregate_type": {
             "const": "payment"
           },
+          "data_classification": {
+            "const": "confidential"
+          },
           "payload": {
             "$ref": "#/$defs/paymentRefunded"
           }
@@ -475,6 +523,9 @@
         "properties": {
           "aggregate_type": {
             "const": "aml_alert"
+          },
+          "data_classification": {
+            "const": "highly-confidential"
           },
           "payload": {
             "$ref": "#/$defs/amlAlertCreated"
