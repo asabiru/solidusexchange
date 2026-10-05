@@ -264,3 +264,54 @@ test("rejects custody policy containing key material", () => {
     /contains restricted custody material/u
   );
 });
+
+function switchingAfterReads(source, key, replacement, reads, mode) {
+  let count = 0;
+  const read = () => (count++ < reads ? source[key] : replacement);
+  if (mode === "proxy") {
+    return new Proxy({ ...source }, {
+      get: (target, property, receiver) =>
+        property === key ? read() : Reflect.get(target, property, receiver)
+    });
+  }
+  const switching = { ...source };
+  Object.defineProperty(switching, key, { enumerable: true, get: read });
+  return switching;
+}
+
+test("rejects accessor or proxy custody inputs that change after validation", () => {
+  const custodyCommand = command();
+  const intentDigest = computeIntentDigest(custodyCommand, policy);
+  for (const [key, replacement] of [
+    ["network", "TRON_MAINNET"],
+    ["network", "ETHEREUM_1"],
+    ["asset", "BTC"]
+  ]) {
+    for (const mode of ["accessor", "proxy"]) {
+      for (let reads = 0; reads <= 24; reads += 1) {
+        assert.throws(
+          () =>
+            prepareUnsignedTransactionIntent({
+              approvals: approvals(intentDigest),
+              command: switchingAfterReads(custodyCommand, key, replacement, reads, mode),
+              now,
+              policy
+            }),
+          /must be (?:plain data|an enumerable data property)/u,
+          `${mode} ${key}=${replacement} after ${reads} reads`
+        );
+      }
+    }
+  }
+  const switchingPolicy = switchingAfterReads(
+    policy,
+    "production_signing_enabled",
+    true,
+    1,
+    "accessor"
+  );
+  assert.throws(
+    () => computeIntentDigest(custodyCommand, switchingPolicy),
+    /policy\.production_signing_enabled must be an enumerable data property/u
+  );
+});

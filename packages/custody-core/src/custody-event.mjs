@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 
-import { verifyUnsignedTransactionIntent } from "./unsigned-intent.mjs";
+import {
+  snapshotPlainData,
+  verifyUnsignedTransactionIntent
+} from "./unsigned-intent.mjs";
 
 const eventContextKeys = [
   "event_id",
@@ -179,17 +182,22 @@ function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOcc
 }
 
 export function createCustodyIntentPreparedEvent({
-  context,
-  intent,
+  context: contextInput,
+  intent: intentInput,
   policy,
-  withdrawalApprovedEvent
+  withdrawalApprovedEvent: withdrawalApprovedEventInput
 }) {
+  const context = snapshotPlainData(contextInput, "event context");
+  const withdrawalApprovedEvent = snapshotPlainData(
+    withdrawalApprovedEventInput,
+    "withdrawal approval event"
+  );
   assertExactKeys(context, eventContextKeys, "event context");
   assertUuidV7(context.event_id, "event_id");
 
   const occurredAt = parseTimestamp(context.occurred_at, "occurred_at");
-  verifyUnsignedTransactionIntent({
-    intent,
+  const intent = verifyUnsignedTransactionIntent({
+    intent: intentInput,
     now: new Date(occurredAt),
     policy
   });
@@ -239,7 +247,8 @@ export function createCustodyProjectionRegistry() {
   const withdrawalIds = new Map();
   const custodyIntentIds = new Map();
 
-  function project(request) {
+  function project(requestInput) {
+    const request = snapshotPlainData(requestInput, "custody projection request");
     const event = createCustodyIntentPreparedEvent(request);
     const requestDigest = digest(request);
     const idempotencyKey = event.idempotency_key;

@@ -37,7 +37,7 @@ It returns an immutable envelope with:
 }
 ```
 
-Raw destination addresses are replaced by `destination_reference`; exact address ownership remains inside the future custody/signer trust zone. Missing approvals, reused human subjects, stale evidence, command or policy digest drift, mainnet assets and signing-enabled policy fail closed.
+Raw destination addresses are replaced by `destination_reference`; exact address ownership remains inside the future custody/signer trust zone. Missing approvals, reused human subjects, stale evidence, command or policy digest drift, mainnet assets and signing-enabled policy fail closed. Every entry point first snapshots its inputs into fresh plain data and validates and projects only that snapshot; proxies, accessor (getter) properties, symbol keys, sparse arrays, cycles and non-plain prototypes are rejected, so a value cannot pass the testnet allowlist and then change to a mainnet network or unapproved asset when the intent or event is built.
 
 `createCustodyIntentPreparedEvent` projects a verified envelope into the canonical additive domain event contract. Aggregate, correlation and idempotency values are derived from the sealed command; causation is derived from a verified canonical `WithdrawalApproved` event, while only the new UUIDv7 event ID and timestamp are supplied by the outbox boundary. The approval event must preserve withdrawal aggregate/correlation, summarize the exact approval evidence digest and occur after the individual approvals. The custody event excludes destination references, individual approvals and all signing material.
 

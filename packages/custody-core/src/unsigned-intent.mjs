@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types } from "node:util";
 
 const commandKeys = [
   "amount",
@@ -91,6 +92,47 @@ function assertPlainObject(value, label) {
       Object.getPrototypeOf(value) === Object.prototype,
     `${label} must be a plain object`
   );
+}
+
+const arrayIndexPattern = /^(?:0|[1-9][0-9]*)$/u;
+
+export function snapshotPlainData(value, label = "input", ancestors = new Set()) {
+  assert(typeof value !== "function", `${label} must be plain data`);
+  if (value === null || typeof value !== "object") return value;
+  assert(!types.isProxy(value), `${label} must be plain data`);
+  assert(!ancestors.has(value), `${label} must not be cyclic`);
+  const isArray = Array.isArray(value);
+  assert(
+    Object.getPrototypeOf(value) === (isArray ? Array.prototype : Object.prototype),
+    `${label} must be plain data`
+  );
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  const snapshot = isArray ? [] : {};
+  if (isArray) {
+    assert(keys.length === descriptors.length.value + 1, `${label} must be a dense array`);
+  }
+  ancestors.add(value);
+  for (const key of keys) {
+    if (isArray && key === "length") continue;
+    assert(typeof key === "string", `${label} must not contain symbol keys`);
+    if (isArray) {
+      assert(arrayIndexPattern.test(key), `${label} must only contain array elements`);
+    }
+    const descriptor = descriptors[key];
+    assert(
+      Object.hasOwn(descriptor, "value") && descriptor.enumerable,
+      `${label}.${key} must be an enumerable data property`
+    );
+    Object.defineProperty(snapshot, key, {
+      configurable: true,
+      enumerable: true,
+      value: snapshotPlainData(descriptor.value, `${label}.${key}`, ancestors),
+      writable: true
+    });
+  }
+  ancestors.delete(value);
+  return snapshot;
 }
 
 function assertNoRestrictedMaterial(value, label = "input") {
@@ -285,7 +327,9 @@ function calculateIntentDigest(command, policyDigest) {
   });
 }
 
-export function computeIntentDigest(command, policy) {
+export function computeIntentDigest(commandInput, policyInput) {
+  const command = snapshotPlainData(commandInput, "command");
+  const policy = snapshotPlainData(policyInput, "policy");
   assertNoRestrictedMaterial(command, "command");
   assertNoRestrictedMaterial(policy, "policy");
   assertPolicy(policy);
@@ -295,10 +339,12 @@ export function computeIntentDigest(command, policy) {
 }
 
 export function verifyUnsignedTransactionIntent({
-  intent,
+  intent: intentInput,
   now = new Date(),
-  policy
+  policy: policyInput
 }) {
+  const intent = snapshotPlainData(intentInput, "intent");
+  const policy = snapshotPlainData(policyInput, "policy");
   assertNoRestrictedMaterial(intent, "intent");
   assertNoRestrictedMaterial(policy, "policy");
   assertExactKeys(intent, intentKeys, "intent");
@@ -332,15 +378,20 @@ export function verifyUnsignedTransactionIntent({
     JSON.stringify(intent.approvals) === JSON.stringify(orderedApprovals),
     "intent approvals must remain canonically ordered"
   );
-  return intent;
+  return deepFreeze(intent);
 }
 
 export function prepareUnsignedTransactionIntent({
-  approvals,
-  command,
+  approvals: approvalsInput,
+  command: commandInput,
   now = new Date(),
-  policy
+  policy: policyInput
 }) {
+  const { approvals, command } = snapshotPlainData(
+    { approvals: approvalsInput, command: commandInput },
+    "custody_request"
+  );
+  const policy = snapshotPlainData(policyInput, "policy");
   assertNoRestrictedMaterial({ approvals, command }, "custody_request");
   assertNoRestrictedMaterial(policy, "policy");
   assertPolicy(policy);

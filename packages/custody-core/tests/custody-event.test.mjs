@@ -501,3 +501,71 @@ test("rejects policy drift and signing-enabled policy", () => {
     /production signing must remain disabled/u
   );
 });
+
+function switchingAfterReads(source, key, replacement, reads, mode) {
+  let count = 0;
+  const read = () => (count++ < reads ? source[key] : replacement);
+  if (mode === "proxy") {
+    return new Proxy({ ...source }, {
+      get: (target, property, receiver) =>
+        property === key ? read() : Reflect.get(target, property, receiver)
+    });
+  }
+  const switching = { ...source };
+  Object.defineProperty(switching, key, { enumerable: true, get: read });
+  return switching;
+}
+
+test("rejects accessor or proxy custody evidence that changes after verification", () => {
+  const intent = preparedIntent();
+  for (const [key, replacement] of [
+    ["network", "TRON_MAINNET"],
+    ["network", "ETHEREUM_1"],
+    ["asset", "BTC"]
+  ]) {
+    for (const mode of ["accessor", "proxy"]) {
+      for (let reads = 0; reads <= 24; reads += 1) {
+        const request = () => {
+          const switchingIntent = {
+            ...intent,
+            command: switchingAfterReads(intent.command, key, replacement, reads, mode)
+          };
+          return {
+            context: context(),
+            intent: switchingIntent,
+            policy,
+            withdrawalApprovedEvent: withdrawalApprovedEvent(intent)
+          };
+        };
+        const label = `${mode} ${key}=${replacement} after ${reads} reads`;
+        assert.throws(
+          () => createCustodyIntentPreparedEvent(request()),
+          /must be (?:plain data|an enumerable data property)/u,
+          label
+        );
+        assert.throws(
+          () => createCustodyProjectionRegistry().project(request()),
+          /must be (?:plain data|an enumerable data property)/u,
+          label
+        );
+      }
+    }
+  }
+  const switchingContext = switchingAfterReads(
+    context(),
+    "event_id",
+    "018f3f8a-0012-7000-8000-000000000012",
+    1,
+    "proxy"
+  );
+  assert.throws(
+    () =>
+      createCustodyIntentPreparedEvent({
+        context: switchingContext,
+        intent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(intent)
+      }),
+    /event context must be plain data/u
+  );
+});
