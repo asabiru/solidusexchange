@@ -237,10 +237,14 @@ export function createBackofficeServer(
   function createSession(
     request: IncomingMessage,
     response: ServerResponse,
-    identity: Omit<OperatorSession, "id" | "expiresAt">
+    identity: Omit<OperatorSession, "id" | "expiresAt">,
+    loginStartSessionId?: string
   ): OperatorSession {
     const previousId = parseCookies(request)[sessionCookie];
     if (previousId) sessions.delete(previousId);
+    if (loginStartSessionId) sessions.delete(loginStartSessionId);
+    const { deviceId } = identity;
+    if (deviceId) sessions.deleteWhere((session) => session.deviceId === deviceId);
     const session = {
       ...identity,
       id: createOpaqueValue(),
@@ -325,6 +329,7 @@ export function createBackofficeServer(
         pendingLogins.set(state, {
           nonce,
           verifier,
+          previousSessionId: parseCookies(request)[sessionCookie] || undefined,
           expiresAt: Date.now() + 5 * 60 * 1_000
         });
         setOidcTransactionCookie(response, state);
@@ -375,7 +380,12 @@ export function createBackofficeServer(
         if (!device) return;
         const idToken = await exchangeAuthorizationCode(config.oidc, code, pending.verifier);
         const identity = await verifyIdToken(idToken, config.oidc, pending.nonce);
-        createSession(request, response, { ...identity, ...device });
+        createSession(
+          request,
+          response,
+          { ...identity, ...device },
+          pending.previousSessionId
+        );
         redirect(response, config.allowedOrigins[0]);
         return;
       }
