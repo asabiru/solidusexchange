@@ -289,6 +289,48 @@ function decodeRunText(text) {
   return decodeDoubleQuotedKey(text.replace(/\\\r?\n\s*/g, ""));
 }
 
+export function collectRunCommands(lines) {
+  const commands = [];
+  let contentIndent = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = normalizeKeys(line, EXECUTION_KEYS).trim();
+    const indent = indentation(line);
+
+    if (contentIndent !== -1) {
+      if (!trimmed || indent > contentIndent) {
+        continue;
+      }
+      contentIndent = -1;
+    }
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const runMatch = trimmed.match(RUN_KEY);
+    if (!runMatch) {
+      continue;
+    }
+
+    const keyIndent =
+      runMatch.index === 0 ? indent + runMatch[1].length : indent;
+    const parts = [runMatch[2]];
+    for (let child = index + 1; child < lines.length; child += 1) {
+      if (lines[child].trim() && indentation(lines[child]) <= keyIndent) {
+        break;
+      }
+      parts.push(lines[child]);
+    }
+
+    commands.push({ index, text: decodeRunText(parts.join("\n")) });
+    contentIndent = keyIndent;
+  }
+
+  return commands;
+}
+
 function executionErrors(lines, fileName) {
   const errors = [];
   const validation = !MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/"));

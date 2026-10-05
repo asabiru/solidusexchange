@@ -1,0 +1,99 @@
+{
+  "scripts": {
+    "backoffice/package.json": {
+      "dev": "node scripts/dev.mjs",
+      "dev:web": "vite",
+      "dev:bff": "npm run build:bff && BACKOFFICE_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
+      "build": "tsc -b && npm run build:bff && vite build",
+      "build:bff": "tsc -p tsconfig.server.json",
+      "lint": "biome lint src scripts vite.config.ts",
+      "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
+    },
+    "packages/api-contracts/package.json": {
+      "check": "node scripts/check-contracts.mjs",
+      "test": "npm run check && node --test tests/*.test.mjs"
+    },
+    "packages/custody-core/package.json": {
+      "check": "node scripts/check-boundary.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    },
+    "packages/financial-core/package.json": {
+      "check": "node scripts/check-foundation.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    }
+  },
+  "runSteps": {
+    ".github/workflows/backoffice-ci.yml": [
+      "working-directory: backoffice",
+      "npm ci",
+      "npm audit --audit-level=moderate",
+      "npm run lint",
+      "npm run typecheck",
+      "npm test",
+      "npm run build"
+    ],
+    ".github/workflows/contracts-ci.yml": [
+      "working-directory: packages/api-contracts",
+      "npm ci",
+      "npm audit --audit-level=moderate",
+      "npm test"
+    ],
+    ".github/workflows/custody-core-ci.yml": [
+      "working-directory: packages/custody-core",
+      "npm ci",
+      "npm audit --audit-level=moderate",
+      "npm run verify",
+      "bash tests/postgres-migration-source-catalog.sh",
+      "bash tests/postgres-migration-source-policy.sh",
+      "bash tests/postgres-outbox.sh",
+      "bash tests/postgres-migration-history.sh",
+      "bash tests/postgres-catalog.sh",
+      "bash tests/postgres-execution-surface-catalog.sh",
+      "bash tests/postgres-backup-restore.sh",
+      "bash tests/postgres-runtime-privileges.sh"
+    ],
+    ".github/workflows/deploy.yml": [],
+    ".github/workflows/financial-core-ci.yml": [
+      "working-directory: packages/financial-core",
+      "npm ci",
+      "npm audit --audit-level=moderate",
+      "npm run verify",
+      "bash tests/postgres-migration-source-catalog.sh",
+      "bash tests/postgres-migration-source-policy.sh",
+      "| for migration in migrations/*.sql; do docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$migration\" done",
+      "bash tests/postgres-migration-history.sh",
+      "bash tests/postgres-chart-of-accounts.sh",
+      "bash tests/postgres-owner-truncate-guard.sh",
+      "bash tests/postgres-immutability-catalog.sh",
+      "bash tests/postgres-trigger-function-catalog.sh",
+      "bash tests/postgres-execution-surface-catalog.sh",
+      "bash tests/postgres-posting-rule-registry.sh",
+      ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -v \"command_vector_json=$(tr -d '\\n' < tests/command-digest-vector.json)\" -f tests/postgres-smoke.sql",
+      "bash tests/postgres-acceptance-artifact-integrity.sh",
+      "bash tests/postgres-finite-timestamps.sh",
+      "bash tests/postgres-constraint-catalog.sh",
+      "bash tests/postgres-relation-catalog.sh",
+      "bash tests/postgres-access-control-catalog.sh",
+      "bash tests/postgres-invariant-trigger-catalog.sh",
+      "bash tests/postgres-replica-reference-integrity.sh",
+      "bash tests/postgres-concurrency.sh",
+      "bash tests/postgres-backup-restore.sh",
+      "bash tests/postgres-runtime-privileges.sh",
+      ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f tests/postgres-precision-boundary.sql",
+      "| while IFS='|' read -r fixture expected; do set +e output=\"$(docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$fixture\" 2>&1)\" status=$? set -e printf '%s\\n' \"$output\" if [ \"$status\" -eq 0 ]; then echo \"$fixture unexpectedly committed.\" exit 1 fi printf '%s\\n' \"$output\" | grep -F \"$expected\" done <<'EOF' tests/postgres-reject-incomplete.sql|requires at least two entries tests/postgres-reject-unbalanced.sql|is not balanced per asset tests/postgres-reject-late-entry.sql|is sealed tests/postgres-reject-unregistered-rule.sql|ledger_journals_posting_rule_fk tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule tests/postgres-reject-rule-pattern.sql|entries violate its posting rule tests/postgres-reject-precision.sql|amount exceeds ledger precision limit tests/postgres-reject-nonfinite.sql|amount must be finite EOF"
+    ],
+    ".github/workflows/workflow-policy.yml": [
+      "node --test .github/scripts/check-workflow-policy.test.mjs",
+      "node .github/scripts/check-workflow-policy.mjs",
+      "node --test .github/scripts/check-regulated-core-status.test.mjs",
+      "node .github/scripts/check-regulated-core-status.mjs",
+      "node --test .github/scripts/check-verification-integrity.test.mjs",
+      "node .github/scripts/check-verification-integrity.mjs"
+    ]
+  }
+}
