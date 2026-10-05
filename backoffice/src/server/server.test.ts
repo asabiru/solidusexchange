@@ -592,6 +592,65 @@ describe("backoffice BFF", () => {
     assert.equal(executionRoute.status, 404);
   });
 
+  it("revokes the presented session and its step-up grant when the operator logs in again", async () => {
+    const previous = await devSession("compliance-lead");
+    const approval = demoRepository.approvals().find((item) => item.id === "APV-843910");
+    assert.ok(approval);
+    const commandDigest = approvalCommandDigest(approval);
+    const headers = { cookie: previous, "content-type": "application/json", origin };
+    const challengePath = `${baseUrl}/bff/api/approvals/${approval.id}/step-up/challenges`;
+    const challenge = await fetch(challengePath, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ commandDigest })
+    });
+    assert.equal(challenge.status, 200);
+    const { payload: challengePayload } = await challenge.json() as {
+      payload: { challengeId: string; devVerificationCode: string };
+    };
+    const verification = await fetch(`${challengePath}/${challengePayload.challengeId}/verify`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ commandDigest, code: challengePayload.devVerificationCode })
+    });
+    assert.equal(verification.status, 200);
+    const { payload: { grant } } = await verification.json() as { payload: { grant: string } };
+
+    const relogin = await fetch(`${baseUrl}/bff/auth/dev-session`, {
+      method: "POST",
+      headers: { cookie: previous, "content-type": "application/json", origin },
+      body: JSON.stringify({ role: "auditor" })
+    });
+    assert.equal(relogin.status, 200);
+    const rotated = relogin.headers.get("set-cookie")?.split(";")[0];
+    assert.ok(rotated);
+    assert.notEqual(rotated, previous);
+
+    const status = await fetch(`${baseUrl}/bff/auth/status`, { headers: { cookie: previous } });
+    assert.deepEqual(await status.json(), { authenticated: false });
+    const approvals = await fetch(`${baseUrl}/bff/api/approvals`, { headers: { cookie: previous } });
+    assert.equal(approvals.status, 401);
+    const replay = await fetch(`${baseUrl}/bff/api/approvals/${approval.id}/preview`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ commandDigest, stepUpGrant: grant })
+    });
+    assert.equal(replay.status, 401);
+    assert.deepEqual(await replay.json(), { error: "operator_session_required" });
+
+    const current = await fetch(`${baseUrl}/bff/api/session`, { headers: { cookie: rotated } });
+    assert.equal(current.status, 200);
+    const { payload } = await current.json() as { payload: { operator: { role: string } } };
+    assert.equal(payload.operator.role, "auditor");
+  });
+
+  it("keeps concurrent sessions that were not presented at login", async () => {
+    const first = await devSession("compliance-lead");
+    await devSession("compliance-lead");
+    const status = await fetch(`${baseUrl}/bff/auth/status`, { headers: { cookie: first } });
+    assert.deepEqual(await status.json(), { authenticated: true });
+  });
+
   it("denies step-up challenge creation to read-only roles and untrusted origins", async () => {
     const auditorCookie = await devSession("auditor");
     const complianceCookie = await devSession("compliance-lead");
