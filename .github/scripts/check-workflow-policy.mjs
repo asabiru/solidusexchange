@@ -324,7 +324,54 @@ export function collectRunCommands(lines) {
       parts.push(lines[child]);
     }
 
-    commands.push({ index, text: decodeRunText(parts.join("\n")) });
+    const envParts = [];
+    const grabEnv = (sibling) => {
+      const envMatch = normalizeKeys(lines[sibling], EXECUTION_KEYS)
+        .trim()
+        .match(/^(?:env|"env"|'env')\s*:\s*(.*)$/);
+      if (!envMatch) {
+        return;
+      }
+      envParts.push(envMatch[1]);
+      for (let child = sibling + 1; child < lines.length; child += 1) {
+        if (lines[child].trim() && indentation(lines[child]) <= keyIndent) {
+          break;
+        }
+        envParts.push(lines[child]);
+      }
+    };
+    for (let sibling = index - 1; sibling >= 0; sibling -= 1) {
+      const line2 = lines[sibling];
+      if (!line2.trim()) {
+        continue;
+      }
+      const siblingIndent = indentation(line2);
+      if (siblingIndent < keyIndent) {
+        break;
+      }
+      if (siblingIndent === keyIndent) {
+        grabEnv(sibling);
+      }
+    }
+    for (let sibling = index + 1; sibling < lines.length; sibling += 1) {
+      const line2 = lines[sibling];
+      if (!line2.trim()) {
+        continue;
+      }
+      const siblingIndent = indentation(line2);
+      if (siblingIndent < keyIndent) {
+        break;
+      }
+      if (siblingIndent === keyIndent) {
+        grabEnv(sibling);
+      }
+    }
+
+    commands.push({
+      index,
+      text: decodeRunText(parts.join("\n")),
+      env: decodeRunText(envParts.join("\n")),
+    });
     contentIndent = keyIndent;
   }
 
