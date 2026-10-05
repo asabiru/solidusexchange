@@ -106,6 +106,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 34. Every reviewed SQL migration source file must retain its exact canonical name and SHA-256 digest; changed, missing or extra migration files fail before database application.
 35. Migration source filenames must form a contiguous sequence from `0001`; every file must use one outer `BEGIN`/`COMMIT` transaction and record exactly one history row matching its filename and numeric version.
 36. Migration sources must not contain psql meta-commands or additional transaction-control statements that could escape the reviewed atomic boundary.
+37. JavaScript ledger configuration and posting commands are snapshotted into plain data before validation: accessors, Proxies, inherited or non-enumerable fields, symbol keys and extra array properties fail closed, so validated values are exactly the values stored.
 
 The JavaScript test and PostgreSQL smoke journal consume the same canonical command vector. Structural verification recomputes its SHA-256 digest before either runtime uses it.
 

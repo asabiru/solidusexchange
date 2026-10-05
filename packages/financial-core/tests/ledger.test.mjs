@@ -377,3 +377,148 @@ test("unsupported actors and hidden command fields are rejected", () => {
     "LEDGER_VALIDATION_FAILED"
   );
 });
+
+function swapAfterReads(target, key, safeValue, swappedValue, safeReads) {
+  let reads = 0;
+  Object.defineProperty(target, key, {
+    configurable: true,
+    enumerable: true,
+    get() {
+      reads += 1;
+      return reads <= safeReads ? safeValue : swappedValue;
+    }
+  });
+  return target;
+}
+
+function ledgerConfig() {
+  return {
+    accounts: structuredClone(accounts),
+    assets: structuredClone(assets),
+    chart: structuredClone(chart),
+    postingRules: structuredClone(postingRules),
+    clock: () => "2026-09-25T10:15:01.000Z"
+  };
+}
+
+test("ledger configuration is snapshotted as plain data before validation", () => {
+  const productionRule = ledgerConfig();
+  swapAfterReads(
+    productionRule.postingRules.rules[0],
+    "scope",
+    "synthetic-test-only",
+    "production",
+    1
+  );
+  expectLedgerError(() => createInMemoryLedger(productionRule), "LEDGER_POSTING_RULES_INVALID");
+
+  const unrestrictedActor = ledgerConfig();
+  swapAfterReads(
+    unrestrictedActor.postingRules.rules[0],
+    "allowed_actor_types",
+    ["SERVICE"],
+    ["ROOT"],
+    5
+  );
+  expectLedgerError(
+    () => createInMemoryLedger(unrestrictedActor),
+    "LEDGER_POSTING_RULES_INVALID"
+  );
+
+  const invalidScale = ledgerConfig();
+  swapAfterReads(invalidScale.assets[0], "scale", assets[0].scale, 99, 3);
+  expectLedgerError(() => createInMemoryLedger(invalidScale), "LEDGER_CONFIGURATION_INVALID");
+
+  const invalidEntity = ledgerConfig();
+  swapAfterReads(
+    invalidEntity.accounts[0],
+    "legal_entity_id",
+    accounts[0].legal_entity_id,
+    "production entity",
+    2
+  );
+  expectLedgerError(() => createInMemoryLedger(invalidEntity), "LEDGER_CONFIGURATION_INVALID");
+
+  const invertedChart = ledgerConfig();
+  swapAfterReads(
+    invertedChart.chart,
+    "account_definitions",
+    structuredClone(chart.account_definitions),
+    chart.account_definitions.map((definition) => ({
+      ...definition,
+      normal_side: definition.normal_side === "DEBIT" ? "CREDIT" : "DEBIT"
+    })),
+    3
+  );
+  expectLedgerError(() => createInMemoryLedger(invertedChart), "LEDGER_CHART_INVALID");
+
+  const proxiedAccounts = ledgerConfig();
+  proxiedAccounts.accounts = new Proxy(proxiedAccounts.accounts, {});
+  expectLedgerError(
+    () => createInMemoryLedger(proxiedAccounts),
+    "LEDGER_CONFIGURATION_INVALID"
+  );
+
+  const inheritedAsset = ledgerConfig();
+  inheritedAsset.assets[0] = Object.create(inheritedAsset.assets[0]);
+  expectLedgerError(
+    () => createInMemoryLedger(inheritedAsset),
+    "LEDGER_CONFIGURATION_INVALID"
+  );
+
+  const frozen = ledgerConfig();
+  Object.freeze(frozen.chart);
+  Object.freeze(frozen.accounts[0]);
+  assert.equal(createInMemoryLedger(frozen).runtime_boundary, "dev-dry-run");
+});
+
+test("posting-rule validation checks rules against the validated chart", () => {
+  const unvalidatedDefinition = {
+    ...chart.account_definitions[0],
+    code: "PRODUCTION_HOT_WALLET"
+  };
+  const swappedChart = swapAfterReads(
+    structuredClone(chart),
+    "account_definitions",
+    structuredClone(chart.account_definitions),
+    [...structuredClone(chart.account_definitions), unvalidatedDefinition],
+    3
+  );
+  const registry = structuredClone(postingRules);
+  registry.rules[0].entry_pattern[0].definition_code = "PRODUCTION_HOT_WALLET";
+  expectLedgerError(() => validatePostingRules(registry, swappedChart), "LEDGER_CHART_INVALID");
+  expectLedgerError(
+    () => validatePostingRules(new Proxy(structuredClone(postingRules), {}), chart),
+    "LEDGER_POSTING_RULES_INVALID"
+  );
+  expectLedgerError(
+    () => validateChart(new Proxy(structuredClone(chart), {})),
+    "LEDGER_CHART_INVALID"
+  );
+});
+
+test("posting commands must be plain data without hidden array fields", () => {
+  const ledger = createLedger();
+  const hiddenArrayField = command();
+  hiddenArrayField.entries.network = "TRON_MAINNET";
+  expectLedgerError(() => ledger.post(hiddenArrayField), "LEDGER_VALIDATION_FAILED");
+
+  const symbolField = command();
+  symbolField.entries[0][Symbol("amount")] = "1000000.000000";
+  expectLedgerError(() => ledger.post(symbolField), "LEDGER_VALIDATION_FAILED");
+
+  const accessorAmount = command();
+  swapAfterReads(accessorAmount.entries[0], "amount", "25.500000", "1e9", 1);
+  expectLedgerError(() => ledger.post(accessorAmount), "LEDGER_VALIDATION_FAILED");
+
+  expectLedgerError(() => ledger.post(new Proxy(command(), {})), "LEDGER_VALIDATION_FAILED");
+  expectLedgerError(
+    () => ledger.post(JSON.parse(`{"__proto__":{},${JSON.stringify(command()).slice(1)}`)),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  assert.deepEqual(ledger.listJournals(), []);
+
+  const frozenCommand = command();
+  Object.freeze(frozenCommand.entries);
+  assert.equal(ledger.post(frozenCommand).command_digest, commandDigestVector.expected_digest);
+});
