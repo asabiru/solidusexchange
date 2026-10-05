@@ -127,7 +127,9 @@ for (const required of [
   "custody runtime writer must not inherit or assume another role",
   "custody runtime writer must not own custody_core objects",
   "GRANT EXECUTE ON FUNCTION custody_core.record_custody_projection(jsonb, text)",
-  "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA custody_core"
+  "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA custody_core",
+  "REVOKE ALL PRIVILEGES ON DATABASE :\"DBNAME\"",
+  "REVOKE TEMPORARY ON DATABASE :\"DBNAME\" FROM PUBLIC"
 ]) {
   assert(runtimeGrants.includes(required), `Custody runtime grants are missing evidence: ${required}`);
 }
@@ -144,6 +146,10 @@ for (const required of [
   "ALTER ROLE $runtime_role LOGIN",
   "ALTER ROLE $runtime_role SUPERUSER",
   "GRANT $PGUSER TO $runtime_role",
+  "GRANT TEMPORARY ON DATABASE \\\"$PGDATABASE\\\" TO PUBLIC",
+  "GRANT CREATE ON DATABASE \\\"$PGDATABASE\\\" TO $runtime_role",
+  "custody runtime temporary type shadowing",
+  "CREATE DOMAIN pg_temp.timestamptz AS pg_catalog.date",
   "custody-postgres-runtime-privilege-catalog-negative-ok",
   "custody-runtime-privilege-shape-ok",
   "direct custody outbox select",
@@ -164,6 +170,8 @@ for (const required of [
   "pg_catalog.aclexplode(attribute.attacl)",
   "pg_catalog.pg_default_acl",
   "pg_catalog.pg_auth_members",
+  "pg_catalog.acldefault('d', database.datdba)",
+  "SELECT * FROM database_grants",
   "role.rolcanlogin",
   "'owns_custody_objects'",
   "namespace.nspname = 'custody_core'",
@@ -180,6 +188,7 @@ const runtimePrivilegeVerifier = read(
 );
 for (const required of [
   "record_custody_projection(p_event_document jsonb, p_request_digest text)",
+  'grant("database", "current_database", "CONNECT", "public")',
   "can_login: false",
   "memberships: []",
   "owns_custody_objects: false",
