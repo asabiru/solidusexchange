@@ -212,6 +212,10 @@
       {
         "run": "bash tests/postgres-ledger-integrity.sh",
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-command-digest-uniqueness.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       }
     ],
     ".github/workflows/workflow-policy.yml": [
@@ -396,6 +400,9 @@
     },
     "packages/financial-core/tests/postgres-chart-of-accounts.sql": {
       "minLines": 49
+    },
+    "packages/financial-core/tests/postgres-command-digest-uniqueness.sh": {
+      "minLines": 316
     },
     "packages/financial-core/tests/postgres-concurrency.sh": {
       "minLines": 305

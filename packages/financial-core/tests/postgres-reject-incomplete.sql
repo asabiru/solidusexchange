@@ -26,7 +26,7 @@ INSERT INTO financial_core.ledger_journals (
   'SYNTHETIC_PROVIDER_POSITION',
   'solidchange-dev',
   'postgres-incomplete-demo-001',
-  repeat('e', 64),
+  repeat('b', 64),
   '03000000-0000-4000-8000-000000000030',
   NULL,
   '2026-09-25T10:25:00.000Z',
@@ -73,7 +73,7 @@ INSERT INTO financial_core.ledger_idempotency_registry (
 ) VALUES (
   'solidchange-dev',
   'postgres-incomplete-demo-001',
-  repeat('e', 64),
+  repeat('b', 64),
   '02000000-0000-4000-8000-000000000020',
   '2026-09-25T10:25:01.000Z'
 );
@@ -92,7 +92,7 @@ INSERT INTO financial_core.ledger_outbox_events (
     'journal_id',
     '02000000-0000-4000-8000-000000000020',
     'command_digest',
-    repeat('e', 64)
+    repeat('b', 64)
   ),
   '2026-09-25T10:25:01.000Z'
 );
@@ -104,7 +104,7 @@ INSERT INTO financial_core.ledger_journal_seals (
   sealed_at
 ) VALUES (
   '02000000-0000-4000-8000-000000000020',
-  repeat('e', 64),
+  repeat('b', 64),
   1,
   '2026-09-25T10:25:01.000Z'
 );

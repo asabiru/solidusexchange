@@ -153,6 +153,7 @@ assert_out_of_order_history_rejected() {
     "0009_ledger_acceptance_timeline_guard.sql"
     "0010_ledger_finite_timestamp_guard.sql"
     "0011_ledger_migration_sequence_guard.sql"
+    "0012_ledger_command_digest_uniqueness.sql"
   )
 
   drop_out_of_order_database
@@ -277,30 +278,30 @@ assert_history_rejected \
 verify_history
 
 assert_sequence_rejected \
-  "migration version 13 must follow installed version 11 with version 12" \
+  "migration version 14 must follow installed version 12 with version 13" \
   "INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (13, '0013_skipped_migration');"
+   VALUES (14, '0014_skipped_migration');"
 
 assert_sequence_rejected \
-  "migration name 0013_wrong_version must encode version 12" \
+  "migration name 0014_wrong_version must encode version 13" \
   "INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (12, '0013_wrong_version');"
+   VALUES (13, '0014_wrong_version');"
 
 assert_sequence_rejected \
-  "migration applied_at must be later than installed version 11" \
+  "migration applied_at must be later than installed version 12" \
   "INSERT INTO financial_core.schema_migrations (
      version,
      migration_name,
      applied_at
    )
-   SELECT 12, '0012_stale_timestamp', max(applied_at)
+   SELECT 13, '0013_stale_timestamp', max(applied_at)
    FROM financial_core.schema_migrations;"
 
 assert_sequence_rejected \
-  "migration version 13 must follow installed version 11 with version 12" \
+  "migration version 14 must follow installed version 12 with version 13" \
   "SET session_replication_role = replica;
    INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (13, '0013_replica_skip');"
+   VALUES (14, '0014_replica_skip');"
 
 verify_history
 

@@ -74,7 +74,7 @@ PostgreSQL evidence должно дополнительно подтвердит
 16. повторный restore в occupied financial-core target отклоняется атомарно и не изменяет canonical state.
 17. schema-scoped backup не переносит unrelated source schema и не изменяет unrelated state в restore target.
 18. все 13 PostgreSQL timestamp constraints отклоняют `infinity` и `-infinity`, включая replica mode.
-19. установленная PostgreSQL migration history точно соответствует migrations `0001`–`0011` и порядку их применения; synthetic extra record и out-of-order application отклоняются verifier.
+19. установленная PostgreSQL migration history точно соответствует migrations `0001`–`0012` и порядку их применения; synthetic extra record и out-of-order application отклоняются verifier.
 20. новые migration records отклоняются до записи при пропуске версии, несовпадении numeric prefix или stale `applied_at`, включая replica mode.
 21. SHA-256 migration source catalog отклоняет изменённый historical SQL, отсутствующий migration и лишний unreviewed migration до применения к базе.
 22. каждый migration source использует один atomic `BEGIN`/`COMMIT` boundary, sequential filename и ровно одну history row, совпадающую с filename/version.
