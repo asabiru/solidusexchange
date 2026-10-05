@@ -108,6 +108,7 @@ export interface HealthPayload {
   mode: "dev-dry-run";
   oidcConfigured: boolean;
   devLoginEnabled: boolean;
+  deviceBinding?: "off" | "enforce";
   dataSource: "synthetic";
   audit: {
     backend: "synthetic-memory" | "postgresql";
@@ -409,7 +410,22 @@ export async function createDevSession(role: OperatorRole): Promise<void> {
     },
     body: JSON.stringify({ role })
   });
-  if (!response.ok) throw new ApiError(response.status, "Dev session was rejected");
+  if (!response.ok) {
+    let detail: { error?: string; deviceDigest?: string } = {};
+    try {
+      detail = await response.json() as typeof detail;
+    } catch {
+      detail = {};
+    }
+    if (detail.error === "device_not_approved" && typeof detail.deviceDigest === "string") {
+      throw new ApiError(
+        response.status,
+        `Устройство не одобрено для backoffice. Передайте администратору отпечаток: ${detail.deviceDigest}`,
+        detail.error
+      );
+    }
+    throw new ApiError(response.status, "Dev session was rejected", detail.error);
+  }
 }
 
 export async function logout(): Promise<void> {

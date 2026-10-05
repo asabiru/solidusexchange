@@ -7,6 +7,7 @@ import {
   type AuditStore
 } from "./audit-store.js";
 import { approvalCommandDigest } from "./controls.js";
+import { deviceDigest } from "./device.js";
 import { createBackofficeServer } from "./server.js";
 
 const origin = "http://127.0.0.1:4173";
@@ -897,6 +898,214 @@ describe("OIDC browser transaction boundary", () => {
     } finally {
       await new Promise<void>((resolve, reject) => {
         isolated.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+});
+
+describe("operator device binding", () => {
+  const approvedDevice = "3f1c2d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f";
+  const otherDevice = "9b8a7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d";
+  let bound: Server;
+  let boundUrl: string;
+
+  function boundConfig(oidc?: Parameters<typeof createBackofficeServer>[0]["oidc"]) {
+    return {
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: [origin],
+      allowDevLogin: true,
+      sessionTtlSeconds: 900,
+      audit: { storage: "memory" as const, retentionDays: 30 },
+      stepUp: {
+        provider: "synthetic-dev" as const,
+        challengeTtlSeconds: 300,
+        grantTtlSeconds: 60,
+        maxAttempts: 3
+      },
+      signing: {
+        backend: "ephemeral-dev" as const,
+        rotationSeconds: 900,
+        retainedVerificationKeys: 2
+      },
+      deviceBinding: {
+        mode: "enforce" as const,
+        approvedDeviceDigests: [deviceDigest(approvedDevice)]
+      },
+      oidc
+    };
+  }
+
+  async function listen(candidate: Server): Promise<string> {
+    await new Promise<void>((resolve) => candidate.listen(0, "127.0.0.1", resolve));
+    const address = candidate.address();
+    if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  function devLogin(cookie?: string): Promise<Response> {
+    return fetch(`${boundUrl}/bff/auth/dev-session`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin,
+        ...(cookie ? { cookie } : {})
+      },
+      body: JSON.stringify({ role: "compliance-lead" })
+    });
+  }
+
+  function sessionCookieFrom(response: Response): string {
+    const cookie = response.headers.getSetCookie()
+      .find((value) => value.startsWith("solidchange_bo_session="));
+    assert.ok(cookie);
+    return cookie.split(";")[0];
+  }
+
+  before(async () => {
+    bound = createBackofficeServer(boundConfig());
+    boundUrl = await listen(bound);
+  });
+
+  after(async () => {
+    await new Promise<void>((resolve, reject) => {
+      bound.close((error) => error ? reject(error) : resolve());
+    });
+  });
+
+  it("issues a new device and denies login until its digest is approved", async () => {
+    const response = await devLogin();
+    assert.equal(response.status, 403);
+    const cookies = response.headers.getSetCookie();
+    assert.equal(cookies.some((value) => value.startsWith("solidchange_bo_session=")), false);
+    const deviceCookie = cookies.find((value) => value.startsWith("solidchange_bo_device="));
+    assert.ok(deviceCookie);
+    assert.match(
+      deviceCookie,
+      /^solidchange_bo_device=[0-9a-f-]{36}; HttpOnly; SameSite=Lax; Path=\/bff; Max-Age=34560000$/
+    );
+    const deviceId = deviceCookie.split(";")[0].split("=")[1];
+    assert.deepEqual(await response.json(), {
+      error: "device_not_approved",
+      deviceDigest: deviceDigest(deviceId)
+    });
+
+    const status = await fetch(`${boundUrl}/bff/auth/device`, {
+      headers: { cookie: `solidchange_bo_device=${deviceId}` }
+    });
+    assert.equal(status.headers.get("set-cookie"), null);
+    assert.deepEqual(await status.json(), {
+      binding: "enforce",
+      deviceDigest: deviceDigest(deviceId),
+      approved: false
+    });
+  });
+
+  it("replaces malformed device identifiers instead of trusting them", async () => {
+    const response = await devLogin(`solidchange_bo_device=${approvedDevice.toUpperCase()}`);
+    assert.equal(response.status, 403);
+    const deviceCookie = response.headers.getSetCookie()
+      .find((value) => value.startsWith("solidchange_bo_device="));
+    assert.ok(deviceCookie);
+    assert.notEqual(deviceCookie.split(";")[0], `solidchange_bo_device=${approvedDevice}`);
+  });
+
+  it("admits approved devices and binds the session to that device", async () => {
+    const deviceCookie = `solidchange_bo_device=${approvedDevice}`;
+    const login = await devLogin(deviceCookie);
+    assert.equal(login.status, 200);
+    assert.equal(
+      login.headers.getSetCookie().some((value) => value.startsWith("solidchange_bo_device=")),
+      false
+    );
+    const session = sessionCookieFrom(login);
+
+    const allowed = await fetch(`${boundUrl}/bff/api/session`, {
+      headers: { cookie: `${session}; ${deviceCookie}` }
+    });
+    assert.equal(allowed.status, 200);
+
+    for (const cookie of [session, `${session}; solidchange_bo_device=${otherDevice}`]) {
+      const rejected = await fetch(`${boundUrl}/bff/api/session`, { headers: { cookie } });
+      assert.equal(rejected.status, 401);
+      assert.deepEqual(await rejected.json(), { error: "operator_session_required" });
+    }
+
+    const status = await fetch(`${boundUrl}/bff/auth/status`, { headers: { cookie: session } });
+    assert.deepEqual(await status.json(), { authenticated: false });
+
+    const health = await fetch(`${boundUrl}/bff/healthz`);
+    assert.equal((await health.json() as { deviceBinding: string }).deviceBinding, "enforce");
+  });
+
+  it("denies OIDC callbacks from unapproved devices before exchanging the code", async () => {
+    const isolated = createBackofficeServer({
+      ...boundConfig({
+        issuer: "https://identity.example.test",
+        authorizationEndpoint: "https://identity.example.test/authorize",
+        tokenEndpoint: "https://identity.example.test/token",
+        jwksUri: "https://identity.example.test/jwks",
+        clientId: "solidchange-backoffice",
+        clientSecret: "",
+        redirectUri: "http://127.0.0.1:4173/bff/auth/callback",
+        roleClaim: "groups",
+        roleMap: { compliance: "compliance-lead" }
+      }),
+      allowDevLogin: false
+    });
+    const isolatedUrl = await listen(isolated);
+    try {
+      const login = await fetch(`${isolatedUrl}/bff/auth/login`, { redirect: "manual" });
+      const location = login.headers.get("location");
+      assert.ok(location);
+      const state = new URL(location).searchParams.get("state");
+      assert.ok(state);
+      const callback = await fetch(
+        `${isolatedUrl}/bff/auth/callback?code=synthetic&state=${state}`,
+        {
+          headers: {
+            cookie: `solidchange_bo_oidc_transaction=${state}; solidchange_bo_device=${otherDevice}`
+          }
+        }
+      );
+      assert.equal(callback.status, 403);
+      assert.deepEqual(await callback.json(), {
+        error: "device_not_approved",
+        deviceDigest: deviceDigest(otherDevice)
+      });
+      assert.equal(
+        callback.headers.getSetCookie().some((value) => value.startsWith("solidchange_bo_session=")),
+        false
+      );
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        isolated.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+
+  it("leaves login unchanged and issues no device cookie when binding is off", async () => {
+    const unbound = createBackofficeServer({ ...boundConfig(), deviceBinding: undefined });
+    const unboundUrl = await listen(unbound);
+    try {
+      const off = await fetch(`${unboundUrl}/bff/auth/device`);
+      assert.deepEqual(await off.json(), { binding: "off" });
+      const response = await fetch(`${unboundUrl}/bff/auth/dev-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ role: "auditor" })
+      });
+      assert.equal(response.status, 200);
+      assert.equal(
+        response.headers.getSetCookie().some((value) => value.startsWith("solidchange_bo_device=")),
+        false
+      );
+      const session = sessionCookieFrom(response);
+      const allowed = await fetch(`${unboundUrl}/bff/api/session`, { headers: { cookie: session } });
+      assert.equal(allowed.status, 200);
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        unbound.close((error) => error ? reject(error) : resolve());
       });
     }
   });

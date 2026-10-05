@@ -6,6 +6,7 @@ export interface OperatorSession {
   email: string;
   name: string;
   role: OperatorRole;
+  deviceId?: string;
   expiresAt: number;
 }
 
