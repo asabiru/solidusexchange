@@ -93,6 +93,9 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA custody_core
   FROM :"custody_runtime_role";
 REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA custody_core
   FROM :"custody_runtime_role";
+REVOKE ALL PRIVILEGES ON DATABASE :"DBNAME"
+  FROM :"custody_runtime_role";
+REVOKE TEMPORARY ON DATABASE :"DBNAME" FROM PUBLIC;
 
 GRANT USAGE ON SCHEMA custody_core
   TO :"custody_runtime_role";

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 
-function grant(objectType, objectName, privilege) {
+function grant(objectType, objectName, privilege, grantee = "runtime") {
   return {
     column_name: null,
     grantable: false,
-    grantee: "runtime",
+    grantee,
     object_name: objectName,
     object_type: objectType,
     privilege
@@ -14,6 +14,7 @@ function grant(objectType, objectName, privilege) {
 const expected = {
   default_privileges: [],
   grants: [
+    grant("database", "current_database", "CONNECT", "public"),
     grant(
       "function",
       "record_custody_projection(p_event_document jsonb, p_request_digest text)",

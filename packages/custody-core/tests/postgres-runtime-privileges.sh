@@ -129,6 +129,10 @@ assert_runtime_catalog_rejected \
   "ALTER ROLE $runtime_role SET search_path = public;"
 assert_runtime_catalog_rejected \
   "GRANT $PGUSER TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "GRANT TEMPORARY ON DATABASE \"$PGDATABASE\" TO PUBLIC;"
+assert_runtime_catalog_rejected \
+  "GRANT CREATE ON DATABASE \"$PGDATABASE\" TO $runtime_role;"
 
 verify_runtime_catalog
 echo "custody-postgres-runtime-privilege-catalog-negative-ok"
@@ -283,6 +287,10 @@ expect_denied \
   "custody trigger disable" \
   "must be owner of table custody_projection_outbox" \
   "ALTER TABLE custody_core.custody_projection_outbox DISABLE TRIGGER ALL;"
+expect_denied \
+  "custody runtime temporary type shadowing" \
+  "permission denied to create temporary tables in database" \
+  "CREATE DOMAIN pg_temp.timestamptz AS pg_catalog.date;"
 
 test "$(psql_command -Atq -c "
   SELECT count(*)
