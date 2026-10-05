@@ -987,6 +987,10 @@
               "Proposed; D-001/D-011/D-012/D-014, policy, provider, case-management and reporting approvals pending"
             ],
             [
+              "Own HSM custody program",
+              "Proposed; D-002/D-003, legal key-location review, vendor proof of concept and independent design review pending"
+            ],
+            [
               "Finance model",
               "Required before ledger build"
             ]

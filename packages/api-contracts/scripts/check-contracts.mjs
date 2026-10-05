@@ -726,16 +726,56 @@ const pinnedEventEnvelopeDefinitions = {
   }
 };
 
+const pinnedEventSchemaKeys = ["$schema", "$id", "title", "type", "additionalProperties", "required", "properties", "allOf", "$defs"];
+
+function pinnedEventEnvelopeContextProperties() {
+  return {
+    occurred_at: dateTime,
+    producer: { type: "string", pattern: "^[a-z][a-z0-9-]{1,63}$" },
+    aggregate_type: {
+      type: "string",
+      enum: [...new Set(Object.values(pinnedEventContracts).map((contract) => contract.aggregateType))]
+    },
+    data_classification: { type: "string", enum: ["confidential", "highly-confidential"] },
+    payload: { type: "object" }
+  };
+}
+
+function withSortedEnum(schema) {
+  if (!schema || typeof schema !== "object" || !Array.isArray(schema.enum)) return schema;
+  return { ...schema, enum: [...schema.enum].sort() };
+}
+
 function verifyEventEnvelope(eventSchema) {
+  sameSet(Object.keys(eventSchema), pinnedEventSchemaKeys, "Event schema keywords");
+  assert(
+    eventSchema.$schema === "https://json-schema.org/draft/2020-12/schema",
+    "Event schema dialect must remain pinned"
+  );
+  assert(
+    eventSchema.$id === "https://contracts.solidchange.invalid/schemas/events/domain-event.schema.json",
+    "Event schema $id must remain pinned"
+  );
   assert(
     eventSchema.type === "object" && eventSchema.additionalProperties === false,
     "Event envelope must reject unknown top-level fields"
   );
   assert(Array.isArray(eventSchema.required), "Event envelope required fields must be explicit");
   sameSet(eventSchema.required, pinnedEventEnvelopeRequired, "Event envelope required fields");
+  assert(
+    eventSchema.properties && typeof eventSchema.properties === "object" && !Array.isArray(eventSchema.properties),
+    "Event envelope properties must be explicit"
+  );
+  sameSet(Object.keys(eventSchema.properties), pinnedEventEnvelopeRequired, "Event envelope properties");
   for (const [name, expected] of Object.entries(pinnedEventEnvelopeProperties)) {
     assert(
       canonicalJson(eventSchema.properties?.[name]) === canonicalJson(expected),
+      `Canonical event ${name} schema must remain pinned`
+    );
+  }
+  for (const [name, expected] of Object.entries(pinnedEventEnvelopeContextProperties())) {
+    assert(
+      canonicalJson(withSortedEnum(eventSchema.properties?.[name])) === canonicalJson(withSortedEnum(expected)),
       `Canonical event ${name} schema must remain pinned`
     );
   }
@@ -745,6 +785,185 @@ function verifyEventEnvelope(eventSchema) {
       `Canonical event ${name} definition must remain pinned`
     );
   }
+}
+
+const schemaIdentifierKeywords = new Set([
+  "$id",
+  "$anchor",
+  "$dynamicAnchor",
+  "$dynamicRef",
+  "$recursiveAnchor",
+  "$recursiveRef",
+  "$schema",
+  "$vocabulary"
+]);
+
+function verifyNoNestedSchemaIdentifiers(value, label, isRoot = true) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    assert(
+      !schemaIdentifierKeywords.has(key) || (isRoot && (key === "$schema" || key === "$id")),
+      `${label}: nested ${key} is prohibited because it can retarget references`
+    );
+    verifyNoNestedSchemaIdentifiers(child, `${label}.${key}`, false);
+  }
+}
+
+const allowedEventPropertySchemaKeywords = new Set([
+  "$ref",
+  "additionalProperties",
+  "anyOf",
+  "const",
+  "description",
+  "enum",
+  "format",
+  "items",
+  "maxItems",
+  "maxLength",
+  "maximum",
+  "minItems",
+  "minLength",
+  "minimum",
+  "pattern",
+  "properties",
+  "required",
+  "type",
+  "uniqueItems"
+]);
+
+const allowedEventStringFormats = new Set(["date-time", "uuid"]);
+
+const allowedEventSchemaTypes = new Set(["string", "integer", "boolean", "object", "array", "null"]);
+
+let eventSchemaDefinitions = {};
+
+function verifyClosedEventSchema(schema, label) {
+  assert(
+    schema && typeof schema === "object" && !Array.isArray(schema),
+    `${label} must be an explicit schema object`
+  );
+  for (const key of Object.keys(schema)) {
+    assert(allowedEventPropertySchemaKeywords.has(key), `${label}: schema keyword ${key} is prohibited`);
+  }
+  assert(
+    ["$ref", "anyOf", "const", "enum", "type"].some((key) => Object.hasOwn(schema, key)),
+    `${label} must declare type, const, enum, $ref or anyOf`
+  );
+  if (Object.hasOwn(schema, "$ref")) {
+    const target = /^#\/\$defs\/([A-Za-z][A-Za-z0-9]*)$/.exec(schema.$ref)?.[1];
+    assert(
+      target && Object.hasOwn(eventSchemaDefinitions, target),
+      `${label}: event $ref ${schema.$ref} must target a checked #/$defs definition`
+    );
+  }
+  const types = schema.type === undefined ? [] : Array.isArray(schema.type) ? schema.type : [schema.type];
+  assert(
+    !types.includes("number"),
+    `${label}: floating-point number type is prohibited; use decimal strings or integers`
+  );
+  if (Object.hasOwn(schema, "type")) {
+    assert(
+      types.length > 0
+        && new Set(types).size === types.length
+        && types.every((type) => allowedEventSchemaTypes.has(type))
+        && (types.length === 1 || (types.length === 2 && types.includes("null"))),
+      `${label}: type must be exactly one of ${[...allowedEventSchemaTypes].join(", ")}, optionally nullable`
+    );
+  }
+  for (const literal of [schema.const, ...(Array.isArray(schema.enum) ? schema.enum : [])]) {
+    assert(
+      typeof literal !== "number" || Number.isInteger(literal),
+      `${label}: floating-point literals are prohibited`
+    );
+  }
+  if (Object.hasOwn(schema, "format")) {
+    assert(allowedEventStringFormats.has(schema.format), `${label}: string format ${schema.format} is prohibited`);
+  }
+  if (types.includes("object") || Object.hasOwn(schema, "properties") || Object.hasOwn(schema, "required")) {
+    assert(schema.additionalProperties === false, `${label} object must set additionalProperties to false`);
+    assert(
+      schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties),
+      `${label} object must declare explicit properties`
+    );
+    for (const [name, child] of Object.entries(schema.properties)) {
+      verifyClosedEventSchema(child, `${label}.${name}`);
+    }
+  } else {
+    assert(!Object.hasOwn(schema, "additionalProperties"), `${label}: additionalProperties requires an object schema`);
+  }
+  if (types.includes("array") || Object.hasOwn(schema, "items")) {
+    assert(Object.hasOwn(schema, "items"), `${label} array must declare items`);
+    verifyClosedEventSchema(schema.items, `${label}.items`);
+  }
+  if (Object.hasOwn(schema, "anyOf")) {
+    assert(Array.isArray(schema.anyOf) && schema.anyOf.length > 0, `${label}: anyOf must be a non-empty array`);
+    schema.anyOf.forEach((candidate, index) => verifyClosedEventSchema(candidate, `${label}.anyOf[${index}]`));
+  }
+}
+
+function verifyClosedEventSchemas(eventSchema) {
+  eventSchemaDefinitions = eventSchema.$defs ?? {};
+  for (const [name, property] of Object.entries(eventSchema.properties ?? {})) {
+    if (name === "payload") continue;
+    verifyClosedEventSchema(property, `event schema.properties.${name}`);
+  }
+  for (const [name, definition] of Object.entries(eventSchema.$defs ?? {})) {
+    verifyClosedEventSchema(definition, `event schema.$defs.${name}`);
+  }
+}
+
+const piiPropertyNameFragments = [
+  "birth",
+  "email",
+  "firstname",
+  "fullname",
+  "familyname",
+  "givenname",
+  "lastname",
+  "maiden",
+  "mail",
+  "msisdn",
+  "nationality",
+  "passport",
+  "phone",
+  "postal",
+  "postcode",
+  "street",
+  "surname"
+];
+
+const piiPropertyNameTokens = new Set([
+  "address",
+  "addresses",
+  "city",
+  "dob",
+  "document",
+  "documents",
+  "given",
+  "mobile",
+  "name",
+  "names",
+  "ssn",
+  "tel",
+  "zip"
+]);
+
+const allowedReferencePropertyNames = new Set(["address_reference"]);
+
+function verifyNoPiiPropertyNames(value, label) {
+  if (!value || typeof value !== "object") return;
+  if (value.properties && typeof value.properties === "object" && !Array.isArray(value.properties)) {
+    for (const propertyName of Object.keys(value.properties)) {
+      if (allowedReferencePropertyNames.has(propertyName)) continue;
+      const name = propertyName.toLowerCase();
+      assert(
+        !piiPropertyNameFragments.some((fragment) => name.includes(fragment))
+          && !name.split("_").some((token) => piiPropertyNameTokens.has(token)),
+        `${label}: PII-like property ${propertyName} is prohibited; use an opaque reference or digest`
+      );
+    }
+  }
+  for (const [key, child] of Object.entries(value)) verifyNoPiiPropertyNames(child, `${label}.${key}`);
 }
 
 const identifierRef = { $ref: "#/$defs/identifier" };
@@ -1040,6 +1259,11 @@ function verifyPinnedEvents(eventSchema, conditions, catalog) {
   const eventTypes = eventSchema.properties?.event_type?.enum ?? [];
   assert(new Set(eventTypes).size === eventTypes.length, "Event schema contains duplicate event types");
   sameSet(eventTypes, Object.keys(pinnedEventContracts), "Pinned event types");
+  const { enum: _eventTypes, ...eventTypeSchema } = eventSchema.properties.event_type;
+  assert(
+    canonicalJson(eventTypeSchema) === canonicalJson({ type: "string" }),
+    "Canonical event event_type schema must remain pinned"
+  );
   for (const [name, pinned] of Object.entries(pinnedEventContracts)) {
     const condition = conditions.get(name);
     const catalogEntry = catalog.events.find((entry) => entry.name === name);
@@ -1054,6 +1278,20 @@ function verifyPinnedEvents(eventSchema, conditions, catalog) {
       `${name}: data classification must remain pinned`
     );
     assert(condition.payloadRef === `#/$defs/${pinned.payload}`, `${name}: payload schema must remain pinned`);
+    const conditionSchema = eventSchema.allOf.find((entry) => entry.if?.properties?.event_type?.const === name);
+    assert(
+      canonicalJson(conditionSchema) === canonicalJson({
+        if: { properties: { event_type: { const: name } }, required: ["event_type"] },
+        then: {
+          properties: {
+            aggregate_type: { const: pinned.aggregateType },
+            data_classification: { const: pinned.dataClassification },
+            payload: { $ref: `#/$defs/${pinned.payload}` }
+          }
+        }
+      }),
+      `${name}: event condition must remain pinned`
+    );
     const payload = eventSchema.$defs?.[pinned.payload];
     assert(payload && typeof payload === "object", `${name}: payload schema is missing`);
     sameSet(Object.keys(payload), allowedPayloadSchemaKeys, `${name} payload schema keywords`);
@@ -1078,6 +1316,7 @@ function verifyPinnedEvents(eventSchema, conditions, catalog) {
 function checkEvents() {
   const schemaPath = join(root, "schemas/events/domain-event.schema.json");
   const eventSchema = loadAbsolute(schemaPath);
+  verifyNoExtensions(eventSchema, "event schema");
   verifyEventEnvelope(eventSchema);
   const catalog = readJson("event-catalog.json");
   const examples = readJson("examples/domain-events.json");
@@ -1178,9 +1417,11 @@ function checkEvents() {
 
   verifyReferences(eventSchema, schemaPath);
   verifyMoneyFieldSchemas(eventSchema, "event schema");
-  verifyNoExtensions(eventSchema, "event schema");
   verifySafeFields(eventSchema, "event schema");
   verifySafeFields(examples, "event examples");
+  verifyNoNestedSchemaIdentifiers(eventSchema, "event schema");
+  verifyClosedEventSchemas(eventSchema);
+  verifyNoPiiPropertyNames(eventSchema, "event schema");
 }
 
 checkOpenApi();
