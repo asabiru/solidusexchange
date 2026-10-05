@@ -54,6 +54,8 @@ Protected requests use:
 - `X-Client-Version`;
 - `X-Platform`.
 
+Operator requests additionally require `X-Device-Id`: an opaque random UUIDv4 identifying the operator workstation installation. It must not encode hardware identifiers, operator or customer PII, or provider data. Customer and metadata requests must not send it; extending it to customers requires a separate Product/Privacy/Architecture decision. It only identifies the installation; device allowlisting or new-device step-up is a separate future control.
+
 `Idempotency-Key` is defined as a required reusable component for future commands but is not attached to the current read-only paths.
 
 ## Error policy
@@ -108,4 +110,4 @@ npm ci
 npm test
 ```
 
-The checker verifies local references, inline path items without Path Item `$ref` indirection, the exact pinned set of operation IDs and their paths, namespace/version rules, canonical bearer scheme definitions, exact customer/operator security requirements, required headers and request ID schema, canonical `200` JSON success responses with exact `SessionView` and `CapabilitiesView` component schemas and JSON-only error responses for protected operations, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, authentication-scheme, anonymous-security-alternative, path-item-reference, removed-operation, moved-operation, request-header-schema, remote-reference, protected-success-status, protected-success-media-type, protected-success-schema, protected-view-component, protected-error-media-type, operation-error-envelope, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.
+The checker verifies local references, inline path items without Path Item `$ref` indirection, the exact pinned set of operation IDs and their paths, namespace/version rules, canonical bearer scheme definitions, exact customer/operator security requirements, required headers, request ID schema and operator-only `X-Device-Id`, canonical `200` JSON success responses with exact `SessionView` and `CapabilitiesView` component schemas and JSON-only error responses for protected operations, error shape, event catalog/schema/example alignment, decimal amount encoding and prohibited secret/PII field names. Negative tests mutate financial-command, HTTP method, authentication-scheme, anonymous-security-alternative, path-item-reference, removed-operation, moved-operation, request-header-schema, operator-device-identifier, remote-reference, protected-success-status, protected-success-media-type, protected-success-schema, protected-view-component, protected-error-media-type, operation-error-envelope, error-envelope, execution-authority and prohibited-field boundaries and require every drift to fail closed.
