@@ -484,7 +484,37 @@ assertRejected(
   })
 );
 
-test("accepts optional event envelope fields and reordered required fields", () => {
+for (const [name, mutate] of [
+  ["an optional top-level envelope property", (schema) => {
+    schema.properties.debug_note = { type: "string", maxLength: 10 };
+  }],
+  ["an optional trace envelope property", (schema) => {
+    schema.properties.trace_parent = { type: "string", maxLength: 128 };
+  }],
+  ["a required extra envelope property", (schema) => {
+    schema.properties.debug_note = { type: "string", maxLength: 10 };
+    schema.required = [...schema.required, "debug_note"];
+  }],
+  ["a duplicated required envelope field", (schema) => {
+    schema.required = [...schema.required, "actor"];
+  }]
+]) {
+  assertRejected(
+    `rejects ${name}`,
+    name.startsWith("an optional") ? "Event envelope properties" : "Event envelope required fields",
+    (scratch) => mutateEventSchema(scratch, mutate)
+  );
+}
+
+assertRejected(
+  "rejects a removed envelope property schema",
+  "Event envelope properties",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    delete schema.properties.producer;
+  })
+);
+
+test("accepts reordered event envelope required fields", () => {
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {
     for (const path of contractFiles) {
@@ -492,7 +522,6 @@ test("accepts optional event envelope fields and reordered required fields", () 
     }
     mutateEventSchema(scratch, (schema) => {
       schema.required = [...schema.required].reverse();
-      schema.properties.trace_parent = { type: "string", maxLength: 128 };
     });
     const result = spawnSync(process.execPath, [checker, scratch], {
       encoding: "utf8"
@@ -1159,7 +1188,7 @@ for (const field of [
 
 assertRejected(
   "rejects PII-like event envelope fields",
-  "PII-like property operator_email is prohibited",
+  "Event envelope properties",
   (scratch) => mutateEventSchema(scratch, (schema) => {
     schema.properties.operator_email = { type: "string", maxLength: 128 };
   })
@@ -1232,6 +1261,6 @@ assertAccepted("accepts closed optional event payload objects, integers and null
       }
     };
     schema.$defs.withdrawalHeld.properties.escalation_reference = { anyOf: [{ $ref: "#/$defs/identifier" }, { type: "null" }] };
-    schema.properties.trace_state = { type: ["string", "null"], maxLength: 256 };
+    schema.$defs.withdrawalHeld.properties.trace_state = { type: ["string", "null"], maxLength: 256 };
   });
 });

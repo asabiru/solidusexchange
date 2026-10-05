@@ -762,6 +762,11 @@ function verifyEventEnvelope(eventSchema) {
   );
   assert(Array.isArray(eventSchema.required), "Event envelope required fields must be explicit");
   sameSet(eventSchema.required, pinnedEventEnvelopeRequired, "Event envelope required fields");
+  assert(
+    eventSchema.properties && typeof eventSchema.properties === "object" && !Array.isArray(eventSchema.properties),
+    "Event envelope properties must be explicit"
+  );
+  sameSet(Object.keys(eventSchema.properties), pinnedEventEnvelopeRequired, "Event envelope properties");
   for (const [name, expected] of Object.entries(pinnedEventEnvelopeProperties)) {
     assert(
       canonicalJson(eventSchema.properties?.[name]) === canonicalJson(expected),
