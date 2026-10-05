@@ -8,6 +8,9 @@ const FLOW_USES_KEY =
   /^-\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
 const FLOW_JOB_USES_KEY =
   /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*(?:&[^\s,[\]{}]+\s+)?\{(?:\s*|[^{}]*,\s*)(?:uses|"uses"|'uses')\s*:/;
+const FLOW_JOB_START =
+  /^(?:[A-Za-z_][A-Za-z0-9_-]*|"[A-Za-z_][A-Za-z0-9_-]*"|'[A-Za-z_][A-Za-z0-9_-]*'):\s*(?:&[^\s,[\]{}]+\s+)?\{/;
+const FLOW_PERMISSIONS_KEY = /[{,]\s*permissions\s*:/;
 const BLOCK_USES_KEY = /^\s*(?:-\s*)?(?:uses|"uses"|'uses')\s*:\s*(.+)$/;
 const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
 const SINGLE_QUOTED_KEY = /'((?:[^']|'')*)'(\s*:)/g;
@@ -267,6 +270,27 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
   return errors;
 }
 
+function flowJobText(lines, jobIndex, jobIndent) {
+  const parts = [normalizePolicyKeys(lines[jobIndex])];
+
+  for (let index = jobIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    if (indentation(line) <= jobIndent) {
+      break;
+    }
+
+    parts.push(normalizePolicyKeys(line));
+  }
+
+  return parts.join(" ");
+}
+
 export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
   const errors = triggerErrors(lines, fileName);
@@ -302,6 +326,16 @@ export function validateWorkflowText(text, fileName = "<workflow>") {
       errors.push(
         `${fileName}:${index + 1}: flow-style reusable workflow jobs are not allowed`,
       );
+      continue;
+    }
+
+    if (
+      jobsIndent !== -1 &&
+      indent === jobIndent &&
+      FLOW_JOB_START.test(trimmed) &&
+      FLOW_PERMISSIONS_KEY.test(flowJobText(lines, index, jobIndent))
+    ) {
+      errors.push(`${fileName}:${index + 1}: job-level permissions are not allowed`);
       continue;
     }
 

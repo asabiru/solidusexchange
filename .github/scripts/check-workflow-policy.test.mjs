@@ -469,3 +469,43 @@ test("rejects quoted or escaped duplicate checkout credential inputs", () => {
     assert.match(errors.join("\n"), /persist-credentials: false exactly once/);
   }
 });
+
+test("rejects flow-style jobs that declare job-level permissions", () => {
+  for (const job of [
+    "escalate: { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "'escalate': { runs-on: ubuntu-latest, 'permissions': { contents: write }, steps: [{ run: echo policy fixture }] }",
+    String.raw`"escalate": &escalate { runs-on: ubuntu-latest, "permi\u0073sions": { id-token: write }, steps: [{ run: echo policy fixture }] }`,
+    `escalate: {
+      runs-on: ubuntu-latest, permissions: write-all,
+      steps: [{ run: echo policy fixture }] }`,
+    `escalate: { runs-on: ubuntu-latest,
+      steps: [{ run: echo policy fixture }]
+      , permissions: write-all }`,
+  ]) {
+    const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  ${job}
+`);
+
+    assert.match(errors.join("\n"), /job-level permissions are not allowed/, job);
+  }
+});
+
+test("accepts flow-style jobs that only mention permissions in step text", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  build: { runs-on: ubuntu-latest, steps: [{ name: "Check permissions", run: "echo permissions: read-only" }] }
+`);
+
+  assert.deepEqual(errors, []);
+});
