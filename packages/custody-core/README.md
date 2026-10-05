@@ -59,6 +59,8 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `tests/postgres-catalog.sh` pins the installed schema, relation, columns, constraints, exact always-enabled mutation-trigger definitions, function definitions, ownership and access controls. Unexpected DDL, disabled or predicate-weakened triggers, public access, function-security drift or removed constraints fail closed through transactional probes that roll back to the canonical catalog.
 
+`tests/postgres-execution-surface-catalog.sh` closes what the per-object catalog leaves out. It requires exactly the five reviewed triggers on custody tables, whichever schema their function lives in, allows no rewrite rules (custody has no views), and requires the `custody_core` schema to contain no types other than table row types and their arrays, and no operators, operator classes or families, collations, conversions or text-search objects. `validate_migration_sequence` runs with `search_path = custody_core, pg_catalog`, so such objects would shadow built-ins: a `custody_core.=` integer operator let it accept out-of-sequence history and a `custody_core.timestamptz` domain let it accept backdated history, while `CREATE RULE ... DO INSTEAD NOTHING` silently discarded migration-history inserts or masked the outbox append-only trigger, and the existing catalogs still passed. Transactional probes prove each drift fails while unrelated objects outside the schema still pass.
+
 `tests/postgres-backup-restore.sh` proves that a backup taken during an uncommitted custody projection contains the complete pre-transaction state, excludes unrelated source schemas, requires a truncated archive to fail without leaving a partial schema, and rejects a structurally valid restore whose archive silently omits custody outbox data even though its catalog and migration history remain canonical. The intact archive restores atomically into a disposable database without changing unrelated target state, reruns the exact installed-catalog and migration-history policies—including exact trigger-definition hashes that reject hidden `WHEN` predicates—and compares a deterministic outbox and migration-history snapshot with the source. The restored database must then accept and exactly replay a new synthetic projection without changing the source database. After that recovery point advances, restoring the still-valid first-generation archive must be detected as stale by the same exact state attestation even though its catalog and migration history remain canonical, while a second-generation backup must reproduce the active state in another disposable database. A restore into a target with pre-existing custody state must fail atomically without changing that state. This is dev-only recovery evidence; it does not establish production RPO/RTO, encryption, retention, high availability or restore-drill approval.
 
 ## Verification
@@ -72,6 +74,7 @@ bash tests/postgres-migration-source-policy.sh
 bash tests/postgres-outbox.sh
 bash tests/postgres-migration-history.sh
 bash tests/postgres-catalog.sh
+bash tests/postgres-execution-surface-catalog.sh
 bash tests/postgres-backup-restore.sh
 bash tests/postgres-runtime-privileges.sh
 ```
