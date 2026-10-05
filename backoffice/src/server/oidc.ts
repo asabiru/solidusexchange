@@ -95,8 +95,56 @@ export async function exchangeAuthorizationCode(
   return idToken;
 }
 
+const maxIdTokenLength = 16_384;
+const minRsaModulusBits = 2048;
+const base64UrlSegment = /^[A-Za-z0-9_-]+$/;
+const privateJwkMembers = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"] as const;
+const unsupportedHeaderParameters = ["jku", "jwk", "x5u", "x5c", "b64"] as const;
+
+function decodeSegment(value: string): Buffer {
+  const bytes = Buffer.from(value, "base64url");
+  if (!base64UrlSegment.test(value) || bytes.toString("base64url") !== value) {
+    throw new Error("OIDC id_token is malformed");
+  }
+  return bytes;
+}
+
+function assertNoDuplicateMembers(text: string): void {
+  const scopes: (Set<string> | undefined)[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (character === "{") scopes.push(new Set());
+    else if (character === "[") scopes.push(undefined);
+    else if (character === "}" || character === "]") scopes.pop();
+    else if (character === "\"") {
+      const start = index;
+      for (index += 1; text[index] !== "\""; index += 1) {
+        if (text[index] === "\\") index += 1;
+      }
+      let next = index + 1;
+      while (" \t\n\r".includes(text[next])) next += 1;
+      const scope = scopes.at(-1);
+      if (scope && text[next] === ":") {
+        const member = JSON.parse(text.slice(start, index + 1)) as string;
+        if (scope.has(member)) throw new Error("OIDC id_token contains duplicate JSON members");
+        scope.add(member);
+      }
+    }
+  }
+}
+
 function decodeJson<T>(value: string): T {
-  return JSON.parse(Buffer.from(value, "base64url").toString("utf8")) as T;
+  const bytes = decodeSegment(value);
+  let text: string;
+  let parsed: T;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    parsed = JSON.parse(text) as T;
+  } catch {
+    throw new Error("OIDC id_token is malformed");
+  }
+  assertNoDuplicateMembers(text);
+  return parsed;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -179,8 +227,10 @@ export async function verifyIdToken(
   nonce: string,
   suppliedJwks?: JsonWebKeySet
 ): Promise<OidcIdentity> {
+  if (idToken.length > maxIdTokenLength) throw new Error("OIDC id_token is too large");
   const parts = idToken.split(".");
   if (parts.length !== 3) throw new Error("OIDC id_token is malformed");
+  const signature = decodeSegment(parts[2]);
   const header = decodeJson<unknown>(parts[0]);
   const claims = decodeJson<unknown>(parts[1]);
   if (
@@ -194,6 +244,9 @@ export async function verifyIdToken(
   if (header.crit !== undefined) {
     throw new Error("OIDC critical protected header parameters are not supported");
   }
+  if (unsupportedHeaderParameters.some((name) => Object.hasOwn(header, name))) {
+    throw new Error("OIDC protected header parameter is not supported");
+  }
   if (!isRecord(claims)) throw new Error("OIDC token claims are malformed");
 
   const jwks: JsonWebKeySet = suppliedJwks ?? await fetch(config.jwksUri, {
@@ -203,17 +256,39 @@ export async function verifyIdToken(
       if (!response.ok) throw new Error("OIDC JWKS request failed");
       return await response.json() as JsonWebKeySet;
     });
-  const matchingKeys = jwks.keys.filter((candidate) => candidate.kid === header.kid);
+  if (!isRecord(jwks) || !Array.isArray(jwks.keys)) throw new Error("OIDC JWKS is malformed");
+  const matchingKeys = jwks.keys.filter(
+    (candidate) => isRecord(candidate) && candidate.kid === header.kid
+  );
   if (matchingKeys.length === 0) throw new Error("OIDC signing key was not found");
   if (matchingKeys.length > 1) throw new Error("OIDC signing key is ambiguous");
   const jwk = matchingKeys[0];
   if (
-    (jwk.use !== undefined && jwk.use !== "sig")
+    !isRecord(jwk)
+    || jwk.kty !== "RSA"
+    || typeof jwk.n !== "string"
+    || typeof jwk.e !== "string"
+    || privateJwkMembers.some((name) => Object.hasOwn(jwk, name))
+    || (jwk.use !== undefined && jwk.use !== "sig")
     || (jwk.alg !== undefined && jwk.alg !== header.alg)
     || (
       jwk.key_ops !== undefined
-      && (!Array.isArray(jwk.key_ops) || !jwk.key_ops.includes("verify"))
+      && (
+        !Array.isArray(jwk.key_ops)
+        || jwk.key_ops.length !== 1
+        || jwk.key_ops[0] !== "verify"
+      )
     )
+  ) {
+    throw new Error("OIDC signing key is not allowed");
+  }
+  const publicKey = createPublicKey({
+    key: { kty: "RSA", n: jwk.n, e: jwk.e },
+    format: "jwk"
+  });
+  if (
+    publicKey.asymmetricKeyType !== "rsa"
+    || (publicKey.asymmetricKeyDetails?.modulusLength ?? 0) < minRsaModulusBits
   ) {
     throw new Error("OIDC signing key is not allowed");
   }
@@ -221,8 +296,8 @@ export async function verifyIdToken(
   const verified = verify(
     "RSA-SHA256",
     Buffer.from(`${parts[0]}.${parts[1]}`),
-    createPublicKey({ key: jwk, format: "jwk" }),
-    Buffer.from(parts[2], "base64url")
+    publicKey,
+    signature
   );
   if (!verified) throw new Error("OIDC id_token signature is invalid");
 

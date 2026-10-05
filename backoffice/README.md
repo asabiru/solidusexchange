@@ -9,6 +9,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - OIDC uses Authorization Code with PKCE; OIDC tokens remain in the BFF.
 - OIDC callback state is bound to the initiating browser with a short-lived `HttpOnly` transaction cookie.
 - OIDC URLs require HTTPS outside loopback development, and the callback must use the exact allowed backoffice origin and path.
+- ID tokens are RS256-only and verified only against an `RSA` JWK of at least 2048 bits with no private members (`use`/`alg`/`key_ops` must allow `sig`/`RS256`/exactly `verify` when present); tokens over 16 KiB, non-canonical base64url segments, invalid UTF-8, duplicate JSON members and `jku`/`jwk`/`x5u`/`x5c`/`b64` headers are rejected.
 - Operator roles and capabilities are mapped and enforced server-side.
 - The BFF issues a short-lived `HttpOnly`, `SameSite=Strict` session cookie.
 - A new login revokes the prior session presented when login started (recorded in the server-side OIDC transaction, since the `Strict` cookie is not sent on the cross-site callback) or on the login request itself, together with any step-up grant bound to it.
@@ -20,6 +21,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - Audit reads, approval anchors and signed evidence exports use a newly verified store snapshot.
 - Memory mode remains an explicit non-durable local default and is labelled as such in health/UI.
 - Approval command previews are digest-bound, same-origin, capability-gated and side-effect-free.
+- State-changing BFF routes accept only `application/json` (optionally `charset=utf-8`) bodies of at most 4 KiB that are strict UTF-8 JSON objects with string values, unique keys (compared after escape decoding) and only the route's allowlisted fields; anything else, including `__proto__`/`constructor` keys, fails with `415` or `400`.
 - Synthetic step-up challenges bind session, subject, approval, command digest and audit head, expire, limit attempts and issue a one-time preview grant.
 - Challenge codes are stored only as hashes; the dev code is returned solely to make the synthetic browser flow testable.
 - Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up status.
