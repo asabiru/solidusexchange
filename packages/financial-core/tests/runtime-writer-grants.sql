@@ -46,6 +46,16 @@ BEGIN
 
   IF EXISTS (
     SELECT 1
+      FROM pg_catalog.pg_db_role_setting AS setting
+      JOIN pg_catalog.pg_roles AS role
+        ON role.oid = setting.setrole
+     WHERE role.rolname = runtime_role
+  ) THEN
+    RAISE EXCEPTION 'runtime writer must not carry role or per-database session defaults';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
       FROM pg_catalog.pg_class AS relation
       JOIN pg_catalog.pg_namespace AS namespace
         ON namespace.oid = relation.relnamespace

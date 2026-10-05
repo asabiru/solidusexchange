@@ -29,6 +29,7 @@ const expected = {
     connection_limit: -1,
     create_database: false,
     create_role: false,
+    database_configuration: [],
     exists: true,
     inherit: false,
     memberships: [],

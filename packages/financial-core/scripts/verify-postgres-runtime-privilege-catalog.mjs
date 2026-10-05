@@ -44,6 +44,7 @@ const expected = {
     configuration: [],
     create_database: false,
     create_role: false,
+    database_configuration: [],
     exists: true,
     inherit: false,
     owns_database: false,

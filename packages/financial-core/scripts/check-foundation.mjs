@@ -428,6 +428,11 @@ for (const [fixture, evidence] of [
   ["tests/runtime-writer-grants.sql", "GRANT INSERT ON TABLE"],
   ["tests/runtime-writer-grants.sql", "rolcanlogin = FALSE"],
   ["tests/runtime-writer-grants.sql", "rolconfig IS NULL"],
+  ["tests/runtime-writer-grants.sql", "pg_catalog.pg_db_role_setting"],
+  [
+    "tests/runtime-writer-grants.sql",
+    "runtime writer must not carry role or per-database session defaults"
+  ],
   ["tests/runtime-writer-grants.sql", "REVOKE TEMPORARY ON DATABASE :\"DBNAME\" FROM PUBLIC"],
   ["tests/postgres-runtime-privileges.sh", "runtime-writer-privileges-ok"],
   ["tests/postgres-runtime-privileges.sh", "TRUNCATE financial_core.ledger_entries"],
@@ -449,6 +454,18 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-runtime-privileges.sh",
     "ALTER ROLE $runtime_role SET search_path = public"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "ALTER ROLE $runtime_role IN DATABASE \\\"$PGDATABASE\\\" SET search_path = public"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "ALTER ROLE $runtime_role IN DATABASE \\\"$PGDATABASE\\\" SET TimeZone"
+  ],
+  [
+    "tests/postgres-runtime-privileges.sh",
+    "runtime-writer-session-defaults-negative-ok"
   ],
   [
     "tests/postgres-runtime-privileges.sh",
@@ -476,6 +493,8 @@ for (const [fixture, evidence] of [
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_default_acl"],
   ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.acldefault('d', database.datdba)"],
   ["tests/postgres-runtime-privilege-catalog.sql", "role.rolcanlogin"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "pg_catalog.pg_db_role_setting"],
+  ["tests/postgres-runtime-privilege-catalog.sql", "'database_configuration'"],
   ["tests/postgres-runtime-privilege-catalog.sql", "'owns_financial_objects'"],
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",
@@ -484,6 +503,10 @@ for (const [fixture, evidence] of [
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",
     "configuration: []"
+  ],
+  [
+    "scripts/verify-postgres-runtime-privilege-catalog.mjs",
+    "database_configuration: []"
   ],
   [
     "scripts/verify-postgres-runtime-privilege-catalog.mjs",

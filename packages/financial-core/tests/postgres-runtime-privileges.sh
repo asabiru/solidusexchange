@@ -126,6 +126,22 @@ assert_runtime_catalog_rejected \
 assert_runtime_catalog_rejected \
   "ALTER ROLE $runtime_role SET search_path = public;"
 assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET search_path = public;
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET TimeZone = 'Pacific/Kiritimati';
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET DateStyle = 'SQL, DMY';
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE CURRENT_USER IN DATABASE postgres SET search_path = public;
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
   "ALTER SCHEMA financial_core OWNER TO $runtime_role;"
 assert_runtime_catalog_rejected \
   "GRANT TEMPORARY ON DATABASE \"$PGDATABASE\" TO PUBLIC;"
@@ -134,6 +150,33 @@ assert_runtime_catalog_rejected \
 
 verify_runtime_catalog
 echo "postgres-runtime-privilege-catalog-negative-ok"
+
+run_psql -v ON_ERROR_STOP=1 -c "
+  SET ROLE $runtime_role;
+  ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET TimeZone = 'Pacific/Kiritimati';
+"
+set +e
+grants_output="$(
+  run_psql \
+    -v ON_ERROR_STOP=1 \
+    -v "ledger_runtime_role=$runtime_role" \
+    -f tests/runtime-writer-grants.sql 2>&1
+)"
+grants_status=$?
+set -e
+run_psql -v ON_ERROR_STOP=1 -c "
+  ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" RESET ALL;
+"
+printf '%s\n' "$grants_output"
+if [[ "$grants_status" -eq 0 ]]; then
+  echo "Runtime grants unexpectedly accepted per-database session defaults." >&2
+  exit 1
+fi
+grep -F \
+  "runtime writer must not carry role or per-database session defaults" \
+  <<<"$grants_output"
+verify_runtime_catalog
+echo "runtime-writer-session-defaults-negative-ok"
 
 run_psql -v ON_ERROR_STOP=1 -Atq -c "
   SELECT CASE
