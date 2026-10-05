@@ -174,6 +174,11 @@ function triggerErrors(lines, fileName) {
   if (eventCount("workflow_dispatch") !== 0) {
     errors.push(`${fileName}: workflow_dispatch is only allowed for approved manual workflows`);
   }
+  for (const event of directEvents.filter(({ name }) => !EVENT_KEYS.has(name))) {
+    errors.push(
+      `${fileName}:${event.index + 1}: validation workflow triggers must be only pull_request and push`,
+    );
+  }
 
   const push = events.find((event) => event.name === "push");
   if (!push || push.value) {

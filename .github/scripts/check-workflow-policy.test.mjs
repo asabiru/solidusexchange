@@ -118,6 +118,42 @@ test("normalizes quoted trigger keys without changing unrelated YAML", () => {
   assert.deepEqual(errors, []);
 });
 
+test("rejects additional automatic triggers on validation workflows", () => {
+  const valid = workflow("      - uses: ./local-action");
+
+  for (const extraTrigger of [
+    "  schedule:\n    - cron: '0 0 * * *'\n",
+    "  pull_request_target:\n",
+    "  workflow_run:\n    workflows: [Backoffice CI]\n",
+    "  'pull_request_target':\n",
+    String.raw`  "pull_request_t\u0061rget":` + "\n",
+    "  <<: { schedule: [{ cron: '0 0 * * *' }] }\n",
+    "  ? schedule\n  : [{ cron: '0 0 * * *' }]\n",
+  ]) {
+    const errors = validateWorkflowText(
+      valid.replace("  pull_request:\n", `  pull_request:\n${extraTrigger}`),
+    );
+
+    assert.match(
+      errors.join("\n"),
+      /validation workflow triggers must be only pull_request and push/,
+    );
+  }
+});
+
+test("accepts filtered pull_request and push triggers on validation workflows", () => {
+  const errors = validateWorkflowText(
+    workflow("      - uses: ./local-action")
+      .replace(
+        "  pull_request:\n",
+        "  'pull_request':\n    # Path filters keep validation scoped.\n    paths:\n      - \"backoffice/**\"\n",
+      )
+      .replace("      - main", "      - main\n    paths:\n      - \"backoffice/**\""),
+  );
+
+  assert.deepEqual(errors, []);
+});
+
 test("rejects workflow_dispatch outside the approved manual workflow", () => {
   const errors = validateWorkflowText(
     workflow("      - uses: ./local-action").replace(
