@@ -215,3 +215,8 @@ jobs:
           tests/postgres-reject-precision.sql|amount exceeds ledger precision limit
           tests/postgres-reject-nonfinite.sql|amount must be finite
           EOF
+
+      - name: Verify persisted PostgreSQL ledger journal integrity
+        env:
+          PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+        run: bash tests/postgres-ledger-integrity.sh
