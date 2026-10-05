@@ -17,6 +17,14 @@ const BLOCK_USES_KEY = /^\s*(?:-\s*)?(?:uses|"uses"|'uses')\s*:\s*(.+)$/;
 const DOUBLE_QUOTED_KEY = /"((?:[^"\\]|\\.)*)"(\s*:)/g;
 const SINGLE_QUOTED_KEY = /'((?:[^']|'')*)'(\s*:)/g;
 const POLICY_KEYS = new Set(["uses", "permissions", "with", "persist-credentials"]);
+const EXECUTION_KEYS = new Set(["run", "if", "continue-on-error"]);
+const EXECUTION_KEY_PREFIX = String.raw`(^-\s+|^|[{,]\s*)(?:\?\s+)?(?:&[^\s,[\]{}]+\s+)?`;
+const RUN_KEY = new RegExp(`${EXECUTION_KEY_PREFIX}run\\s*:(.*)$`);
+const IF_KEY = new RegExp(`${EXECUTION_KEY_PREFIX}if\\s*:`);
+const CONTINUE_ON_ERROR_KEY = new RegExp(
+  `${EXECUTION_KEY_PREFIX}continue-on-error\\s*:\\s*([^,}]*)`,
+);
+const EXPRESSION_START = /\$\{\{/;
 const TRIGGER_KEYS = new Set([
   "on",
   "pull_request",
@@ -272,6 +280,68 @@ function checkoutCredentialErrors(lines, usesIndex, usesIndent, fileName) {
   return errors;
 }
 
+function decodeRunText(text) {
+  return decodeDoubleQuotedKey(text.replace(/\\\r?\n\s*/g, ""));
+}
+
+function executionErrors(lines, fileName) {
+  const errors = [];
+  const validation = !MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/"));
+  let contentIndent = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = normalizeKeys(line, EXECUTION_KEYS).trim();
+    const indent = indentation(line);
+
+    if (contentIndent !== -1) {
+      if (!trimmed || indent > contentIndent) {
+        continue;
+      }
+      contentIndent = -1;
+    }
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const runMatch = trimmed.match(RUN_KEY);
+    if (runMatch) {
+      const keyIndent = runMatch.index === 0 ? indent + runMatch[1].length : indent;
+      const parts = [runMatch[2]];
+      for (let child = index + 1; child < lines.length; child += 1) {
+        if (lines[child].trim() && indentation(lines[child]) <= keyIndent) {
+          break;
+        }
+        parts.push(lines[child]);
+      }
+
+      const runText = decodeRunText(parts.join("\n"));
+      if (EXPRESSION_START.test(runText) || /^\s*\*/.test(runMatch[2])) {
+        errors.push(
+          `${fileName}:${index + 1}: run steps must not interpolate expressions; pass values through env`,
+        );
+      }
+      contentIndent = keyIndent;
+    }
+
+    const continueMatch = trimmed.match(CONTINUE_ON_ERROR_KEY);
+    if (continueMatch && scalar(continueMatch[2]) !== "false") {
+      errors.push(
+        `${fileName}:${index + 1}: continue-on-error must be omitted or false`,
+      );
+    }
+
+    if (validation && IF_KEY.test(trimmed)) {
+      errors.push(
+        `${fileName}:${index + 1}: validation workflow jobs and steps must not be conditional`,
+      );
+    }
+  }
+
+  return errors;
+}
+
 function jobText(lines, jobIndex, jobIndent) {
   const parts = [normalizePolicyKeys(lines[jobIndex])];
 
@@ -295,7 +365,7 @@ function jobText(lines, jobIndex, jobIndent) {
 
 export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
-  const errors = triggerErrors(lines, fileName);
+  const errors = [...triggerErrors(lines, fileName), ...executionErrors(lines, fileName)];
   const rootPermissions = [];
   let jobsIndent = -1;
   let jobIndent = -1;

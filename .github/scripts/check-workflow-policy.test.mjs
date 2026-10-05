@@ -564,9 +564,176 @@ test("rejects tagged flow-style steps that hide mutable external action refs", (
 test("accepts negated expressions and shell negation that resemble YAML tags", () => {
   const errors = validateWorkflowText(
     workflow(`      - name: Report
-        if: \${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
+        env:
+          REPORT: \${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
         run: |
           [ ! -f missing.txt ] && echo "policy fixture!"`),
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+function jobsWorkflow(jobs, fileName) {
+  return validateWorkflowText(
+    `name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+${jobs}
+`,
+    fileName,
+  );
+}
+
+test("rejects expressions interpolated into run scripts in any key or scalar spelling", () => {
+  for (const step of [
+    '      - run: echo "${{ github.head_ref }}"',
+    "      - run: |\n          echo \"${{ github.event.pull_request.title }}\"",
+    "      - run: >-\n          echo\n          ${{ github.event.issue.body }}",
+    "      - run: echo safe\n          ${{ github.event.comment.body }}",
+    "      - 'run': echo ${{ github.head_ref }}",
+    '      - "r\\u0075n": echo ${{ github.head_ref }}',
+    String.raw`      - run: "echo \x24{{ github.head_ref }}"`,
+    String.raw`      - run: "echo $\u007b{ github.head_ref }}"`,
+    "      - run: \"echo $\\\n          {{ github.head_ref }}\"",
+    "      - name: Echo\n        run: echo ${{ toJSON(github.event) }}",
+    "      - { name: Echo, run: \"echo ${{ github['head_ref'] }}\" }",
+    "      - &echo { run: echo ${{ GITHUB.HEAD_REF }} }",
+    "      - {\n          run: \"echo ${{ github.event.pull_request.head.ref }}\" }",
+    "      - name: Echo\n        env:\n          TITLE: &title ${{ github.event.pull_request.title }}\n        run: *title",
+  ]) {
+    const errors = validateWorkflowText(workflow(step));
+
+    assert.match(errors.join("\n"), /run steps must not interpolate expressions/, step);
+  }
+
+  for (const step of ["      - run: echo ${{ github.head_ref }}"]) {
+    const errors = validateWorkflowText(
+      `name: Deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+${step}
+`,
+      ".github/workflows/deploy.yml",
+    );
+
+    assert.match(errors.join("\n"), /run steps must not interpolate expressions/);
+  }
+});
+
+test("accepts untrusted values passed to run scripts through env", () => {
+  const errors = validateWorkflowText(
+    workflow(`      - name: Echo branch
+        env:
+          HEAD_REF: \${{ github.head_ref }}
+          TITLE: \${{ github.event.pull_request.title }}
+        working-directory: \${{ github.workspace }}
+        run: |
+          echo "$HEAD_REF" "$TITLE" "\${HOME}" '$\\{{ literal }}'
+          printf '%s\\n' "$ {{ not an expression }}"`),
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("rejects continue-on-error that hides failing jobs or steps", () => {
+  for (const jobs of [
+    "  verify:\n    runs-on: ubuntu-latest\n    continue-on-error: true\n    steps:\n      - run: npm test",
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n        continue-on-error: true",
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n        'continue-on-error': ${{ true }}",
+    String.raw`  verify:
+    runs-on: ubuntu-latest
+    "continue-on-error": True
+    steps:
+      - run: npm test`,
+    String.raw`  verify:
+    runs-on: ubuntu-latest
+    "continue-on-\u0065rror":
+      true
+    steps:
+      - run: npm test`,
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - { run: npm test, continue-on-error: true }",
+    "  verify: { runs-on: ubuntu-latest, continue-on-error: true, steps: [{ run: npm test }] }",
+  ]) {
+    const errors = jobsWorkflow(jobs);
+
+    assert.match(errors.join("\n"), /continue-on-error must be omitted or false/, jobs);
+  }
+});
+
+test("accepts explicit continue-on-error false", () => {
+  const errors = jobsWorkflow(
+    "  verify:\n    runs-on: ubuntu-latest\n    continue-on-error: false\n    steps:\n      - { run: npm test, 'continue-on-error': false }",
+  );
+
+  assert.deepEqual(errors, []);
+});
+
+test("rejects conditional jobs and steps in validation workflows", () => {
+  for (const jobs of [
+    "  verify:\n    if: false\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test",
+    "  verify:\n    if: ${{ always() }}\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test",
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm test\n        if: ${{ false }}",
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - if: github.event_name == 'never'\n        run: npm test",
+    "  verify:\n    runs-on: ubuntu-latest\n    'if': false\n    steps:\n      - run: npm test",
+    String.raw`  verify:
+    runs-on: ubuntu-latest
+    "i\u0066": false
+    steps:
+      - run: npm test`,
+    "  verify:\n    runs-on: ubuntu-latest\n    steps:\n      - { if: false, run: npm test }",
+    "  verify: { if: false, runs-on: ubuntu-latest, steps: [{ run: npm test }] }",
+  ]) {
+    const errors = jobsWorkflow(jobs);
+
+    assert.match(errors.join("\n"), /must not be conditional/, jobs);
+  }
+});
+
+test("accepts run script text and data that only resemble conditions", () => {
+  const errors = jobsWorkflow(`  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "if: in a name"
+        run: |
+          if: true
+          continue-on-error: true
+          if [ -f package.json ]; then echo ok; fi
+      - run: >-
+          echo
+          if: folded`);
+
+  assert.deepEqual(errors, []);
+});
+
+test("accepts conditional steps in the approved manual workflow", () => {
+  const errors = validateWorkflowText(
+    `name: Deploy
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - if: \${{ !cancelled() }}
+        run: echo deploy
+`,
+    ".github/workflows/deploy.yml",
   );
 
   assert.deepEqual(errors, []);
