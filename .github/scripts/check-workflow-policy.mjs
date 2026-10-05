@@ -289,6 +289,95 @@ function decodeRunText(text) {
   return decodeDoubleQuotedKey(text.replace(/\\\r?\n\s*/g, ""));
 }
 
+export function collectRunCommands(lines) {
+  const commands = [];
+  let contentIndent = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = normalizeKeys(line, EXECUTION_KEYS).trim();
+    const indent = indentation(line);
+
+    if (contentIndent !== -1) {
+      if (!trimmed || indent > contentIndent) {
+        continue;
+      }
+      contentIndent = -1;
+    }
+
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
+
+    const runMatch = trimmed.match(RUN_KEY);
+    if (!runMatch) {
+      continue;
+    }
+
+    const keyIndent =
+      runMatch.index === 0 ? indent + runMatch[1].length : indent;
+    const parts = [runMatch[2]];
+    for (let child = index + 1; child < lines.length; child += 1) {
+      if (lines[child].trim() && indentation(lines[child]) <= keyIndent) {
+        break;
+      }
+      parts.push(lines[child]);
+    }
+
+    const envParts = [];
+    const grabEnv = (sibling) => {
+      const envMatch = normalizeKeys(lines[sibling], EXECUTION_KEYS)
+        .trim()
+        .match(/^(?:env|"env"|'env')\s*:\s*(.*)$/);
+      if (!envMatch) {
+        return;
+      }
+      envParts.push(envMatch[1]);
+      for (let child = sibling + 1; child < lines.length; child += 1) {
+        if (lines[child].trim() && indentation(lines[child]) <= keyIndent) {
+          break;
+        }
+        envParts.push(lines[child]);
+      }
+    };
+    for (let sibling = index - 1; sibling >= 0; sibling -= 1) {
+      const line2 = lines[sibling];
+      if (!line2.trim()) {
+        continue;
+      }
+      const siblingIndent = indentation(line2);
+      if (siblingIndent < keyIndent) {
+        break;
+      }
+      if (siblingIndent === keyIndent) {
+        grabEnv(sibling);
+      }
+    }
+    for (let sibling = index + 1; sibling < lines.length; sibling += 1) {
+      const line2 = lines[sibling];
+      if (!line2.trim()) {
+        continue;
+      }
+      const siblingIndent = indentation(line2);
+      if (siblingIndent < keyIndent) {
+        break;
+      }
+      if (siblingIndent === keyIndent) {
+        grabEnv(sibling);
+      }
+    }
+
+    commands.push({
+      index,
+      text: decodeRunText(parts.join("\n")),
+      env: decodeRunText(envParts.join("\n")),
+    });
+    contentIndent = keyIndent;
+  }
+
+  return commands;
+}
+
 function executionErrors(lines, fileName) {
   const errors = [];
   const validation = !MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/"));

@@ -1,0 +1,533 @@
+{
+  "scripts": {
+    "backoffice/package.json": {
+      "dev": "node scripts/dev.mjs",
+      "dev:web": "vite",
+      "dev:bff": "npm run build:bff && BACKOFFICE_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
+      "build": "tsc -b && npm run build:bff && vite build",
+      "build:bff": "tsc -p tsconfig.server.json",
+      "lint": "biome lint src scripts vite.config.ts",
+      "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
+    },
+    "packages/api-contracts/package.json": {
+      "check": "node scripts/check-contracts.mjs",
+      "test": "npm run check && node --test tests/*.test.mjs"
+    },
+    "packages/custody-core/package.json": {
+      "check": "node scripts/check-boundary.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    },
+    "packages/financial-core/package.json": {
+      "check": "node scripts/check-foundation.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    }
+  },
+  "runSteps": {
+    ".github/workflows/backoffice-ci.yml": [
+      {
+        "run": "working-directory: backoffice"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      },
+      {
+        "run": "npm run build"
+      }
+    ],
+    ".github/workflows/contracts-ci.yml": [
+      {
+        "run": "working-directory: packages/api-contracts"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
+    ".github/workflows/custody-core-ci.yml": [
+      {
+        "run": "working-directory: packages/custody-core"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run verify"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-catalog.sh"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-policy.sh"
+      },
+      {
+        "run": "bash tests/postgres-outbox.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-migration-history.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-execution-surface-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-backup-restore.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-runtime-privileges.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/deploy.yml": [],
+    ".github/workflows/financial-core-ci.yml": [
+      {
+        "run": "working-directory: packages/financial-core"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run verify"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-catalog.sh"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-policy.sh"
+      },
+      {
+        "run": "| for migration in migrations/*.sql; do docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$migration\" done"
+      },
+      {
+        "run": "bash tests/postgres-migration-history.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-chart-of-accounts.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-owner-truncate-guard.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-immutability-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-trigger-function-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-execution-surface-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-posting-rule-registry.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -v \"command_vector_json=$(tr -d '\\n' < tests/command-digest-vector.json)\" -f tests/postgres-smoke.sql"
+      },
+      {
+        "run": "bash tests/postgres-acceptance-artifact-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-finite-timestamps.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-constraint-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-relation-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-access-control-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-invariant-trigger-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-replica-reference-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-concurrency.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-backup-restore.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-runtime-privileges.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f tests/postgres-precision-boundary.sql"
+      },
+      {
+        "run": "| while IFS='|' read -r fixture expected; do set +e output=\"$(docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$fixture\" 2>&1)\" status=$? set -e printf '%s\\n' \"$output\" if [ \"$status\" -eq 0 ]; then echo \"$fixture unexpectedly committed.\" exit 1 fi printf '%s\\n' \"$output\" | grep -F \"$expected\" done <<'EOF' tests/postgres-reject-incomplete.sql|requires at least two entries tests/postgres-reject-unbalanced.sql|is not balanced per asset tests/postgres-reject-late-entry.sql|is sealed tests/postgres-reject-unregistered-rule.sql|ledger_journals_posting_rule_fk tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule tests/postgres-reject-rule-pattern.sql|entries violate its posting rule tests/postgres-reject-precision.sql|amount exceeds ledger precision limit tests/postgres-reject-nonfinite.sql|amount must be finite EOF"
+      },
+      {
+        "run": "bash tests/postgres-ledger-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/workflow-policy.yml": [
+      {
+        "run": "node --test .github/scripts/check-workflow-policy.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-workflow-policy.mjs"
+      },
+      {
+        "run": "node --test .github/scripts/check-regulated-core-status.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-regulated-core-status.mjs"
+      },
+      {
+        "run": "node --test .github/scripts/check-verification-integrity.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-verification-integrity.mjs"
+      }
+    ]
+  },
+  "testFiles": {
+    ".github/scripts/check-regulated-core-status.test.mjs": {
+      "minLines": 215,
+      "minCases": 13
+    },
+    ".github/scripts/check-verification-integrity.test.mjs": {
+      "minLines": 299,
+      "minCases": 26
+    },
+    ".github/scripts/check-workflow-policy.test.mjs": {
+      "minLines": 714,
+      "minCases": 44
+    },
+    "backoffice/src/auth/access.test.ts": {
+      "minLines": 59,
+      "minCases": 6
+    },
+    "backoffice/src/data/client.test.ts": {
+      "minLines": 226,
+      "minCases": 7
+    },
+    "backoffice/src/data/demo.test.ts": {
+      "minLines": 47,
+      "minCases": 2
+    },
+    "backoffice/src/server/audit-store.test.ts": {
+      "minLines": 47,
+      "minCases": 3
+    },
+    "backoffice/src/server/config.test.ts": {
+      "minLines": 221,
+      "minCases": 14
+    },
+    "backoffice/src/server/controls.test.ts": {
+      "minLines": 65,
+      "minCases": 6
+    },
+    "backoffice/src/server/dev-server.test.ts": {
+      "minLines": 49,
+      "minCases": 1
+    },
+    "backoffice/src/server/oidc-session.test.ts": {
+      "minLines": 289,
+      "minCases": 6
+    },
+    "backoffice/src/server/oidc.test.ts": {
+      "minLines": 715,
+      "minCases": 19
+    },
+    "backoffice/src/server/postgres-audit-store.test.ts": {
+      "minLines": 30,
+      "minCases": 2
+    },
+    "backoffice/src/server/server.test.ts": {
+      "minLines": 1211,
+      "minCases": 26
+    },
+    "backoffice/src/server/signing.test.ts": {
+      "minLines": 41,
+      "minCases": 2
+    },
+    "backoffice/src/server/step-up.test.ts": {
+      "minLines": 176,
+      "minCases": 5
+    },
+    "backoffice/tsconfig.test.json": {
+      "minLines": 23
+    },
+    "packages/api-contracts/tests/contract-boundary.test.mjs": {
+      "minLines": 959,
+      "minCases": 5
+    },
+    "packages/custody-core/tests/custody-event.test.mjs": {
+      "minLines": 546,
+      "minCases": 11
+    },
+    "packages/custody-core/tests/postgres-backup-consistency.sql": {
+      "minLines": 43
+    },
+    "packages/custody-core/tests/postgres-backup-continuity.sql": {
+      "minLines": 57
+    },
+    "packages/custody-core/tests/postgres-backup-restore.sh": {
+      "minLines": 634
+    },
+    "packages/custody-core/tests/postgres-catalog.sh": {
+      "minLines": 83
+    },
+    "packages/custody-core/tests/postgres-catalog.sql": {
+      "minLines": 539
+    },
+    "packages/custody-core/tests/postgres-execution-surface-catalog.sh": {
+      "minLines": 180
+    },
+    "packages/custody-core/tests/postgres-execution-surface-catalog.sql": {
+      "minLines": 293
+    },
+    "packages/custody-core/tests/postgres-migration-history.sh": {
+      "minLines": 262
+    },
+    "packages/custody-core/tests/postgres-migration-history.sql": {
+      "minLines": 30
+    },
+    "packages/custody-core/tests/postgres-migration-source-catalog.sh": {
+      "minLines": 46
+    },
+    "packages/custody-core/tests/postgres-migration-source-policy.sh": {
+      "minLines": 154
+    },
+    "packages/custody-core/tests/postgres-outbox.sh": {
+      "minLines": 69
+    },
+    "packages/custody-core/tests/postgres-outbox.sql": {
+      "minLines": 226
+    },
+    "packages/custody-core/tests/postgres-runtime-privilege-catalog.sql": {
+      "minLines": 326
+    },
+    "packages/custody-core/tests/postgres-runtime-privileges.sh": {
+      "minLines": 325
+    },
+    "packages/custody-core/tests/postgres-state-snapshot.sql": {
+      "minLines": 37
+    },
+    "packages/custody-core/tests/runtime-writer-grants.sql": {
+      "minLines": 105
+    },
+    "packages/custody-core/tests/unsigned-intent.test.mjs": {
+      "minLines": 297,
+      "minCases": 13
+    },
+    "packages/financial-core/tests/command-digest-vector.json": {
+      "minLines": 44
+    },
+    "packages/financial-core/tests/ledger.test.mjs": {
+      "minLines": 479,
+      "minCases": 16
+    },
+    "packages/financial-core/tests/postgres-acceptance-artifact-integrity.sh": {
+      "minLines": 274
+    },
+    "packages/financial-core/tests/postgres-access-control-catalog.sh": {
+      "minLines": 63
+    },
+    "packages/financial-core/tests/postgres-access-control-catalog.sql": {
+      "minLines": 281
+    },
+    "packages/financial-core/tests/postgres-backup-consistency.sql": {
+      "minLines": 117
+    },
+    "packages/financial-core/tests/postgres-backup-continuity.sql": {
+      "minLines": 201
+    },
+    "packages/financial-core/tests/postgres-backup-restore.sh": {
+      "minLines": 713
+    },
+    "packages/financial-core/tests/postgres-chart-of-accounts.sh": {
+      "minLines": 28
+    },
+    "packages/financial-core/tests/postgres-chart-of-accounts.sql": {
+      "minLines": 49
+    },
+    "packages/financial-core/tests/postgres-concurrency.sh": {
+      "minLines": 305
+    },
+    "packages/financial-core/tests/postgres-constraint-catalog.sh": {
+      "minLines": 269
+    },
+    "packages/financial-core/tests/postgres-constraint-catalog.sql": {
+      "minLines": 102
+    },
+    "packages/financial-core/tests/postgres-execution-surface-catalog.sh": {
+      "minLines": 170
+    },
+    "packages/financial-core/tests/postgres-execution-surface-catalog.sql": {
+      "minLines": 293
+    },
+    "packages/financial-core/tests/postgres-finite-timestamps.sh": {
+      "minLines": 464
+    },
+    "packages/financial-core/tests/postgres-immutability-catalog.sh": {
+      "minLines": 90
+    },
+    "packages/financial-core/tests/postgres-immutability-catalog.sql": {
+      "minLines": 44
+    },
+    "packages/financial-core/tests/postgres-invariant-trigger-catalog.sh": {
+      "minLines": 77
+    },
+    "packages/financial-core/tests/postgres-invariant-trigger-catalog.sql": {
+      "minLines": 47
+    },
+    "packages/financial-core/tests/postgres-ledger-integrity.sh": {
+      "minLines": 235
+    },
+    "packages/financial-core/tests/postgres-ledger-integrity.sql": {
+      "minLines": 192
+    },
+    "packages/financial-core/tests/postgres-migration-history.sh": {
+      "minLines": 271
+    },
+    "packages/financial-core/tests/postgres-migration-history.sql": {
+      "minLines": 30
+    },
+    "packages/financial-core/tests/postgres-migration-source-catalog.sh": {
+      "minLines": 48
+    },
+    "packages/financial-core/tests/postgres-migration-source-policy.sh": {
+      "minLines": 124
+    },
+    "packages/financial-core/tests/postgres-owner-truncate-guard.sh": {
+      "minLines": 74
+    },
+    "packages/financial-core/tests/postgres-posting-rule-registry.sh": {
+      "minLines": 26
+    },
+    "packages/financial-core/tests/postgres-posting-rule-registry.sql": {
+      "minLines": 21
+    },
+    "packages/financial-core/tests/postgres-precision-boundary.sql": {
+      "minLines": 117
+    },
+    "packages/financial-core/tests/postgres-reject-incomplete.sql": {
+      "minLines": 106
+    },
+    "packages/financial-core/tests/postgres-reject-late-entry.sql": {
+      "minLines": 36
+    },
+    "packages/financial-core/tests/postgres-reject-nonfinite.sql": {
+      "minLines": 101
+    },
+    "packages/financial-core/tests/postgres-reject-precision.sql": {
+      "minLines": 63
+    },
+    "packages/financial-core/tests/postgres-reject-rule-actor.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-rule-pattern.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-unbalanced.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-unregistered-rule.sql": {
+      "minLines": 40
+    },
+    "packages/financial-core/tests/postgres-relation-catalog.sh": {
+      "minLines": 213
+    },
+    "packages/financial-core/tests/postgres-relation-catalog.sql": {
+      "minLines": 156
+    },
+    "packages/financial-core/tests/postgres-replica-reference-integrity.sh": {
+      "minLines": 285
+    },
+    "packages/financial-core/tests/postgres-runtime-privilege-catalog.sql": {
+      "minLines": 332
+    },
+    "packages/financial-core/tests/postgres-runtime-privileges.sh": {
+      "minLines": 423
+    },
+    "packages/financial-core/tests/postgres-smoke.sql": {
+      "minLines": 302
+    },
+    "packages/financial-core/tests/postgres-state-snapshot.sql": {
+      "minLines": 153
+    },
+    "packages/financial-core/tests/postgres-trigger-function-catalog.sh": {
+      "minLines": 26
+    },
+    "packages/financial-core/tests/postgres-trigger-function-catalog.sql": {
+      "minLines": 54
+    },
+    "packages/financial-core/tests/runtime-writer-grants.sql": {
+      "minLines": 91
+    },
+    "tests/CreatesApplication.php": {
+      "minLines": 16
+    },
+    "tests/Feature/ExampleTest.php": {
+      "minLines": 15
+    },
+    "tests/Feature/ExchangeReservationCleanupTest.php": {
+      "minLines": 60
+    },
+    "tests/Feature/ExchangeRoutingTest.php": {
+      "minLines": 129
+    },
+    "tests/TestCase.php": {
+      "minLines": 7
+    },
+    "tests/Unit/ExampleTest.php": {
+      "minLines": 13
+    }
+  }
+}

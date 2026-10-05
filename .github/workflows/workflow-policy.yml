@@ -35,3 +35,9 @@ jobs:
 
       - name: Enforce regulated-core approval-status policy
         run: node .github/scripts/check-regulated-core-status.mjs
+
+      - name: Test verification-integrity policy
+        run: node --test .github/scripts/check-verification-integrity.test.mjs
+
+      - name: Enforce verification-integrity policy
+        run: node .github/scripts/check-verification-integrity.mjs
