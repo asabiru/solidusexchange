@@ -244,6 +244,60 @@ for (const required of [
   assert(catalogTests.includes(required), `Custody catalog tests are missing evidence: ${required}`);
 }
 
+const executionSurfaceQuery = read(
+  "packages/custody-core/tests/postgres-execution-surface-catalog.sql"
+);
+for (const required of [
+  "pg_catalog.pg_trigger",
+  "pg_catalog.pg_rewrite",
+  "pg_catalog.pg_operator",
+  "pg_catalog.pg_type",
+  "pg_catalog.pg_collation",
+  "pg_catalog.pg_ts_config",
+  "nspname = 'custody_core'"
+]) {
+  assert(
+    executionSurfaceQuery.includes(required),
+    `Custody execution-surface catalog query is missing evidence: ${required}`
+  );
+}
+
+const executionSurfaceVerifier = read(
+  "packages/custody-core/scripts/verify-postgres-execution-surface-catalog.mjs"
+);
+for (const required of [
+  "validate_migration_sequence",
+  "reject_outbox_mutation",
+  "PostgreSQL custody trigger inventory differs from the expected policy",
+  "PostgreSQL custody rewrite rules differ from the expected policy",
+  "PostgreSQL custody schema contains search-path shadow objects",
+  "custody-postgres-execution-surface-catalog-ok"
+]) {
+  assert(
+    executionSurfaceVerifier.includes(required),
+    `Custody execution-surface verifier is missing evidence: ${required}`
+  );
+}
+
+const executionSurfaceTests = read(
+  "packages/custody-core/tests/postgres-execution-surface-catalog.sh"
+);
+for (const required of [
+  "public.forge_migration",
+  "ON INSERT TO custody_core.schema_migrations DO INSTEAD NOTHING",
+  "ON DELETE TO custody_core.custody_projection_outbox DO INSTEAD NOTHING",
+  "CREATE OPERATOR custody_core.=",
+  "CREATE OPERATOR custody_core.<=",
+  "CREATE DOMAIN custody_core.timestamptz AS DATE",
+  "Unrelated PostgreSQL object unexpectedly failed",
+  "custody-postgres-execution-surface-catalog-negative-ok"
+]) {
+  assert(
+    executionSurfaceTests.includes(required),
+    `Custody execution-surface tests are missing evidence: ${required}`
+  );
+}
+
 const migrationSourceCatalog = read(
   "packages/custody-core/scripts/verify-postgres-migration-source-catalog.mjs"
 );
@@ -462,5 +516,6 @@ assert(workflow.includes("npm audit --audit-level=moderate"));
 assert(workflow.includes("bash tests/postgres-migration-source-catalog.sh"));
 assert(workflow.includes("bash tests/postgres-migration-source-policy.sh"));
 assert(workflow.includes("bash tests/postgres-migration-history.sh"));
+assert(workflow.includes("bash tests/postgres-execution-surface-catalog.sh"));
 
 console.log("custody-boundary-ok");
