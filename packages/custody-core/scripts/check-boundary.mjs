@@ -21,6 +21,9 @@ assert(policy.allowed_assets.every(({ network }) =>
 
 const source = read("packages/custody-core/src/unsigned-intent.mjs");
 for (const required of [
+  "export function snapshotPlainData",
+  "types.isProxy(value)",
+  "must be an enumerable data property",
   "maker and checker must be different humans",
   "intent_digest does not match command and policy",
   "production signing must remain disabled",
@@ -34,6 +37,7 @@ for (const required of [
 const eventSource = read("packages/custody-core/src/custody-event.mjs");
 for (const required of [
   "verifyUnsignedTransactionIntent",
+  "snapshotPlainData(requestInput",
   "createCustodyProjectionRegistry",
   'event_type: "CustodyIntentPrepared"',
   'status: "unsigned_intent_ready"',
@@ -60,7 +64,8 @@ for (const required of [
   "rejects approval evidence after custody policy drift",
   "rejects raw addresses and key material",
   "rejects production execution or signing policy",
-  "rejects custody policy containing key material"
+  "rejects custody policy containing key material",
+  "rejects accessor or proxy custody inputs that change after validation"
 ]) {
   assert(tests.includes(required), `Custody tests are missing evidence: ${required}`);
 }
@@ -76,7 +81,8 @@ for (const required of [
   "rejects invalid or reused event identity",
   "rejects withdrawal approval continuity drift",
   "rejects events before approvals or after intent expiry",
-  "rejects policy drift and signing-enabled policy"
+  "rejects policy drift and signing-enabled policy",
+  "rejects accessor or proxy custody evidence that changes after verification"
 ]) {
   assert(eventTests.includes(required), `Custody event tests are missing evidence: ${required}`);
 }
