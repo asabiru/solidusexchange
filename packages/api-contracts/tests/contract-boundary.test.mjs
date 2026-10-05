@@ -1058,3 +1058,180 @@ assertAccepted("accepts optional canonical money fields and description edits", 
     schema.properties.details.description = "Client-safe structured context.";
   });
 });
+
+function eventCondition(schema, name) {
+  return schema.allOf.find((condition) => condition.if.properties.event_type.const === name);
+}
+
+for (const [field, mutate] of [
+  ["data_classification", (schema) => schema.properties.data_classification.enum.push("public")],
+  ["occurred_at", (schema) => delete schema.properties.occurred_at.format],
+  ["producer", (schema) => delete schema.properties.producer.pattern],
+  ["aggregate_type", (schema) => schema.properties.aggregate_type.enum.push("anything")],
+  ["event_type", (schema) => { schema.properties.event_type.minLength = 0; }],
+  ["payload", (schema) => { schema.properties.payload = {}; }]
+]) {
+  assertRejected(
+    `rejects a weakened event envelope ${field} schema`,
+    `Canonical event ${field} schema must remain pinned`,
+    (scratch) => mutateEventSchema(scratch, mutate)
+  );
+}
+
+for (const [variant, mutate] of [
+  ["an unsatisfiable condition", (condition) => condition.if.required.push("never_present")],
+  ["an extra condition constraint", (condition) => { condition.if.properties.event_version = { const: 2 }; }],
+  ["a missing classification binding", (condition) => delete condition.then.properties.data_classification],
+  ["a downgraded classification binding", (condition) => { condition.then.properties.data_classification.const = "confidential"; }],
+  ["an else branch", (condition) => { condition.else = {}; }],
+  ["a retargeting condition $id", (condition) => { condition.then.$id = "https://schemas.example.invalid/x.json"; }]
+]) {
+  assertRejected(
+    `rejects event conditions with ${variant}`,
+    "WithdrawalApproved: event condition must remain pinned",
+    (scratch) => mutateEventSchema(scratch, (schema) => mutate(eventCondition(schema, "WithdrawalApproved")))
+  );
+}
+
+for (const keyword of ["patternProperties", "anyOf", "unevaluatedProperties"]) {
+  assertRejected(
+    `rejects top-level event schema ${keyword}`,
+    "Event schema keywords",
+    (scratch) => mutateEventSchema(scratch, (schema) => {
+      schema[keyword] = keyword === "anyOf" ? [true] : { "^.*$": {} };
+    })
+  );
+}
+
+assertRejected(
+  "rejects a downgraded event schema dialect",
+  "Event schema dialect must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$schema = "http://json-schema.org/draft-04/schema#";
+  })
+);
+
+assertRejected(
+  "rejects a retargeted event schema $id",
+  "Event schema $id must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$id = "https://schemas.example.invalid/domain-event.schema.json";
+  })
+);
+
+for (const keyword of ["$id", "$anchor", "$dynamicRef", "$dynamicAnchor", "$recursiveRef", "$schema"]) {
+  assertRejected(
+    `rejects nested ${keyword} in event schemas`,
+    `nested ${keyword} is prohibited`,
+    (scratch) => mutateEventSchema(scratch, (schema) => {
+      schema.$defs.withdrawalHeld.properties.review_note = { type: "string", [keyword]: "https://schemas.example.invalid/x#a" };
+    })
+  );
+}
+
+for (const field of [
+  "full_name",
+  "first_name",
+  "customer_name",
+  "passport_number",
+  "customer_email",
+  "e_mail",
+  "phone_number",
+  "mobile",
+  "home_address",
+  "date_of_birth",
+  "document_type",
+  "nationality",
+  "mailbox",
+  "given_name",
+  "postcode",
+  "street_line",
+  "zip"
+]) {
+  assertRejected(
+    `rejects PII-like event payload field ${field}`,
+    `PII-like property ${field} is prohibited`,
+    (scratch) => mutateEventSchema(scratch, (schema) => {
+      schema.$defs.userRegistered.properties[field] = { type: "string", maxLength: 128 };
+    })
+  );
+}
+
+assertRejected(
+  "rejects PII-like event envelope fields",
+  "PII-like property operator_email is prohibited",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.properties.operator_email = { type: "string", maxLength: 128 };
+  })
+);
+
+assertRejected(
+  "rejects nested PII-like event payload fields",
+  "PII-like property surname is prohibited",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.userRegistered.properties.profile = {
+      type: "object",
+      additionalProperties: false,
+      properties: { surname: { type: "string" } }
+    };
+  })
+);
+
+for (const [variant, property, expected] of [
+  ["a floating-point fee", { type: "number" }, "floating-point number type is prohibited"],
+  ["a nullable floating-point price", { type: ["number", "null"] }, "floating-point number type is prohibited"],
+  ["a floating-point price alternative", { anyOf: [{ type: "number" }, { type: "null" }] }, "floating-point number type is prohibited"],
+  ["a floating-point literal", { enum: [1.5] }, "floating-point literals are prohibited"],
+  ["an open nested object", { type: "object" }, "object must set additionalProperties to false"],
+  ["a permissive nested object", { type: "object", additionalProperties: true, properties: {} }, "object must set additionalProperties to false"],
+  ["a nested object with pattern properties", { type: "object", additionalProperties: false, properties: {}, patternProperties: { "^.*$": {} } }, "schema keyword patternProperties is prohibited"],
+  ["an untyped field", {}, "must declare type, const, enum, $ref or anyOf"],
+  ["a boolean schema", true, "must be an explicit schema object"],
+  ["an array without items", { type: "array" }, "array must declare items"],
+  ["an array of open objects", { type: "array", items: { type: "object" } }, "object must set additionalProperties to false"],
+  ["a negated schema", { not: { type: "null" } }, "schema keyword not is prohibited"],
+  ["an email format", { type: "string", format: "email" }, "string format email is prohibited"],
+  ["a reference to the open envelope payload", { $ref: "#/properties/payload" }, "must target a checked #/$defs definition"],
+  ["a reference to another contract file", { $ref: "../error.schema.json#/properties/details" }, "must target a checked #/$defs definition"],
+  ["a reference to an event condition", { $ref: "#/allOf/0" }, "must target a checked #/$defs definition"],
+  ["a reference to the whole event schema", { $ref: "#" }, "must target a checked #/$defs definition"],
+  ["a reference to a missing definition", { $ref: "#/$defs/missing" }, "missing JSON pointer #/$defs/missing"],
+  ["an unknown type spelling", { type: "Number" }, "type must be exactly one of"],
+  ["an empty type list", { type: [] }, "type must be exactly one of"],
+  ["a mixed type list", { type: ["string", "object"], additionalProperties: false, properties: {} }, "type must be exactly one of"],
+  ["a tuple items list", { type: "array", items: [{ type: "object" }] }, "items must be an explicit schema object"]
+]) {
+  assertRejected(
+    `rejects optional event payload fields with ${variant}`,
+    expected,
+    (scratch) => mutateEventSchema(scratch, (schema) => {
+      schema.$defs.quoteCreated.properties.pricing_extra = property;
+    })
+  );
+}
+
+assertRejected(
+  "rejects open event definitions reached through references",
+  "event schema.$defs.openThing object must set additionalProperties to false",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.openThing = { type: "object" };
+    schema.$defs.quoteCreated.properties.pricing_extra = { $ref: "#/$defs/openThing" };
+  })
+);
+
+assertAccepted("accepts closed optional event payload objects, integers and nullable references", (scratch) => {
+  mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalHeld.properties.review = {
+      type: "object",
+      additionalProperties: false,
+      required: ["review_reference"],
+      properties: {
+        review_reference: { $ref: "#/$defs/identifier" },
+        attempt: { type: "integer", minimum: 1, description: "Review attempt counter." },
+        tags: { type: "array", maxItems: 8, items: { type: "string", pattern: "^[a-z]{2,16}$" } }
+      }
+    };
+    schema.$defs.withdrawalHeld.properties.escalation_reference = { anyOf: [{ $ref: "#/$defs/identifier" }, { type: "null" }] };
+    schema.properties.trace_state = { type: ["string", "null"], maxLength: 256 };
+  });
+});
