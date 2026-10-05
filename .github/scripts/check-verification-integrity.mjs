@@ -27,10 +27,81 @@ const FOCUSED_OR_SKIPPED_TEST =
 const X_PREFIXED_TEST = /\bx(?:describe|it|test|suite|specify|context)\s*\(/;
 const TEST_OPTION_FLAG = /[{,]\s*['"`]?(?:only|skip|todo)['"`]?\s*:\s*\S/;
 const SELECTIVE_TEST_FLAG = /--test-(?:only|name-pattern|skip-pattern)\b/;
-const EARLY_PROCESS_EXIT =
-  /process\s*(?:\.\s*|\[\s*['"`])(?:exit|reallyExit)['"`]?\s*\]?\s*\(/;
-const SHELL_EXIT = /(?:^|[\s;&|{}()])\s*exit\s*([^;\n]*)/g;
-const SHELL_EXIT_ARG = /^[1-9][0-9]*$/;
+const PROCESS = "pro" + "cess";
+const EXIT_CODE = "exit" + "Code";
+const EARLY_PROCESS_EXIT = new RegExp(
+  PROCESS +
+    "\\s*(?:\\.\\s*|\\[\\s*['\"`])(?:exit|reallyExit)['\"`]?\\s*\\]?\\s*\\(",
+);
+const PROCESS_REFERENCE = new RegExp(`(?<![\\w$])${PROCESS}(?![\\w$])`, "g");
+const PROCESS_MEMBER = /^\s*\.\s*([A-Za-z_$][\w$]*)(?![\w$])/;
+const PROSE_WORD = /^[ \t]+([a-z]+)(?![\w$])/;
+const OPERATOR_WORDS = new Set(["as", "in", "instanceof", "satisfies"]);
+const PROCESS_MEMBERS = new Set([
+  "argv",
+  "cwd",
+  "env",
+  "execPath",
+  EXIT_CODE,
+  "stderr",
+  "stdin",
+  "stdout",
+]);
+const PINNED_PROCESS_MEMBERS = {
+  "backoffice/scripts/dev.mjs": ["on"],
+};
+const EXIT_CODE_REFERENCE = new RegExp(`(?<![\\w$])${EXIT_CODE}(?![\\w$])`, "g");
+const NONZERO_EXIT_CODE = new RegExp(
+  `^${PROCESS}\\.${EXIT_CODE} = (?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5]);?$`,
+);
+const PINNED_EXIT_CODE_LINES = {
+  "backoffice/scripts/dev.mjs": [`${PROCESS}.${EXIT_CODE} = code;`],
+};
+const DYNAMIC_CODE = [
+  new RegExp(
+    "(?<![\\w$])(?:ev" +
+      "al|Func" +
+      "tion|createRe" +
+      "quire|getBuiltin" +
+      "Module|runIn(?:This|New)?Con" +
+      "text|compileFunc" +
+      "tion)(?![\\w$])",
+  ),
+  new RegExp(
+    `["'\`](?:node:)?(?:${PROCESS}|v` + "m|mod" + "ule|inspe" + "ctor|wa" + "si|re" + "pl)[\"'`]",
+  ),
+  new RegExp(
+    "(?<![\\w$])(?:im" +
+      "port|re" +
+      "quire)\\s*\\(\\s*(?![\"'][^\"'`$+\\\\]*[\"']\\s*\\))",
+  ),
+  new RegExp("\\.\\s*con" + "structor(?![\\w$])"),
+  new RegExp("[\\w$)\\]]\\s*\\[\\s*[\"'`]con" + "structor"),
+  new RegExp("(?<![\\w$.])(?:global" + "This|glo" + "bal)\\s*(?:\\?\\.)?\\s*\\["),
+  new RegExp(
+    "(?:Object|Reflect)\\s*\\.\\s*[\\w$]+\\s*\\(\\s*(?:global" +
+      "This|glo" +
+      "bal)(?![\\w$])",
+  ),
+];
+const SHELL_EXIT = /(?:^|[\s;&|{}()=$`])\s*exit\s*([^;\n]*)/g;
+const SHELL_QUOTING = /["'\\]/g;
+const ASCII_ESCAPE = /\\(?:u\{0*([2-7][0-9a-fA-F])\}|u00([2-7][0-9a-fA-F])|x([2-7][0-9a-fA-F]))/g;
+const SHELL_COMMAND_PREFIX = "(?:^|[;&|{}()`]|\\b(?:then|do|else))\\s*";
+const SHELL_FORBIDDEN_WORD = new RegExp(
+  "(?<![\\w-])(?:ev" + "al|exec|alias|shopt|enable|trap|BASH_ENV|SHELLOPTS)(?![\\w-])",
+);
+const SHELL_SOURCE = new RegExp(
+  `${SHELL_COMMAND_PREFIX}(?:source|\\.)[ \\t]+[^=\\s]`,
+);
+const SHELL_SET = /(?<![\w-])set(?:\s+[-+]|\s*$)/;
+const SHELL_STRICT_MODE = "set -euo pipefail";
+const PINNED_TRAP_LINES = new Set([
+  "trap cleanup EXIT",
+  `trap 'rm -rf "$scratch"' EXIT`,
+  `trap 'rm -f "$output_one" "$output_two"' EXIT`,
+]);
+const SHELL_EXIT_ARG = /^(?:[1-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$/;
 const TEST_CASE = /(?:^|[^\w$])(?:test|it|specify)\s*\(/g;
 const KEY_LINE = /^["']?([A-Za-z_][\w-]*)["']?\s*:/;
 const NODE_OPTIONS = /\bNODE_OPTIONS\b/;
@@ -222,8 +293,16 @@ export function validateTestFileContent(text, pinned, fileName) {
   return errors;
 }
 
-export function validateSourceText(text, fileName) {
+function decodeAsciiEscapes(text) {
+  return text.replace(ASCII_ESCAPE, (escape, ...digits) => {
+    const value = Number.parseInt(digits.find(Boolean), 16);
+    return value > 0x7e ? escape : String.fromCharCode(value);
+  });
+}
+
+export function validateSourceText(raw, fileName) {
   const code = CODE_FILE.test(fileName);
+  const text = code ? decodeAsciiEscapes(raw) : raw;
   const testFile = TEST_PATH.test(fileName);
   const errors = [];
 
@@ -243,7 +322,7 @@ export function validateSourceText(text, fileName) {
     }
     if (code && EARLY_PROCESS_EXIT.test(line)) {
       errors.push(
-        `${fileName}:${index + 1}: checked-in scripts and tests must not call process.exit`,
+        `${fileName}:${index + 1}: checked-in scripts and tests must not call ${PROCESS}.exit`,
       );
     }
     if (
@@ -256,16 +335,125 @@ export function validateSourceText(text, fileName) {
     }
   });
 
+  if (code && (testFile || !fileName.startsWith("assets/"))) {
+    errors.push(...validateProcessAccess(text, fileName));
+  }
+
   if (SHELL_FILE.test(fileName) && testFile) {
-    for (const match of text.matchAll(SHELL_EXIT)) {
+    errors.push(...validateShellControl(text, fileName));
+    const unquoted = text.replace(SHELL_QUOTING, "");
+    for (const match of unquoted.matchAll(SHELL_EXIT)) {
       const argument = match[1].trim().split(/\s+/)[0] ?? "";
       if (!SHELL_EXIT_ARG.test(argument)) {
-        const line = text.slice(0, match.index).split("\n").length;
+        const line = lineAt(unquoted, match.index);
         errors.push(
           `${fileName}:${line}: test scripts must only exit with an explicit nonzero status`,
         );
       }
     }
+  }
+
+  return errors;
+}
+
+function lineAt(text, offset) {
+  return text.slice(0, offset).split("\n").length;
+}
+
+function validateProcessAccess(text, fileName) {
+  const errors = [];
+  const lines = text.split("\n");
+  const pinnedMembers = PINNED_PROCESS_MEMBERS[fileName] ?? [];
+  const pinnedExitCodes = PINNED_EXIT_CODE_LINES[fileName] ?? [];
+
+  for (const match of text.matchAll(PROCESS_REFERENCE)) {
+    const rest = text.slice(match.index + PROCESS.length);
+    const member = rest.match(PROCESS_MEMBER)?.[1];
+    const prose = rest.match(PROSE_WORD)?.[1];
+    if (
+      member
+        ? !PROCESS_MEMBERS.has(member) && !pinnedMembers.includes(member)
+        : !prose || OPERATOR_WORDS.has(prose)
+    ) {
+      errors.push(
+        `${fileName}:${lineAt(text, match.index)}: ${PROCESS} may only be used as ${PROCESS}.<${[...PROCESS_MEMBERS].join("|")}>`,
+      );
+    }
+  }
+
+  for (const match of text.matchAll(EXIT_CODE_REFERENCE)) {
+    const line = lineAt(text, match.index);
+    const statement = lines[line - 1].trim();
+    if (
+      !NONZERO_EXIT_CODE.test(statement) &&
+      !pinnedExitCodes.includes(statement)
+    ) {
+      errors.push(
+        `${fileName}:${line}: ${EXIT_CODE} may only be set to a literal nonzero status`,
+      );
+    }
+  }
+
+  lines.forEach((line, index) => {
+    if (DYNAMIC_CODE.some((pattern) => pattern.test(line))) {
+      errors.push(
+        `${fileName}:${index + 1}: dynamic code, module or global-object access is not allowed`,
+      );
+    }
+  });
+
+  return errors;
+}
+
+function validateShellControl(text, fileName) {
+  const errors = [];
+  const modes = [];
+
+  text.split("\n").forEach((raw, index) => {
+    const line = raw.replace(SHELL_QUOTING, "");
+    const statement = raw.trim();
+    const location = `${fileName}:${index + 1}`;
+
+    if (
+      SHELL_FORBIDDEN_WORD.test(line) &&
+      !PINNED_TRAP_LINES.has(statement)
+    ) {
+      errors.push(
+        `${location}: test scripts must not use dynamic evaluation, exec, alias, shopt, enable or unpinned traps`,
+      );
+    }
+    if (SHELL_SOURCE.test(line)) {
+      errors.push(`${location}: test scripts must not source other files`);
+    }
+    if (SHELL_SET.test(line)) {
+      if (
+        statement !== SHELL_STRICT_MODE &&
+        statement !== "set +e" &&
+        statement !== "set -e"
+      ) {
+        errors.push(
+          `${location}: test scripts may only use "${SHELL_STRICT_MODE}", "set +e" and "set -e"`,
+        );
+      } else {
+        modes.push({ statement, location });
+      }
+    }
+  });
+
+  if (modes[0]?.statement !== SHELL_STRICT_MODE) {
+    errors.push(
+      `${fileName}: test scripts must start with "${SHELL_STRICT_MODE}"`,
+    );
+  }
+  let errexit = true;
+  for (const { statement, location } of modes.slice(1)) {
+    if (statement === SHELL_STRICT_MODE || statement === "set -e" ? errexit : !errexit) {
+      errors.push(`${location}: "set +e" must be followed by exactly one "set -e"`);
+    }
+    errexit = statement !== "set +e";
+  }
+  if (!errexit) {
+    errors.push(`${fileName}: "set +e" is never restored with "set -e"`);
   }
 
   return errors;
