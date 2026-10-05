@@ -509,3 +509,65 @@ jobs:
 
   assert.deepEqual(errors, []);
 });
+
+test("rejects job-level permissions hidden by flow placement, tags, anchors or explicit keys", () => {
+  for (const job of [
+    `escalate:
+    { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }`,
+    "escalate: !!map { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: !<tag:yaml.org,2002:map> { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: { runs-on: ubuntu-latest, &perm permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: { runs-on: ubuntu-latest, ? permissions : write-all, steps: [{ run: echo policy fixture }] }",
+    `escalate:
+    runs-on: ubuntu-latest
+    !!str permissions: write-all
+    steps:
+      - run: echo policy fixture`,
+    `escalate:
+    runs-on: ubuntu-latest
+    &perm permissions: write-all
+    steps:
+      - run: echo policy fixture`,
+    `escalate:
+    runs-on: ubuntu-latest
+    ? permissions
+    : write-all
+    steps:
+      - run: echo policy fixture`,
+  ]) {
+    const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  ${job}
+`);
+
+    assert.match(
+      errors.join("\n"),
+      /job-level permissions are not allowed|YAML tags are not allowed|explicit YAML keys are not allowed in jobs/,
+      job,
+    );
+  }
+});
+
+test("rejects tagged flow-style steps that hide mutable external action refs", () => {
+  const errors = validateWorkflowText(
+    workflow("      - !!map { uses: actions/checkout@v4 }"),
+  );
+
+  assert.match(errors.join("\n"), /YAML tags are not allowed/);
+});
+
+test("accepts negated expressions and shell negation that resemble YAML tags", () => {
+  const errors = validateWorkflowText(
+    workflow(`      - name: Report
+        if: \${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          [ ! -f missing.txt ] && echo "policy fixture!"`),
+  );
+
+  assert.deepEqual(errors, []);
+});
