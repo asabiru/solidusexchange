@@ -539,6 +539,159 @@ function verifyEventEnvelope(eventSchema) {
   }
 }
 
+const pinnedEventContracts = {
+  UserRegistered: {
+    version: 1,
+    aggregateType: "user",
+    payload: "userRegistered",
+    required: ["user_id", "registration_channel"]
+  },
+  KycSubmitted: {
+    version: 1,
+    aggregateType: "kyc_case",
+    payload: "kycSubmitted",
+    required: ["case_id", "user_id", "provider_reference", "evidence_digest"]
+  },
+  KycVerified: {
+    version: 1,
+    aggregateType: "kyc_case",
+    payload: "kycVerified",
+    required: ["case_id", "user_id", "decision", "policy_version", "evidence_digest"]
+  },
+  WalletAddressAssigned: {
+    version: 1,
+    aggregateType: "wallet",
+    payload: "walletAddressAssigned",
+    required: ["wallet_id", "user_id", "asset", "network", "address_reference", "custody_account_id"]
+  },
+  DepositDetected: {
+    version: 1,
+    aggregateType: "deposit",
+    payload: "depositDetected",
+    required: ["deposit_id", "wallet_id", "asset", "network", "amount", "transaction_reference", "observed_at"]
+  },
+  DepositConfirmed: {
+    version: 1,
+    aggregateType: "deposit",
+    payload: "depositConfirmed",
+    required: ["deposit_id", "confirmations", "confirmed_at"]
+  },
+  QuoteCreated: {
+    version: 1,
+    aggregateType: "quote",
+    payload: "quoteCreated",
+    required: ["quote_id", "user_id", "from_asset", "to_asset", "from_amount", "to_amount", "fee_amount", "pricing_source", "expires_at"]
+  },
+  ExchangeOrderCreated: {
+    version: 1,
+    aggregateType: "exchange_order",
+    payload: "exchangeOrderCreated",
+    required: ["order_id", "quote_id", "user_id", "status"]
+  },
+  ExchangeSettled: {
+    version: 1,
+    aggregateType: "exchange_order",
+    payload: "exchangeSettled",
+    required: ["order_id", "journal_id", "settled_at"]
+  },
+  WithdrawalRequested: {
+    version: 1,
+    aggregateType: "withdrawal",
+    payload: "withdrawalRequested",
+    required: ["withdrawal_id", "user_id", "asset", "network", "amount", "destination_reference"]
+  },
+  WithdrawalHeld: {
+    version: 1,
+    aggregateType: "withdrawal",
+    payload: "withdrawalHeld",
+    required: ["withdrawal_id", "hold_id", "reason_code"]
+  },
+  WithdrawalApproved: {
+    version: 1,
+    aggregateType: "withdrawal",
+    payload: "withdrawalApproved",
+    required: ["withdrawal_id", "approval_id", "approver_count", "evidence_digest"]
+  },
+  CustodyIntentPrepared: {
+    version: 1,
+    aggregateType: "withdrawal",
+    payload: "custodyIntentPrepared",
+    required: ["withdrawal_id", "custody_intent_id", "intent_digest", "policy_digest", "approval_evidence_digest", "asset", "network", "expires_at", "status", "execution_authority", "production_signing_enabled"]
+  },
+  WithdrawalBroadcast: {
+    version: 1,
+    aggregateType: "withdrawal",
+    payload: "withdrawalBroadcast",
+    required: ["withdrawal_id", "transaction_reference", "broadcast_at"]
+  },
+  PaymentConfirmed: {
+    version: 1,
+    aggregateType: "payment",
+    payload: "paymentConfirmed",
+    required: ["payment_id", "provider_reference", "amount", "currency", "confirmed_at"]
+  },
+  PaymentRefunded: {
+    version: 1,
+    aggregateType: "payment",
+    payload: "paymentRefunded",
+    required: ["payment_id", "refund_id", "amount", "currency", "journal_id", "refunded_at"]
+  },
+  AmlAlertCreated: {
+    version: 1,
+    aggregateType: "aml_alert",
+    payload: "amlAlertCreated",
+    required: ["alert_id", "user_id", "risk_score", "rule_codes"]
+  }
+};
+
+const allowedPayloadSchemaKeys = ["type", "additionalProperties", "required", "properties"];
+
+const pinnedEventCatalogKeys = ["catalog_version", "compatibility_policy", "execution_authority", "events"];
+
+const pinnedEventCatalogEntryKeys = ["name", "current_version", "aggregate_type", "owner", "data_classification"];
+
+function verifyEventCatalogShape(catalog) {
+  sameSet(Object.keys(catalog), pinnedEventCatalogKeys, "Event catalog keys");
+  assert(catalog.catalog_version === 1, "Event catalog version must remain 1");
+  assert(
+    catalog.compatibility_policy === "additive-with-versioned-breaking-changes",
+    "Event catalog compatibility policy must remain pinned"
+  );
+  assert(Array.isArray(catalog.events), "Event catalog events must be an array");
+  for (const entry of catalog.events) {
+    assert(entry && typeof entry === "object" && !Array.isArray(entry), "Event catalog entries must be objects");
+    sameSet(Object.keys(entry), pinnedEventCatalogEntryKeys, `Event catalog entry ${entry.name} keys`);
+  }
+}
+
+function verifyPinnedEvents(eventSchema, conditions, catalog) {
+  const eventTypes = eventSchema.properties?.event_type?.enum ?? [];
+  assert(new Set(eventTypes).size === eventTypes.length, "Event schema contains duplicate event types");
+  sameSet(eventTypes, Object.keys(pinnedEventContracts), "Pinned event types");
+  for (const [name, pinned] of Object.entries(pinnedEventContracts)) {
+    const condition = conditions.get(name);
+    const catalogEntry = catalog.events.find((entry) => entry.name === name);
+    assert(catalogEntry?.current_version === pinned.version, `${name}: event version must remain pinned`);
+    assert(
+      condition?.aggregateType === pinned.aggregateType && catalogEntry.aggregate_type === pinned.aggregateType,
+      `${name}: aggregate type must remain pinned`
+    );
+    assert(condition.payloadRef === `#/$defs/${pinned.payload}`, `${name}: payload schema must remain pinned`);
+    const payload = eventSchema.$defs?.[pinned.payload];
+    assert(payload && typeof payload === "object", `${name}: payload schema is missing`);
+    sameSet(Object.keys(payload), allowedPayloadSchemaKeys, `${name} payload schema keywords`);
+    assert(
+      payload.type === "object" && payload.additionalProperties === false,
+      `${name} payload must reject unknown fields`
+    );
+    assert(Array.isArray(payload.required), `${name} payload required fields must be explicit`);
+    sameSet(payload.required, pinned.required, `${name} payload required fields`);
+    for (const field of payload.required) {
+      assert(Object.hasOwn(payload.properties ?? {}, field), `${name} payload required field ${field} is undefined`);
+    }
+  }
+}
+
 function checkEvents() {
   const schemaPath = join(root, "schemas/events/domain-event.schema.json");
   const eventSchema = loadAbsolute(schemaPath);
@@ -553,6 +706,8 @@ function checkEvents() {
   sameSet(schemaEvents, conditions.keys(), "Event schema conditions");
   sameSet(schemaEvents, catalogEvents, "Event catalog");
   sameSet(schemaEvents, exampleEvents, "Event examples");
+  verifyEventCatalogShape(catalog);
+  verifyPinnedEvents(eventSchema, conditions, catalog);
   assert(catalog.events.length === schemaEvents.size, "Event catalog contains duplicates");
   assert(examples.length === schemaEvents.size, "Event examples must contain exactly one sample per event");
   assert(catalog.execution_authority === false, "Events must not grant execution authority");
