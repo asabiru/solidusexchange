@@ -574,6 +574,27 @@ assertRejected(
   })
 );
 
+assertRejected(
+  "rejects a consistent event data classification downgrade",
+  "KycSubmitted: data classification must remain pinned",
+  (scratch) => {
+    mutateEventCatalog(scratch, (catalog) => {
+      catalog.events.find((event) => event.name === "KycSubmitted").data_classification = "confidential";
+    });
+    const examples = readJson(scratch, "examples/domain-events.json");
+    examples.find((event) => event.event_type === "KycSubmitted").data_classification = "confidential";
+    writeJson(scratch, "examples/domain-events.json", examples);
+  }
+);
+
+assertRejected(
+  "rejects an event owner change",
+  "WithdrawalRequested: owner must remain pinned",
+  (scratch) => mutateEventCatalog(scratch, (catalog) => {
+    catalog.events.find((event) => event.name === "WithdrawalRequested").owner = "custody-orchestrator";
+  })
+);
+
 test("accepts optional event payload fields and reordered payload required fields", () => {
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {

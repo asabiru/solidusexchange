@@ -568,102 +568,136 @@ const pinnedEventContracts = {
   UserRegistered: {
     version: 1,
     aggregateType: "user",
+    owner: "identity",
+    dataClassification: "confidential",
     payload: "userRegistered",
     required: ["user_id", "registration_channel"]
   },
   KycSubmitted: {
     version: 1,
     aggregateType: "kyc_case",
+    owner: "customer-risk",
+    dataClassification: "highly-confidential",
     payload: "kycSubmitted",
     required: ["case_id", "user_id", "provider_reference", "evidence_digest"]
   },
   KycVerified: {
     version: 1,
     aggregateType: "kyc_case",
+    owner: "customer-risk",
+    dataClassification: "highly-confidential",
     payload: "kycVerified",
     required: ["case_id", "user_id", "decision", "policy_version", "evidence_digest"]
   },
   WalletAddressAssigned: {
     version: 1,
     aggregateType: "wallet",
+    owner: "custody-orchestrator",
+    dataClassification: "highly-confidential",
     payload: "walletAddressAssigned",
     required: ["wallet_id", "user_id", "asset", "network", "address_reference", "custody_account_id"]
   },
   DepositDetected: {
     version: 1,
     aggregateType: "deposit",
+    owner: "deposit-orchestrator",
+    dataClassification: "confidential",
     payload: "depositDetected",
     required: ["deposit_id", "wallet_id", "asset", "network", "amount", "transaction_reference", "observed_at"]
   },
   DepositConfirmed: {
     version: 1,
     aggregateType: "deposit",
+    owner: "deposit-orchestrator",
+    dataClassification: "confidential",
     payload: "depositConfirmed",
     required: ["deposit_id", "confirmations", "confirmed_at"]
   },
   QuoteCreated: {
     version: 1,
     aggregateType: "quote",
+    owner: "pricing",
+    dataClassification: "confidential",
     payload: "quoteCreated",
     required: ["quote_id", "user_id", "from_asset", "to_asset", "from_amount", "to_amount", "fee_amount", "pricing_source", "expires_at"]
   },
   ExchangeOrderCreated: {
     version: 1,
     aggregateType: "exchange_order",
+    owner: "exchange",
+    dataClassification: "confidential",
     payload: "exchangeOrderCreated",
     required: ["order_id", "quote_id", "user_id", "status"]
   },
   ExchangeSettled: {
     version: 1,
     aggregateType: "exchange_order",
+    owner: "settlement",
+    dataClassification: "confidential",
     payload: "exchangeSettled",
     required: ["order_id", "journal_id", "settled_at"]
   },
   WithdrawalRequested: {
     version: 1,
     aggregateType: "withdrawal",
+    owner: "withdrawals",
+    dataClassification: "highly-confidential",
     payload: "withdrawalRequested",
     required: ["withdrawal_id", "user_id", "asset", "network", "amount", "destination_reference"]
   },
   WithdrawalHeld: {
     version: 1,
     aggregateType: "withdrawal",
+    owner: "withdrawals",
+    dataClassification: "highly-confidential",
     payload: "withdrawalHeld",
     required: ["withdrawal_id", "hold_id", "reason_code"]
   },
   WithdrawalApproved: {
     version: 1,
     aggregateType: "withdrawal",
+    owner: "approvals",
+    dataClassification: "highly-confidential",
     payload: "withdrawalApproved",
     required: ["withdrawal_id", "approval_id", "approver_count", "evidence_digest"]
   },
   CustodyIntentPrepared: {
     version: 1,
     aggregateType: "withdrawal",
+    owner: "custody-orchestrator",
+    dataClassification: "highly-confidential",
     payload: "custodyIntentPrepared",
     required: ["withdrawal_id", "custody_intent_id", "intent_digest", "policy_digest", "approval_evidence_digest", "asset", "network", "expires_at", "status", "execution_authority", "production_signing_enabled"]
   },
   WithdrawalBroadcast: {
     version: 1,
     aggregateType: "withdrawal",
+    owner: "custody-orchestrator",
+    dataClassification: "highly-confidential",
     payload: "withdrawalBroadcast",
     required: ["withdrawal_id", "transaction_reference", "broadcast_at"]
   },
   PaymentConfirmed: {
     version: 1,
     aggregateType: "payment",
+    owner: "payments",
+    dataClassification: "confidential",
     payload: "paymentConfirmed",
     required: ["payment_id", "provider_reference", "amount", "currency", "confirmed_at"]
   },
   PaymentRefunded: {
     version: 1,
     aggregateType: "payment",
+    owner: "payments",
+    dataClassification: "confidential",
     payload: "paymentRefunded",
     required: ["payment_id", "refund_id", "amount", "currency", "journal_id", "refunded_at"]
   },
   AmlAlertCreated: {
     version: 1,
     aggregateType: "aml_alert",
+    owner: "aml",
+    dataClassification: "highly-confidential",
     payload: "amlAlertCreated",
     required: ["alert_id", "user_id", "risk_score", "rule_codes"]
   }
@@ -700,6 +734,11 @@ function verifyPinnedEvents(eventSchema, conditions, catalog) {
     assert(
       condition?.aggregateType === pinned.aggregateType && catalogEntry.aggregate_type === pinned.aggregateType,
       `${name}: aggregate type must remain pinned`
+    );
+    assert(catalogEntry.owner === pinned.owner, `${name}: owner must remain pinned`);
+    assert(
+      catalogEntry.data_classification === pinned.dataClassification,
+      `${name}: data classification must remain pinned`
     );
     assert(condition.payloadRef === `#/$defs/${pinned.payload}`, `${name}: payload schema must remain pinned`);
     const payload = eventSchema.$defs?.[pinned.payload];
