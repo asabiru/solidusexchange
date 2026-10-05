@@ -1,4 +1,4 @@
-import type { Capability, OperatorRole } from "../auth/access";
+import type { Capability, OperatorRole } from "../auth/access.js";
 import type {
   AmlCase,
   ApprovalPreview,
@@ -10,7 +10,7 @@ import type {
   KycCase,
   Metric,
   QueueRow
-} from "./demo";
+} from "./demo.js";
 
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
@@ -28,6 +28,7 @@ interface SigningKey {
   version: number;
   algorithm: "Ed25519";
   status: "active" | "retired";
+  retiredAt?: string;
   publicJwk: JsonWebKey;
 }
 
@@ -161,17 +162,71 @@ export class ApiError extends Error {
   }
 }
 
+const KEYSET_MAX_AGE_MS = 60 * 1_000;
+const RESPONSE_MAX_SKEW_MS = 5 * 60 * 1_000;
+const ENVELOPE_FIELDS = [
+  "issuedAt",
+  "keyId",
+  "keyVersion",
+  "payload",
+  "requestId",
+  "resource",
+  "signature",
+  "signatureVersion"
+] as const;
+
 let signingKeysetPromise: Promise<SigningKeyset> | undefined;
+let signingKeysetFetchedAt = 0;
 
 function bytes(value: Uint8Array): ArrayBuffer {
   return value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer;
 }
 
 function decodeBase64Url(value: string): ArrayBuffer {
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) {
+    throw new Error("Backoffice response signature encoding is invalid");
+  }
   const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
   const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
   const binary = window.atob(padded);
   return bytes(Uint8Array.from(binary, (character) => character.charCodeAt(0)));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function assertCanonicalJson(value: unknown): void {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || Object.is(value, -0)) {
+      throw new Error("Backoffice response payload is not canonical JSON");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertCanonicalJson(item);
+    return;
+  }
+  if (isRecord(value)) {
+    for (const item of Object.values(value)) assertCanonicalJson(item);
+  }
+}
+
+function assertEnvelopeShape(envelope: unknown): asserts envelope is SignedEnvelope<unknown> {
+  if (
+    !isRecord(envelope)
+    || Object.keys(envelope).sort().join(",") !== ENVELOPE_FIELDS.join(",")
+    || envelope.signatureVersion !== 1
+    || typeof envelope.keyId !== "string"
+    || !Number.isSafeInteger(envelope.keyVersion)
+    || (envelope.keyVersion as number) < 1
+    || typeof envelope.issuedAt !== "string"
+    || typeof envelope.requestId !== "string"
+    || envelope.requestId.length === 0
+    || typeof envelope.resource !== "string"
+    || typeof envelope.signature !== "string"
+  ) throw new Error("Backoffice response envelope is malformed");
+  assertCanonicalJson(envelope.payload);
 }
 
 function canonicalMessage<T>(envelope: SignedEnvelope<T>): ArrayBuffer {
@@ -186,23 +241,41 @@ function canonicalMessage<T>(envelope: SignedEnvelope<T>): ArrayBuffer {
   })));
 }
 
+function isValidKeyset(keyset: SigningKeyset): boolean {
+  if (
+    !isRecord(keyset)
+    || keyset.formatVersion !== 1
+    || keyset.backend !== "ephemeral-dev"
+    || typeof keyset.activeKeyId !== "string"
+    || !Array.isArray(keyset.keys)
+  ) return false;
+  const active = keyset.keys.filter((key) => isRecord(key) && key.status === "active");
+  const keyIds = new Set(keyset.keys.map((key) => isRecord(key) ? key.keyId : undefined));
+  return active.length === 1
+    && active[0]?.keyId === keyset.activeKeyId
+    && keyIds.size === keyset.keys.length;
+}
+
 async function signingKeyset(forceRefresh = false): Promise<SigningKeyset> {
-  if (forceRefresh) signingKeysetPromise = undefined;
-  signingKeysetPromise ??= fetch("/bff/api/signing-keys", {
-    credentials: "same-origin",
-    headers: { accept: "application/json" }
-  }).then(async (response) => {
-    if (!response.ok) throw new ApiError(response.status, "Signing keys unavailable");
-    const keyset = await response.json() as SigningKeyset;
-    if (
-      keyset.formatVersion !== 1
-      || keyset.backend !== "ephemeral-dev"
-      || typeof keyset.activeKeyId !== "string"
-      || !Array.isArray(keyset.keys)
-      || keyset.keys.filter((key) => key.status === "active").length !== 1
-    ) throw new Error("Backoffice signing keyset is invalid");
-    return keyset;
-  });
+  if (forceRefresh || Date.now() - signingKeysetFetchedAt > KEYSET_MAX_AGE_MS) {
+    signingKeysetPromise = undefined;
+  }
+  if (!signingKeysetPromise) {
+    signingKeysetFetchedAt = Date.now();
+    const pending = fetch("/bff/api/signing-keys", {
+      credentials: "same-origin",
+      headers: { accept: "application/json" }
+    }).then(async (response) => {
+      if (!response.ok) throw new ApiError(response.status, "Signing keys unavailable");
+      const keyset = await response.json() as SigningKeyset;
+      if (!isValidKeyset(keyset)) throw new Error("Backoffice signing keyset is invalid");
+      return keyset;
+    });
+    signingKeysetPromise = pending;
+    pending.catch(() => {
+      if (signingKeysetPromise === pending) signingKeysetPromise = undefined;
+    });
+  }
   return signingKeysetPromise;
 }
 
@@ -210,9 +283,7 @@ async function verifyEnvelope<T>(
   envelope: SignedEnvelope<T>,
   expectedResource: string
 ): Promise<T> {
-  if (envelope.signatureVersion !== 1) {
-    throw new Error("Backoffice response signature version is unsupported");
-  }
+  assertEnvelopeShape(envelope);
   let keys = await signingKeyset();
   let key = keys.keys.find((candidate) => candidate.keyId === envelope.keyId);
   if (!key) {
@@ -230,8 +301,18 @@ async function verifyEnvelope<T>(
     throw new Error("Backoffice response resource mismatch");
   }
   const issuedAt = Date.parse(envelope.issuedAt);
-  if (!Number.isFinite(issuedAt) || Math.abs(Date.now() - issuedAt) > 5 * 60 * 1_000) {
+  if (
+    !Number.isFinite(issuedAt)
+    || new Date(issuedAt).toISOString() !== envelope.issuedAt
+    || Math.abs(Date.now() - issuedAt) > RESPONSE_MAX_SKEW_MS
+  ) {
     throw new Error("Backoffice response is outside the accepted time window");
+  }
+  if (key.status === "retired") {
+    const retiredAt = typeof key.retiredAt === "string" ? Date.parse(key.retiredAt) : Number.NaN;
+    if (!Number.isFinite(retiredAt) || issuedAt > retiredAt) {
+      throw new Error("Backoffice response was issued after its signing key was retired");
+    }
   }
   const publicKey = await crypto.subtle.importKey(
     "jwk",
