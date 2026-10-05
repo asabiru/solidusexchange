@@ -68,8 +68,13 @@ function resolveRef(sourcePath, reference) {
 
 function verifyReferences(value, sourcePath, seen = new Set()) {
   if (!value || typeof value !== "object") return;
-  if (typeof value.$ref === "string") {
-    assert(!value.$ref.startsWith("http"), `Remote $ref is prohibited: ${value.$ref}`);
+  if (Object.hasOwn(value, "$ref")) {
+    assert(typeof value.$ref === "string", `$ref must be a string: ${sourcePath}`);
+    assert(!/^[a-z][a-z0-9+.-]*:/i.test(value.$ref) && !value.$ref.startsWith("//"), `Remote $ref is prohibited: ${value.$ref}`);
+    assert(!value.$ref.includes("%") && !value.$ref.includes("\\"), `Encoded $ref is prohibited: ${value.$ref}`);
+    for (const key of Object.keys(value)) {
+      assert(allowedReferenceSiblings.has(key), `$ref sibling ${key} is prohibited: ${value.$ref}`);
+    }
     const key = `${sourcePath}:${value.$ref}`;
     if (!seen.has(key)) {
       seen.add(key);
@@ -98,7 +103,25 @@ function canonicalJson(value) {
 }
 
 const boundedString = { type: "string", minLength: 1, maxLength: 128 };
-const protectedViewSchemas = {
+const pinnedResponseSchemas = {
+  ApiMetadata: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "api_version",
+      "contract_version",
+      "runtime_boundary",
+      "financial_commands_enabled",
+      "production_providers_enabled"
+    ],
+    properties: {
+      api_version: { const: "v1" },
+      contract_version: { type: "string", const: "1.0.0-draft" },
+      runtime_boundary: { const: "contract-only" },
+      financial_commands_enabled: { const: false },
+      production_providers_enabled: { const: false }
+    }
+  },
   SessionView: {
     type: "object",
     additionalProperties: false,
@@ -161,6 +184,13 @@ function verifyRequestIdResponseHeader(response, label) {
   );
 }
 
+const allowedOpenApiExtensions = [
+  "x-solidchange-runtime-boundary",
+  "x-solidchange-financial-commands-enabled",
+  "x-solidchange-production-providers-enabled",
+  "x-solidchange-planned-namespaces"
+];
+
 function checkOpenApi() {
   const path = join(root, "openapi.yaml");
   const openapi = loadAbsolute(path);
@@ -214,7 +244,8 @@ function checkOpenApi() {
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"]
   ]);
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
-  const protectedSuccessSchemas = new Map([
+  const successSchemas = new Map([
+    ["getApiMetadata", "#/components/schemas/ApiMetadata"],
     ["getCustomerSession", "#/components/schemas/SessionView"],
     ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
@@ -295,39 +326,35 @@ function checkOpenApi() {
 
       const success = operation.responses?.["200"];
       verifyRequestIdResponseHeader(success, `${operation.operationId} 200`);
-      if (pathName !== "/api/v1/meta") {
-        const expectedSchema = protectedSuccessSchemas.get(operation.operationId);
-        assert(expectedSchema, `Protected success schema is not pinned: ${operation.operationId}`);
-        sameSet(
-          Object.keys(operation.responses ?? {}).filter((status) => status.startsWith("2")),
-          ["200"],
-          `Success response statuses for ${operation.operationId}`
-        );
-        sameSet(
-          Object.keys(success.content ?? {}),
-          ["application/json"],
-          `Success response media types for ${operation.operationId} 200`
-        );
-        assert(
-          success.content?.["application/json"]?.schema?.$ref === expectedSchema,
-          `Success response must use canonical schema: ${operation.operationId} 200`
-        );
-      }
+      const expectedSchema = successSchemas.get(operation.operationId);
+      assert(expectedSchema, `Success schema is not pinned: ${operation.operationId}`);
+      sameSet(
+        Object.keys(operation.responses ?? {}).filter((status) => status.startsWith("2")),
+        ["200"],
+        `Success response statuses for ${operation.operationId}`
+      );
+      sameSet(
+        Object.keys(success.content ?? {}),
+        ["application/json"],
+        `Success response media types for ${operation.operationId} 200`
+      );
+      assert(
+        canonicalJson(success.content?.["application/json"]?.schema) === canonicalJson({ $ref: expectedSchema }),
+        `Success response must use canonical schema: ${operation.operationId} 200`
+      );
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         if (status.startsWith("2")) continue;
         const resolvedResponse = response.$ref
           ? resolveRef(path, response.$ref).value
           : response;
-        if (pathName !== "/api/v1/meta") {
-          sameSet(
-            Object.keys(resolvedResponse.content ?? {}),
-            ["application/json"],
-            `Error response media types for ${operation.operationId} ${status}`
-          );
-        }
+        sameSet(
+          Object.keys(resolvedResponse.content ?? {}),
+          ["application/json"],
+          `Error response media types for ${operation.operationId} ${status}`
+        );
         assert(
-          resolvedResponse.content?.["application/json"]?.schema?.$ref
-            === "#/components/schemas/Error",
+          canonicalJson(resolvedResponse.content?.["application/json"]?.schema)
+            === canonicalJson({ $ref: "#/components/schemas/Error" }),
           `Error response must use canonical Error schema: ${operation.operationId} ${status}`
         );
         verifyRequestIdResponseHeader(resolvedResponse, `${operation.operationId} ${status}`);
@@ -408,13 +435,16 @@ function checkOpenApi() {
       && idempotencyKeySchema.pattern === "^[A-Za-z0-9._:-]+$",
     "Canonical IdempotencyKey constraints must remain pinned"
   );
-  for (const [name, expected] of Object.entries(protectedViewSchemas)) {
+  for (const [name, expected] of Object.entries(pinnedResponseSchemas)) {
     assert(
       canonicalJson(openapi.components?.schemas?.[name]) === canonicalJson(expected),
       `Canonical ${name} schema must remain pinned`
     );
   }
-  assert(openapi.components?.schemas?.Error?.$ref === "./schemas/error.schema.json", "Canonical error schema is not referenced");
+  assert(
+    canonicalJson(openapi.components?.schemas?.Error) === canonicalJson({ $ref: "./schemas/error.schema.json" }),
+    "Canonical error schema is not referenced"
+  );
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     verifyRequestIdResponseHeader(response, `${name} response`);
   }
@@ -427,10 +457,50 @@ function checkOpenApi() {
     "Canonical RequestId response header must remain required with the UuidV7 schema"
   );
   verifyReferences(openapi, path);
+  verifyNoExtensions(openapi, "OpenAPI", new Set(allowedOpenApiExtensions));
+  verifyMoneyFieldSchemas(openapi, "OpenAPI");
+  verifySafeFields(openapi, "OpenAPI");
+}
+
+const pinnedErrorProperties = {
+  code: {
+    type: "string",
+    enum: [
+      "AUTHENTICATION_REQUIRED",
+      "CAPABILITY_DENIED",
+      "IDEMPOTENCY_CONFLICT",
+      "INTERNAL_ERROR",
+      "OPERATION_REQUIRES_REVIEW",
+      "RATE_LIMITED",
+      "VALIDATION_FAILED",
+      "VERSION_UNSUPPORTED"
+    ]
+  },
+  message: { type: "string", minLength: 1, maxLength: 256 },
+  request_id: { type: "string", format: "uuid" },
+  details: { type: "object" }
+};
+
+function withoutDescription(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const { description: _description, ...rest } = value;
+  return rest;
 }
 
 function checkErrorSchema() {
+  const path = join(root, "schemas/error.schema.json");
   const schema = readJson("schemas/error.schema.json");
+  sameSet(
+    Object.keys(schema),
+    ["$schema", "$id", "title", "type", "additionalProperties", "required", "properties"],
+    "Error envelope schema keywords"
+  );
+  assert(schema.$schema === "https://json-schema.org/draft/2020-12/schema", "Error envelope dialect must remain pinned");
+  assert(
+    schema.$id === "https://contracts.solidchange.invalid/schemas/error.schema.json",
+    "Error envelope $id must remain pinned"
+  );
+  assert(schema.type === "object", "Error envelope must remain an object");
   sameSet(
     schema.required,
     ["code", "message", "request_id", "details"],
@@ -438,6 +508,17 @@ function checkErrorSchema() {
   );
   assert(schema.additionalProperties === false, "Error envelope must reject unknown top-level fields");
   assert(schema.properties?.code?.enum?.length >= 1, "Error codes must be an explicit stable enum");
+  sameSet(Object.keys(schema.properties ?? {}), Object.keys(pinnedErrorProperties), "Error envelope properties");
+  for (const [name, expected] of Object.entries(pinnedErrorProperties)) {
+    assert(
+      canonicalJson(withoutDescription(schema.properties[name])) === canonicalJson(expected),
+      `Canonical error ${name} schema must remain pinned`
+    );
+  }
+  verifyReferences(schema, path);
+  verifyMoneyFieldSchemas(schema, "error schema");
+  verifyNoExtensions(schema, "error schema");
+  verifySafeFields(schema, "error schema");
 }
 
 function payloadSchemas(eventSchema) {
@@ -550,15 +631,55 @@ function verifySafeFields(value, label) {
   }
 }
 
-function verifyAmountSchemas(eventSchema) {
-  for (const [definitionName, definition] of Object.entries(eventSchema.$defs ?? {})) {
-    for (const [propertyName, property] of Object.entries(definition.properties ?? {})) {
-      if (!propertyName.endsWith("amount") && propertyName !== "amount") continue;
+function allowedMoneyFieldSchemas(propertyName) {
+  const name = propertyName.toLowerCase();
+  if (name.includes("amount")) return [decimalAmountRef];
+  if (name === "asset" || name.endsWith("_asset") || name === "currency" || name.endsWith("_currency")) {
+    return [assetCodeRef];
+  }
+  if (name === "network" || name.endsWith("_network")) return [networkCodeRef, testnetNetwork];
+  return null;
+}
+
+function verifyMoneyFieldSchemas(value, label) {
+  if (!value || typeof value !== "object") return;
+  if (value.properties && typeof value.properties === "object" && !Array.isArray(value.properties)) {
+    for (const [propertyName, property] of Object.entries(value.properties)) {
+      assert(/^[a-z][a-z0-9_]*$/.test(propertyName), `${label}: property name ${JSON.stringify(propertyName)} must be lowercase ASCII snake_case`);
+      const allowed = allowedMoneyFieldSchemas(propertyName);
+      if (!allowed) continue;
       assert(
-        property.$ref === "#/$defs/decimalAmount",
-        `${definitionName}.${propertyName} must use decimalAmount`
+        allowed.some((schema) => canonicalJson(property) === canonicalJson(schema)),
+        `${label}.${propertyName} must use exactly ${allowed.map((schema) => schema.$ref ?? JSON.stringify(schema)).join(" or ")}`
       );
     }
+  }
+  for (const [key, child] of Object.entries(value)) verifyMoneyFieldSchemas(child, `${label}.${key}`);
+}
+
+const allowedReferenceSiblings = new Set(["$ref", "summary", "description"]);
+
+const nameMapKeywords = new Set([
+  "$defs",
+  "content",
+  "headers",
+  "parameters",
+  "paths",
+  "properties",
+  "responses",
+  "schemas",
+  "securitySchemes"
+]);
+
+function verifyNoExtensions(value, label, allowedTopLevel = new Set(), nameMap = false) {
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    if (!nameMap && key.toLowerCase().startsWith("x-")) {
+      assert(allowedTopLevel.has(key), `${label}: specification extension ${key} is prohibited`);
+      continue;
+    }
+    const childIsNameMap = !nameMap && nameMapKeywords.has(key) && child && typeof child === "object" && !Array.isArray(child);
+    verifyNoExtensions(child, `${label}.${key}`, new Set(), childIsNameMap);
   }
 }
 
@@ -590,6 +711,10 @@ const pinnedEventEnvelopeProperties = {
 
 const pinnedEventEnvelopeDefinitions = {
   identifier: { type: "string", pattern: "^[a-z][a-z0-9_-]{2,127}$" },
+  digest: { type: "string", pattern: "^[a-f0-9]{64}$" },
+  decimalAmount: { type: "string", pattern: "^(0|[1-9][0-9]*)(\\.[0-9]+)?$" },
+  assetCode: { type: "string", pattern: "^[A-Z0-9]{2,16}$" },
+  networkCode: { type: "string", pattern: "^[A-Z0-9_-]{2,32}$" },
   actor: {
     type: "object",
     additionalProperties: false,
@@ -622,6 +747,15 @@ function verifyEventEnvelope(eventSchema) {
   }
 }
 
+const identifierRef = { $ref: "#/$defs/identifier" };
+const digestRef = { $ref: "#/$defs/digest" };
+const decimalAmountRef = { $ref: "#/$defs/decimalAmount" };
+const assetCodeRef = { $ref: "#/$defs/assetCode" };
+const networkCodeRef = { $ref: "#/$defs/networkCode" };
+const testnetNetwork = { type: "string", pattern: "^[A-Z0-9]+_TESTNET$" };
+const dateTime = { type: "string", format: "date-time" };
+const nullableIdentifier = { anyOf: [identifierRef, { type: "null" }] };
+
 const pinnedEventContracts = {
   UserRegistered: {
     version: 1,
@@ -629,7 +763,11 @@ const pinnedEventContracts = {
     owner: "identity",
     dataClassification: "confidential",
     payload: "userRegistered",
-    required: ["user_id", "registration_channel"]
+    required: ["user_id", "registration_channel"],
+    properties: {
+      user_id: identifierRef,
+      registration_channel: { type: "string", enum: ["web", "ios", "android", "telegram-mini-app", "migration"] }
+    }
   },
   KycSubmitted: {
     version: 1,
@@ -637,7 +775,13 @@ const pinnedEventContracts = {
     owner: "customer-risk",
     dataClassification: "highly-confidential",
     payload: "kycSubmitted",
-    required: ["case_id", "user_id", "provider_reference", "evidence_digest"]
+    required: ["case_id", "user_id", "provider_reference", "evidence_digest"],
+    properties: {
+      case_id: identifierRef,
+      user_id: identifierRef,
+      provider_reference: identifierRef,
+      evidence_digest: digestRef
+    }
   },
   KycVerified: {
     version: 1,
@@ -645,7 +789,14 @@ const pinnedEventContracts = {
     owner: "customer-risk",
     dataClassification: "highly-confidential",
     payload: "kycVerified",
-    required: ["case_id", "user_id", "decision", "policy_version", "evidence_digest"]
+    required: ["case_id", "user_id", "decision", "policy_version", "evidence_digest"],
+    properties: {
+      case_id: identifierRef,
+      user_id: identifierRef,
+      decision: { type: "string", enum: ["approved", "rejected", "manual-review"] },
+      policy_version: { type: "string", minLength: 1, maxLength: 64 },
+      evidence_digest: digestRef
+    }
   },
   WalletAddressAssigned: {
     version: 1,
@@ -653,7 +804,15 @@ const pinnedEventContracts = {
     owner: "custody-orchestrator",
     dataClassification: "highly-confidential",
     payload: "walletAddressAssigned",
-    required: ["wallet_id", "user_id", "asset", "network", "address_reference", "custody_account_id"]
+    required: ["wallet_id", "user_id", "asset", "network", "address_reference", "custody_account_id"],
+    properties: {
+      wallet_id: identifierRef,
+      user_id: identifierRef,
+      asset: assetCodeRef,
+      network: networkCodeRef,
+      address_reference: identifierRef,
+      custody_account_id: identifierRef
+    }
   },
   DepositDetected: {
     version: 1,
@@ -661,7 +820,16 @@ const pinnedEventContracts = {
     owner: "deposit-orchestrator",
     dataClassification: "confidential",
     payload: "depositDetected",
-    required: ["deposit_id", "wallet_id", "asset", "network", "amount", "transaction_reference", "observed_at"]
+    required: ["deposit_id", "wallet_id", "asset", "network", "amount", "transaction_reference", "observed_at"],
+    properties: {
+      deposit_id: identifierRef,
+      wallet_id: identifierRef,
+      asset: assetCodeRef,
+      network: networkCodeRef,
+      amount: decimalAmountRef,
+      transaction_reference: identifierRef,
+      observed_at: dateTime
+    }
   },
   DepositConfirmed: {
     version: 1,
@@ -669,7 +837,13 @@ const pinnedEventContracts = {
     owner: "deposit-orchestrator",
     dataClassification: "confidential",
     payload: "depositConfirmed",
-    required: ["deposit_id", "confirmations", "confirmed_at"]
+    required: ["deposit_id", "confirmations", "confirmed_at"],
+    properties: {
+      deposit_id: identifierRef,
+      confirmations: { type: "integer", minimum: 1 },
+      confirmed_at: dateTime,
+      journal_id: nullableIdentifier
+    }
   },
   QuoteCreated: {
     version: 1,
@@ -677,7 +851,18 @@ const pinnedEventContracts = {
     owner: "pricing",
     dataClassification: "confidential",
     payload: "quoteCreated",
-    required: ["quote_id", "user_id", "from_asset", "to_asset", "from_amount", "to_amount", "fee_amount", "pricing_source", "expires_at"]
+    required: ["quote_id", "user_id", "from_asset", "to_asset", "from_amount", "to_amount", "fee_amount", "pricing_source", "expires_at"],
+    properties: {
+      quote_id: identifierRef,
+      user_id: identifierRef,
+      from_asset: assetCodeRef,
+      to_asset: assetCodeRef,
+      from_amount: decimalAmountRef,
+      to_amount: decimalAmountRef,
+      fee_amount: decimalAmountRef,
+      pricing_source: identifierRef,
+      expires_at: dateTime
+    }
   },
   ExchangeOrderCreated: {
     version: 1,
@@ -685,7 +870,13 @@ const pinnedEventContracts = {
     owner: "exchange",
     dataClassification: "confidential",
     payload: "exchangeOrderCreated",
-    required: ["order_id", "quote_id", "user_id", "status"]
+    required: ["order_id", "quote_id", "user_id", "status"],
+    properties: {
+      order_id: identifierRef,
+      quote_id: identifierRef,
+      user_id: identifierRef,
+      status: { const: "created" }
+    }
   },
   ExchangeSettled: {
     version: 1,
@@ -693,7 +884,12 @@ const pinnedEventContracts = {
     owner: "settlement",
     dataClassification: "confidential",
     payload: "exchangeSettled",
-    required: ["order_id", "journal_id", "settled_at"]
+    required: ["order_id", "journal_id", "settled_at"],
+    properties: {
+      order_id: identifierRef,
+      journal_id: identifierRef,
+      settled_at: dateTime
+    }
   },
   WithdrawalRequested: {
     version: 1,
@@ -701,7 +897,15 @@ const pinnedEventContracts = {
     owner: "withdrawals",
     dataClassification: "highly-confidential",
     payload: "withdrawalRequested",
-    required: ["withdrawal_id", "user_id", "asset", "network", "amount", "destination_reference"]
+    required: ["withdrawal_id", "user_id", "asset", "network", "amount", "destination_reference"],
+    properties: {
+      withdrawal_id: identifierRef,
+      user_id: identifierRef,
+      asset: assetCodeRef,
+      network: networkCodeRef,
+      amount: decimalAmountRef,
+      destination_reference: identifierRef
+    }
   },
   WithdrawalHeld: {
     version: 1,
@@ -709,7 +913,12 @@ const pinnedEventContracts = {
     owner: "withdrawals",
     dataClassification: "highly-confidential",
     payload: "withdrawalHeld",
-    required: ["withdrawal_id", "hold_id", "reason_code"]
+    required: ["withdrawal_id", "hold_id", "reason_code"],
+    properties: {
+      withdrawal_id: identifierRef,
+      hold_id: identifierRef,
+      reason_code: { type: "string", pattern: "^[A-Z][A-Z0-9_]{2,63}$" }
+    }
   },
   WithdrawalApproved: {
     version: 1,
@@ -717,7 +926,13 @@ const pinnedEventContracts = {
     owner: "approvals",
     dataClassification: "highly-confidential",
     payload: "withdrawalApproved",
-    required: ["withdrawal_id", "approval_id", "approver_count", "evidence_digest"]
+    required: ["withdrawal_id", "approval_id", "approver_count", "evidence_digest"],
+    properties: {
+      withdrawal_id: identifierRef,
+      approval_id: identifierRef,
+      approver_count: { type: "integer", minimum: 1 },
+      evidence_digest: digestRef
+    }
   },
   CustodyIntentPrepared: {
     version: 1,
@@ -725,7 +940,20 @@ const pinnedEventContracts = {
     owner: "custody-orchestrator",
     dataClassification: "highly-confidential",
     payload: "custodyIntentPrepared",
-    required: ["withdrawal_id", "custody_intent_id", "intent_digest", "policy_digest", "approval_evidence_digest", "asset", "network", "expires_at", "status", "execution_authority", "production_signing_enabled"]
+    required: ["withdrawal_id", "custody_intent_id", "intent_digest", "policy_digest", "approval_evidence_digest", "asset", "network", "expires_at", "status", "execution_authority", "production_signing_enabled"],
+    properties: {
+      withdrawal_id: identifierRef,
+      custody_intent_id: identifierRef,
+      intent_digest: digestRef,
+      policy_digest: digestRef,
+      approval_evidence_digest: digestRef,
+      asset: assetCodeRef,
+      network: testnetNetwork,
+      expires_at: dateTime,
+      status: { const: "unsigned_intent_ready" },
+      execution_authority: { const: false },
+      production_signing_enabled: { const: false }
+    }
   },
   WithdrawalBroadcast: {
     version: 1,
@@ -733,7 +961,12 @@ const pinnedEventContracts = {
     owner: "custody-orchestrator",
     dataClassification: "highly-confidential",
     payload: "withdrawalBroadcast",
-    required: ["withdrawal_id", "transaction_reference", "broadcast_at"]
+    required: ["withdrawal_id", "transaction_reference", "broadcast_at"],
+    properties: {
+      withdrawal_id: identifierRef,
+      transaction_reference: identifierRef,
+      broadcast_at: dateTime
+    }
   },
   PaymentConfirmed: {
     version: 1,
@@ -741,7 +974,14 @@ const pinnedEventContracts = {
     owner: "payments",
     dataClassification: "confidential",
     payload: "paymentConfirmed",
-    required: ["payment_id", "provider_reference", "amount", "currency", "confirmed_at"]
+    required: ["payment_id", "provider_reference", "amount", "currency", "confirmed_at"],
+    properties: {
+      payment_id: identifierRef,
+      provider_reference: identifierRef,
+      amount: decimalAmountRef,
+      currency: assetCodeRef,
+      confirmed_at: dateTime
+    }
   },
   PaymentRefunded: {
     version: 1,
@@ -749,7 +989,15 @@ const pinnedEventContracts = {
     owner: "payments",
     dataClassification: "confidential",
     payload: "paymentRefunded",
-    required: ["payment_id", "refund_id", "amount", "currency", "journal_id", "refunded_at"]
+    required: ["payment_id", "refund_id", "amount", "currency", "journal_id", "refunded_at"],
+    properties: {
+      payment_id: identifierRef,
+      refund_id: identifierRef,
+      amount: decimalAmountRef,
+      currency: assetCodeRef,
+      journal_id: identifierRef,
+      refunded_at: dateTime
+    }
   },
   AmlAlertCreated: {
     version: 1,
@@ -757,7 +1005,14 @@ const pinnedEventContracts = {
     owner: "aml",
     dataClassification: "highly-confidential",
     payload: "amlAlertCreated",
-    required: ["alert_id", "user_id", "risk_score", "rule_codes"]
+    required: ["alert_id", "user_id", "risk_score", "rule_codes"],
+    properties: {
+      alert_id: identifierRef,
+      user_id: identifierRef,
+      risk_score: { type: "integer", minimum: 0, maximum: 100 },
+      rule_codes: { type: "array", minItems: 1, uniqueItems: true, items: { type: "string", pattern: "^[A-Z][A-Z0-9_]{2,63}$" } },
+      case_id: nullableIdentifier
+    }
   }
 };
 
@@ -810,6 +1065,12 @@ function verifyPinnedEvents(eventSchema, conditions, catalog) {
     sameSet(payload.required, pinned.required, `${name} payload required fields`);
     for (const field of payload.required) {
       assert(Object.hasOwn(payload.properties ?? {}, field), `${name} payload required field ${field} is undefined`);
+    }
+    for (const [field, expected] of Object.entries(pinned.properties)) {
+      assert(
+        canonicalJson(payload.properties?.[field]) === canonicalJson(expected),
+        `${name} payload ${field} schema must remain pinned`
+      );
     }
   }
 }
@@ -916,7 +1177,8 @@ function checkEvents() {
   );
 
   verifyReferences(eventSchema, schemaPath);
-  verifyAmountSchemas(eventSchema);
+  verifyMoneyFieldSchemas(eventSchema, "event schema");
+  verifyNoExtensions(eventSchema, "event schema");
   verifySafeFields(eventSchema, "event schema");
   verifySafeFields(examples, "event examples");
 }

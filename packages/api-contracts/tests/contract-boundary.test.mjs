@@ -792,3 +792,269 @@ test("accepts unrelated response headers, parameters and header descriptions", (
     rmSync(scratch, { force: true, recursive: true });
   }
 });
+
+function mutateErrorSchema(scratch, mutate) {
+  const schema = readJson(scratch, "schemas/error.schema.json");
+  mutate(schema);
+  writeJson(scratch, "schemas/error.schema.json", schema);
+}
+
+function assertAccepted(name, mutate) {
+  test(name, () => {
+    const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
+    try {
+      for (const path of contractFiles) {
+        cpSync(join(root, path), join(scratch, path), { recursive: true });
+      }
+      mutate(scratch);
+      const result = spawnSync(process.execPath, [checker, scratch], {
+        encoding: "utf8"
+      });
+      assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+    } finally {
+      rmSync(scratch, { force: true, recursive: true });
+    }
+  });
+}
+
+assertRejected(
+  "rejects a floating-point decimal amount definition",
+  "Canonical event decimalAmount definition must remain pinned",
+  (scratch) => {
+    mutateEventSchema(scratch, (schema) => {
+      schema.$defs.decimalAmount = { type: "number" };
+    });
+    const examples = readJson(scratch, "examples/domain-events.json");
+    for (const event of examples) {
+      for (const key of Object.keys(event.payload)) {
+        if (key.endsWith("amount")) event.payload[key] = Number(event.payload[key]);
+      }
+    }
+    writeJson(scratch, "examples/domain-events.json", examples);
+  }
+);
+
+assertRejected(
+  "rejects a removed decimal amount pattern",
+  "Canonical event decimalAmount definition must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    delete schema.$defs.decimalAmount.pattern;
+  })
+);
+
+assertRejected(
+  "rejects an unconstrained network code definition",
+  "Canonical event networkCode definition must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.networkCode = { type: "string" };
+  })
+);
+
+assertRejected(
+  "rejects an unconstrained asset code definition",
+  "Canonical event assetCode definition must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.assetCode = {};
+  })
+);
+
+assertRejected(
+  "rejects an inline unconstrained withdrawal network",
+  "WithdrawalRequested payload network schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalRequested.properties.network = { type: "string" };
+  })
+);
+
+assertRejected(
+  "rejects a nullable custody intent network",
+  "CustodyIntentPrepared payload network schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.custodyIntentPrepared.properties.network.type = ["string", "null"];
+  })
+);
+
+assertRejected(
+  "rejects an unconstrained custody intent asset",
+  "CustodyIntentPrepared payload asset schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.custodyIntentPrepared.properties.asset = {};
+  })
+);
+
+assertRejected(
+  "rejects a weakened withdrawal approver count",
+  "WithdrawalApproved payload approver_count schema must remain pinned",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalApproved.properties.approver_count.minimum = 0;
+  })
+);
+
+assertRejected(
+  "rejects a decimal amount reference with a widening type sibling",
+  "$ref sibling type is prohibited",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalHeld.properties.release_amount = {
+      $ref: "#/$defs/decimalAmount",
+      type: ["string", "number"]
+    };
+  })
+);
+
+assertRejected(
+  "rejects an optional floating-point amount field",
+  "withdrawalRequested.amount_usd must use exactly #/$defs/decimalAmount",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalRequested.properties.amount_usd = { type: "number" };
+  })
+);
+
+assertRejected(
+  "rejects a nested optional floating-point amount field",
+  "properties.fee.amount must use exactly #/$defs/decimalAmount",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalRequested.properties.fee = {
+      type: "object",
+      properties: { amount: { type: "number" } }
+    };
+  })
+);
+
+assertRejected(
+  "rejects an optional mainnet network field",
+  "paymentRefunded.payout_network must use exactly #/$defs/networkCode",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.paymentRefunded.properties.payout_network = { const: "TRON_MAINNET" };
+  })
+);
+
+assertRejected(
+  "rejects non-snake-case or homoglyph property names",
+  "must be lowercase ASCII snake_case",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalRequested.properties["\u0430mount_usd"] = { type: "number" };
+  })
+);
+
+assertRejected(
+  "rejects specification extensions in event schemas",
+  "specification extension x-execute is prohibited",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.allOf[0]["x-execute"] = true;
+  })
+);
+
+assertRejected(
+  "rejects a widened API metadata financial-command flag",
+  "Canonical ApiMetadata schema must remain pinned",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.schemas.ApiMetadata.properties.financial_commands_enabled = { type: "boolean" };
+  })
+);
+
+assertRejected(
+  "rejects an inline API metadata success schema",
+  "Success response must use canonical schema: getApiMetadata 200",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/meta"].get.responses["200"].content["application/json"].schema = {};
+  })
+);
+
+assertRejected(
+  "rejects an alternate API metadata success media type",
+  "Success response media types for getApiMetadata 200",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/meta"].get.responses["200"].content["text/html"] = { schema: { type: "string" } };
+  })
+);
+
+assertRejected(
+  "rejects siblings on a protected success schema reference",
+  "Success response must use canonical schema: getCustomerSession 200",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.responses["200"].content["application/json"].schema.additionalProperties = true;
+  })
+);
+
+assertRejected(
+  "rejects siblings on the Error component reference",
+  "Canonical error schema is not referenced",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.schemas.Error.properties = { stack_trace: { type: "string" } };
+  })
+);
+
+assertRejected(
+  "rejects execution-flag extensions on operations",
+  "specification extension x-solidchange-financial-commands-enabled is prohibited",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get["x-solidchange-financial-commands-enabled"] = true;
+  })
+);
+
+assertRejected(
+  "rejects unknown top-level OpenAPI extensions",
+  "specification extension x-solidchange-signing-enabled is prohibited",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi["x-solidchange-signing-enabled"] = true;
+  })
+);
+
+assertRejected(
+  "rejects scheme-prefixed and encoded references",
+  "Remote $ref is prohibited: FILE:x.json",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.schemas.Loose = { $ref: "FILE:x.json" };
+  })
+);
+
+assertRejected(
+  "rejects percent-encoded JSON pointers",
+  "Encoded $ref is prohibited",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.schemas.Loose = { $ref: "#/components/schemas/Session%56iew" };
+  })
+);
+
+assertRejected(
+  "rejects secret fields on the error envelope",
+  "Error envelope properties",
+  (scratch) => mutateErrorSchema(scratch, (schema) => {
+    schema.properties.stack_trace = { type: "string" };
+  })
+);
+
+assertRejected(
+  "rejects an unbounded error message",
+  "Canonical error message schema must remain pinned",
+  (scratch) => mutateErrorSchema(scratch, (schema) => {
+    schema.properties.message = {};
+  })
+);
+
+assertRejected(
+  "rejects declared secret fields in error details",
+  "Canonical error details schema must remain pinned",
+  (scratch) => mutateErrorSchema(scratch, (schema) => {
+    schema.properties.details.properties = { secret: { type: "string" } };
+  })
+);
+
+assertRejected(
+  "rejects widening error envelope combinators",
+  "Error envelope schema keywords",
+  (scratch) => mutateErrorSchema(scratch, (schema) => {
+    schema.oneOf = [{}, { type: "string" }];
+  })
+);
+
+assertAccepted("accepts optional canonical money fields and description edits", (scratch) => {
+  mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalRequested.properties.settlement_amount = { $ref: "#/$defs/decimalAmount" };
+    schema.$defs.paymentRefunded.properties.refund_network = { $ref: "#/$defs/networkCode" };
+    schema.$defs.paymentRefunded.properties.fee_currency = { $ref: "#/$defs/assetCode" };
+  });
+  mutateErrorSchema(scratch, (schema) => {
+    schema.properties.details.description = "Client-safe structured context.";
+  });
+});
