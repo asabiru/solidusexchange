@@ -128,6 +128,22 @@ assert_runtime_catalog_rejected \
 assert_runtime_catalog_rejected \
   "ALTER ROLE $runtime_role SET search_path = public;"
 assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET search_path = public;
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET TimeZone = 'Pacific/Kiritimati';
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" SET DateStyle = 'SQL, DMY';
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
+  "SET LOCAL ROLE $runtime_role;
+   ALTER ROLE CURRENT_USER IN DATABASE postgres SET search_path = public;
+   RESET ROLE;"
+assert_runtime_catalog_rejected \
   "GRANT $PGUSER TO $runtime_role;"
 assert_runtime_catalog_rejected \
   "GRANT TEMPORARY ON DATABASE \"$PGDATABASE\" TO PUBLIC;"
@@ -136,6 +152,38 @@ assert_runtime_catalog_rejected \
 
 verify_runtime_catalog
 echo "custody-postgres-runtime-privilege-catalog-negative-ok"
+
+for session_default in \
+  "IN DATABASE \"$PGDATABASE\" SET TimeZone = 'Pacific/Kiritimati'" \
+  "SET search_path = public"; do
+  psql_command -v ON_ERROR_STOP=1 -c "
+    SET ROLE $runtime_role;
+    ALTER ROLE $runtime_role $session_default;
+  "
+  set +e
+  grants_output="$(
+    psql_command \
+      -v ON_ERROR_STOP=1 \
+      -v "custody_runtime_role=$runtime_role" \
+      -f tests/runtime-writer-grants.sql 2>&1
+  )"
+  grants_status=$?
+  set -e
+  psql_command -v ON_ERROR_STOP=1 -c "
+    ALTER ROLE $runtime_role RESET ALL;
+    ALTER ROLE $runtime_role IN DATABASE \"$PGDATABASE\" RESET ALL;
+  "
+  printf '%s\n' "$grants_output"
+  if [[ "$grants_status" -eq 0 ]]; then
+    echo "Custody runtime grants unexpectedly accepted session defaults: $session_default" >&2
+    exit 1
+  fi
+  grep -E \
+    "custody runtime writer must (be an existing unprivileged role|not carry role or per-database session defaults)" \
+    <<<"$grants_output"
+done
+verify_runtime_catalog
+echo "custody-runtime-writer-session-defaults-negative-ok"
 
 psql_command -v ON_ERROR_STOP=1 -Atq -c "
   SELECT CASE

@@ -256,6 +256,27 @@ SELECT jsonb_build_object(
         'replication', runtime_role.rolreplication,
         'bypass_row_security', runtime_role.rolbypassrls,
         'configuration', COALESCE(to_jsonb(runtime_role.rolconfig), '[]'::JSONB),
+        'database_configuration', COALESCE(
+          (
+            SELECT jsonb_agg(
+              jsonb_build_object(
+                'database', COALESCE(database.datname::TEXT, setting.setdatabase::TEXT),
+                'setting', configuration.setting
+              )
+              ORDER BY
+                COALESCE(database.datname::TEXT, setting.setdatabase::TEXT) COLLATE "C",
+                configuration.ordinality
+            )
+            FROM pg_catalog.pg_db_role_setting AS setting
+            LEFT JOIN pg_catalog.pg_database AS database
+              ON database.oid = setting.setdatabase
+            CROSS JOIN LATERAL unnest(setting.setconfig)
+              WITH ORDINALITY AS configuration(setting, ordinality)
+            WHERE setting.setrole = runtime_role.oid
+              AND setting.setdatabase <> 0
+          ),
+          '[]'::JSONB
+        ),
         'owns_database', runtime_ownership.database,
         'owns_financial_objects', runtime_ownership.financial_objects
       )

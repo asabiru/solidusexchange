@@ -29,6 +29,7 @@ BEGIN
       AND rolinherit = false
       AND rolreplication = false
       AND rolbypassrls = false
+      AND rolconfig IS NULL
   ) THEN
     RAISE EXCEPTION 'custody runtime writer must be an existing unprivileged role';
   END IF;
@@ -41,6 +42,16 @@ BEGIN
     WHERE member.rolname = runtime_role
   ) THEN
     RAISE EXCEPTION 'custody runtime writer must not inherit or assume another role';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_db_role_setting AS setting
+    JOIN pg_catalog.pg_roles AS role
+      ON role.oid = setting.setrole
+    WHERE role.rolname = runtime_role
+  ) THEN
+    RAISE EXCEPTION 'custody runtime writer must not carry role or per-database session defaults';
   END IF;
 
   IF EXISTS (
