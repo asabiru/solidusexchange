@@ -29,3 +29,9 @@ jobs:
 
       - name: Enforce workflow policy
         run: node .github/scripts/check-workflow-policy.mjs
+
+      - name: Test regulated-core approval-status policy
+        run: node --test .github/scripts/check-regulated-core-status.test.mjs
+
+      - name: Enforce regulated-core approval-status policy
+        run: node .github/scripts/check-regulated-core-status.mjs

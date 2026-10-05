@@ -1,0 +1,843 @@
+{
+  "documents": {
+    "access-control.md": {
+      "title": "# Access Control and Identity Governance Baseline — Proposed",
+      "statusLines": [
+        "- D-016 workforce SSO and VPN/ZTNA direction is approved;"
+      ],
+      "approverLines": [],
+      "statusSections": [
+        {
+          "heading": "## Status and boundary",
+          "lines": [
+            "This document defines the proposed identity, authentication, authorization and privileged-access control model for the regulated SolidChange platform.",
+            "It does not provision a production identity provider, grant production access, approve a VPN/ZTNA product, enable operator commands, create service credentials or satisfy D-016. All current backoffice identity, session and step-up behavior remains synthetic or local development evidence."
+          ]
+        }
+      ],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "adr/0001-isolate-regulated-core-from-legacy.md": {
+      "title": "# ADR-0001: Isolate the Regulated Core from Legacy Laravel",
+      "statusLines": [
+        "- Status: Proposed"
+      ],
+      "approverLines": [
+        "- Required approvers: Security, Financial Core, Legal/Compliance for data boundary"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": [
+        "Operator browser ---- Backoffice BFF ---- policy / approval / audit"
+      ]
+    },
+    "adr/0002-ledger-is-financial-source-of-truth.md": {
+      "title": "# ADR-0002: Ledger Is the Financial Source of Truth",
+      "statusLines": [
+        "- Status: Proposed"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Finance, Security"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "adr/0003-isolate-custody-signing-boundary.md": {
+      "title": "# ADR-0003: Isolate Custody Signing Boundary",
+      "statusLines": [
+        "- Status: Proposed"
+      ],
+      "approverLines": [
+        "- Required approvers: Legal, Security, CTO"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "ai-governance.md": {
+      "title": "# Regulated AI Governance Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-012 capability tests and operator-approval evidence are complete;"
+      ],
+      "approverLines": [
+        "- Required approvers: MLRO, Security, Legal/Privacy, CTO and every affected domain owner"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "audit-evidence.md": {
+      "title": "# Regulated Audit Evidence Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, MLRO, Legal/Privacy, Finance"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": [
+        "approval.requested | approval.granted | approval.rejected | approval.expired",
+        "command.accepted | command.rejected | command.conflicted",
+        "ledger.journal.accepted | ledger.journal.reversed",
+        "custody.intent.created | custody.approval.recorded | custody.observation.recorded"
+      ]
+    },
+    "compliance-operations.md": {
+      "title": "# Regulated Compliance Operations Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-001, D-011, D-012, D-014 and every affected product/provider decision are approved;"
+      ],
+      "approverLines": [
+        "- Required approvers: Legal, MLRO/Compliance, Product, Finance, Security, CTO and every affected provider or operations owner"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "customer-protection.md": {
+      "title": "# Regulated Customer Protection Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-001, D-002 and every affected D-004…D-014 scope decision is approved;"
+      ],
+      "approverLines": [
+        "- Required approvers: Legal, MLRO/Compliance, Product, Finance, Security and every affected domain owner"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "data-classification-register.md": {
+      "title": "# Data Classification and Processing Register — Draft",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "Data/process",
+            "Source",
+            "Target processor/system",
+            "Purpose",
+            "Owner",
+            "Retention/status"
+          ],
+          "rows": [
+            [
+              "Customer identity",
+              "Open"
+            ],
+            [
+              "KYC evidence",
+              "Open"
+            ],
+            [
+              "KYT/AML alerts",
+              "Open"
+            ],
+            [
+              "Financial journals",
+              "Define legal retention"
+            ],
+            [
+              "Wallet ownership",
+              "Open"
+            ],
+            [
+              "Bank/payment records",
+              "Open"
+            ],
+            [
+              "Operator activity",
+              "Open"
+            ],
+            [
+              "Notification data",
+              "Open"
+            ],
+            [
+              "Support data",
+              "Open"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "data-lifecycle.md": {
+      "title": "# Regulated Data Lifecycle Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "| State | Meaning | Allowed transition authority |",
+        "- D-001 through D-018 dependencies applicable to the scope are approved;"
+      ],
+      "approverLines": [
+        "- Required approvers: Legal/Privacy, MLRO, Finance, Security, CTO, affected data owner"
+      ],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "State",
+            "Meaning",
+            "Allowed transition authority"
+          ],
+          "rows": [
+            [
+              "Collected",
+              "Collected"
+            ],
+            [
+              "Active",
+              "Active"
+            ],
+            [
+              "Restricted",
+              "Restricted"
+            ],
+            [
+              "Held",
+              "Held"
+            ],
+            [
+              "Retention due",
+              "Retention due"
+            ],
+            [
+              "Disposal approved",
+              "Disposal approved"
+            ],
+            [
+              "Disposed",
+              "Disposed"
+            ],
+            [
+              "Exception",
+              "Exception"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "decision-register.md": {
+      "title": "# Decision Register",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "ID",
+            "Решение",
+            "Owner / approver",
+            "Статус",
+            "Безопасный default до approval",
+            "Evidence / exit condition"
+          ],
+          "rows": [
+            [
+              "D-001",
+              "Legal + MLRO",
+              "Open"
+            ],
+            [
+              "D-002",
+              "Legal + CTO + Security",
+              "Open"
+            ],
+            [
+              "D-003",
+              "CTO + Security",
+              "Open"
+            ],
+            [
+              "D-004",
+              "CEO + Legal + Finance",
+              "Open"
+            ],
+            [
+              "D-005",
+              "CEO + Legal",
+              "Open"
+            ],
+            [
+              "D-006",
+              "Legal + issuer",
+              "Open"
+            ],
+            [
+              "D-007",
+              "CFO + CTO + Risk",
+              "Open"
+            ],
+            [
+              "D-008",
+              "CTO + Legal + SRE",
+              "Open"
+            ],
+            [
+              "D-009",
+              "CTO + Financial Core Lead",
+              "Proposed"
+            ],
+            [
+              "D-010",
+              "Product + bank + Compliance",
+              "Open"
+            ],
+            [
+              "D-011",
+              "MLRO + Security",
+              "Open"
+            ],
+            [
+              "D-012",
+              "MLRO + Security",
+              "Accepted"
+            ],
+            [
+              "D-013",
+              "CTO + Product + Security",
+              "Proposed"
+            ],
+            [
+              "D-014",
+              "Product + Compliance + Risk",
+              "Open"
+            ],
+            [
+              "D-015",
+              "CTO + SRE + Security",
+              "Proposed"
+            ],
+            [
+              "D-016",
+              "CTO + Security",
+              "Open"
+            ],
+            [
+              "D-017",
+              "SRE + Security + Compliance",
+              "Open"
+            ],
+            [
+              "D-018",
+              "SRE + Security",
+              "Proposed"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [
+        "D-001",
+        "D-002",
+        "D-003",
+        "D-004",
+        "D-005",
+        "D-006",
+        "D-007",
+        "D-008",
+        "D-009",
+        "D-010",
+        "D-011",
+        "D-012",
+        "D-013",
+        "D-014",
+        "D-015",
+        "D-016",
+        "D-017",
+        "D-018"
+      ],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "finance-ledger-approval-pack.md": {
+      "title": "# Finance Ledger Approval Pack",
+      "statusLines": [
+        "- Review state: `PENDING`.",
+        "- D-009 Financial Core DB: `Proposed`.",
+        "- D-009 трактуется как production database approval;"
+      ],
+      "approverLines": [],
+      "statusSections": [
+        {
+          "heading": "## Текущий статус",
+          "lines": [
+            "- Review state: `PENDING`.",
+            "- Chart version: `1`, status `draft`.",
+            "- Posting-rule registry version: `1`, status `draft`.",
+            "- Runtime boundary: `dev-dry-run`.",
+            "- Production financial execution: disabled.",
+            "- D-009 Financial Core DB: `Proposed`.",
+            "- Production assets, customer data, providers, custody и runtime writer: отсутствуют.",
+            "До письменного approval Finance, CTO и Security Session D не включает holds, reversals, fees, reconciliation или opening balances."
+          ]
+        }
+      ],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": [
+        "Decision: APPROVE / REJECT",
+        "Decision: APPROVE / REJECT",
+        "Decision: APPROVE / REJECT"
+      ]
+    },
+    "incident-response.md": {
+      "title": "# Regulated Incident Response Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017 and D-018 dependencies applicable to the scope are approved;"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, MLRO, Legal/Privacy, Finance"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "legacy-inventory.md": {
+      "title": "# Legacy SolidChange Inventory",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "migration-boundary.md": {
+      "title": "# Migration Boundary",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "operational-resilience.md": {
+      "title": "# Regulated Operational Resilience Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, Finance, MLRO/Compliance, Legal/Privacy, affected domain owners"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "phase-0-evidence-index.md": {
+      "title": "# Phase 0 Evidence Index",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "Evidence",
+            "Owner",
+            "Required content",
+            "Current state"
+          ],
+          "rows": [
+            [
+              "Decision register",
+              "Drafted; approvals pending"
+            ],
+            [
+              "Architecture ADR",
+              "Proposed"
+            ],
+            [
+              "Legacy inventory",
+              "Static repository inventory complete"
+            ],
+            [
+              "Migration boundary",
+              "Proposed"
+            ],
+            [
+              "Product/risk matrix",
+              "Drafted; blocked on D-001/D-010/D-014"
+            ],
+            [
+              "Data processing register",
+              "Drafted; approvals open"
+            ],
+            [
+              "Vendor scorecards",
+              "Template drafted; evaluations open"
+            ],
+            [
+              "Threat model",
+              "Proposed; Security/Architecture approval pending"
+            ],
+            [
+              "Incident response baseline",
+              "Proposed; domain approvals pending"
+            ],
+            [
+              "Release authorization baseline",
+              "Proposed; D-015/D-018 and domain approvals pending"
+            ],
+            [
+              "Audit evidence baseline",
+              "Proposed; identity, retention and key-custody approvals pending"
+            ],
+            [
+              "Data lifecycle baseline",
+              "Proposed; schedule, location, processor and legal-basis approvals pending"
+            ],
+            [
+              "Access-control baseline",
+              "Proposed; D-016, production IdP/MFA, JML and privileged-access approvals pending"
+            ],
+            [
+              "Third-party risk baseline",
+              "Proposed; provider selections, contracts and applicable D-001…D-018 approvals pending"
+            ],
+            [
+              "Operational-resilience baseline",
+              "Proposed; D-008/D-015/D-017/D-018, service objectives and exercise approvals pending"
+            ],
+            [
+              "AI-governance baseline",
+              "Proposed; D-012 capability tests, provider/data and domain approvals pending"
+            ],
+            [
+              "Customer-protection baseline",
+              "Proposed; product scope, customer terms, complaint/remediation policy and domain approvals pending"
+            ],
+            [
+              "Safeguarding baseline",
+              "Proposed; legal model, provider/custody scope, treasury policy, reconciliation and domain approvals pending"
+            ],
+            [
+              "Compliance-operations baseline",
+              "Proposed; D-001/D-011/D-012/D-014, policy, provider, case-management and reporting approvals pending"
+            ],
+            [
+              "Finance model",
+              "Required before ledger build"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "product-risk-matrix.md": {
+      "title": "# Product and Risk Matrix — Draft",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "Dimension",
+            "Proposed V1",
+            "Status",
+            "Safe fallback"
+          ],
+          "rows": [
+            [
+              "Customer type",
+              "Open pending D-001/D-014"
+            ],
+            [
+              "KYB/legal entities",
+              "Open"
+            ],
+            [
+              "Primary jurisdiction",
+              "Open pending legal memo"
+            ],
+            [
+              "Other countries",
+              "Open"
+            ],
+            [
+              "Russia/CIS card availability",
+              "Open"
+            ],
+            [
+              "Sanctioned/high-risk jurisdictions",
+              "Open"
+            ]
+          ]
+        },
+        {
+          "header": [
+            "Product/rail",
+            "Proposed scope",
+            "Status",
+            "Execution gate"
+          ],
+          "rows": [
+            [
+              "TON",
+              "Proposed"
+            ],
+            [
+              "USDT on TON",
+              "Proposed"
+            ],
+            [
+              "TRON",
+              "Proposed"
+            ],
+            [
+              "USDT TRC20",
+              "Proposed"
+            ],
+            [
+              "RUB via Kyrgyz bank/SBP",
+              "Open"
+            ],
+            [
+              "KGS",
+              "Open"
+            ],
+            [
+              "Cards",
+              "Open"
+            ],
+            [
+              "Other chains/tokens",
+              "Open"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "README.md": {
+      "title": "# Regulated Core — Phase 0 Pack",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [
+        {
+          "heading": "## Статус",
+          "lines": [
+            "- Baseline commit: `365a653cc9676af5cabdef725f09937f19a0200a`",
+            "- Runtime boundary: `dev-dry-run`",
+            "- Financial command execution: запрещено",
+            "- Production providers, HSM/KMS и customer money movement: не подключены",
+            "- Дата инвентаризации: 25 сентября 2026"
+          ]
+        },
+        {
+          "heading": "## Статусы решений",
+          "lines": [
+            "- `Accepted` — решение утверждено и может стать обязательным constraint.",
+            "- `Proposed` — engineering recommendation; требуется approval указанного owner.",
+            "- `Open` — выбор не сделан; действует только safe fallback.",
+            "- `Blocked` — нельзя продолжать зависящую production-работу."
+          ]
+        }
+      ],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "release-authorization.md": {
+      "title": "# Regulated Release Authorization Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, affected domain owner"
+      ],
+      "statusSections": [],
+      "statusTables": [
+        {
+          "header": [
+            "Scope affected",
+            "Required human approval"
+          ],
+          "rows": [
+            [
+              "Architecture/trust-zone connection",
+              "CTO + Security"
+            ],
+            [
+              "Identity, operator role or privilege",
+              "Security + system owner"
+            ],
+            [
+              "Financial schema, posting or reconciliation",
+              "Finance + Financial Core + CTO + Security"
+            ],
+            [
+              "AML/KYT, eligibility or case workflow",
+              "MLRO/Compliance + Security"
+            ],
+            [
+              "Customer/PII processing or location",
+              "Legal/Privacy + Security"
+            ],
+            [
+              "Provider/bank integration",
+              "Domain owner + Finance/MLRO/Legal as applicable + Security"
+            ],
+            [
+              "Custody/signer/HSM/MPC",
+              "Custody owner + CTO + Security + Legal"
+            ],
+            [
+              "Database migration/recovery",
+              "Data owner + SRE + Security; Finance for ledger scope"
+            ],
+            [
+              "Production feature enablement",
+              "Product owner + every affected domain approver"
+            ]
+          ]
+        }
+      ],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": [
+        "decision: APPROVE | REJECT"
+      ]
+    },
+    "safeguarding.md": {
+      "title": "# Regulated Safeguarding Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017 and D-018 are approved where applicable;"
+      ],
+      "approverLines": [
+        "- Required approvers: Legal, MLRO/Compliance, Finance, Treasury, Custody, Security, CTO and every affected product/provider owner"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "third-party-risk.md": {
+      "title": "# Third-Party and Outsourcing Risk Baseline — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none",
+        "- D-002 and D-003 remain open until separately approved."
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, Legal/Privacy, MLRO and the accountable domain owner"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    },
+    "threat-model.md": {
+      "title": "# Regulated Core Threat Model — Proposed",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none"
+      ],
+      "approverLines": [
+        "- Required approvers: CTO, Security, Financial Core, Compliance"
+      ],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": [
+        "  +-- Operator browser --> Backoffice BFF --> policy / approval / audit"
+      ]
+    },
+    "vendor-scorecards.md": {
+      "title": "# Vendor RFP and Scorecards — Draft",
+      "statusLines": [],
+      "approverLines": [],
+      "statusSections": [],
+      "statusTables": [],
+      "decisionRows": [],
+      "datedApprovalClaims": [],
+      "fencedClaims": []
+    }
+  },
+  "requiredPhrases": {
+    "README.md": [
+      "не являются юридическим заключением или разрешением на production launch",
+      "- `Proposed` — engineering recommendation; требуется approval указанного owner.",
+      "1. Ни один `Open`/`Blocked` пункт не разрешает production integration по умолчанию."
+    ],
+    "access-control.md": [
+      "It does not provision a production identity provider, grant production access",
+      "Approval of this baseline confirms only the proposed access-control design."
+    ],
+    "adr/0003-isolate-custody-signing-boundary.md": [
+      "does not authorize production signing"
+    ],
+    "decision-register.md": [
+      "`Proposed` не означает `Accepted`."
+    ],
+    "finance-ledger-approval-pack.md": [
+      "Он не является бухгалтерским заключением, production approval",
+      "Chat approval без commit SHA и evidence link не меняет `PENDING` на `APPROVED`.",
+      "- любой approver не дал письменный approval;"
+    ],
+    "phase-0-evidence-index.md": [
+      "Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scope",
+      "Missing evidence is a `NO-GO`, not an implicit exception."
+    ],
+    "product-risk-matrix.md": [
+      "а не коммерчески или юридически утверждённый продукт"
+    ],
+    "release-authorization.md": [
+      "No agent, workflow, repository administrator or single engineer can substitute for a required domain approver."
+    ],
+    "vendor-scorecards.md": [
+      "No vendor in this document is approved."
+    ]
+  }
+}
