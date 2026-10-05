@@ -25,6 +25,7 @@ import {
   approvalCommandDigest,
   buildApprovalPreview
 } from "./controls.js";
+import { RequestBodyError, readJsonBody } from "./request-body.js";
 import {
   StepUpRejectedError,
   SyntheticStepUpService
@@ -108,18 +109,6 @@ function exactLoopbackOrigin(request: IncomingMessage, config: ServerConfig): bo
   } catch {
     return false;
   }
-}
-
-async function readJson(request: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.from(chunk);
-    size += buffer.length;
-    if (size > 4_096) throw new Error("Request body is too large");
-    chunks.push(buffer);
-  }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
 function defaultAuditStore(config: ServerConfig): AuditStore {
@@ -400,9 +389,8 @@ export function createBackofficeServer(
           json(response, 404, { error: "not_found" });
           return;
         }
-        const body = await readJson(request);
-        const role = body && typeof body === "object" && "role" in body ? body.role : undefined;
-        if (typeof role !== "string" || !validRoles.has(role as OperatorRole)) {
+        const { role } = await readJsonBody(request, ["role"]);
+        if (!validRoles.has(role as OperatorRole)) {
           json(response, 400, { error: "unsupported_role" });
           return;
         }
@@ -584,20 +572,7 @@ export function createBackofficeServer(
           json(response, 409, { error: "step_up_not_required" });
           return;
         }
-        let body: unknown;
-        try {
-          body = await readJson(request);
-        } catch {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
-        const commandDigest = body && typeof body === "object" && "commandDigest" in body
-          ? body.commandDigest
-          : undefined;
-        if (typeof commandDigest !== "string") {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
+        const { commandDigest } = await readJsonBody(request, ["commandDigest"]);
         if (commandDigest !== approvalCommandDigest(approval)) {
           json(response, 409, { error: "approval_version_mismatch" });
           return;
@@ -641,20 +616,8 @@ export function createBackofficeServer(
           json(response, 404, { error: "approval_not_found" });
           return;
         }
-        let body: unknown;
-        try {
-          body = await readJson(request);
-        } catch {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
-        const commandDigest = body && typeof body === "object" && "commandDigest" in body
-          ? body.commandDigest
-          : undefined;
-        const code = body && typeof body === "object" && "code" in body
-          ? body.code
-          : undefined;
-        if (typeof commandDigest !== "string" || typeof code !== "string" || !/^\d{6}$/.test(code)) {
+        const { commandDigest, code } = await readJsonBody(request, ["commandDigest", "code"]);
+        if (!/^\d{6}$/.test(code)) {
           json(response, 400, { error: "invalid_request" });
           return;
         }
@@ -701,27 +664,11 @@ export function createBackofficeServer(
           json(response, 404, { error: "approval_not_found" });
           return;
         }
-        let body: unknown;
-        try {
-          body = await readJson(request);
-        } catch {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
-        const commandDigest = body && typeof body === "object" && "commandDigest" in body
-          ? body.commandDigest
-          : undefined;
-        const stepUpGrant = body && typeof body === "object" && "stepUpGrant" in body
-          ? body.stepUpGrant
-          : undefined;
-        if (typeof commandDigest !== "string") {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
-        if (stepUpGrant !== undefined && typeof stepUpGrant !== "string") {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
+        const { commandDigest, stepUpGrant } = await readJsonBody(
+          request,
+          ["commandDigest"],
+          ["stepUpGrant"]
+        );
         if (commandDigest !== approvalCommandDigest(approval)) {
           json(response, 409, { error: "approval_version_mismatch" });
           return;
@@ -757,6 +704,12 @@ export function createBackofficeServer(
 
       json(response, 404, { error: "not_found" });
     } catch (error) {
+      if (error instanceof RequestBodyError) {
+        json(response, error.status, {
+          error: error.status === 415 ? "unsupported_media_type" : "invalid_request"
+        });
+        return;
+      }
       if (error instanceof AuditStoreError) {
         json(response, 503, { error: "audit_integrity_unavailable" });
         return;

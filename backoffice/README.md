@@ -20,6 +20,7 @@ Wave 2 starts as an independently built operator frontend inside the repository.
 - Audit reads, approval anchors and signed evidence exports use a newly verified store snapshot.
 - Memory mode remains an explicit non-durable local default and is labelled as such in health/UI.
 - Approval command previews are digest-bound, same-origin, capability-gated and side-effect-free.
+- State-changing BFF routes accept only `application/json` (optionally `charset=utf-8`) bodies of at most 4 KiB that are strict UTF-8 JSON objects with string values, unique keys (compared after escape decoding) and only the route's allowlisted fields; anything else, including `__proto__`/`constructor` keys, fails with `415` or `400`.
 - Synthetic step-up challenges bind session, subject, approval, command digest and audit head, expire, limit attempts and issue a one-time preview grant.
 - Challenge codes are stored only as hashes; the dev code is returned solely to make the synthetic browser flow testable.
 - Preview policy exposes evidence readiness, maker-checker separation, required approvers and step-up status.
