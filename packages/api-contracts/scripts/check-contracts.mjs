@@ -173,6 +173,13 @@ function checkOpenApi() {
   }
 
   const operationIds = new Set();
+  const pinnedOperationPaths = new Map([
+    ["getApiMetadata", "/api/v1/meta"],
+    ["getCustomerSession", "/api/v1/customer/session"],
+    ["getCustomerCapabilities", "/api/v1/customer/capabilities"],
+    ["getOperatorSession", "/api/v1/operator/session"],
+    ["getOperatorCapabilities", "/api/v1/operator/capabilities"]
+  ]);
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
   const protectedSuccessSchemas = new Map([
     ["getCustomerSession", "#/components/schemas/SessionView"],
@@ -189,6 +196,10 @@ function checkOpenApi() {
       assert(operation.operationId, `Missing operationId: ${method.toUpperCase()} ${pathName}`);
       assert(!operationIds.has(operation.operationId), `Duplicate operationId: ${operation.operationId}`);
       operationIds.add(operation.operationId);
+      assert(
+        pinnedOperationPaths.get(operation.operationId) === pathName,
+        `Operation path is not pinned: ${operation.operationId} ${pathName}`
+      );
 
       const requestHeaders = refs(operation);
       assert(
@@ -268,6 +279,7 @@ function checkOpenApi() {
       }
     }
   }
+  sameSet(operationIds, pinnedOperationPaths.keys(), "Pinned API operations");
 
   const parameters = openapi.components?.parameters ?? {};
   const parameterNames = {
