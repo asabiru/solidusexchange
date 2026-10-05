@@ -111,10 +111,21 @@ assert_source_policy_rejected \
   "PostgreSQL migration must not use unreviewable procedural SQL: 0002_ledger_verification_views.sql" \
   "$scratch/single-quoted-dynamic-history-rewrite"
 
+mkdir "$scratch/unicode-escaped-history-write"
+cp -R "$workspace/migrations/." "$scratch/unicode-escaped-history-write/"
+sed -i \
+  '/^COMMIT;$/i UPDATE financial_core.U\&"schema_migrations" SET migration_name = migration_name;' \
+  "$scratch/unicode-escaped-history-write/0002_ledger_verification_views.sql"
+grep -F 'financial_core.U&"schema_migrations"' \
+  "$scratch/unicode-escaped-history-write/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must not use Unicode-escaped identifiers: 0002_ledger_verification_views.sql" \
+  "$scratch/unicode-escaped-history-write"
+
 mkdir "$scratch/harmless-history-text"
 cp -R "$workspace/migrations/." "$scratch/harmless-history-text/"
 sed -i \
-  "/^COMMIT;$/i /* UPDATE financial_core.schema_migrations SET migration_name = migration_name; */\\nSELECT 'ALTER TABLE financial_core.schema_migrations DISABLE TRIGGER schema_migrations_append_only;';\\nSELECT \\\$plain_text\\\$EXECUTE 'UPDATE financial_core.schema_migrations SET migration_name = migration_name'\\\$plain_text\\\$;\\nDO \\\$harmless_history_text\\\$\\nBEGIN\\n  RAISE NOTICE 'UPDATE financial_core.schema_migrations SET migration_name = migration_name';\\nEND;\\n\\\$harmless_history_text\\\$;" \
+  "/^COMMIT;$/i /* UPDATE financial_core.schema_migrations SET migration_name = migration_name; */\\nSELECT 'ALTER TABLE financial_core.schema_migrations DISABLE TRIGGER schema_migrations_append_only;';\\nSELECT \\\$plain_text\\\$EXECUTE 'UPDATE financial_core.schema_migrations SET migration_name = migration_name'\\\$plain_text\\\$;\\nDO \\\$harmless_history_text\\\$\\nBEGIN\\n  RAISE NOTICE 'UPDATE financial_core.schema_migrations SET migration_name = migration_name';\\n  RAISE NOTICE 'UPDATE financial_core.U\\&\"schema_migrations\" SET migration_name = migration_name';\\nEND;\\n\\\$harmless_history_text\\\$;" \
   "$scratch/harmless-history-text/0002_ledger_verification_views.sql"
 node "$workspace/scripts/verify-postgres-migration-source-policy.mjs" \
   "$scratch/harmless-history-text"

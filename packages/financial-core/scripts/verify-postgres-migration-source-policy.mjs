@@ -45,6 +45,7 @@ function analyzeSql(source) {
   const masked = [...source];
   const dollarQuotedBodies = [];
   const singleQuotedLiterals = [];
+  const unicodeEscapedIdentifiers = [];
   let index = 0;
 
   function mask(start, end) {
@@ -97,6 +98,12 @@ function analyzeSql(source) {
         }
       }
       mask(start, index);
+    } else if (
+      /^u&"/iu.test(source.slice(index, index + 3)) &&
+      !/[a-z0-9_$]/iu.test(source[index - 1] ?? "")
+    ) {
+      unicodeEscapedIdentifiers.push(index);
+      index += 2;
     } else if (source[index] === '"') {
       index += 1;
       while (index < source.length) {
@@ -134,7 +141,8 @@ function analyzeSql(source) {
   return {
     masked: masked.join(""),
     dollarQuotedBodies,
-    singleQuotedLiterals
+    singleQuotedLiterals,
+    unicodeEscapedIdentifiers
   };
 }
 
@@ -158,6 +166,14 @@ function splitSqlStatements(source) {
 
 function containsHistoryChange(source) {
   return historyChangePattern.test(analyzeSql(source).masked);
+}
+
+function containsUnicodeEscapedIdentifier(source) {
+  const analysis = analyzeSql(source);
+  return (
+    analysis.unicodeEscapedIdentifiers.length > 0 ||
+    analysis.dollarQuotedBodies.some(({ value }) => containsUnicodeEscapedIdentifier(value))
+  );
 }
 
 function containsDisallowedProceduralStatement(source) {
@@ -226,6 +242,10 @@ for (const { name, migrationName, version } of migrations) {
   const historyRows = [
     ...statements.map((statement) => canonicalHistoryRowPattern.exec(statement)).filter(Boolean)
   ];
+  assert(
+    !containsUnicodeEscapedIdentifier(source),
+    `PostgreSQL migration must not use Unicode-escaped identifiers: ${name}`
+  );
   const historyChanges = statements.filter(
     (statement) => containsHistoryChange(statement) && !isAllowedHistoryChange(statement, version)
   );
