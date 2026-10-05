@@ -15,6 +15,10 @@ const SKIP = "s" + "kip";
 const ONLY = "o" + "nly";
 const TODO = "t" + "odo";
 const EXIT = "e" + "xit";
+const PROCESS = "pro" + "cess";
+const EXIT_CODE = "exit" + "Code";
+const GLOBAL = "global" + "This";
+const IMPORT = "im" + "port";
 const TEST_FLAG = "--test-" + "skip-pattern";
 const NODE_ENV_OPTIONS = "NODE_" + "OPTIONS";
 
@@ -267,11 +271,11 @@ test("rejects test option objects that skip or focus", () => {
 
 test("rejects process exit aliases and selective test flags in code", () => {
   for (const variant of [
-    `process${DOT}${EXIT}(0);`,
-    `process ${DOT} ${EXIT} (0);`,
-    `process${DOT}really${"Ex"}it(0);`,
-    `process["${EXIT}"](0);`,
-    `process["really${"Ex"}it"](1);`,
+    `${PROCESS}${DOT}${EXIT}(0);`,
+    `${PROCESS} ${DOT} ${EXIT} (0);`,
+    `${PROCESS}${DOT}really${"Ex"}it(0);`,
+    `${PROCESS}["${EXIT}"](0);`,
+    `${PROCESS}["really${"Ex"}it"](1);`,
     `node --test ` + TEST_FLAG + ` smoke`,
   ]) {
     assert.notDeepEqual(
@@ -311,16 +315,212 @@ test("rejects emptied or thinned pinned test files", () => {
 test("accepts ordinary scripts and tests", () => {
   assert.deepEqual(
     validateSourceText(
-      'process.exitCode = 1;\ndescribe("x", () => { it("y", () => {}); });\n',
+      `${PROCESS}.${EXIT_CODE} = 1;\ndescribe("x", () => { it("y", () => {}); });\n`,
       "tests/a.test.mjs",
     ),
     [],
   );
   assert.deepEqual(
     validateSourceText(
-      'kill "$pid" 2>/dev/null || true\nexit 1\nif false; then exit 2; fi\n',
+      [
+        "#!/usr/bin/env bash",
+        "set -euo pipefail",
+        "trap cleanup EXIT",
+        `trap 'rm -rf "$scratch"' EXIT`,
+        'kill "$pid" 2>/dev/null || true',
+        "set +e",
+        'output="$(psql -f probe.sql 2>&1)"',
+        "status=$?",
+        "  set -e",
+        'source="$1"',
+        'echo "source state must not change"',
+        "exit 1",
+        "if false; then exit 2; fi",
+        "",
+      ].join("\n"),
       "tests/probe.sh",
     ),
+    [],
+  );
+});
+
+test("rejects aliased, reflected and indirect process access", () => {
+  for (const variant of [
+    `const p = ${PROCESS}; p.${EXIT}(0);`,
+    `const { ${EXIT} } = ${PROCESS}; ${EXIT}(0);`,
+    `${PROCESS}\n  .${EXIT}(0);`,
+    `(${PROCESS} as any).${EXIT}(0);`,
+    `${PROCESS}?.${EXIT}(0);`,
+    `Reflect.apply(${PROCESS}.${EXIT}, ${PROCESS}, [0]);`,
+    `${PROCESS}.${EXIT}.call(${PROCESS}, 0);`,
+    `const quit = ${PROCESS}.${EXIT}.bind(${PROCESS});`,
+    `${PROCESS}.abort();`,
+    `${PROCESS}.kill(${PROCESS}.pid);`,
+    `${PROCESS}.on("${EXIT}", () => {});`,
+    `${PROCESS}.getBuiltin` + `Module("node:os");`,
+    `${GLOBAL}["${PROCESS}"].env;`,
+    `${GLOBAL}?.["${PROCESS}"].env;`,
+    `Object.values(${GLOBAL});`,
+    `import p from "node:${PROCESS}";`,
+    `import { ${EXIT} } from "${PROCESS}";`,
+    `import vm from "node:v` + `m";`,
+    `const m = await ${IMPORT}("node:" + name);`,
+    `const m = await ${IMPORT}(\`./\${name}.mjs\`);`,
+    `const m = re` + `quire(name);`,
+    `ev` + `al("1");`,
+    `new Func` + `tion("return 1")();`,
+    `(() => {}).con` + `structor("return 1")();`,
+    `fn["con` + `structor"]("return 1");`,
+    `createRe` + `quire(import.meta.url);`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(variant, "packages/x/tests/a.test.mjs"),
+      [],
+      variant,
+    );
+  }
+});
+
+test("rejects success exit codes and reflective exit code writes", () => {
+  for (const variant of [
+    `${PROCESS}.${EXIT_CODE} = 0;`,
+    `${PROCESS}.${EXIT_CODE} = 00;`,
+    `${PROCESS}.${EXIT_CODE} = failed ? 1 : 0;`,
+    `${PROCESS}.${EXIT_CODE} = 1; ${PROCESS}.${EXIT_CODE} = 0;`,
+    `${PROCESS}.${EXIT_CODE} ??= 0;`,
+    `${PROCESS}.${EXIT_CODE} = code;`,
+    `delete ${PROCESS}.${EXIT_CODE};`,
+    `target.${EXIT_CODE} = 0;`,
+    `Object.defineProperty(target, "${EXIT_CODE}", { value: 0 });`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(variant, "scripts/check.mjs"),
+      [],
+      variant,
+    );
+  }
+});
+
+test("accepts plain process members and pinned launcher code", () => {
+  assert.deepEqual(
+    validateSourceText(
+      [
+        `const root = ${PROCESS}.cwd();`,
+        `const file = ${PROCESS}.argv[1];`,
+        `const value = ${PROCESS}.env[name]?.trim();`,
+        `spawnSync(${PROCESS}.execPath, ["--version"]);`,
+        `for await (const chunk of ${PROCESS}.stdin) {}`,
+        `${PROCESS}.stdout.write("ok\\n");`,
+        `  ${PROCESS}.${EXIT_CODE} = 1;`,
+        `const text = "No ${PROCESS} outside the signer boundary";`,
+        `const client = await import("./client.js");`,
+        `globalThis.fetch = stub;`,
+        `const groups = ["con` + `structor", "toString"];`,
+      ].join("\n"),
+      "packages/x/scripts/check.mjs",
+    ),
+    [],
+  );
+  const launcher = `${PROCESS}.${EXIT_CODE} = code;\n${PROCESS}.on("SIGINT", stop);\n`;
+  assert.deepEqual(validateSourceText(launcher, "backoffice/scripts/dev.mjs"), []);
+  assert.notDeepEqual(validateSourceText(launcher, "backoffice/scripts/other.mjs"), []);
+});
+
+function shellTest(...body) {
+  return ["#!/usr/bin/env bash", "set -euo pipefail", ...body, ""].join("\n");
+}
+
+test("rejects traps that override a failing shell test status", () => {
+  for (const variant of [
+    `trap "${EXIT} 0" EXIT`,
+    `trap '${EXIT} 0' ERR`,
+    "trap - ERR",
+    "trap '' ERR",
+    "trap ok EXIT",
+    "trap cleanup EXIT ERR",
+    "trap cleanup INT",
+    `tr""ap cleanup EXIT`,
+    "builtin trap cleanup EXIT",
+    `trap 'rm -rf "$scratch"; ${EXIT} 0' EXIT`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(shellTest(variant, "false"), "tests/probe.sh"),
+      [],
+      variant,
+    );
+  }
+});
+
+test("rejects disabled errexit and dynamic shell evaluation", () => {
+  const variants = [
+    ["set +e", "false"],
+    ["set +e", "set +e", "set -e"],
+    ["set -e"],
+    ["set +o errexit"],
+    ["set +eu"],
+    ["set -euo pipefail; set +e"],
+    ["shopt -u -o errexit"],
+    [`ev` + `al "${EXIT} 0"`],
+    [`ex""it 0`],
+    [`$'${EXIT}' 0`],
+    [`e\\xit 0`],
+    [`cmd=${EXIT}`, "$cmd 0"],
+    ["exec true"],
+    ["source ./neutral.sh"],
+    [". ./neutral.sh"],
+    ["true && . ./neutral.sh"],
+    ["alias ok=true"],
+    ["enable -n false"],
+  ];
+  for (const body of variants) {
+    assert.notDeepEqual(
+      validateSourceText(shellTest(...body), "tests/probe.sh"),
+      [],
+      body.join("; "),
+    );
+  }
+  for (const header of ["set -eu", "set -uo pipefail", ""]) {
+    const script = `#!/usr/bin/env bash\n${header}\nfalse\n`;
+    assert.notDeepEqual(validateSourceText(script, "tests/probe.sh"), [], header);
+  }
+});
+
+test("rejects escaped identifiers, specifiers and wrapped status codes", () => {
+  const BS = "\\";
+  for (const variant of [
+    `pro${BS}u0063ess.${EXIT}(0);`,
+    `${BS}u{70}rocess.${EXIT}(0);`,
+    `${PROCESS}.${BS}u0065xit(0);`,
+    `test.${BS}u0073` + `kip("name");`,
+    `import p from "node:proc${BS}x65ss";`,
+    `const m = await ${IMPORT}("node:proc${BS}x65ss");`,
+    `import { Module } from "node:mod` + `ule";`,
+    `import { Session } from "node:inspe` + `ctor";`,
+    `import { WASI } from "node:wa` + `si";`,
+    `const m = module.re` + `quire(name);`,
+    `${PROCESS}.${EXIT_CODE} = 256;`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(variant, "packages/x/tests/a.test.mjs"),
+      [],
+      variant,
+    );
+  }
+  for (const body of [
+    [`${EXIT} 256`],
+    [`${EXIT} 512`],
+    ["builtin set +e", "false"],
+    ["command set +e", "false"],
+    ["true; set +e"],
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(shellTest(...body), "tests/probe.sh"),
+      [],
+      body.join("; "),
+    );
+  }
+  assert.deepEqual(
+    validateSourceText(shellTest(`${EXIT} 255`), "tests/probe.sh"),
     [],
   );
 });
