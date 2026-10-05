@@ -479,9 +479,70 @@ function verifyAmountSchemas(eventSchema) {
   }
 }
 
+const pinnedEventEnvelopeRequired = [
+  "event_id",
+  "event_type",
+  "event_version",
+  "occurred_at",
+  "producer",
+  "aggregate_type",
+  "aggregate_id",
+  "correlation_id",
+  "causation_id",
+  "idempotency_key",
+  "actor",
+  "data_classification",
+  "payload"
+];
+
+const pinnedEventEnvelopeProperties = {
+  event_id: { type: "string", format: "uuid" },
+  event_version: { const: 1 },
+  aggregate_id: { $ref: "#/$defs/identifier" },
+  correlation_id: { type: "string", format: "uuid" },
+  causation_id: { type: ["string", "null"], format: "uuid" },
+  idempotency_key: { type: ["string", "null"], minLength: 16, maxLength: 128 },
+  actor: { $ref: "#/$defs/actor" }
+};
+
+const pinnedEventEnvelopeDefinitions = {
+  identifier: { type: "string", pattern: "^[a-z][a-z0-9_-]{2,127}$" },
+  actor: {
+    type: "object",
+    additionalProperties: false,
+    required: ["type", "subject"],
+    properties: {
+      type: { type: "string", enum: ["customer", "operator", "service", "provider"] },
+      subject: { $ref: "#/$defs/identifier" }
+    }
+  }
+};
+
+function verifyEventEnvelope(eventSchema) {
+  assert(
+    eventSchema.type === "object" && eventSchema.additionalProperties === false,
+    "Event envelope must reject unknown top-level fields"
+  );
+  assert(Array.isArray(eventSchema.required), "Event envelope required fields must be explicit");
+  sameSet(eventSchema.required, pinnedEventEnvelopeRequired, "Event envelope required fields");
+  for (const [name, expected] of Object.entries(pinnedEventEnvelopeProperties)) {
+    assert(
+      canonicalJson(eventSchema.properties?.[name]) === canonicalJson(expected),
+      `Canonical event ${name} schema must remain pinned`
+    );
+  }
+  for (const [name, expected] of Object.entries(pinnedEventEnvelopeDefinitions)) {
+    assert(
+      canonicalJson(eventSchema.$defs?.[name]) === canonicalJson(expected),
+      `Canonical event ${name} definition must remain pinned`
+    );
+  }
+}
+
 function checkEvents() {
   const schemaPath = join(root, "schemas/events/domain-event.schema.json");
   const eventSchema = loadAbsolute(schemaPath);
+  verifyEventEnvelope(eventSchema);
   const catalog = readJson("event-catalog.json");
   const examples = readJson("examples/domain-events.json");
   const schemaEvents = new Set(eventSchema.properties?.event_type?.enum ?? []);
