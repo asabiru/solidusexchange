@@ -254,6 +254,9 @@ for (const required of [
   "pg_catalog.pg_type",
   "pg_catalog.pg_collation",
   "pg_catalog.pg_ts_config",
+  "pg_catalog.pg_cast",
+  "oid >= 16384",
+  "builtin_catalog_rows",
   "nspname = 'custody_core'"
 ]) {
   assert(
@@ -271,6 +274,8 @@ for (const required of [
   "PostgreSQL custody trigger inventory differs from the expected policy",
   "PostgreSQL custody rewrite rules differ from the expected policy",
   "PostgreSQL custody schema contains search-path shadow objects",
+  "PostgreSQL database contains user-defined casts or pg_catalog objects that shadow custody built-ins",
+  "PostgreSQL built-in casts, pg_catalog functions or operators differ from the pinned PostgreSQL 16.10 catalog",
   "custody-postgres-execution-surface-catalog-ok"
 ]) {
   assert(
@@ -289,6 +294,9 @@ for (const required of [
   "CREATE OPERATOR custody_core.=",
   "CREATE OPERATOR custody_core.<=",
   "CREATE DOMAIN custody_core.timestamptz AS DATE",
+  "CREATE CAST (TEXT AS INTEGER) WITH FUNCTION public.forge_migration_version(TEXT)",
+  "CREATE FUNCTION pg_catalog.to_jsonb(custody_core.custody_projection_outbox)",
+  "UPDATE pg_catalog.pg_operator",
   "Unrelated PostgreSQL object unexpectedly failed",
   "custody-postgres-execution-surface-catalog-negative-ok"
 ]) {

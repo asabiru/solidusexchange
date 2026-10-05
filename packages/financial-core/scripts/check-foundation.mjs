@@ -568,6 +568,9 @@ for (const [fixture, evidence] of [
   ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_rewrite"],
   ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_operator"],
   ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_type"],
+  ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_cast"],
+  ["tests/postgres-execution-surface-catalog.sql", "oid >= 16384"],
+  ["tests/postgres-execution-surface-catalog.sql", "builtin_catalog_rows"],
   [
     "scripts/verify-postgres-execution-surface-catalog.mjs",
     "PostgreSQL financial-core trigger inventory differs from the expected policy"
@@ -582,6 +585,14 @@ for (const [fixture, evidence] of [
   ],
   [
     "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "PostgreSQL database contains user-defined casts or pg_catalog objects that shadow financial-core built-ins"
+  ],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "PostgreSQL built-in casts, pg_catalog functions or operators differ from the pinned PostgreSQL 16.10 catalog"
+  ],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
     "postgres-execution-surface-catalog-ok"
   ],
   ["tests/postgres-execution-surface-catalog.sh", "public.forge_migration"],
@@ -590,6 +601,18 @@ for (const [fixture, evidence] of [
   [
     "tests/postgres-execution-surface-catalog.sh",
     "CREATE DOMAIN financial_core.timestamptz AS DATE"
+  ],
+  [
+    "tests/postgres-execution-surface-catalog.sh",
+    "CREATE CAST (TEXT AS INTEGER) WITH FUNCTION public.forge_migration_version(TEXT)"
+  ],
+  [
+    "tests/postgres-execution-surface-catalog.sh",
+    "CREATE FUNCTION pg_catalog.to_jsonb(financial_core.ledger_outbox_events)"
+  ],
+  [
+    "tests/postgres-execution-surface-catalog.sh",
+    "UPDATE pg_catalog.pg_operator"
   ],
   [
     "tests/postgres-execution-surface-catalog.sh",
