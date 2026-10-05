@@ -31,6 +31,14 @@
       "test": "node --test tests/*.test.mjs",
       "verify": "npm run check && npm run verify:migrations && npm test",
       "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    },
+    "packages/provider-simulators/package.json": {
+      "build": "rm -rf dist && tsc -p tsconfig.build.json",
+      "check": "node scripts/check-boundary.mjs",
+      "lint": "biome lint src tests scripts",
+      "test": "node --test tests/*.test.mjs",
+      "typecheck": "tsc -p tsconfig.json --pretty false",
+      "verify": "npm run check && npm run lint && npm run typecheck && npm test && npm run build"
     }
   },
   "runSteps": {
@@ -236,6 +244,32 @@
       {
         "run": "bash tests/postgres-command-digest-uniqueness.sh",
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/provider-simulators-ci.yml": [
+      {
+        "run": "working-directory: packages/provider-simulators"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run check"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      },
+      {
+        "run": "npm run build"
       }
     ],
     ".github/workflows/workflow-policy.yml": [
@@ -567,6 +601,42 @@
     },
     "packages/financial-core/tests/runtime-writer-grants.sql": {
       "minLines": 91
+    },
+    "packages/provider-simulators/tests/bank.test.mjs": {
+      "minLines": 148,
+      "minCases": 15
+    },
+    "packages/provider-simulators/tests/boundary.test.mjs": {
+      "minLines": 99,
+      "minCases": 8
+    },
+    "packages/provider-simulators/tests/canonical-json.test.mjs": {
+      "minLines": 89,
+      "minCases": 7
+    },
+    "packages/provider-simulators/tests/decimal.test.mjs": {
+      "minLines": 68,
+      "minCases": 6
+    },
+    "packages/provider-simulators/tests/determinism.test.mjs": {
+      "minLines": 91,
+      "minCases": 4
+    },
+    "packages/provider-simulators/tests/kyc.test.mjs": {
+      "minLines": 149,
+      "minCases": 14
+    },
+    "packages/provider-simulators/tests/kyt.test.mjs": {
+      "minLines": 138,
+      "minCases": 11
+    },
+    "packages/provider-simulators/tests/quotes.test.mjs": {
+      "minLines": 114,
+      "minCases": 9
+    },
+    "packages/provider-simulators/tests/signing.test.mjs": {
+      "minLines": 269,
+      "minCases": 14
     },
     "tests/CreatesApplication.php": {
       "minLines": 16
