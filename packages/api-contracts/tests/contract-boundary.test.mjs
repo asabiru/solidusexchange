@@ -441,3 +441,97 @@ test("accepts optional event envelope fields and reordered required fields", () 
     rmSync(scratch, { force: true, recursive: true });
   }
 });
+
+function mutateEventCatalog(scratch, mutate) {
+  const catalog = readJson(scratch, "event-catalog.json");
+  mutate(catalog);
+  writeJson(scratch, "event-catalog.json", catalog);
+}
+
+assertRejected(
+  "rejects permissive event payload schemas",
+  "WithdrawalApproved payload must reject unknown fields",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalApproved.additionalProperties = true;
+  })
+);
+
+assertRejected(
+  "rejects removed event payload required fields",
+  "WithdrawalApproved payload required fields",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalApproved.required = ["withdrawal_id"];
+  })
+);
+
+assertRejected(
+  "rejects event payload pattern properties",
+  "WithdrawalApproved payload schema keywords",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.$defs.withdrawalApproved.patternProperties = { "^.*$": {} };
+  })
+);
+
+assertRejected(
+  "rejects consistent removal of a catalogued event",
+  "Pinned event types",
+  (scratch) => {
+    const removed = "WithdrawalHeld";
+    mutateEventSchema(scratch, (schema) => {
+      schema.properties.event_type.enum = schema.properties.event_type.enum.filter((name) => name !== removed);
+      schema.allOf = schema.allOf.filter((condition) => condition.if.properties.event_type.const !== removed);
+    });
+    mutateEventCatalog(scratch, (catalog) => {
+      catalog.events = catalog.events.filter((event) => event.name !== removed);
+    });
+    const examples = readJson(scratch, "examples/domain-events.json");
+    writeJson(scratch, "examples/domain-events.json", examples.filter((event) => event.event_type !== removed));
+  }
+);
+
+assertRejected(
+  "rejects duplicate event types",
+  "Event schema contains duplicate event types",
+  (scratch) => mutateEventSchema(scratch, (schema) => {
+    schema.properties.event_type.enum.push("WithdrawalHeld");
+  })
+);
+
+assertRejected(
+  "rejects command flags on event catalog entries",
+  "Event catalog entry UserRegistered keys",
+  (scratch) => mutateEventCatalog(scratch, (catalog) => {
+    catalog.events[0].command_enabled = true;
+  })
+);
+
+assertRejected(
+  "rejects unknown event catalog keys",
+  "Event catalog keys",
+  (scratch) => mutateEventCatalog(scratch, (catalog) => {
+    catalog.commands_enabled = true;
+  })
+);
+
+test("accepts optional event payload fields and reordered payload required fields", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
+  try {
+    for (const path of contractFiles) {
+      cpSync(join(root, path), join(scratch, path), { recursive: true });
+    }
+    mutateEventSchema(scratch, (schema) => {
+      const payload = schema.$defs.withdrawalHeld;
+      payload.required = [...payload.required].reverse();
+      payload.properties.review_reference = { $ref: "#/$defs/identifier" };
+    });
+    const examples = readJson(scratch, "examples/domain-events.json");
+    examples.find((event) => event.event_type === "WithdrawalHeld").payload.review_reference = "review_0001";
+    writeJson(scratch, "examples/domain-events.json", examples);
+    const result = spawnSync(process.execPath, [checker, scratch], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
+});
