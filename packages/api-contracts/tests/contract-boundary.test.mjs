@@ -617,3 +617,178 @@ test("accepts optional event payload fields and reordered payload required field
     rmSync(scratch, { force: true, recursive: true });
   }
 });
+
+function mutateOpenApi(scratch, mutate) {
+  const openapi = readJson(scratch, "openapi.yaml");
+  mutate(openapi);
+  writeJson(scratch, "openapi.yaml", openapi);
+}
+
+const moneyMovingPost = {
+  post: {
+    operationId: "createWithdrawal",
+    requestBody: {
+      required: true,
+      content: {
+        "application/json": {
+          schema: { type: "object", additionalProperties: true, properties: { amount: { type: "string" } } }
+        }
+      }
+    },
+    responses: { "202": { description: "Accepted" } }
+  }
+};
+
+assertRejected(
+  "rejects money-moving webhook operations outside paths",
+  "OpenAPI webhooks are prohibited in this slice",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.webhooks = { withdrawalRequested: structuredClone(moneyMovingPost) };
+  })
+);
+
+assertRejected(
+  "rejects referenced component path items",
+  "OpenAPI components.pathItems are prohibited in this slice",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.pathItems = { withdrawal: structuredClone(moneyMovingPost) };
+  })
+);
+
+assertRejected(
+  "rejects money-moving callback operations",
+  "Callbacks are prohibited in this slice: getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.callbacks = {
+      withdrawal: { "{$request.header.X-Request-Id}": structuredClone(moneyMovingPost) }
+    };
+  })
+);
+
+assertRejected(
+  "rejects permissive command bodies on read-only operations",
+  "Request bodies are prohibited in this slice: getOperatorCapabilities",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/operator/capabilities"].get.requestBody = structuredClone(
+      moneyMovingPost.post.requestBody
+    );
+  })
+);
+
+assertRejected(
+  "rejects optional request ID response header component",
+  "Canonical RequestId response header must remain required with the UuidV7 schema",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.headers.RequestId.required = false;
+  })
+);
+
+assertRejected(
+  "rejects permissive request ID response header schema",
+  "Canonical RequestId response header must remain required with the UuidV7 schema",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.headers.RequestId.schema = { type: "string" };
+  })
+);
+
+assertRejected(
+  "rejects optional inline success request ID header",
+  "Response must echo the canonical X-Request-Id header: getCustomerSession 200",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.responses["200"].headers["X-Request-Id"] = {
+      required: false,
+      schema: { type: "string" }
+    };
+  })
+);
+
+assertRejected(
+  "rejects optional inline error request ID header",
+  "Response must echo the canonical X-Request-Id header: getCustomerSession 401",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.responses.Unauthenticated.headers["X-Request-Id"] = {
+      required: false,
+      schema: { type: "string" }
+    };
+  })
+);
+
+assertRejected(
+  "rejects case-variant duplicate response request ID header",
+  "Response request ID header must be spelled X-Request-Id: getOperatorSession 200",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/operator/session"].get.responses["200"].headers["x-request-id"] = {
+      required: false,
+      schema: { type: "string" }
+    };
+  })
+);
+
+assertRejected(
+  "rejects case-variant optional duplicate of a required request header",
+  "x-request-id must use only the canonical #/components/parameters/RequestId parameter: getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.parameters.push({
+      name: "x-request-id",
+      in: "header",
+      required: false,
+      schema: { type: "string" }
+    });
+  })
+);
+
+assertRejected(
+  "rejects optional local parameter component for a required request header",
+  "X-Device-Id must use only the canonical #/components/parameters/DeviceId parameter: getOperatorSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.parameters.LooseDeviceId = {
+      ...structuredClone(openapi.components.parameters.DeviceId),
+      required: false
+    };
+    openapi.paths["/api/v1/operator/session"].get.parameters.push({
+      $ref: "#/components/parameters/LooseDeviceId"
+    });
+  })
+);
+
+assertRejected(
+  "rejects optional path-level duplicate of a required request header",
+  "Idempotency-Key must use only the canonical #/components/parameters/IdempotencyKey parameter: /api/v1/customer/capabilities",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/capabilities"].parameters = [{
+      name: "Idempotency-Key",
+      in: "header",
+      required: false,
+      schema: { type: "string" }
+    }];
+  })
+);
+
+test("accepts unrelated response headers, parameters and header descriptions", () => {
+  const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
+  try {
+    for (const path of contractFiles) {
+      cpSync(join(root, path), join(scratch, path), { recursive: true });
+    }
+    mutateOpenApi(scratch, (openapi) => {
+      openapi.components.headers.RequestId.description = "Echoed request identifier.";
+      const operation = openapi.paths["/api/v1/customer/session"].get;
+      operation.parameters.push({
+        name: "Accept-Language",
+        in: "header",
+        required: false,
+        schema: { type: "string", maxLength: 64 }
+      });
+      operation.responses["200"].headers["Cache-Control"] = {
+        required: false,
+        schema: { type: "string", maxLength: 128 }
+      };
+    });
+    const result = spawnSync(process.execPath, [checker, scratch], {
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, `${result.stdout}${result.stderr}`);
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
+  }
+});
