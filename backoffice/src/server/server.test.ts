@@ -744,6 +744,120 @@ describe("backoffice BFF", () => {
     assert.equal(malformed.status, 400);
   });
 
+  it("accepts only unambiguous JSON objects on state-changing routes", async () => {
+    const cookie = await devSession("compliance-lead");
+    const approval = demoRepository.approvals().find((item) => item.id === "APV-843910");
+    assert.ok(approval);
+    const digest = approvalCommandDigest(approval);
+    const stale = "0".repeat(64);
+    const preview = `${baseUrl}/bff/api/approvals/APV-843910/preview`;
+    const challenges = `${baseUrl}/bff/api/approvals/APV-843910/step-up/challenges`;
+    const send = (url: string, body: string | Blob, contentType?: string) => fetch(url, {
+      method: "POST",
+      headers: {
+        cookie,
+        origin,
+        ...(contentType === undefined ? {} : { "content-type": contentType })
+      },
+      body
+    });
+    const json = "application/json";
+    const valid = JSON.stringify({ commandDigest: digest });
+
+    for (const contentType of [
+      undefined,
+      "text/plain",
+      "text/plain;charset=UTF-8",
+      "application/x-www-form-urlencoded",
+      "multipart/form-data; boundary=x",
+      "text/json",
+      "application/json-patch+json",
+      "application/jsonx",
+      "application/json; charset=utf-16",
+      "application/json; charset=iso-8859-1",
+      "application/json; charset=utf-8; charset=utf-8",
+      "application/json; boundary=x"
+    ]) {
+      for (const url of [preview, challenges]) {
+        const response = await send(
+          url,
+          contentType === undefined ? new Blob([valid]) : valid,
+          contentType
+        );
+        assert.equal(response.status, 415, String(contentType));
+        assert.deepEqual(await response.json(), { error: "unsupported_media_type" });
+      }
+    }
+
+    for (const body of [
+      `{"commandDigest":"${stale}","commandDigest":"${digest}"}`,
+      `{"commandDigest":"${stale}","command\\u0044igest":"${digest}"}`,
+      `{"commandDigest":"${digest}","stepUpGrant":"a","stepUpGrant":"b"}`,
+      `{"__proto__":{"stepUpGrant":"a"},"commandDigest":"${digest}"}`,
+      `{"\\u005f_proto__":"a","commandDigest":"${digest}"}`,
+      `{"constructor":"a","commandDigest":"${digest}"}`,
+      `{"commandDigest":"${digest}","approve":"true"}`,
+      `{"commandDigest":${JSON.stringify([digest])}}`,
+      `{"commandDigest":1}`,
+      `{"commandDigest":"${digest}"}{}`,
+      `{"commandDigest":"${digest}",}`,
+      `{"commandDigest":"${digest}"} x`,
+      `{'commandDigest':'${digest}'}`,
+      `{"commandDigest":"${digest}\\x41"}`,
+      `{"commandDigest":"${digest}\n"}`,
+      `\ufeff${valid}`,
+      "{}",
+      "[]",
+      "null",
+      ""
+    ]) {
+      const response = await send(preview, body, json);
+      assert.equal(response.status, 400, body);
+      assert.deepEqual(await response.json(), { error: "invalid_request" });
+    }
+
+    const invalidUtf8 = Buffer.concat([
+      Buffer.from(`{"commandDigest":"${digest}","stepUpGrant":"`),
+      Buffer.from([0xc0, 0xaf]),
+      Buffer.from("\"}")
+    ]);
+    const malformedBytes = await send(preview, new Blob([new Uint8Array(invalidUtf8)]), json);
+    assert.equal(malformedBytes.status, 400);
+
+    const verify = await send(
+      `${challenges}/${"a".repeat(32)}/verify`,
+      `{"commandDigest":"${digest}","code":"000000","code":"123456"}`,
+      json
+    );
+    assert.equal(verify.status, 400);
+
+    const devLogin = await fetch(`${baseUrl}/bff/auth/dev-session`, {
+      method: "POST",
+      headers: { "content-type": "text/plain", origin },
+      body: JSON.stringify({ role: "auditor" })
+    });
+    assert.equal(devLogin.status, 415);
+    for (const body of ['{"role":"auditor","role":"compliance-lead"}', "{"]) {
+      const response = await fetch(`${baseUrl}/bff/auth/dev-session`, {
+        method: "POST",
+        headers: { "content-type": json, origin },
+        body
+      });
+      assert.equal(response.status, 400, body);
+      assert.equal(response.headers.get("set-cookie"), null);
+    }
+
+    for (const [body, contentType] of [
+      [valid, json],
+      [valid, "Application/JSON; Charset=\"UTF-8\""],
+      [valid, "application/json;charset=utf-8"],
+      [`\n {\t"command\\u0044igest" :\r"${digest}" }\n`, json]
+    ]) {
+      const response = await send(preview, body, contentType);
+      assert.equal(response.status, 200, `${contentType} ${body}`);
+    }
+  });
+
   it("keeps dev login limited to configured loopback origins", async () => {
     const response = await fetch(`${baseUrl}/bff/auth/dev-session`, {
       method: "POST",
