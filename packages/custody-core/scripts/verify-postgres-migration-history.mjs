@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 
 const expectedHistory = [
   { migration_name: "0001_custody_projection_outbox", version: 1 },
-  { migration_name: "0002_custody_migration_history", version: 2 }
+  { migration_name: "0002_custody_migration_history", version: 2 },
+  { migration_name: "0003_custody_enabled_asset_network", version: 3 }
 ];
 
 let input = "";

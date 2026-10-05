@@ -12,6 +12,10 @@ const expectedSources = [
   [
     "0002_custody_migration_history.sql",
     "8cec61ccf50fd42ba823398b7f670ce61a0f45ab0ec4e1707d498e7cf929d3c4"
+  ],
+  [
+    "0003_custody_enabled_asset_network.sql",
+    "0a96e35b7f0fa4595d641076c04fc83df271b93f7990dff8bf125b8dc08b3218"
   ]
 ];
 

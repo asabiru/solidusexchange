@@ -7,7 +7,8 @@ CREATE FUNCTION pg_temp.custody_event(
   custody_intent_id text DEFAULT 'custody_intent_001',
   idempotency_key text DEFAULT 'custody_idempotency_001',
   network text DEFAULT 'TRON_TESTNET',
-  production_signing_enabled boolean DEFAULT false
+  production_signing_enabled boolean DEFAULT false,
+  asset text DEFAULT 'USDT'
 )
 RETURNS jsonb
 LANGUAGE sql
@@ -30,7 +31,7 @@ AS $$
     'occurred_at', '2026-10-01T12:02:00.000Z',
     'payload', jsonb_build_object(
       'approval_evidence_digest', repeat('a', 64),
-      'asset', 'USDT',
+      'asset', asset,
       'custody_intent_id', custody_intent_id,
       'execution_authority', false,
       'expires_at', '2026-10-01T12:05:00.000Z',
@@ -170,6 +171,137 @@ EXCEPTION
     IF position('custody_projection_unsigned_status' IN SQLERRM) = 0 THEN
       RAISE;
     END IF;
+END;
+$$;
+
+DO $$
+DECLARE
+  candidate record;
+BEGIN
+  FOR candidate IN
+    SELECT *
+    FROM (
+      VALUES
+        ('TON', 'TRON_TESTNET'),
+        ('BTC', 'BITCOIN_TESTNET'),
+        ('ETH', 'ETHEREUM_TESTNET'),
+        ('USDT', 'ETH_TESTNET'),
+        ('USDT', 'MAINNET_TESTNET'),
+        ('USDT', 'TRONTESTNET_TESTNET'),
+        ('USDT0', 'TRON_TESTNET'),
+        ('TUSDT', 'TRON_TESTNET'),
+        ('1INCH', 'TON_TESTNET')
+    ) AS disabled_pair (asset, network)
+  LOOP
+    BEGIN
+      PERFORM *
+      FROM custody_core.record_custody_projection(
+        pg_temp.custody_event(
+          event_id => '018f3f8a-0018-7000-8000-000000000018',
+          approval_event_id => '018f3f8a-0019-7000-8000-000000000019',
+          withdrawal_id => 'withdrawal_002',
+          custody_intent_id => 'custody_intent_002',
+          idempotency_key => 'custody_idempotency_002',
+          network => candidate.network,
+          asset => candidate.asset
+        ),
+        repeat('e', 64)
+      );
+      RAISE EXCEPTION 'disabled custody asset/network projection was accepted: %/%',
+        candidate.asset,
+        candidate.network;
+    EXCEPTION
+      WHEN check_violation THEN
+        IF position('custody_projection_testnet_allowlist' IN SQLERRM) = 0 THEN
+          RAISE;
+        END IF;
+    END;
+  END LOOP;
+END;
+$$;
+
+DO $$
+DECLARE
+  candidate record;
+BEGIN
+  FOR candidate IN
+    SELECT *
+    FROM (
+      VALUES
+        ('usdt', 'TRON_TESTNET'),
+        ('Usdt', 'TRON_TESTNET'),
+        ('USDT', 'tron_testnet'),
+        ('USDT', 'Tron_Testnet'),
+        ('USDT ', 'TRON_TESTNET'),
+        ('USDT', 'TRON_TESTNET '),
+        ('USDT', 'TRON_TESTNET' || chr(10)),
+        ('USDT', 'TRON_TESTNET' || chr(0x200B)),
+        ('USD' || chr(0x0422), 'TRON_TESTNET'),
+        (chr(0xFF35) || chr(0xFF33) || chr(0xFF24) || chr(0xFF34), 'TRON_TESTNET'),
+        ('USDT', 'TR' || chr(0x041E) || 'N_TESTNET'),
+        ('USDT', 'TRON_MAINNET'),
+        ('TON', 'TON_MAINNET')
+    ) AS alias_pair (asset, network)
+  LOOP
+    BEGIN
+      PERFORM *
+      FROM custody_core.record_custody_projection(
+        pg_temp.custody_event(
+          event_id => '018f3f8a-0018-7000-8000-000000000018',
+          approval_event_id => '018f3f8a-0019-7000-8000-000000000019',
+          withdrawal_id => 'withdrawal_002',
+          custody_intent_id => 'custody_intent_002',
+          idempotency_key => 'custody_idempotency_002',
+          network => candidate.network,
+          asset => candidate.asset
+        ),
+        repeat('e', 64)
+      );
+      RAISE EXCEPTION 'aliased custody asset/network projection was accepted: %/%',
+        candidate.asset,
+        candidate.network;
+    EXCEPTION
+      WHEN check_violation THEN
+        NULL;
+    END;
+  END LOOP;
+END;
+$$;
+
+DO $$
+DECLARE
+  candidate record;
+BEGIN
+  FOR candidate IN
+    SELECT *
+    FROM (
+      VALUES
+        ('TON', 'TON_TESTNET'),
+        ('USDT', 'TON_TESTNET')
+    ) AS enabled_pair (asset, network)
+  LOOP
+    BEGIN
+      PERFORM *
+      FROM custody_core.record_custody_projection(
+        pg_temp.custody_event(
+          event_id => '018f3f8a-0018-7000-8000-000000000018',
+          approval_event_id => '018f3f8a-0019-7000-8000-000000000019',
+          withdrawal_id => 'withdrawal_002',
+          custody_intent_id => 'custody_intent_002',
+          idempotency_key => 'custody_idempotency_002',
+          network => candidate.network,
+          asset => candidate.asset
+        ),
+        repeat('e', 64)
+      );
+      RAISE EXCEPTION 'enabled custody asset/network projection rolled back';
+    EXCEPTION
+      WHEN raise_exception THEN
+        IF SQLERRM <> 'enabled custody asset/network projection rolled back' THEN
+          RAISE;
+        END IF;
+    END;
+  END LOOP;
 END;
 $$;
 
