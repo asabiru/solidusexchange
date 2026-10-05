@@ -564,6 +564,37 @@ for (const [fixture, evidence] of [
     "scripts/verify-postgres-trigger-function-catalog.mjs",
     "postgres-trigger-function-catalog-ok"
   ],
+  ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_trigger"],
+  ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_rewrite"],
+  ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_operator"],
+  ["tests/postgres-execution-surface-catalog.sql", "pg_catalog.pg_type"],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "PostgreSQL financial-core trigger inventory differs from the expected policy"
+  ],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "PostgreSQL financial-core rewrite rules differ from the expected policy"
+  ],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "PostgreSQL financial-core schema contains search-path shadow objects"
+  ],
+  [
+    "scripts/verify-postgres-execution-surface-catalog.mjs",
+    "postgres-execution-surface-catalog-ok"
+  ],
+  ["tests/postgres-execution-surface-catalog.sh", "public.forge_migration"],
+  ["tests/postgres-execution-surface-catalog.sh", "DO INSTEAD NOTHING"],
+  ["tests/postgres-execution-surface-catalog.sh", "CREATE OPERATOR financial_core.<>"],
+  [
+    "tests/postgres-execution-surface-catalog.sh",
+    "CREATE DOMAIN financial_core.timestamptz AS DATE"
+  ],
+  [
+    "tests/postgres-execution-surface-catalog.sh",
+    "postgres-execution-surface-catalog-negative-ok"
+  ],
   ["tests/postgres-invariant-trigger-catalog.sql", "pg_catalog.pg_trigger"],
   [
     "scripts/verify-postgres-invariant-trigger-catalog.mjs",
@@ -1048,6 +1079,7 @@ for (const required of [
   "tests/postgres-owner-truncate-guard.sh",
   "tests/postgres-immutability-catalog.sh",
   "tests/postgres-trigger-function-catalog.sh",
+  "tests/postgres-execution-surface-catalog.sh",
   "tests/postgres-migration-source-catalog.sh",
   "tests/postgres-migration-source-policy.sh",
   "tests/postgres-migration-history.sh",

@@ -45,6 +45,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-owner-truncate-guard.sh` | Migration-owner truncation denial regression |
 | `tests/postgres-immutability-catalog.sh` | Exact installed immutability-trigger definition and policy comparison |
 | `tests/postgres-trigger-function-catalog.sh` | Exact installed trigger-function policy and source-hash comparison |
+| `tests/postgres-execution-surface-catalog.sh` | Exact financial-core trigger and rewrite-rule inventory with no search-path shadow objects |
 | `tests/postgres-constraint-catalog.sh` | Exact installed constraint/index policy and replica-mode rejection evidence |
 | `tests/postgres-relation-catalog.sh` | Exact installed table/view/column policy and replica-mode NOT NULL evidence |
 | `tests/postgres-access-control-catalog.sh` | Exact ownership/ACL policy and rejected privilege-drift evidence |
@@ -189,6 +190,14 @@ PGUSER=ledger_test \
 PGDATABASE=ledger_test \
 PGPASSWORD=ledger_test \
 PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+bash tests/postgres-execution-surface-catalog.sh
+
+PGHOST=127.0.0.1 \
+PGPORT=55432 \
+PGUSER=ledger_test \
+PGDATABASE=ledger_test \
+PGPASSWORD=ledger_test \
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
 bash tests/postgres-chart-of-accounts.sh
 
 docker exec -i solidchange-ledger-test \
@@ -294,6 +303,8 @@ The owner truncation regression exercises every append-only configuration and le
 The immutability catalog regression reads the installed PostgreSQL trigger metadata and requires an exact match for all 22 mutation guards. It fails when a protected table, trigger event, row/statement level, always-enabled state or `reject_mutation` function binding differs from the expected policy. It also proves representative `UPDATE`, `DELETE` and `TRUNCATE` statements fail after switching the test session to replica mode.
 
 The trigger-function catalog regression requires an exact match for all eight installed ledger trigger functions. It verifies each function's SHA-256 source digest, fixed search path, language, return type, execution flags and owner-only access, so replacing a guard with a weaker body, catalog configuration or execution grant fails CI.
+
+The execution-surface catalog regression closes what the per-function catalogs filter out. It requires the exact set of 34 user-defined triggers on financial-core tables, whichever schema their function lives in, so a trigger bound to a `public` or `pg_catalog` function cannot rewrite or skip rows after the guards run. It allows only the two views' `_RETURN` rules, so `CREATE RULE ... DO INSTEAD NOTHING` cannot silently discard ledger or migration-history writes. It also requires the `financial_core` schema to contain no types other than table/view row types and their arrays, and no operators, operator classes or families, collations, conversions or text-search objects. Trigger functions use `search_path = financial_core, pg_catalog`, so such objects would shadow built-ins: a `financial_core.<>` integer operator or a `financial_core.timestamptz` domain otherwise let `validate_migration_sequence` accept out-of-sequence or backdated history. Transactional probes prove each drift fails while unrelated objects outside the schema still pass.
 
 The constraint catalog regression requires an exact match for all 96 installed table constraints and the standalone account-identity unique index, including definitions, validation and backing-index state. It also proves amount checks, entry-sequence uniqueness, idempotency uniqueness and account-identity uniqueness still reject invalid writes in replica mode.
 
