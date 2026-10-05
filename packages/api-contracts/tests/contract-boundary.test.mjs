@@ -96,6 +96,29 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects removed protected operations",
+  "Pinned API operations",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    delete openapi.paths["/api/v1/customer/session"];
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects protected operations moved to unauthenticated metadata paths",
+  "Operation path is not pinned: getCustomerSession /api/v1/meta",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/session"].get;
+    operation.security = [];
+    delete openapi.paths["/api/v1/customer/session"];
+    openapi.paths["/api/v1/meta"].get = operation;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects weakened authentication scheme definitions",
   "CustomerBearer must remain an HTTP security scheme",
   (scratch) => {
