@@ -210,6 +210,17 @@ function checkOpenApi() {
         !requestHeaders.has("#/components/parameters/IdempotencyKey"),
         `Read-only operation must not require Idempotency-Key: ${operation.operationId}`
       );
+      if (pathName.startsWith("/api/v1/operator/")) {
+        assert(
+          requestHeaders.has("#/components/parameters/DeviceId"),
+          `Missing X-Device-Id: ${operation.operationId}`
+        );
+      } else {
+        assert(
+          !requestHeaders.has("#/components/parameters/DeviceId"),
+          `X-Device-Id is approved only for operator operations: ${operation.operationId}`
+        );
+      }
       if (pathName !== "/api/v1/meta") {
         const expectedScheme = pathName.startsWith("/api/v1/customer/")
           ? "CustomerBearer"
@@ -286,6 +297,7 @@ function checkOpenApi() {
     RequestId: "X-Request-Id",
     ClientVersion: "X-Client-Version",
     Platform: "X-Platform",
+    DeviceId: "X-Device-Id",
     IdempotencyKey: "Idempotency-Key"
   };
   for (const [name, headerName] of Object.entries(parameterNames)) {
@@ -309,6 +321,19 @@ function checkOpenApi() {
     platformSchema.enum ?? [],
     ["web", "ios", "android", "telegram-mini-app", "operator-web", "service"],
     "Canonical Platform enum"
+  );
+  assert(
+    parameters.DeviceId?.schema?.$ref === "#/components/schemas/DeviceId",
+    "DeviceId must use canonical DeviceId schema"
+  );
+  const deviceIdSchema = openapi.components?.schemas?.DeviceId;
+  assert(
+    canonicalJson(deviceIdSchema) === canonicalJson({
+      type: "string",
+      format: "uuid",
+      pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    }),
+    "Canonical DeviceId constraints must remain pinned"
   );
   assert(
     parameters.RequestId?.schema?.$ref === "#/components/schemas/UuidV7",

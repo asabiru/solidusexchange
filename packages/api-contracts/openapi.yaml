@@ -185,6 +185,9 @@
           },
           {
             "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
           }
         ],
         "responses": {
@@ -239,6 +242,9 @@
           },
           {
             "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
           }
         ],
         "responses": {
@@ -326,6 +332,15 @@
           ]
         }
       },
+      "DeviceId": {
+        "name": "X-Device-Id",
+        "in": "header",
+        "required": true,
+        "description": "Opaque random UUIDv4 operator workstation installation identifier. Required only for operator operations. It must not encode hardware identifiers, operator or customer PII, or provider data.",
+        "schema": {
+          "$ref": "#/components/schemas/DeviceId"
+        }
+      },
       "IdempotencyKey": {
         "name": "Idempotency-Key",
         "in": "header",
@@ -358,6 +373,11 @@
         "type": "string",
         "format": "uuid",
         "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+      },
+      "DeviceId": {
+        "type": "string",
+        "format": "uuid",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
       },
       "IdempotencyKey": {
         "type": "string",

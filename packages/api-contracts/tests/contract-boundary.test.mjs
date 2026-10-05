@@ -174,6 +174,67 @@ assertRejected(
   }
 );
 
+function withoutDeviceId(parameters) {
+  return parameters.filter((parameter) => parameter.$ref !== "#/components/parameters/DeviceId");
+}
+
+assertRejected(
+  "rejects operator operations without a device identifier",
+  "Missing X-Device-Id: getOperatorSession",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/session"].get;
+    operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+for (const [pathName, operationId] of [
+  ["/api/v1/customer/session", "getCustomerSession"],
+  ["/api/v1/customer/capabilities", "getCustomerCapabilities"],
+  ["/api/v1/meta", "getApiMetadata"]
+]) {
+  assertRejected(
+    `rejects device identifiers on ${operationId}`,
+    `X-Device-Id is approved only for operator operations: ${operationId}`,
+    (scratch) => {
+      const openapi = readJson(scratch, "openapi.yaml");
+      openapi.paths[pathName].get.parameters.push({ $ref: "#/components/parameters/DeviceId" });
+      writeJson(scratch, "openapi.yaml", openapi);
+    }
+  );
+}
+
+assertRejected(
+  "rejects optional device identifiers",
+  "DeviceId must be required when used",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.DeviceId.required = false;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects weakened device ID parameter schemas",
+  "DeviceId must use canonical DeviceId schema",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.parameters.DeviceId.schema = { type: "string" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects weakened canonical device ID constraints",
+  "Canonical DeviceId constraints must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DeviceId.pattern = ".*";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
 assertRejected(
   "rejects weakened request ID schemas",
   "RequestId must use canonical UuidV7 schema",
