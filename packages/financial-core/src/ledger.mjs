@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { types } from "node:util";
 
 import { formatAmount, parseAmount } from "./amount.mjs";
 
@@ -13,6 +14,7 @@ const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{15,127}$/;
 const DATE_TIME_PATTERN =
   /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const MAX_ENTRIES = 1000;
+const ARRAY_INDEX_PATTERN = /^(?:0|[1-9][0-9]*)$/;
 
 const CHART_KEYS = new Set([
   "account_definitions",
@@ -181,13 +183,50 @@ function clone(value) {
   return structuredClone(value);
 }
 
+function snapshotPlainData(value, code, label, ancestors = new Set()) {
+  if (typeof value === "function") reject(code, `${label} must be plain data.`);
+  if (value === null || typeof value !== "object") return value;
+  if (types.isProxy(value)) reject(code, `${label} must be plain data.`);
+  if (ancestors.has(value)) reject(code, `${label} must not be cyclic.`);
+  const isArray = Array.isArray(value);
+  if (Object.getPrototypeOf(value) !== (isArray ? Array.prototype : Object.prototype)) {
+    reject(code, `${label} must be plain data.`);
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(value);
+  const keys = Reflect.ownKeys(descriptors);
+  if (isArray && keys.length !== descriptors.length.value + 1) {
+    reject(code, `${label} must be a dense array without extra properties.`);
+  }
+  const snapshot = isArray ? [] : {};
+  ancestors.add(value);
+  for (const key of keys) {
+    if (isArray && key === "length") continue;
+    if (typeof key !== "string" || (isArray && !ARRAY_INDEX_PATTERN.test(key))) {
+      reject(code, `${label} must not contain symbol or non-index keys.`);
+    }
+    const descriptor = descriptors[key];
+    if (!Object.hasOwn(descriptor, "value") || !descriptor.enumerable) {
+      reject(code, `${label}.${key} must be an enumerable data property.`);
+    }
+    Object.defineProperty(snapshot, key, {
+      configurable: true,
+      enumerable: true,
+      value: snapshotPlainData(descriptor.value, code, `${label}.${key}`, ancestors),
+      writable: true
+    });
+  }
+  ancestors.delete(value);
+  return snapshot;
+}
+
 function freezeDeep(value) {
   if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
   for (const child of Object.values(value)) freezeDeep(child);
   return Object.freeze(value);
 }
 
-export function validateChart(chart) {
+export function validateChart(chartInput) {
+  const chart = snapshotPlainData(chartInput, "LEDGER_CHART_INVALID", "Chart of accounts");
   if (!chart || typeof chart !== "object" || Array.isArray(chart)) {
     reject("LEDGER_CHART_INVALID", "Chart of accounts must be an object.");
   }
@@ -313,7 +352,13 @@ function buildPostingRuleRegistry(registry, chart) {
   return rules;
 }
 
-export function validatePostingRules(registry, chart) {
+export function validatePostingRules(registryInput, chartInput) {
+  const chart = snapshotPlainData(chartInput, "LEDGER_CHART_INVALID", "Chart of accounts");
+  const registry = snapshotPlainData(
+    registryInput,
+    "LEDGER_POSTING_RULES_INVALID",
+    "Posting rule registry"
+  );
   validateChart(chart);
   buildPostingRuleRegistry(registry, chart);
   return true;
@@ -503,12 +548,24 @@ function validateCommand(command, accounts, assets, postingRules) {
 }
 
 export function createInMemoryLedger({
-  accounts,
-  assets,
-  chart,
-  postingRules,
+  accounts: accountsInput,
+  assets: assetsInput,
+  chart: chartInput,
+  postingRules: postingRulesInput,
   clock = () => new Date().toISOString()
 }) {
+  const chart = snapshotPlainData(chartInput, "LEDGER_CHART_INVALID", "Chart of accounts");
+  const postingRules = snapshotPlainData(
+    postingRulesInput,
+    "LEDGER_POSTING_RULES_INVALID",
+    "Posting rule registry"
+  );
+  const assets = snapshotPlainData(assetsInput, "LEDGER_CONFIGURATION_INVALID", "Assets");
+  const accounts = snapshotPlainData(
+    accountsInput,
+    "LEDGER_CONFIGURATION_INVALID",
+    "Ledger accounts"
+  );
   validateChart(chart);
   if (typeof clock !== "function") {
     reject("LEDGER_CONFIGURATION_INVALID", "Ledger clock must be a function.");
@@ -523,7 +580,7 @@ export function createInMemoryLedger({
   const idempotency = new Map();
 
   function post(command) {
-    const candidate = clone(command);
+    const candidate = snapshotPlainData(command, "LEDGER_VALIDATION_FAILED", "Posting command");
     validateCommand(candidate, accountRegistry, assetRegistry, postingRuleRegistry);
     const commandDigest = digest(candidate);
     const idempotencyIdentity = `${candidate.legal_entity_id}|${candidate.idempotency_key}`;

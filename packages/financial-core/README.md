@@ -88,6 +88,7 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 16. Every canonical chart definition must satisfy the PostgreSQL schema and survive an exact, deterministic round-trip.
 17. User-defined account, amount, seal and journal-completeness safeguards fail closed in every PostgreSQL replication mode.
 18. Account, asset, posting-rule, journal, ledger-account and outbox references remain fail closed when replica mode suppresses PostgreSQL's internal foreign-key triggers.
+19. JavaScript ledger configuration and posting commands are snapshotted into plain data before validation: accessors, Proxies, inherited or non-enumerable fields, symbol keys and extra array properties fail closed, so validated values are exactly the values stored.
 19. The installed check, uniqueness, primary-key, foreign-key and standalone unique-index catalog must exactly match the reviewed policy; checks and uniqueness remain active in replica mode.
 20. The installed table, verification-view and column catalog must exactly match the reviewed logged-storage, type, nullability, default and view-definition policy; NOT NULL remains active in replica mode.
 21. The financial-core schema, relations and functions remain migration-owner controlled with no `PUBLIC`, non-owner or column-specific grants and no migration-owner default-ACL overrides.
