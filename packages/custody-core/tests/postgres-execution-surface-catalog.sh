@@ -80,6 +80,8 @@ assert_catalog_accepted() {
 trigger_drift="PostgreSQL custody trigger inventory differs from the expected policy"
 rule_drift="PostgreSQL custody rewrite rules differ from the expected policy"
 shadow_drift="PostgreSQL custody schema contains search-path shadow objects"
+database_shadow_drift="PostgreSQL database contains user-defined casts or pg_catalog objects that shadow custody built-ins"
+builtin_drift="PostgreSQL built-in casts, pg_catalog functions or operators differ from the pinned PostgreSQL 16.10 catalog"
 
 verify_catalog
 
@@ -150,6 +152,39 @@ assert_catalog_rejected "$shadow_drift" \
   "CREATE OPERATOR FAMILY custody_core.integer_ops USING btree;"
 assert_catalog_rejected "$shadow_drift" \
   "CREATE TEXT SEARCH CONFIGURATION custody_core.english (COPY = pg_catalog.english);"
+
+assert_catalog_rejected "$database_shadow_drift" "
+CREATE FUNCTION public.forge_migration_version(TEXT) RETURNS INTEGER
+LANGUAGE sql STABLE AS \$\$SELECT CASE WHEN \$1 = '0099' THEN (SELECT pg_catalog.max(version) + 1 FROM custody_core.schema_migrations) ELSE pg_catalog.int4in(pg_catalog.textout(\$1)) END\$\$;
+CREATE CAST (TEXT AS INTEGER) WITH FUNCTION public.forge_migration_version(TEXT);"
+assert_catalog_rejected "$database_shadow_drift" \
+  "CREATE CAST (TEXT AS INTEGER) WITH INOUT AS IMPLICIT;"
+assert_catalog_rejected "$database_shadow_drift" \
+  "CREATE CAST (BIGINT AS TIMESTAMPTZ) WITHOUT FUNCTION;"
+assert_catalog_rejected "$database_shadow_drift" "
+CREATE FUNCTION pg_catalog.to_jsonb(custody_core.custody_projection_outbox) RETURNS JSONB
+LANGUAGE sql IMMUTABLE AS 'SELECT ''{}''::JSONB';"
+assert_catalog_rejected "$database_shadow_drift" "
+CREATE FUNCTION public.never_equal(INTEGER, INTEGER) RETURNS BOOLEAN
+LANGUAGE sql IMMUTABLE AS 'SELECT FALSE';
+CREATE OPERATOR pg_catalog.=== (
+  LEFTARG = INTEGER,
+  RIGHTARG = INTEGER,
+  FUNCTION = public.never_equal
+);"
+
+assert_catalog_rejected "$builtin_drift" "
+CREATE FUNCTION public.never_not_equal(INTEGER, INTEGER) RETURNS BOOLEAN
+LANGUAGE sql IMMUTABLE AS 'SELECT FALSE';
+UPDATE pg_catalog.pg_operator
+SET oprcode = 'public.never_not_equal'::pg_catalog.regproc
+WHERE oid = '<>(integer,integer)'::pg_catalog.regoperator;"
+assert_catalog_rejected "$builtin_drift" \
+  "ALTER FUNCTION pg_catalog.lower(TEXT) SET search_path = public;"
+assert_catalog_rejected "$builtin_drift" "
+UPDATE pg_catalog.pg_cast SET castcontext = 'i'
+WHERE castsource = 'bigint'::pg_catalog.regtype
+  AND casttarget = 'integer'::pg_catalog.regtype;"
 
 assert_catalog_accepted "
 CREATE DOMAIN public.timestamptz AS DATE;

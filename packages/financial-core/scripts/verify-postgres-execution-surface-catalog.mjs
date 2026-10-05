@@ -79,7 +79,7 @@ for await (const chunk of process.stdin) {
 const actual = JSON.parse(input);
 assert.deepStrictEqual(
   Object.keys(actual).toSorted(),
-  ["rules", "shadow_objects", "triggers"],
+  ["builtin_catalog", "database_shadow_objects", "rules", "shadow_objects", "triggers"],
   "PostgreSQL execution-surface catalog has an unexpected shape"
 );
 
@@ -110,6 +110,21 @@ assert.deepStrictEqual(
   actual.shadow_objects,
   [],
   "PostgreSQL financial-core schema contains search-path shadow objects"
+);
+
+assert.deepStrictEqual(
+  actual.database_shadow_objects,
+  [],
+  "PostgreSQL database contains user-defined casts or pg_catalog objects that shadow financial-core built-ins"
+);
+
+assert.deepStrictEqual(
+  actual.builtin_catalog,
+  {
+    rows: 4314,
+    sha256: "10627cdd303107ddca796d78f7d8d34ca2a4533952c1495a5360426570362bbd"
+  },
+  "PostgreSQL built-in casts, pg_catalog functions or operators differ from the pinned PostgreSQL 16.10 catalog"
 );
 
 console.log("postgres-execution-surface-catalog-ok");
