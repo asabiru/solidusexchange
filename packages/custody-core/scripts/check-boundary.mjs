@@ -111,6 +111,28 @@ for (const required of [
   assert(migration.includes(required), `Custody migration is missing evidence: ${required}`);
 }
 
+const enabledAssetMigration = read(
+  "packages/custody-core/migrations/0003_custody_enabled_asset_network.sql"
+);
+const enabledAssetConstraint = /ADD CONSTRAINT custody_projection_testnet_allowlist CHECK \(\n([^;]*?)\n  \);/u
+  .exec(enabledAssetMigration);
+assert(enabledAssetConstraint, "Custody enabled asset/network constraint is missing");
+const enabledAssetPairPattern =
+  /^ {4}(?:OR )?\(asset = '([A-Z0-9]+)' AND network = '([A-Z0-9]+_TESTNET)'\)$/u;
+const migrationAssetPairs = enabledAssetConstraint[1].split("\n").map((line, index) => {
+  const pair = enabledAssetPairPattern.exec(line);
+  assert(
+    pair && line.startsWith("    OR ") === index > 0,
+    "Custody enabled asset/network constraint must only list literal pairs"
+  );
+  return `${pair[1]}:${pair[2]}`;
+});
+assert.deepEqual(
+  migrationAssetPairs.sort(),
+  policy.allowed_assets.map(({ asset, network }) => `${asset}:${network}`).sort(),
+  "Custody enabled asset/network constraint must match custody-policy.json"
+);
+
 const postgresTests = read("packages/custody-core/tests/postgres-outbox.sql");
 for (const required of [
   "exact custody projection replay was not recognized",
@@ -119,6 +141,10 @@ for (const required of [
   "duplicate approval source identity was accepted",
   "mainnet custody projection was accepted",
   "signing-enabled custody projection was accepted",
+  "disabled custody asset/network projection was accepted",
+  "custody_projection_testnet_allowlist",
+  "aliased custody asset/network projection was accepted",
+  "enabled custody asset/network projection rolled back",
   "custody outbox truncate was accepted",
   "replica-mode custody outbox update was accepted"
 ]) {
@@ -314,6 +340,8 @@ for (const required of [
   "2c0ee1744180763f0d76a0f0282fd2797c826a622164a04b6d6e0a4eab3b1202",
   "0002_custody_migration_history.sql",
   "8cec61ccf50fd42ba823398b7f670ce61a0f45ab0ec4e1707d498e7cf929d3c4",
+  "0003_custody_enabled_asset_network.sql",
+  "0a96e35b7f0fa4595d641076c04fc83df271b93f7990dff8bf125b8dc08b3218",
   "PostgreSQL custody migration source files differ from canonical manifest",
   "PostgreSQL custody migration source digest differs for"
 ]) {
@@ -413,6 +441,7 @@ const migrationHistory = read(
 for (const required of [
   '{ migration_name: "0001_custody_projection_outbox", version: 1 }',
   '{ migration_name: "0002_custody_migration_history", version: 2 }',
+  '{ migration_name: "0003_custody_enabled_asset_network", version: 3 }',
   "PostgreSQL custody migration history differs from canonical manifest",
   "PostgreSQL custody migrations were not applied in canonical version order",
   "custody-postgres-migration-history-ok"
@@ -442,9 +471,10 @@ const migrationHistoryTests = read(
 for (const required of [
   "9999_unreviewed_migration",
   "DISABLE TRIGGER schema_migrations_append_only",
-  "custody migration version 4 must follow installed version 2 with version 3",
-  "custody migration name 0004_wrong_version must encode version 3",
-  "custody migration applied_at must be later than installed version 2",
+  "custody migration version 5 must follow installed version 3 with version 4",
+  "custody migration name 0005_wrong_version must encode version 4",
+  "custody migration applied_at must be later than installed version 3",
+  "migrations/0003_custody_enabled_asset_network.sql",
   "SET session_replication_role = replica;",
   "custody migration history is append-only",
   "assert_failed_history_bootstrap_rolled_back",

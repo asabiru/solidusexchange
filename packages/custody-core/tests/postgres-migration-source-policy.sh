@@ -80,7 +80,9 @@ assert_source_policy_rejected \
 
 mkdir "$scratch/missing-history-bootstrap"
 cp -R "$workspace/migrations/." "$scratch/missing-history-bootstrap/"
-rm "$scratch/missing-history-bootstrap/0002_custody_migration_history.sql"
+rm \
+  "$scratch/missing-history-bootstrap/0002_custody_migration_history.sql" \
+  "$scratch/missing-history-bootstrap/0003_custody_enabled_asset_network.sql"
 assert_source_policy_rejected \
   "PostgreSQL custody migration source policy requires the history bootstrap migration 0002" \
   "$scratch/missing-history-bootstrap"

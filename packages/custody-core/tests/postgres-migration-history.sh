@@ -196,6 +196,10 @@ assert_failed_history_bootstrap_rolled_back() {
     -v ON_ERROR_STOP=1 \
     -f migrations/0002_custody_migration_history.sql \
     >/dev/null
+  psql_database "$ROLLBACK_DATABASE" \
+    -v ON_ERROR_STOP=1 \
+    -f migrations/0003_custody_enabled_asset_network.sql \
+    >/dev/null
   verify_history "$ROLLBACK_DATABASE"
   psql_database "$ROLLBACK_DATABASE" \
     -v ON_ERROR_STOP=1 \
@@ -247,35 +251,35 @@ assert_history_rejected \
 verify_history
 
 assert_statement_rejected \
-  "custody migration version 4 must follow installed version 2 with version 3" \
+  "custody migration version 5 must follow installed version 3 with version 4" \
   "INSERT INTO custody_core.schema_migrations (version, migration_name)
-   VALUES (4, '0004_skipped_migration');"
+   VALUES (5, '0005_skipped_migration');"
 
 assert_statement_rejected \
-  "custody migration version 2 must follow installed version 2 with version 3" \
+  "custody migration version 3 must follow installed version 3 with version 4" \
   "INSERT INTO custody_core.schema_migrations (version, migration_name)
-   VALUES (2, '0002_duplicate_migration');"
+   VALUES (3, '0003_duplicate_migration');"
 
 assert_statement_rejected \
-  "custody migration name 0004_wrong_version must encode version 3" \
+  "custody migration name 0005_wrong_version must encode version 4" \
   "INSERT INTO custody_core.schema_migrations (version, migration_name)
-   VALUES (3, '0004_wrong_version');"
+   VALUES (4, '0005_wrong_version');"
 
 assert_statement_rejected \
-  "custody migration applied_at must be later than installed version 2" \
+  "custody migration applied_at must be later than installed version 3" \
   "INSERT INTO custody_core.schema_migrations (
      version,
      migration_name,
      applied_at
    )
-   SELECT 3, '0003_stale_timestamp', max(applied_at)
+   SELECT 4, '0004_stale_timestamp', max(applied_at)
    FROM custody_core.schema_migrations;"
 
 assert_statement_rejected \
-  "custody migration version 4 must follow installed version 2 with version 3" \
+  "custody migration version 5 must follow installed version 3 with version 4" \
   "SET session_replication_role = replica;
    INSERT INTO custody_core.schema_migrations (version, migration_name)
-   VALUES (4, '0004_replica_skip');"
+   VALUES (5, '0005_replica_skip');"
 
 assert_statement_rejected \
   "custody migration history is append-only" \
