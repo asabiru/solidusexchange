@@ -157,7 +157,7 @@ BACKOFFICE_DEVICE_BINDING
 BACKOFFICE_APPROVED_DEVICE_DIGESTS
 ```
 
-`BACKOFFICE_OIDC_ROLE_MAP_JSON` maps external groups to the explicit operator-role allowlist. Example:
+`BACKOFFICE_OIDC_ROLE_MAP_JSON` maps external groups to the explicit operator-role allowlist. Only groups that are own keys of the map count; inherited object properties such as `constructor` or `__proto__` never map to a role. Example:
 
 ```json
 {"solidchange-compliance":"compliance-lead","solidchange-support":"support-l1"}

@@ -218,6 +218,71 @@ describe("OIDC boundary", () => {
     );
   });
 
+  it("ignores inherited object properties when mapping roles", async () => {
+    const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const header = encode({ alg: "RS256", kid: "test-key" });
+    const now = Math.floor(Date.now() / 1000);
+    const inheritedNames = [
+      "constructor",
+      "__proto__",
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+      "isPrototypeOf",
+      "propertyIsEnumerable",
+      "toLocaleString",
+      "__defineGetter__",
+      "__lookupGetter__"
+    ];
+
+    for (const groups of [...inheritedNames.map((name) => [name]), "constructor"]) {
+      const claims = encode({
+        iss: config.issuer,
+        sub: "operator-inherited",
+        aud: config.clientId,
+        exp: now + 300,
+        iat: now,
+        nonce: "nonce-inherited",
+        groups
+      });
+      const signature = sign(
+        "RSA-SHA256",
+        Buffer.from(`${header}.${claims}`),
+        pair.privateKey
+      ).toString("base64url");
+
+      await assert.rejects(
+        verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-inherited", {
+          keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
+        }),
+        /no mapped backoffice role/,
+        JSON.stringify(groups)
+      );
+    }
+
+    const claims = encode({
+      iss: config.issuer,
+      sub: "operator-inherited",
+      aud: config.clientId,
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-inherited",
+      groups: ["constructor", "compliance", "toString"]
+    });
+    const signature = sign(
+      "RSA-SHA256",
+      Buffer.from(`${header}.${claims}`),
+      pair.privateKey
+    ).toString("base64url");
+    const identity = await verifyIdToken(
+      `${header}.${claims}.${signature}`,
+      config,
+      "nonce-inherited",
+      { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
+    );
+    assert.equal(identity.role, "compliance-lead");
+  });
+
   it("rejects identities mapped to multiple operator roles", async () => {
     const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
     const header = encode({ alg: "RS256", kid: "test-key" });

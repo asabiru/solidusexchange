@@ -35,6 +35,7 @@ async function close(server: Server): Promise<void> {
 describe("OIDC re-login session rotation", () => {
   const pair = generateKeyPairSync("rsa", { modulusLength: 2048 });
   const nonces = new Map<string, string>();
+  let identityGroups: unknown = ["compliance"];
   let identityProvider: Server;
   let identityUrl: string;
 
@@ -66,7 +67,7 @@ describe("OIDC re-login session rotation", () => {
         iat: now,
         nonce,
         email: "operator@example.test",
-        groups: ["compliance"]
+        groups: identityGroups
       });
       const signature = sign("RSA-SHA256", Buffer.from(`${header}.${claims}`), pair.privateKey)
         .toString("base64url");
@@ -225,6 +226,35 @@ describe("OIDC re-login session rotation", () => {
       );
       assert.equal(rejected.status, 500);
       assert.equal(await authenticated(baseUrl, previous), true);
+    });
+  });
+
+  it("issues no session for identities whose groups only name inherited object properties", async () => {
+    await withBff(undefined, async (baseUrl) => {
+      for (const groups of [["constructor"], ["__proto__"], ["toString"], "hasOwnProperty"]) {
+        identityGroups = groups;
+        try {
+          const login = await fetch(`${baseUrl}/bff/auth/login`, { redirect: "manual" });
+          const authorize = new URL(login.headers.get("location") ?? "");
+          const state = authorize.searchParams.get("state");
+          const nonce = authorize.searchParams.get("nonce");
+          assert.ok(state && nonce);
+          nonces.set(`code-${state}`, nonce);
+          const callback = await fetch(
+            `${baseUrl}/bff/auth/callback?code=code-${state}&state=${state}`,
+            { redirect: "manual", headers: { cookie: `${transactionCookie}=${state}` } }
+          );
+          assert.equal(callback.status, 500, JSON.stringify(groups));
+          assert.equal(
+            callback.headers.getSetCookie()
+              .some((value) => value.startsWith("solidchange_bo_session=")),
+            false,
+            JSON.stringify(groups)
+          );
+        } finally {
+          identityGroups = ["compliance"];
+        }
+      }
     });
   });
 
