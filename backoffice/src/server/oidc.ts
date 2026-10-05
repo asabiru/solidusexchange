@@ -5,7 +5,7 @@ import {
   verify,
   type JsonWebKey
 } from "node:crypto";
-import type { OperatorRole } from "../auth/access.js";
+import { findRole, type OperatorRole } from "../auth/access.js";
 import type { OidcConfig } from "./config.js";
 
 interface ValidIdTokenClaims {
@@ -164,8 +164,9 @@ function mapRole(claims: ValidIdTokenClaims, config: OidcConfig): OperatorRole {
       : [];
   const mappedRoles = new Set<OperatorRole>();
   for (const group of groups) {
+    if (!Object.hasOwn(config.roleMap, group)) continue;
     const role = config.roleMap[group];
-    if (role) mappedRoles.add(role);
+    if (typeof role === "string" && findRole(role)) mappedRoles.add(role);
   }
   if (mappedRoles.size === 0) throw new Error("OIDC identity has no mapped backoffice role");
   if (mappedRoles.size > 1) throw new Error("OIDC identity has ambiguous backoffice roles");
