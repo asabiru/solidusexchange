@@ -469,3 +469,105 @@ test("rejects quoted or escaped duplicate checkout credential inputs", () => {
     assert.match(errors.join("\n"), /persist-credentials: false exactly once/);
   }
 });
+
+test("rejects flow-style jobs that declare job-level permissions", () => {
+  for (const job of [
+    "escalate: { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "'escalate': { runs-on: ubuntu-latest, 'permissions': { contents: write }, steps: [{ run: echo policy fixture }] }",
+    String.raw`"escalate": &escalate { runs-on: ubuntu-latest, "permi\u0073sions": { id-token: write }, steps: [{ run: echo policy fixture }] }`,
+    `escalate: {
+      runs-on: ubuntu-latest, permissions: write-all,
+      steps: [{ run: echo policy fixture }] }`,
+    `escalate: { runs-on: ubuntu-latest,
+      steps: [{ run: echo policy fixture }]
+      , permissions: write-all }`,
+  ]) {
+    const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  ${job}
+`);
+
+    assert.match(errors.join("\n"), /job-level permissions are not allowed/, job);
+  }
+});
+
+test("accepts flow-style jobs that only mention permissions in step text", () => {
+  const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  build: { runs-on: ubuntu-latest, steps: [{ name: "Check permissions", run: "echo permissions: read-only" }] }
+`);
+
+  assert.deepEqual(errors, []);
+});
+
+test("rejects job-level permissions hidden by flow placement, tags, anchors or explicit keys", () => {
+  for (const job of [
+    `escalate:
+    { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }`,
+    "escalate: !!map { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: !<tag:yaml.org,2002:map> { runs-on: ubuntu-latest, permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: { runs-on: ubuntu-latest, &perm permissions: write-all, steps: [{ run: echo policy fixture }] }",
+    "escalate: { runs-on: ubuntu-latest, ? permissions : write-all, steps: [{ run: echo policy fixture }] }",
+    `escalate:
+    runs-on: ubuntu-latest
+    !!str permissions: write-all
+    steps:
+      - run: echo policy fixture`,
+    `escalate:
+    runs-on: ubuntu-latest
+    &perm permissions: write-all
+    steps:
+      - run: echo policy fixture`,
+    `escalate:
+    runs-on: ubuntu-latest
+    ? permissions
+    : write-all
+    steps:
+      - run: echo policy fixture`,
+  ]) {
+    const errors = validateWorkflowText(`name: Policy fixture
+${validationTriggers}
+
+permissions:
+  contents: read
+
+jobs:
+  ${job}
+`);
+
+    assert.match(
+      errors.join("\n"),
+      /job-level permissions are not allowed|YAML tags are not allowed|explicit YAML keys are not allowed in jobs/,
+      job,
+    );
+  }
+});
+
+test("rejects tagged flow-style steps that hide mutable external action refs", () => {
+  const errors = validateWorkflowText(
+    workflow("      - !!map { uses: actions/checkout@v4 }"),
+  );
+
+  assert.match(errors.join("\n"), /YAML tags are not allowed/);
+});
+
+test("accepts negated expressions and shell negation that resemble YAML tags", () => {
+  const errors = validateWorkflowText(
+    workflow(`      - name: Report
+        if: \${{ !cancelled() && !startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          [ ! -f missing.txt ] && echo "policy fixture!"`),
+  );
+
+  assert.deepEqual(errors, []);
+});
