@@ -38,6 +38,23 @@ grantees (oid, label) AS (
   UNION ALL
   SELECT 0::OID, 'public'
 ),
+database_grants AS (
+  SELECT
+    'database' AS object_type,
+    'current_database' AS object_name,
+    NULL::TEXT AS column_name,
+    acl.grantee,
+    acl.privilege_type,
+    acl.is_grantable
+  FROM pg_catalog.pg_database AS database
+  CROSS JOIN LATERAL pg_catalog.aclexplode(
+    COALESCE(
+      database.datacl,
+      pg_catalog.acldefault('d', database.datdba)
+    )
+  ) AS acl
+  WHERE database.datname = current_database()
+),
 schema_grants AS (
   SELECT
     'schema' AS object_type,
@@ -140,6 +157,8 @@ type_grants AS (
   WHERE namespace.nspname = 'financial_core'
 ),
 all_grants AS (
+  SELECT * FROM database_grants
+  UNION ALL
   SELECT * FROM schema_grants
   UNION ALL
   SELECT * FROM relation_grants

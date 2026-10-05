@@ -66,6 +66,8 @@ REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA financial_core
   FROM :"ledger_runtime_role";
 REVOKE ALL PRIVILEGES ON ALL FUNCTIONS IN SCHEMA financial_core
   FROM :"ledger_runtime_role";
+REVOKE ALL PRIVILEGES ON DATABASE :"DBNAME" FROM :"ledger_runtime_role";
+REVOKE TEMPORARY ON DATABASE :"DBNAME" FROM PUBLIC;
 
 GRANT USAGE ON SCHEMA financial_core TO :"ledger_runtime_role";
 
