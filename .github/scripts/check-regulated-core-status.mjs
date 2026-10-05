@@ -27,6 +27,16 @@ const FENCED_CLAIM_KEY =
   /approv|sign|decision|decided|status|state|accept|grant|review|date|time|owner|утвержд|одобр|статус|решени/u;
 const APPROVAL_VOCABULARY =
   /\b(?:approv\w*|accept\w*|grant\w*|decided|sign(?:ed)?[ -]?off|signed|ratifi\w*|endorse\w*|authori[sz]ed)\b|утвержд|одобр|принят|согласован|подписан|решено/u;
+const APPROVAL_TOKEN =
+  /^(?:approv\p{L}*|accept\p{L}*|grant\p{L}*|decided|sign-?off|signoff|signed|ratifi\p{L}*|endorse\p{L}*|authori[sz]ed|утвержд\p{L}*|одобр\p{L}*|принят\p{L}*|согласова\p{L}*|подписа\p{L}*|решено)$/u;
+const NON_CLAIM_TOKEN = /^(?:approvers?|acceptable|unacceptable|acceptance)$/u;
+const NEGATED_TOKEN = /^(?:un|не|dis)(?:approv|accept|grant|sign|ratifi|endorse|authori|утвержд|одобр|принят|согласова|подписа)/u;
+const NEGATOR =
+  /^(?:not|no|non|un|never|without|pending|until|unless|before|awaiting|require|requires|required|need|needs|must|cannot|can't|isn't|aren't|wasn't|не|нет|без|до|пока|требуется|требует|нужен|нужно|нужна|ожидает|ожидается)$/u;
+const NEGATION_FILLER =
+  /^(?:approval|approvals|sign-?off|acceptance|yet|formally|explicitly|written|separately|be|been|is|are|was|were|an|a|the|any|final|formal|human|production|still|also|cto|legal|mlro|finance|security|compliance|domain|owner|ещё|еще|явно|письменно|отдельно|был|была|было|были|получен|получено|финальн\p{L}*)$/u;
+const COPULA = /^(?:is|are|was|were|be|been|remains?|still|has|have|yet|был|была|было|были|пока|ещё|еще)$/u;
+const NEGATED_FOLLOWER = /^(?:pending|required|not|missing|absent|outstanding|не|нет|отсутствует|требуется|ожидается)$/u;
 const DATE =
   /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}[./]\d{1,2}[./]\d{2,4}\b|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|январ|феврал|март|апрел|ма[яй]|июн|июл|август|сентябр|октябр|ноябр|декабр)\p{L}*\.?\s+\d{4}\b|\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\p{L}*\.?\s+\d{1,2},?\s+\d{4}\b/u;
 const STATUS_SECTION = /^(?:(?:current|текущий)\s+)?(?:status|state|статусы?|состояние)(?:\s[^,]*)?$/u;
@@ -101,6 +111,42 @@ function hasApprovalVocabulary(text) {
   return matchesAny(text, APPROVAL_VOCABULARY);
 }
 
+function claimTokens(clause) {
+  return (clause.match(/[\p{L}\p{N}'-]+/gu) ?? []).flatMap((token) =>
+    /^sign-?off$/u.test(token) ? [token] : token.split("-").filter(Boolean),
+  );
+}
+
+function clauseHasApprovalClaim(clause, lookalikeClause) {
+  const tokens = claimTokens(clause);
+  const lookalikeTokens = claimTokens(lookalikeClause);
+  return tokens.some((token, index) => {
+    const words = [token, lookalikeTokens[index] ?? token].map((word) => word.replace(/^'+|'+$/g, ""));
+    const isApprovalWord = words.some(
+      (word, form) => APPROVAL_TOKEN.test(word) || (word === "sign" && [tokens, lookalikeTokens][form][index + 1] === "off"),
+    );
+    if (!isApprovalWord || words.some((word) => NON_CLAIM_TOKEN.test(word) || NEGATED_TOKEN.test(word))) return false;
+    for (let before = index - 1; before >= 0 && before >= index - 4; before -= 1) {
+      if (NEGATOR.test(tokens[before])) return before > 0 && NEGATOR.test(tokens[before - 1]);
+      if (!NEGATION_FILLER.test(tokens[before])) break;
+    }
+    for (let after = index + 1; after < tokens.length && after <= index + 3; after += 1) {
+      if (NEGATED_FOLLOWER.test(tokens[after])) {
+        return NEGATED_FOLLOWER.test(tokens[after + 1] ?? "") || NEGATOR.test(tokens[after + 1] ?? "");
+      }
+      if (!COPULA.test(tokens[after])) break;
+    }
+    return true;
+  });
+}
+
+function hasApprovalClaim(line) {
+  const [folded, lookalike] = forms(line.replace(/^\s*- Required approvers:/, ""));
+  const clauses = folded.split(/[.;:!?,|()]+/u);
+  const lookalikeClauses = lookalike.split(/[.;:!?,|()]+/u);
+  return clauses.some((clause, index) => clauseHasApprovalClaim(clause, lookalikeClauses[index] ?? clause));
+}
+
 function fenceMarker(line) {
   const match = line.match(/^\s{0,3}(`{3,}|~{3,})/);
   return match ? match[1] : null;
@@ -158,6 +204,7 @@ export function snapshotDocument(text) {
     statusTables: [],
     decisionRows: [],
     datedApprovalClaims: [],
+    approvalClaims: [],
     fencedClaims: [],
   };
   let fence = null;
@@ -195,6 +242,7 @@ export function snapshotDocument(text) {
     if (isStatusLine(line)) snapshot.statusLines.push(line);
     if (isApproverLine(line)) snapshot.approverLines.push(line);
     if (hasApprovalVocabulary(line) && matchesAny(line, DATE)) snapshot.datedApprovalClaims.push(line);
+    if (hasApprovalClaim(line)) snapshot.approvalClaims.push(line);
 
     if (isTableLine(line)) {
       const [first = ""] = tableCells(line);
@@ -262,6 +310,7 @@ function unpinnedDocumentErrors(snapshot, fileName) {
     }
   }
   for (const line of snapshot.datedApprovalClaims) fail(`dated approval claim: ${line}`);
+  for (const line of snapshot.approvalClaims) fail(`approval claim without explicit negation: ${line}`);
   for (const row of snapshot.decisionRows) fail(`decision rows belong only in decision-register.md: ${row}`);
   for (const line of snapshot.fencedClaims) fail(`filled approval/status field in code block: ${line}`);
 

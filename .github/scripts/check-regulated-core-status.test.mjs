@@ -54,7 +54,7 @@ const newProposedDocument = `# Example Baseline — Proposed
 
 ## Purpose
 
-This proposed baseline is not approved. Approved evidence will be required later.
+This proposed baseline is not approved. Production use requires CTO approval, and Legal approval is pending.
 
 | Control | Status |
 |---|---|
@@ -181,10 +181,57 @@ test("rejects approval claims in new regulated-core documents", () => {
   assertRejected({ "new-baseline.md": `${newProposedDocument}\n\`\`\`text\napproved_by: Jane Doe\n\`\`\`\n` });
 });
 
+test("rejects undated prose approval claims in new and pinned documents", () => {
+  assertRejected({ "zz-new.md": "# X\n\nThis baseline is accepted by the CTO.\n" }, /approval claim/);
+  assertRejected({ "README.md": (text) => `${text}\nLegal and MLRO approved this baseline.\n` }, /approvalClaims/);
+  assertRejected({ "README.md": (text) => `${text}\nThis document is formally approved for production.\n` }, /approvalClaims/);
+  for (const claim of [
+    "Legal has not only reviewed but approved this baseline.",
+    "This is not a draft; it is approved.",
+    "Legal approved this, not Finance.",
+    "No doubt the CTO approved it.",
+    "The chart of accounts is Finance-approved.",
+    "Security signed off on this baseline.",
+    "Security gave sign-off.",
+    "MLRO granted the exception.",
+    "The CTO endorsed and ratified the baseline.",
+    "Документ утверждён CTO.",
+    "Legal одобрил этот baseline.",
+    "This baseline is ACCEPTED.",
+    "This baseline is аpproved.",
+    "| Example | Approved by CTO |",
+    "> This baseline is approved.",
+    "Not pending: approved.",
+    "Not pending approved.",
+    "Approved not pending.",
+    "Legal approval не требуется approved.",
+  ]) {
+    assertRejected({ "zz-new.md": `# X\n\n${claim}\n` }, /approval claim/);
+    assertRejected({ "access-control.md": (text) => `${text}\n${claim}\n` });
+  }
+});
+
+test("accepts explicitly negated or pending approval wording in new documents", () => {
+  for (const line of [
+    "This baseline is not approved.",
+    "This baseline is not yet formally approved.",
+    "Approval is pending.",
+    "Production use requires CTO approval.",
+    "No production approval is granted.",
+    "Nothing here is unapproved-safe; remain without approval.",
+    "Legal approval не выдан.",
+    "Документ не утверждён.",
+    "Until approved, production remains disabled.",
+    "Acceptance criteria are listed below.",
+  ]) {
+    assert.deepEqual(validateWith({ "zz-new.md": `# X\n\n${line}\n` }), [], line);
+  }
+});
+
 test("keeps unrelated valid edits accepted", () => {
   assertAccepted({ "new-baseline.md": newProposedDocument });
   assertAccepted({
-    "access-control.md": (text) => `${text}\nAdditional approved groups must still be reviewed before production use.\n`,
+    "access-control.md": (text) => `${text}\nAdditional groups must still be reviewed and are not approved for production use.\n`,
     "release-authorization.md": replaceOnce("- Scope: future regulated-core build, deployment and rollback evidence", "- Scope: future regulated-core build, deployment, promotion and rollback evidence"),
     "decision-register.md": replaceOnce("| Письменный legal memo и compliance scope |", "| Письменный legal memo, compliance scope и jurisdiction list |"),
     "threat-model.md": (text) => `${text}\nДополнительное замечание: approval не выдан.\n`,
