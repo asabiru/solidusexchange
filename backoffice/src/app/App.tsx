@@ -39,11 +39,13 @@ import type {
   FraudAlert,
   InvestigationCase,
   KycCase,
+  QueueRow,
   Tone,
   WorkflowCheck
 } from "../data/demo";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
+import { ScreenIcon, UiIcon } from "./icons";
 
 type Theme = "light" | "dark";
 type Density = "compact" | "comfortable";
@@ -62,6 +64,49 @@ function TableShell({ children, label }: { children: React.ReactNode; label: str
   return <section className="table-scroll" aria-label={label}>{children}</section>;
 }
 
+function Backdrop() {
+  return (
+    <div className="backdrop" aria-hidden="true">
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+function QueueChart({ queues }: { queues: readonly QueueRow[] }) {
+  const width = 300;
+  const height = 132;
+  const pad = 14;
+  const max = Math.max(1, ...queues.map((row) => row.total));
+  const x = (index: number) => pad + (index * (width - pad * 2)) / Math.max(1, queues.length - 1);
+  const y = (value: number) => height - pad - (value / max) * (height - pad * 2);
+  const line = (key: "total" | "critical") =>
+    queues.map((row, index) => `${index ? "L" : "M"}${x(index).toFixed(1)} ${y(row[key]).toFixed(1)}`).join(" ");
+  const area = `${line("total")} L${x(queues.length - 1).toFixed(1)} ${height - pad} L${x(0).toFixed(1)} ${height - pad} Z`;
+  return (
+    <figure className="queue-chart">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Всего и критично по очередям">
+        <path className="queue-chart-area" d={area} />
+        <path className="queue-chart-total" d={line("total")} />
+        <path className="queue-chart-critical" d={line("critical")} />
+        {queues.map((row, index) => (
+          <circle key={row.queue} cx={x(index)} cy={y(row.total)} r="3.5" />
+        ))}
+      </svg>
+      <figcaption>
+        {queues.map((row) => (
+          <span key={row.queue}><strong>{row.total}</strong>{row.queue}</span>
+        ))}
+      </figcaption>
+    </figure>
+  );
+}
+
+function DisabledSwitch({ label }: { label: string }) {
+  return <input className="switch" type="checkbox" role="switch" aria-checked={false} checked={false} disabled readOnly aria-label={label} />;
+}
+
 function DashboardView({ data }: { data: DashboardPayload }) {
   return (
     <>
@@ -70,16 +115,16 @@ function DashboardView({ data }: { data: DashboardPayload }) {
         description="Синтетическая dev-only сводка · команды и live-провайдеры отключены"
       />
       <section className="metrics" aria-label="Операционные показатели">
-        {data.metrics.map((metric) => (
-          <article className="metric" key={metric.label}>
+        {data.metrics.map((metric, index) => (
+          <article className="metric" data-accent={index === 0 ? "true" : undefined} key={metric.label}>
             <div><span>{metric.label}</span><i data-tone={metric.tone} /></div>
             <strong>{metric.value}</strong>
             <small>{metric.detail}</small>
           </article>
         ))}
       </section>
-      <section className="grid">
-        <article className="panel">
+      <section className="bento">
+        <article className="panel bento-queues">
           <header className="panel-heading">
             <div><h2>Приоритетные очереди</h2><p>Риск, SLA и сумма раньше технических деталей</p></div>
           </header>
@@ -100,6 +145,12 @@ function DashboardView({ data }: { data: DashboardPayload }) {
             </table>
           </TableShell>
         </article>
+        <article className="panel bento-chart">
+          <header className="panel-heading">
+            <div><h2>Нагрузка очередей</h2><p>Всего и критично · synthetic snapshot</p></div>
+          </header>
+          <QueueChart queues={data.queues} />
+        </article>
         <aside className="panel health-panel">
           <header className="panel-heading">
             <div><h2>System readiness</h2><p>Fail-closed foundation state</p></div>
@@ -107,8 +158,8 @@ function DashboardView({ data }: { data: DashboardPayload }) {
           <dl className="health-list">
             <div><dt>Runtime</dt><dd><Status tone="success">{runtime.mode}</Status></dd></div>
             <div><dt>Data source</dt><dd>{runtime.dataSource}</dd></div>
-            <div><dt>Command clients</dt><dd><Status tone="warning">Not installed</Status></dd></div>
-            <div><dt>Customer systems</dt><dd><Status>Disconnected</Status></dd></div>
+            <div><dt>Command clients</dt><dd><DisabledSwitch label="Command clients выключены" /><Status tone="warning">Not installed</Status></dd></div>
+            <div><dt>Customer systems</dt><dd><DisabledSwitch label="Customer systems отключены" /><Status>Disconnected</Status></dd></div>
           </dl>
         </aside>
       </section>
@@ -1095,9 +1146,11 @@ function hasCapability(session: SessionPayload, capability: Capability): boolean
 
 function AccessGate({
   state,
+  theme,
   onDevLogin
 }: {
   state: Exclude<AccessState, { status: "ready" }>;
+  theme: Theme;
   onDevLogin: (role: OperatorRole) => Promise<void>;
 }) {
   const [role, setRole] = useState<OperatorRole>("compliance-lead");
@@ -1113,7 +1166,8 @@ function AccessGate({
   }
 
   return (
-    <div className="access-shell">
+    <div className="access-shell" data-theme={theme}>
+      <Backdrop />
       <section className="access-card">
         <div className="brand access-brand">
           <span>SC</span>
@@ -1185,6 +1239,8 @@ export function App() {
     window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
   );
   const [density, setDensity] = useState<Density>("compact");
+  const [railExpanded, setRailExpanded] = useState(false);
+  const [tooltip, setTooltip] = useState<{ label: string; top: number; left: number }>();
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -1275,7 +1331,7 @@ export function App() {
   }, [access, screen]);
 
   if (access.status !== "ready") {
-    return <AccessGate state={access} onDevLogin={switchDevRole} />;
+    return <AccessGate state={access} theme={theme} onDevLogin={switchDevRole} />;
   }
 
   const { session } = access.data;
@@ -1288,19 +1344,44 @@ export function App() {
   }
 
   const activeItem = navigation.find((item) => item.id === screen) ?? navigation[0];
+  const isDenied = (item: NavigationItem) =>
+    Boolean(item.capability && !hasCapability(session, item.capability));
+  const today = new Intl.DateTimeFormat("ru-RU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric"
+  }).format(new Date());
+
+  function showTooltip(target: HTMLElement, label: string) {
+    const rect = target.getBoundingClientRect();
+    setTooltip({ label, top: rect.top + rect.height / 2, left: rect.right + 12 });
+  }
 
   return (
-    <div className="app" data-theme={theme} data-density={density}>
+    <div className="app" data-theme={theme} data-density={density} data-rail={railExpanded ? "expanded" : "collapsed"}>
+      <Backdrop />
       <aside className="sidebar">
         <div className="brand"><span>SC</span><div><strong>SolidChange</strong><small>Operator backoffice</small></div></div>
-        <nav aria-label="Backoffice navigation">
+        <button
+          className="rail-toggle"
+          type="button"
+          aria-expanded={railExpanded}
+          aria-label={railExpanded ? "Свернуть навигацию" : "Развернуть навигацию"}
+          onClick={() => {
+            setTooltip(undefined);
+            setRailExpanded(!railExpanded);
+          }}
+        >
+          <UiIcon name={railExpanded ? "collapse" : "expand"} />
+        </button>
+        <nav aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
           {navigationGroups.map((group) => (
             <div className="nav-group" key={group}>
               <p>{group}</p>
               {navigation.filter((item) => item.group === group).map((item) => {
-                const denied = Boolean(
-                  item.capability && !hasCapability(session, item.capability)
-                );
+                const denied = isDenied(item);
+                const hint = `${item.label}${denied ? " · недоступно роли" : !item.implemented ? " · Soon" : ""}`;
                 return (
                   <button
                     key={item.id}
@@ -1309,8 +1390,12 @@ export function App() {
                     aria-disabled={denied}
                     onClick={() => selectScreen(item)}
                     title={!item.implemented ? "Следующий Wave 2 slice" : denied ? "Недоступно выбранной роли" : ""}
+                    onMouseEnter={(event) => showTooltip(event.currentTarget, hint)}
+                    onMouseLeave={() => setTooltip(undefined)}
+                    onFocus={(event) => showTooltip(event.currentTarget, hint)}
+                    onBlur={() => setTooltip(undefined)}
                   >
-                    <span>{item.label.slice(0, 2).toUpperCase()}</span>
+                    <span><ScreenIcon id={item.id} /></span>
                     <strong>{item.label}</strong>
                     {!item.implemented && <small>Soon</small>}
                   </button>
@@ -1319,16 +1404,26 @@ export function App() {
             </div>
           ))}
         </nav>
-        <div className="session-note">
+        <div className="session-note" title="Protected workspace · Signed queries · audit chain · preview only">
+          <UiIcon name="shield" />
           <strong>Protected workspace</strong>
           <span>Signed queries · audit chain · preview only</span>
         </div>
       </aside>
+      {!railExpanded && tooltip && (
+        <span className="rail-tooltip" role="tooltip" style={{ top: tooltip.top, left: tooltip.left }}>
+          {tooltip.label}
+        </span>
+      )}
 
       <div className="workspace">
         <header className="topbar">
+          <div className="greeting">
+            <strong>Добрый день, {profile.label}</strong>
+            <small>{today.charAt(0).toLocaleUpperCase("ru") + today.slice(1)}</small>
+          </div>
           <label className="search">
-            <span aria-hidden="true">⌕</span>
+            <span aria-hidden="true"><UiIcon name="search" /></span>
             <input
               type="search"
               value={query}
@@ -1340,10 +1435,10 @@ export function App() {
           <div className="topbar-spacer" />
           <span className="environment"><i />DEV · dry-run</span>
           <button className="icon-button density-button" type="button" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")} aria-label="Переключить плотность">
-            {density === "compact" ? "≡" : "☰"}
+            <UiIcon name={density === "compact" ? "density" : "comfortable"} />
           </button>
           <button className="icon-button" type="button" onClick={() => setTheme(theme === "light" ? "dark" : "light")} aria-label="Переключить тему">
-            {theme === "light" ? "◐" : "◑"}
+            <UiIcon name={theme === "light" ? "moon" : "sun"} />
           </button>
           <span className="avatar" aria-hidden="true">{profile.initials}</span>
           {access.health.devLoginEnabled ? (
@@ -1366,11 +1461,29 @@ export function App() {
             </div>
           )}
           <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию">
-            ↪
+            <UiIcon name="logout" />
           </button>
         </header>
 
         <main>
+          <nav className="segmented" aria-label="Группы разделов">
+            {navigationGroups.map((group) => {
+              const target = navigation.find((item) => item.group === group && !isDenied(item));
+              return (
+                <button
+                  key={group}
+                  type="button"
+                  aria-current={activeItem.group === group ? "true" : undefined}
+                  disabled={!target}
+                  onClick={() => {
+                    if (target) selectScreen(target);
+                  }}
+                >
+                  {group}
+                </button>
+              );
+            })}
+          </nav>
           {screen === "dashboard" && <DashboardView data={access.data.dashboard} />}
           {screen === "customers" && (
             <CustomersView query={query} data={access.data.customers} />
