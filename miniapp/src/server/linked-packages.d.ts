@@ -201,6 +201,75 @@ declare module "@solidchange/provider-simulators" {
     maxFutureSeconds?: number;
   }): (input: { headers: unknown; body: unknown; now: number }) => CallbackVerification;
   export function createKycCallbackInbox(): CallbackInbox;
+  export type KytScenario =
+    | "low"
+    | "medium"
+    | "high"
+    | "severe"
+    | "sanctions_hit"
+    | "pending_timeout"
+    | "provider_outage"
+    | "duplicate_callback"
+    | "out_of_order_callback"
+    | "late_callback";
+  export type KytRiskLevel = "low" | "medium" | "high" | "severe";
+
+  export interface KytBinding {
+    readonly asset: string;
+    readonly network: string;
+    readonly direction: string;
+    readonly address: string;
+    readonly tx_ref: string | null;
+    readonly amount: string;
+  }
+
+  export interface KytAssessment {
+    readonly assessment_id: string;
+    readonly status: "pending" | "completed";
+    readonly risk_level: KytRiskLevel | null;
+    readonly risk_score: number | null;
+    readonly sanctions_hit: boolean | null;
+    readonly categories: readonly string[];
+    readonly binding: KytBinding;
+    readonly binding_digest: string;
+    readonly assessed_at: string;
+  }
+
+  export interface KytSimulator {
+    readonly providerId: string;
+    screenTransfer(request: {
+      asset: "TON" | "USDT";
+      network: "TON_TESTNET" | "TRON_TESTNET";
+      direction: "inbound" | "outbound";
+      address: string;
+      tx_ref?: string;
+      amount: string;
+      idempotency_key: string;
+    }): Promise<KytAssessment & { readonly screening_deadline: string }>;
+    getAssessment(assessmentId: string): Promise<KytAssessment>;
+    drainCallbacks(): ScheduledDelivery[];
+    pendingCallbacks(): number;
+  }
+
+  export const KYT_SCENARIOS: Readonly<Record<KytScenario, unknown>>;
+  export const KYT_ASSET_NETWORKS: readonly { readonly asset: string; readonly network: string }[];
+  export function kytBindingDigest(binding: KytBinding): string;
+  export function formatAmount(asset: string, units: bigint): string;
+  export function createKytSimulator(options: {
+    seed: string;
+    key: SimulatorKey;
+    clock?: SimulatedClock;
+    scenarios?: Readonly<Record<string, KytScenario>>;
+    defaultScenario?: KytScenario;
+    screeningTimeoutSeconds?: number;
+  }): KytSimulator;
+  export function createKytCallbackVerifier(options: {
+    keyring: ReadonlyMap<string, VerificationKey>;
+    nonceStore: NonceStore;
+    maxAgeSeconds?: number;
+    maxFutureSeconds?: number;
+  }): (input: { headers: unknown; body: unknown; now: number }) => CallbackVerification;
+  export function createKytCallbackInbox(): CallbackInbox;
   export function validateSignedQuote(payload: Readonly<Record<string, unknown>>): string | null;
   export function assessQuote(
     quote: Readonly<Record<string, unknown>>,

@@ -1760,6 +1760,27 @@ button.row:active:not(:disabled) {
   display: inline-block;
 }
 
+.list--single {
+  margin-top: 16px;
+}
+
+.screening-result {
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.screening-result .pill {
+  margin: 0;
+}
+
 .asset-select {
   min-width: 108px;
   padding-right: 30px;

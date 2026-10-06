@@ -14,4 +14,5 @@ export type SheetRequest =
   | { kind: "operation"; id: string }
   | { kind: "qr-manual" }
   | { kind: "qr-image" }
-  | { kind: "notifications" };
+  | { kind: "notifications" }
+  | { kind: "address-screening" };

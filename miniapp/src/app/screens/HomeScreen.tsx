@@ -102,6 +102,17 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         </button>
       </div>
 
+      <div className="list list--single">
+        <button type="button" className="row" onClick={() => gate({ kind: "address-screening" })}>
+          <span className="coin coin--menu" aria-hidden="true"><Icon name="shield-check" size="sm" /></span>
+          <span className="row__main">
+            <strong>Проверить адрес (тест)</strong>
+            <span>KYT-симулятор · перевод не выполняется</span>
+          </span>
+          <Icon name="chevron-right" size="sm" />
+        </button>
+      </div>
+
       <div className="heading">
         <h3>Активы</h3>
       </div>
