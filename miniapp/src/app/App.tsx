@@ -228,7 +228,7 @@ export function App() {
             ) : null}
             {tab === "exchange" ? <ExchangeScreen wallet={launch.data.wallet} openSheet={setSheet} /> : null}
             {tab === "qr" ? <QrScreen wallet={launch.data.wallet} openSheet={setSheet} /> : null}
-            {tab === "activity" ? <OperationsScreen operations={launch.data.operations} openSheet={setSheet} /> : null}
+            {tab === "activity" ? <OperationsScreen /> : null}
             {tab === "profile" ? (
               <ProfileScreen
                 session={launch.session}

@@ -1,106 +1,164 @@
-import { useMemo, useState } from "react";
-import type { OperationKind, OperationStatus, OperationSummary } from "../../shared/api";
-import { type AssetCode, assetCodes } from "../../shared/assets";
-import type { SheetRequest } from "../navigation";
-import { EmptyState, OperationRow, ScreenTitle } from "../ui";
-import { statusLabels } from "../format";
+import { useEffect, useMemo, useState } from "react";
+import type { ActivityItem, ActivityKind, KycActivity, SessionSource } from "../../shared/api";
+import { screeningTargetOf } from "../../shared/address-screening";
+import { api } from "../api";
+import { dateTime, money } from "../format";
+import { Icon, type IconName } from "../Icon";
+import { screeningBadges } from "../sheets";
+import { EmptyState, ScreenTitle } from "../ui";
 
-const kindFilters: readonly { value: OperationKind | "all"; label: string }[] = [
+type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening";
+
+const groupFilters: readonly { value: ActivityGroup; label: string }[] = [
   { value: "all", label: "Все" },
-  { value: "exchange", label: "Обмен" },
-  { value: "deposit", label: "Пополнение" },
-  { value: "withdrawal", label: "Вывод" },
-  { value: "qr", label: "QR" }
+  { value: "login", label: "Входы" },
+  { value: "kyc", label: "Проверка личности" },
+  { value: "quote", label: "Котировки" },
+  { value: "screening", label: "Проверка адреса" }
 ];
 
-const statusFilters: readonly (OperationStatus | "all")[] = ["all", "completed", "in-review", "needs-action", "failed"];
+const sourceLabels: Readonly<Record<SessionSource, string>> = {
+  telegram: "Telegram",
+  "dev-synthetic": "Тестовый вход"
+};
 
-export function OperationsScreen({
-  operations,
-  openSheet
-}: {
-  operations: readonly OperationSummary[];
-  openSheet: (sheet: SheetRequest) => void;
-}) {
-  const [kind, setKind] = useState<OperationKind | "all">("all");
-  const [status, setStatus] = useState<OperationStatus | "all">("all");
-  const [asset, setAsset] = useState<AssetCode | "all">("all");
+const kycTexts: Readonly<Record<KycActivity["kind"], { title: string; tone: string; icon: IconName }>> = {
+  kyc_submitted: { title: "Заявка на проверку личности принята", tone: "warning", icon: "id-card" },
+  kyc_in_review: { title: "Заявка на проверку рассматривается", tone: "warning", icon: "clock" },
+  kyc_approved: { title: "Проверка личности пройдена", tone: "success", icon: "shield-check" },
+  kyc_rejected: { title: "Проверка личности не пройдена", tone: "risk", icon: "close" },
+  kyc_needs_more_data: { title: "Нужны дополнительные данные", tone: "risk", icon: "alert" },
+  kyc_timed_out: { title: "Срок рассмотрения заявки истёк", tone: "risk", icon: "clock" },
+  kyc_unavailable: { title: "Сервис проверки временно недоступен", tone: "risk", icon: "alert" }
+};
 
-  const filtered = useMemo(() => operations.filter((operation) =>
-    (kind === "all" || operation.kind === kind)
-    && (status === "all" || operation.status === status)
-    && (asset === "all" || operation.legs.some((leg) => leg.asset === asset))
-  ), [operations, kind, status, asset]);
+function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
+  if (kind === "session_login") return "login";
+  if (kind === "quote_previewed") return "quote";
+  if (kind === "address_screened") return "screening";
+  return "kyc";
+}
 
-  const resetFilters = () => {
-    setKind("all");
-    setStatus("all");
-    setAsset("all");
-  };
+function when(at: number): string {
+  return dateTime(new Date(at).toISOString());
+}
+
+function ActivityRow({ item }: { item: ActivityItem }) {
+  if (item.kind === "session_login") {
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="user" size="sm" /></span>
+        <span className="row__main">
+          <strong>Вход в SolidChange</strong>
+          <span className="num">{when(item.at)} · {sourceLabels[item.source]}</span>
+        </span>
+      </li>
+    );
+  }
+  if (item.kind === "quote_previewed") {
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="swap" size="sm" /></span>
+        <span className="row__main">
+          <strong>Расчёт обмена {item.from} → {item.to}</strong>
+          <span className="num">{when(item.at)} · {item.pair}</span>
+          <span className="pill pill--muted">Только расчёт</span>
+        </span>
+        <span className="row__amount">
+          <strong className="num">{money(item.from, item.amountIn)}</strong>
+          <span className="num">≈ {money(item.to, item.amountOut)}</span>
+        </span>
+      </li>
+    );
+  }
+  if (item.kind === "address_screened") {
+    const badge = screeningBadges[item.status];
+    const target = screeningTargetOf(item.asset, item.network);
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="shield" size="sm" /></span>
+        <span className="row__main">
+          <strong>Проверка адреса · {target?.label ?? item.asset}</strong>
+          <span className="num">{when(item.at)} · {target?.networkLabel ?? item.network}</span>
+          <span className={`pill pill--${badge.tone}`}>{badge.label}</span>
+        </span>
+      </li>
+    );
+  }
+  const kyc = kycTexts[item.kind];
+  return (
+    <li className="row">
+      <span className={`coin coin--status coin--${kyc.tone}`} aria-hidden="true"><Icon name={kyc.icon} size="sm" /></span>
+      <span className="row__main">
+        <strong>{kyc.title}</strong>
+        <span className="num">{when(item.at)} · симулятор KYC</span>
+      </span>
+    </li>
+  );
+}
+
+export function OperationsScreen() {
+  const [items, setItems] = useState<readonly ActivityItem[] | undefined>();
+  const [failed, setFailed] = useState(false);
+  const [group, setGroup] = useState<ActivityGroup>("all");
+
+  useEffect(() => {
+    let active = true;
+    api.activity()
+      .then((view) => { if (active) setItems(view.items); })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, []);
+
+  const filtered = useMemo(
+    () => (items ?? []).filter((item) => group === "all" || groupOf(item.kind) === group),
+    [items, group]
+  );
 
   return (
     <section className="screen" aria-label="Операции">
       <ScreenTitle>Операции</ScreenTitle>
-      <fieldset className="filter-row" aria-label="Тип операции">
-        {kindFilters.map((filter) => (
+      <div className="notice-banner">
+        <Icon name="info" size="sm" />
+        <span>Тестовый режим — операции не выполняются</span>
+      </div>
+      <fieldset className="filter-row" aria-label="Тип события">
+        {groupFilters.map((filter) => (
           <button
             type="button"
             key={filter.value}
             className="filter"
-            aria-pressed={kind === filter.value}
-            onClick={() => setKind(filter.value)}
+            aria-pressed={group === filter.value}
+            onClick={() => setGroup(filter.value)}
           >
             {filter.label}
           </button>
         ))}
       </fieldset>
-      <fieldset className="filter-row" aria-label="Статус">
-        {statusFilters.map((value) => (
-          <button
-            type="button"
-            key={value}
-            className="filter filter--quiet"
-            aria-pressed={status === value}
-            onClick={() => setStatus(value)}
-          >
-            {value === "all" ? "Все статусы" : statusLabels[value]}
-          </button>
-        ))}
-      </fieldset>
       <div className="filter-tools">
-        <label className="select-label">
-          <span>Актив</span>
-          <select
-            className="asset-select"
-            value={asset}
-            onChange={(event) => {
-              const value = event.target.value;
-              setAsset(value === "RUB" || value === "USDT" || value === "TON" ? value : "all");
-            }}
-          >
-            <option value="all">Все активы</option>
-            {assetCodes.map((code) => <option key={code} value={code}>{code}</option>)}
-          </select>
-        </label>
-        <span className="filter-tools__count num" aria-live="polite">Найдено: {filtered.length}</span>
+        <span className="filter-tools__count num" aria-live="polite">
+          {items === undefined ? "Загружаем…" : `Найдено: ${filtered.length}`}
+        </span>
       </div>
 
-      {operations.length === 0 ? (
-        <EmptyState title="Операций пока нет">
-          Здесь появятся обмены, пополнения и выводы после прохождения идентификации.
+      {failed ? <p className="form-error" role="alert">Не удалось загрузить историю.</p> : null}
+      {items?.length === 0 ? (
+        <EmptyState title="Событий пока нет">
+          Здесь появятся входы, этапы проверки личности, расчёты обмена и проверки адресов.
         </EmptyState>
-      ) : filtered.length === 0 ? (
+      ) : items && filtered.length === 0 ? (
         <EmptyState
-          title="По выбранному фильтру операций нет."
-          action={<button type="button" className="link" onClick={resetFilters}>Сбросить фильтры</button>}
+          title="По выбранному фильтру событий нет."
+          action={<button type="button" className="link" onClick={() => setGroup("all")}>Сбросить фильтр</button>}
         />
-      ) : (
-        <div className="list">
-          {filtered.map((operation) => (
-            <OperationRow key={operation.id} operation={operation} onOpen={(id) => openSheet({ kind: "operation", id })} />
-          ))}
-        </div>
-      )}
+      ) : filtered.length > 0 ? (
+        <ul className="list activity" aria-label="История тестового режима">
+          {filtered.map((item) => <ActivityRow key={item.id} item={item} />)}
+        </ul>
+      ) : null}
+      <p className="note">
+        История ведётся только на сервере и хранится в памяти. Расчёты обмена не исполняются, деньги не двигаются.
+      </p>
     </section>
   );
 }

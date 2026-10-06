@@ -419,7 +419,7 @@ function QrManualSheet({ close }: { close: () => void }) {
   );
 }
 
-const screeningBadges: Readonly<Record<AddressScreeningStatus, { label: string; tone: string; detail: string }>> = {
+export const screeningBadges: Readonly<Record<AddressScreeningStatus, { label: string; tone: string; detail: string }>> = {
   pending: { label: "Проверяется", tone: "muted", detail: "Ждём подписанный ответ симулятора KYT. Статус обновляется автоматически." },
   low: { label: "Низкий риск", tone: "success", detail: "Симулятор не нашёл заметных признаков риска." },
   medium: { label: "Средний риск", tone: "warning", detail: "Симулятор отметил признаки, требующие внимания." },
