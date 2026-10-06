@@ -96,8 +96,21 @@ export function placeholdersOf(text: string): string[] {
   return [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? "").sort();
 }
 
+function ownMessage(catalog: Messages | undefined, key: string): string | undefined {
+  if (!catalog || !Object.hasOwn(catalog, key)) return undefined;
+  const value: unknown = catalog[key as MessageKey];
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/** Maps an untrusted server code to a message key using own properties only, so "constructor" or "__proto__" fall back. */
+export function messageKeyFor(messages: Readonly<Record<string, MessageKey>>, code: string | undefined): MessageKey | undefined {
+  if (code === undefined || !Object.hasOwn(messages, code)) return undefined;
+  const key = messages[code];
+  return typeof key === "string" && Object.hasOwn(ru, key) ? key : undefined;
+}
+
 export function translate(locale: Locale, key: MessageKey, params?: TranslationParams): string {
-  const template = (catalogs[locale] ?? ru)[key] || ru[key] || key;
+  const template = ownMessage(Object.hasOwn(catalogs, locale) ? catalogs[locale] : undefined, key) ?? ownMessage(ru, key) ?? String(key);
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (placeholder, name: string) =>
     Object.hasOwn(params, name) ? String(params[name]) : placeholder
