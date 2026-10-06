@@ -30,7 +30,7 @@ A synthetic HMAC-SHA256 dev verifier is enabled only when all of these hold:
 
 - `CUSTOMER_API_DEV_AUTH=synthetic`;
 - `CUSTOMER_API_DEV_TOKEN_KEY` is 64 lowercase hex characters (local random value, never a real secret);
-- `NODE_ENV` is not `production`;
+- `NODE_ENV` is not `production` (compared case-insensitively after trimming whitespace);
 - the bind host is loopback (`127.0.0.1` or `::1`; anything else refuses to start).
 
 Synthetic tokens carry a `syn_cust_` subject and a short expiry (max 1 hour).
@@ -57,7 +57,9 @@ exists in `Documentation/regulated-core/decision-register.md` and is still `Open
 - Duplicate, missing or malformed headers, request bodies and body headers return
   `400 VALIDATION_FAILED`; malformed HTTP is answered with the same envelope.
 - `X-Request-Id` is echoed only when valid; otherwise a fresh UUIDv7 is generated.
-- A fixed-window rate limit returns `429 RATE_LIMITED` with `Retry-After`.
+- A fixed-window rate limit returns `429 RATE_LIMITED` with `Retry-After`. All
+  IPv4 loopback sources (`127.0.0.0/8`) share one bucket, so rotating the local
+  source address does not reset the limit.
 - Unexpected failures return a generic `500 INTERNAL_ERROR` without internals.
 
 ## Run

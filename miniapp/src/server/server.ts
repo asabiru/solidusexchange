@@ -33,6 +33,7 @@ import { syntheticData } from "./synthetic.js";
 export const sessionCookie = "solidchange_ma_session";
 const displayName = "Тестовый клиент";
 const devTelegramUserId = 900_000_001;
+const maxSessionsPerSubject = 5;
 
 export interface Route {
   method: "GET" | "POST";
@@ -156,7 +157,10 @@ function sessionView(session: CustomerSession): SessionView {
   };
 }
 
-function pseudonymousSubject(telegramUserId: number): string {
+function pseudonymousSubject(source: CustomerSession["source"], telegramUserId: number): string {
+  if (source === "dev-synthetic") {
+    return `dev-${createHash("sha256").update(`solidchange-miniapp-dev-synthetic|${telegramUserId}`).digest("hex").slice(0, 16)}`;
+  }
   return `tg-${createHash("sha256").update(`solidchange-miniapp-dev|${telegramUserId}`).digest("hex").slice(0, 16)}`;
 }
 
@@ -223,6 +227,7 @@ export function createMiniappServer(
       expiresAt: clock() + config.sessionTtlSeconds * 1_000
     };
     sessions.set(created.id, created);
+    sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
     outbox.record(created.subject, "session_login");
     response.setHeader("set-cookie", sessionCookieValue(created.id, config.sessionTtlSeconds, origin));
     json(response, 201, sessionView(created));
@@ -269,7 +274,7 @@ export function createMiniappServer(
           json(response, 500, { error: "dev_session_unavailable" });
           return;
         }
-        const subject = pseudonymousSubject(verified.value.user.id);
+        const subject = pseudonymousSubject("dev-synthetic", verified.value.user.id);
         kycOnboarding.reset(subject);
         startSession(request, response, origin, {
           subject,
@@ -298,7 +303,7 @@ export function createMiniappServer(
           return;
         }
         startSession(request, response, origin, {
-          subject: pseudonymousSubject(verified.value.user.id),
+          subject: pseudonymousSubject("telegram", verified.value.user.id),
           source: "telegram",
           kyc: "kyc-gated"
         });

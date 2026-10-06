@@ -33,6 +33,13 @@ export interface SimulatorQuoteProviderOptions {
 }
 
 const pairs: readonly QuotePair[] = ["USDT/RUB", "TON/RUB", "TON/USDT"];
+const nonceStoreEntries = 10_000;
+/**
+ * Every preview stores a quote and a signature nonce; rotating the simulator
+ * before its replay cache fills keeps memory bounded and stops one subject
+ * from exhausting quotes for everyone.
+ */
+const previewsPerGeneration = 5_000;
 
 interface RoutedQuote {
   pair: QuotePair;
@@ -117,24 +124,36 @@ function toPreview(
  * accepted, executed or settled.
  */
 export function createSimulatorQuoteProvider(options: SimulatorQuoteProviderOptions): QuoteProvider {
-  const key = generateSimulatorKey({ keyId: "miniapp-bff-quote", algorithm: "ed25519" });
   const nowSeconds = () => Math.floor(options.clock() / 1_000);
-  const simulator = createQuoteSimulator({
-    seed: options.seed,
-    key,
-    ttlSeconds: options.ttlSeconds,
-    defaultScenario: options.scenario ?? "fresh_quote",
-    clock: Object.freeze({
-      now: nowSeconds,
-      advance(): number {
-        throw new Error("the BFF quote clock follows the server clock");
-      }
-    })
-  });
-  const verify = createQuoteVerifier({
-    keyring: createVerificationKeyring([verificationKeyOf(key)]),
-    nonceStore: createNonceStore()
-  });
+
+  function createGeneration(index: number) {
+    const key = generateSimulatorKey({ keyId: "miniapp-bff-quote", algorithm: "ed25519" });
+    const simulator = createQuoteSimulator({
+      seed: index === 0 ? options.seed : `${options.seed}:g${index}`,
+      key,
+      ttlSeconds: options.ttlSeconds,
+      defaultScenario: options.scenario ?? "fresh_quote",
+      clock: Object.freeze({
+        now: nowSeconds,
+        advance(): number {
+          throw new Error("the BFF quote clock follows the server clock");
+        }
+      })
+    });
+    const verify = createQuoteVerifier({
+      keyring: createVerificationKeyring([verificationKeyOf(key)]),
+      nonceStore: createNonceStore({ maxEntries: nonceStoreEntries })
+    });
+    return { index, simulator, verify, previews: 0 };
+  }
+
+  let generation = createGeneration(0);
+
+  function currentGeneration() {
+    if (generation.previews >= previewsPerGeneration) generation = createGeneration(generation.index + 1);
+    generation.previews += 1;
+    return generation;
+  }
 
   async function preview(input: QuoteInput, context: QuoteContext & { subject: string }): Promise<QuotePreview> {
     if (!isAssetCode(input.from) || !isAssetCode(input.to)) throw new QuoteError("invalid_pair");
@@ -149,6 +168,7 @@ export function createSimulatorQuoteProvider(options: SimulatorQuoteProviderOpti
       ? { pair: routed.pair, side: "buy", quote_amount: amount }
       : { pair: routed.pair, side: "sell", base_amount: amount };
     const now = nowSeconds();
+    const { simulator, verify } = currentGeneration();
 
     let quoteId: string;
     try {
