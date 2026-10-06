@@ -32,6 +32,7 @@ const statusBadges: Readonly<Record<SupportStatus, { label: MessageKey; tone: st
 
 const activityKindKeys: Readonly<Record<ActivityKind, MessageKey>> = {
   session_login: "activity.login",
+  session_revoked: "activity.sessionRevokedOne",
   kyc_submitted: "activity.kycSubmitted",
   kyc_in_review: "activity.kycInReview",
   kyc_approved: "activity.kycApproved",
@@ -181,6 +182,7 @@ function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps 
 }
 
 function activityLabel(item: ActivityItem, t: ReturnType<typeof useI18n>["t"]): string {
+  if (item.kind === "session_revoked" && item.scope !== "single") return t("activity.sessionRevokedOthers", { count: String(item.count) });
   if (item.kind === "quote_previewed") return t("activity.quoteTitle", { from: item.from, to: item.to });
   if (item.kind === "address_screened") return t("activity.screeningTitle", { target: screeningTargetOf(item.asset, item.network)?.label ?? item.asset });
   return t(activityKindKeys[item.kind]);

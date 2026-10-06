@@ -7,6 +7,7 @@ import {
 } from "node:http";
 import type {
   ActivityView,
+  DeviceSessionsView,
   HealthView,
   KycStatus,
   KycVerificationState,
@@ -39,7 +40,13 @@ import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAl
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { apiSecurityHeaders, guardRawResponses } from "./security-headers.js";
-import { type CustomerSession, ExpiringStore } from "./session.js";
+import {
+  type CustomerSession,
+  ExpiringStore,
+  createSessionHandles,
+  lastSeenGranularityMs,
+  sessionHandlePattern
+} from "./session.js";
 import {
   type SupportDesk,
   SupportInputError,
@@ -53,6 +60,7 @@ export const sessionCookie = "solidchange_ma_session";
 const displayName = "Тестовый клиент";
 const devTelegramUserId = 900_000_001;
 const maxSessionsPerSubject = 5;
+const maxRevokedHandlesPerSubject = 20;
 
 export interface Route {
   method: "GET" | "POST";
@@ -76,6 +84,9 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/kyc/status" },
   { method: "GET", path: "/bff/notifications" },
   { method: "GET", path: "/bff/activity" },
+  { method: "GET", path: "/bff/sessions" },
+  { method: "POST", path: "/bff/sessions/revoke" },
+  { method: "POST", path: "/bff/sessions/revoke-others" },
   { method: "POST", path: "/bff/notifications/read" },
   { method: "POST", path: "/bff/support/requests" },
   { method: "GET", path: "/bff/support/requests" },
@@ -208,6 +219,8 @@ export function createMiniappServer(
   const clock = options.clock ?? Date.now;
   const devBotToken = options.devBotToken ?? `0:${randomBytes(32).toString("base64url")}`;
   const sessions = new ExpiringStore<CustomerSession>(clock);
+  const handleOf = createSessionHandles();
+  const revokedHandles = new ExpiringStore<{ subject: string; expiresAt: number }>(clock);
   const quoteProvider = options.quoteProvider ?? (config.quoteSource === "provider-simulator"
     ? createSimulatorQuoteProvider({
       seed: config.quoteSeed,
@@ -290,22 +303,46 @@ export function createMiniappServer(
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
     const id = parseCookies(request)[sessionCookie];
     const session = id ? sessions.get(id) : undefined;
-    if (session?.kyc === "kyc-gated" && kycOnboarding.isVerified(session.subject)) session.kyc = "verified";
+    if (!session) return undefined;
+    if (session.kyc === "kyc-gated" && kycOnboarding.isVerified(session.subject)) session.kyc = "verified";
+    const now = clock();
+    if (now - session.lastSeenAt >= lastSeenGranularityMs) session.lastSeenAt = now;
     return session;
+  }
+
+  function sessionsView(current: CustomerSession): DeviceSessionsView {
+    const own = sessions.entries((entry) => entry.subject === current.subject).map(([, entry]) => ({
+      handle: handleOf(entry.id),
+      client: entry.source === "telegram" ? "telegram" as const : "dev-login" as const,
+      createdAt: entry.createdAt,
+      lastSeenAt: entry.lastSeenAt,
+      current: entry.id === current.id
+    }));
+    own.sort((a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt);
+    return { mode: "test", sessions: own };
+  }
+
+  function revoke(session: CustomerSession): void {
+    sessions.delete(session.id);
+    revokedHandles.set(handleOf(session.id), { subject: session.subject, expiresAt: session.expiresAt });
+    revokedHandles.retainNewest((entry) => entry.subject === session.subject, maxRevokedHandlesPerSubject);
   }
 
   function startSession(
     request: IncomingMessage,
     response: ServerResponse,
     origin: string,
-    session: Omit<CustomerSession, "id" | "expiresAt">
+    session: Omit<CustomerSession, "id" | "createdAt" | "lastSeenAt" | "expiresAt">
   ): void {
     const previous = parseCookies(request)[sessionCookie];
     if (previous) sessions.delete(previous);
+    const now = clock();
     const created: CustomerSession = {
       ...session,
       id: randomUUID(),
-      expiresAt: clock() + config.sessionTtlSeconds * 1_000
+      createdAt: now,
+      lastSeenAt: now,
+      expiresAt: now + config.sessionTtlSeconds * 1_000
     };
     sessions.set(created.id, created);
     sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
@@ -406,6 +443,49 @@ export function createMiniappServer(
         if (id) sessions.delete(id);
         response.setHeader("set-cookie", sessionCookieValue("", 0, origin));
         json(response, 200, { ok: true });
+        return;
+      }
+
+      if (path === "/bff/sessions/revoke" || path === "/bff/sessions/revoke-others") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const single = path === "/bff/sessions/revoke";
+        const { handle } = await readJsonBody(request, single ? ["handle"] : []);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        if (single) {
+          if (typeof handle !== "string" || !sessionHandlePattern.test(handle)) {
+            json(response, 400, { error: "invalid_request" });
+            return;
+          }
+          if (handle === handleOf(session.id)) {
+            json(response, 409, { error: "current_session" });
+            return;
+          }
+          const target = sessions.entries((entry) => entry.subject === session.subject && entry.id !== session.id)
+            .find(([id]) => handleOf(id) === handle)?.[1];
+          if (target) {
+            revoke(target);
+            activity.recordSessionsRevoked(session.subject, "single", 1);
+          } else if (revokedHandles.get(handle)?.subject !== session.subject) {
+            json(response, 404, { error: "not_found" });
+            return;
+          }
+        } else {
+          const others = sessions.entries((entry) => entry.subject === session.subject && entry.id !== session.id);
+          for (const [, other] of others) revoke(other);
+          activity.recordSessionsRevoked(session.subject, "others", others.length);
+        }
+        json(response, 200, sessionsView(session));
         return;
       }
 
@@ -626,6 +706,14 @@ export function createMiniappServer(
       }
       const view: ActivityView = { mode: "test", items: activity.list(session.subject, limit), executable: false };
       json(response, 200, view);
+      return;
+    }
+    if (path === "/bff/sessions") {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      json(response, 200, sessionsView(session));
       return;
     }
     if (path === "/bff/support/requests" || path.startsWith("/bff/support/requests/")) {

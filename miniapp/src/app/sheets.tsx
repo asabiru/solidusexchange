@@ -2,12 +2,15 @@ import { useEffect, useId, useRef, useState } from "react";
 import type {
   AddressScreeningStatus,
   AddressScreeningView,
+  DeviceSessionView,
+  DeviceSessionsView,
   KycVerificationState,
   KycVerificationView,
   NotificationDraft,
   NotificationsView,
   OperationDetail,
   ProfileView,
+  SessionClient,
   WalletView
 } from "../shared/api";
 import { type ScreeningNetwork, screeningTargets } from "../shared/address-screening";
@@ -48,6 +51,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <LimitsSheet profile={profile} close={close} />;
     case "security":
       return <SecuritySheet profile={profile} close={close} />;
+    case "sessions":
+      return <SessionsSheet close={close} />;
     case "support":
       return <SupportSheet close={close} />;
     case "operation":
@@ -340,7 +345,7 @@ function SecuritySheet({ profile, close }: { profile: ProfileView; close: () => 
       <p className="sheet__note">{t("security.note")}</p>
       <div className="list">
         {profile.security.map((item) => (
-          <div key={item.title} className="row row--static">
+          <div key={item.title} className="row">
             <span className="coin coin--menu" aria-hidden="true"><Icon name="lock" size="sm" /></span>
             <span className="row__main"><strong>{item.title}</strong><span>{item.detail}</span></span>
             <span className="pill pill--muted">{t("common.soon")}</span>
@@ -561,6 +566,125 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
           </div>
         ) : null}
       </div>
+    </Sheet>
+  );
+}
+
+const sessionClientKeys: Readonly<Record<SessionClient, MessageKey>> = {
+  telegram: "activity.sourceTelegram",
+  "dev-login": "activity.sourceDev"
+};
+
+type SessionRevocation = { scope: "single"; session: DeviceSessionView } | { scope: "others"; count: number };
+
+function SessionsSheet({ close }: { close: () => void }) {
+  const [view, setView] = useState<DeviceSessionsView | undefined>();
+  const [failed, setFailed] = useState(false);
+  const [pending, setPending] = useState<SessionRevocation | undefined>();
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<MessageKey | undefined>();
+  const opener = useRef<HTMLElement | null>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const status = useRef<HTMLParagraphElement>(null);
+  const confirmId = useId();
+  const { t, format } = useI18n();
+  const when = (at: number) => format.dateTime(new Date(at).toISOString());
+
+  useEffect(() => {
+    let active = true;
+    api.sessions()
+      .then((next) => { if (active) setView(next); })
+      .catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (pending) cancelButton.current?.focus();
+  }, [pending]);
+
+  const ask = (next: SessionRevocation) => {
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setOutcome(undefined);
+    setPending(next);
+  };
+
+  const cancel = () => {
+    setPending(undefined);
+    if (opener.current?.isConnected) opener.current.focus();
+  };
+
+  const confirm = async (target: SessionRevocation) => {
+    setBusy(true);
+    try {
+      setView(target.scope === "single" ? await api.revokeSession(target.session.handle) : await api.revokeOtherSessions());
+      setOutcome(target.scope === "single" ? "sessions.revokedOne" : "sessions.revokedOthers");
+    } catch (error) {
+      const ended = error instanceof ApiError && error.status === 404;
+      setOutcome(ended ? "sessions.alreadyEnded" : "sessions.revokeFailed");
+      if (ended) setView(await api.sessions().catch(() => view));
+    } finally {
+      setBusy(false);
+      setPending(undefined);
+      status.current?.focus();
+    }
+  };
+
+  const others = view?.sessions.filter((session) => !session.current).length ?? 0;
+  const clientOf = (session: DeviceSessionView) => t(sessionClientKeys[session.client]);
+
+  return (
+    <Sheet title={t("sessions.title")} onClose={close}>
+      <p className="sheet__note">{t("sessions.note")}</p>
+      {failed ? <p className="form-error" role="alert">{t("sessions.loadFailed")}</p> : null}
+      {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+      {view ? (
+        <ul className="list sessions" aria-label={t("sessions.listLabel")}>
+          {view.sessions.map((session) => (
+            <li key={session.handle} className="row">
+              <span className="coin coin--menu" aria-hidden="true"><Icon name="device" size="sm" /></span>
+              <span className="row__main">
+                <strong>{clientOf(session)}</strong>
+                <span className="num">{t("sessions.meta", { created: when(session.createdAt), seen: when(session.lastSeenAt) })}</span>
+                {session.current ? <span className="pill pill--success">{t("sessions.current")}</span> : null}
+              </span>
+              {session.current ? null : (
+                <button
+                  type="button"
+                  className="row-action"
+                  aria-label={t("sessions.signOutLabel", { client: clientOf(session), created: when(session.createdAt) })}
+                  disabled={busy}
+                  onClick={() => ask({ scope: "single", session })}
+                >
+                  {t("sessions.signOut")}
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {pending ? (
+        <div className="confirm-panel">
+          <p id={confirmId}>
+            {pending.scope === "single"
+              ? t("sessions.confirmOne", { client: clientOf(pending.session), created: when(pending.session.createdAt) })
+              : t("sessions.confirmOthers", { count: String(pending.count) })}
+          </p>
+          <div className="sheet__actions sheet__actions--split">
+            <button type="button" className="cta cta--danger" aria-describedby={confirmId} disabled={busy} onClick={() => confirm(pending)}>{t("sessions.confirmSignOut")}</button>
+            <button ref={cancelButton} type="button" className="cta cta--secondary" disabled={busy} onClick={cancel}>{t("common.cancel")}</button>
+          </div>
+        </div>
+      ) : null}
+      {view && others > 0 && !pending ? (
+        <div className="sheet__actions">
+          <button type="button" className="cta cta--secondary" disabled={busy} onClick={() => ask({ scope: "others", count: others })}>
+            {t("sessions.signOutOthers")}
+          </button>
+        </div>
+      ) : null}
+      {view && others === 0 ? <p className="sheet__note">{t("sessions.noOthers")}</p> : null}
+      <p ref={status} tabIndex={-1} className="sheet__note" aria-live="polite" aria-atomic="true">{outcome ? t(outcome) : null}</p>
+      <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
     </Sheet>
   );
 }

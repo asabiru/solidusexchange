@@ -5,6 +5,21 @@ import type { SupportCategory, SupportStatus } from "./support.js";
 export type KycStatus = "verified" | "kyc-gated";
 export type SessionSource = "telegram" | "dev-synthetic";
 
+export type SessionClient = "telegram" | "dev-login";
+
+export interface DeviceSessionView {
+  handle: string;
+  client: SessionClient;
+  createdAt: number;
+  lastSeenAt: number;
+  current: boolean;
+}
+
+export interface DeviceSessionsView {
+  mode: "test";
+  sessions: readonly DeviceSessionView[];
+}
+
 export interface HealthView {
   mode: "dev-synthetic";
   devLogin: boolean;
@@ -204,6 +219,7 @@ export interface AddressScreeningView {
 export type ActivityKycState = Exclude<KycVerificationState, "not_started">;
 export type ActivityKind =
   | "session_login"
+  | "session_revoked"
   | `kyc_${ActivityKycState}`
   | "quote_previewed"
   | "address_screened"
@@ -217,6 +233,12 @@ interface ActivityBase {
 export interface SessionLoginActivity extends ActivityBase {
   kind: "session_login";
   source: SessionSource;
+}
+
+export interface SessionRevokedActivity extends ActivityBase {
+  kind: "session_revoked";
+  scope: "single" | "others";
+  count: number;
 }
 
 export interface KycActivity extends ActivityBase {
@@ -254,6 +276,7 @@ export interface SupportRequestedActivity extends ActivityBase {
 
 export type ActivityItem =
   | SessionLoginActivity
+  | SessionRevokedActivity
   | KycActivity
   | QuotePreviewedActivity
   | AddressScreenedActivity

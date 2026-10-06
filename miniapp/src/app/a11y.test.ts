@@ -279,6 +279,21 @@ describe("Mini App accessibility semantics", () => {
     assert.match(activity, /failed \? t\("activity.loadFailed"\) : items === undefined/);
   });
 
+  it("confirms device-session sign-outs, names each action and never renders handles", () => {
+    assert.match(sheets, /function SessionsSheet/);
+    assert.match(sheets, /session\.current \? null : \(\s*<button/);
+    assert.match(sheets, /aria-label=\{t\("sessions\.signOutLabel"/);
+    assert.match(sheets, /onClick=\{\(\) => ask\(\{ scope: "single", session \}\)\}/);
+    assert.match(sheets, /onClick=\{\(\) => ask\(\{ scope: "others", count: others \}\)\}/);
+    assert.match(sheets, /className="cta cta--danger" aria-describedby=\{confirmId\}/);
+    assert.match(sheets, /if \(pending\) cancelButton\.current\?\.focus\(\)/);
+    assert.match(sheets, /opener\.current\?\.isConnected\) opener\.current\.focus\(\)/);
+    assert.match(sheets, /ref=\{status\} tabIndex=\{-1\} className="sheet__note" aria-live="polite" aria-atomic="true"/);
+    assert.match(sheets, /<ul className="list sessions" aria-label=\{t\("sessions\.listLabel"\)\}>/);
+    assert.doesNotMatch(sheets, /\{[^}]*\.handle\}\s*</);
+    assert.match(read("app/screens/ProfileScreen.tsx"), /openSheet\(\{ kind: "sessions" \}\)/);
+  });
+
   it("keeps money-moving actions disabled and describes test-version unavailability", () => {
     const cta = elements(ui).find((entry) => entry.tag === "button" && entry.attributes.get("className") === '"cta"');
     assert.equal(cta?.attributes.get("disabled"), "true");
@@ -327,6 +342,16 @@ describe("Mini App WCAG 2.2 AA CSS", () => {
         const base = ["bg", "surface", "surface-elevated"].map((name) => resolve(`var(--${name})`, theme.values).rgb);
         const backgrounds = [...base, ...base.map((rgb) => over(resolve(`var(--${soft})`, theme.values), rgb))];
         checkContrast(resolve(`var(--${foreground})`, theme.values), backgrounds, 4.5, `${theme.name} ${foreground}`);
+      }
+    }
+  });
+
+  it("meets 4.5:1 for session sign-out actions on both themes", () => {
+    for (const theme of themes) {
+      const base = ["bg", "surface", "surface-elevated"].map((name) => resolve(`var(--${name})`, theme.values).rgb);
+      for (const selector of [".row-action", ".cta--danger"]) {
+        const backgrounds = base.map((rgb) => over(resolve(declaration(selector, "background"), theme.values), rgb));
+        checkContrast(resolve(declaration(selector, "color"), theme.values), backgrounds, 4.5, `${theme.name} ${selector}`);
       }
     }
   });

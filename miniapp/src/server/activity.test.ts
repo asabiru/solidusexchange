@@ -254,7 +254,7 @@ describe("activity log: bounded and isolated", () => {
     const source = await readFile(new URL("../../src/server/activity.ts", import.meta.url), "utf8");
     assert.doesNotMatch(source, /fetch\(|node:(http|https|net|dns|tls|dgram)|provider-simulators/);
     const log = createActivityLog({ clock: () => 0 });
-    assert.deepEqual(Object.keys(log).sort(), ["kindOf", "list", "recordKyc", "recordLogin", "recordQuote", "recordScreening", "recordSupport", "size", "subjects"]);
+    assert.deepEqual(Object.keys(log).sort(), ["kindOf", "list", "recordKyc", "recordLogin", "recordQuote", "recordScreening", "recordSessionsRevoked", "recordSupport", "size", "subjects"]);
     assert.ok(Object.isFrozen(log));
   });
 });
