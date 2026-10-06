@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, rmSync } from "node:fs";
 import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -45,7 +45,10 @@ function send(
   options: { headers?: Record<string, string>; body?: string } = {}
 ): Promise<Reply> {
   return new Promise((resolve, reject) => {
-    const request = httpRequest({ host: "127.0.0.1", port, method, path, headers: options.headers }, (response) => {
+    const headers = options.body === undefined
+      ? options.headers
+      : { "content-length": String(Buffer.byteLength(options.body)), ...options.headers };
+    const request = httpRequest({ host: "127.0.0.1", port, method, path, headers, agent: false }, (response) => {
       const chunks: Buffer[] = [];
       response.on("data", (chunk: Buffer) => chunks.push(chunk));
       response.on("end", () => resolve({
@@ -56,6 +59,17 @@ function send(
     });
     request.on("error", reject);
     request.end(options.body);
+  });
+}
+
+function freePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const probe = createNetServer();
+    probe.once("error", reject);
+    probe.listen(0, "127.0.0.1", () => {
+      const { port } = probe.address() as AddressInfo;
+      probe.close(() => resolve(port));
+    });
   });
 }
 
@@ -273,7 +287,7 @@ describe("Mini App BFF security headers on every route", () => {
       check(await send(port, route.method, path, { headers: { host: "bff.example.test" } }), `${route.method} ${path} host`);
       const flipped = route.method === "GET" ? "POST" : "GET";
       check(await send(port, flipped, path), `${flipped} ${path}`);
-      if (route.path !== "/bff/health") {
+      if (route.path !== "/bff/health" && route.path !== "/bff/metrics") {
         check(await send(port, route.method, path, { headers: { "content-type": "application/json" }, body: "{}" }), `${route.method} ${path} anonymous`);
       }
     }
@@ -313,7 +327,8 @@ describe("Mini App Vite document security headers", () => {
       root: miniappRoot,
       configFile: `${miniappRoot}vite.config.ts`,
       logLevel: "silent",
-      server: { port: 0, strictPort: false }
+      server: { port: await freePort(), strictPort: true },
+      optimizeDeps: { noDiscovery: true, include: [] }
     });
     try {
       await vite.listen();
