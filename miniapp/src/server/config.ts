@@ -1,4 +1,5 @@
 import type { KycScenario, KytScenario, QuoteScenario } from "@solidchange/provider-simulators";
+import { type ObservabilityConfig, logModes, metricsModes } from "./observability.js";
 import type { QuoteSource } from "./provider-quotes.js";
 
 export interface ServerConfig {
@@ -21,6 +22,7 @@ export interface ServerConfig {
   kytScreeningTimeoutSeconds: number;
   customerApiUrl?: string;
   customerApiDevTokenKey?: string;
+  observability?: ObservabilityConfig;
 }
 
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -161,6 +163,10 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     kytScenario: oneOf(env, "MINIAPP_KYT_SCENARIO", kytScenarios, "low"),
     kytSeed: seedSetting(env, "MINIAPP_KYT_SEED", "miniapp-dev-kyt"),
     kytScreeningTimeoutSeconds: integerSetting(env, "MINIAPP_KYT_TIMEOUT_SECONDS", 900, 60, 3_600),
-    ...parseCustomerApi(env)
+    ...parseCustomerApi(env),
+    observability: {
+      log: oneOf(env, "MINIAPP_LOG", logModes, "off"),
+      metrics: oneOf(env, "MINIAPP_METRICS", metricsModes, "off")
+    }
   };
 }

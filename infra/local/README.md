@@ -71,6 +71,19 @@ docker compose -f infra/local/compose.yaml down -v
 Все контейнеры работают не от root, с read-only файловой системой,
 `cap_drop: ALL` и `no-new-privileges`. `NODE_ENV` всегда `development`.
 
+## Наблюдаемость (dev-only)
+
+Стенд включает `*_LOG=json` и `*_METRICS=loopback` для трёх серверов. Каждый
+завершённый запрос пишет в stdout контейнера одну JSON-строку
+`{ ts, service, method, route, status, duration_ms, request_id }`: `route` —
+шаблон из таблицы маршрутов (или `unmatched`), `request_id` — случайный hex,
+сгенерированный сервером. Заголовки, cookie, токены, тела, query, initData,
+субъекты, адреса и IP не пишутся. Метрики в формате Prometheus отдаются только
+по GET с loopback (`/bff/metrics` у BFF, `/metrics` у customer-api), без
+сессии и без PII; Vite-прокси браузерного приложения этот путь не пропускает.
+Prometheus/Grafana в стенд не входят. Без флагов логи и метрики выключены
+(метрики отвечают 404).
+
 ## Проверка в CI
 
 `.github/scripts/check-dev-stack.mjs` статически проверяет этот каталог:
@@ -92,4 +105,7 @@ forwards host-loopback traffic to `127.0.0.1`. Synthetic keys and a short-lived
 dev CA are generated at start-up, or taken from a gitignored
 `infra/local/.env` (see `.env.example`). `.github/scripts/check-dev-stack.mjs`
 enforces the loopback, digest-pinning, non-root, no-secret and
-never-production `NODE_ENV` rules in CI.
+never-production `NODE_ENV` rules in CI. Dev-only observability is on in the
+stack (`*_LOG=json`, `*_METRICS=loopback`): redacted JSON request lines on
+stdout and loopback-only, GET-only Prometheus text at `/bff/metrics` (BFFs) or
+`/metrics` (customer-api); no Prometheus/Grafana containers.

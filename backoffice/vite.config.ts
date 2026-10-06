@@ -11,6 +11,8 @@ export default defineConfig({
     port: 4173,
     strictPort: true,
     proxy: {
+      // Dev metrics stay on the BFF's own loopback port, never via the app origin.
+      "/bff/metrics": { target: "http://127.0.0.1:4174", bypass: () => false },
       "/bff": "http://127.0.0.1:4174"
     }
   }

@@ -9,6 +9,12 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import {
+  createRequestObserver,
+  METRICS_CONTENT_TYPE,
+  METRICS_PATH,
+  metricsRequestAllowed
+} from "./observability.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
 
 const BASE_HEADERS = Object.freeze({
@@ -108,7 +114,8 @@ export function createCustomerApiHandler({
   kycDirectory,
   rateLimiter,
   clock = () => Date.now(),
-  generateRequestId = () => generateUuidV7(clock())
+  generateRequestId = () => generateUuidV7(clock()),
+  observer
 }) {
   if (typeof verifier?.verify !== "function") {
     throw new Error("A token verifier is required");
@@ -216,6 +223,25 @@ export function createCustomerApiHandler({
     );
   }
 
+  function handleMetrics(request, response, headers, requestId) {
+    if (!metricsRequestAllowed(request, headers)) {
+      send(response, 404, errorBody("CAPABILITY_DENIED", requestId), requestId);
+      return;
+    }
+    if (request.method !== "GET") {
+      send(response, 405, errorBody("CAPABILITY_DENIED", requestId), requestId, { allow: "GET" });
+      return;
+    }
+    const body = observer.renderMetrics();
+    response.writeHead(200, {
+      ...BASE_HEADERS,
+      "content-type": METRICS_CONTENT_TYPE,
+      "content-length": Buffer.byteLength(body),
+      "x-request-id": requestId
+    });
+    response.end(body);
+  }
+
   return async function handle(request, response) {
     const headers = collectHeaders(request.rawHeaders);
     const requestIdHeader = singleHeader(headers, "x-request-id");
@@ -229,6 +255,10 @@ export function createCustomerApiHandler({
           requestId,
           { connection: "close" }
         );
+        return;
+      }
+      if (observer?.metricsEnabled && request.url === METRICS_PATH) {
+        handleMetrics(request, response, headers, requestId);
         return;
       }
       const operation = OPERATIONS.find(
@@ -252,7 +282,19 @@ export function createCustomerApiHandler({
 }
 
 export function createCustomerApiServer(options) {
-  const handler = createCustomerApiHandler(options);
+  const observer = createRequestObserver({
+    service: "customer-api",
+    routes: [...OPERATIONS.map((operation) => operation.path), METRICS_PATH],
+    config: options.observability,
+    sink: options.logSink,
+    timer: options.timer,
+    wallClock: options.clock
+  });
+  const handle = createCustomerApiHandler({ ...options, observer });
+  const handler = (request, response) => {
+    observer.observe(request, response);
+    return handle(request, response);
+  };
   const generateRequestId =
     options.generateRequestId ?? (() => generateUuidV7((options.clock ?? Date.now)()));
   const server = createServer(
@@ -265,6 +307,7 @@ export function createCustomerApiServer(options) {
     handler
   );
   const rejectRaw = (socket, status, code) => {
+    observer.recordRejected(status);
     const requestId = generateRequestId();
     const body = JSON.stringify(errorBody(code, requestId));
     socket.end(
