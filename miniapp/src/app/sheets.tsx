@@ -1,5 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type {
+  AddressScreeningStatus,
+  AddressScreeningView,
   KycVerificationState,
   KycVerificationView,
   NotificationDraft,
@@ -8,6 +10,7 @@ import type {
   ProfileView,
   WalletView
 } from "../shared/api";
+import { screeningTargets } from "../shared/address-screening";
 import { type AssetCode, assets } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { dateTime, money, rate } from "./format";
@@ -52,6 +55,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <OperationSheet id={sheet.id} close={close} />;
     case "qr-manual":
       return <QrManualSheet close={close} />;
+    case "address-screening":
+      return <AddressScreeningSheet close={close} />;
     case "notifications":
       return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":
@@ -409,6 +414,121 @@ function QrManualSheet({ close }: { close: () => void }) {
       </button>
       {checked ? (
         <Unavailable>Оплата по QR недоступна в тестовой версии. Код не проверяется и не отправляется на сервер.</Unavailable>
+      ) : null}
+    </Sheet>
+  );
+}
+
+const screeningBadges: Readonly<Record<AddressScreeningStatus, { label: string; tone: string; detail: string }>> = {
+  pending: { label: "Проверяется", tone: "muted", detail: "Ждём подписанный ответ симулятора KYT. Статус обновляется автоматически." },
+  low: { label: "Низкий риск", tone: "success", detail: "Симулятор не нашёл заметных признаков риска." },
+  medium: { label: "Средний риск", tone: "warning", detail: "Симулятор отметил признаки, требующие внимания." },
+  high: { label: "Высокий риск", tone: "risk", detail: "Симулятор отметил существенные признаки риска." },
+  severe: { label: "Критический риск", tone: "risk", detail: "Симулятор отметил критические признаки риска." },
+  unavailable: { label: "Нет результата", tone: "muted", detail: "Симулятор провайдера не ответил. Попробуйте ещё раз позже." },
+  timed_out: { label: "Нет ответа вовремя", tone: "muted", detail: "Ответ не пришёл до срока проверки." }
+};
+
+const screeningErrors: Readonly<Record<string, string>> = {
+  invalid_address: "Адрес не похож на адрес выбранной тестовой сети.",
+  invalid_target: "Эта сеть недоступна для проверки.",
+  kyc_required: "Сначала подтвердите личность.",
+  screening_rate_limited: "Слишком много проверок. Попробуйте позже."
+};
+
+function AddressScreeningSheet({ close }: { close: () => void }) {
+  const [targetId, setTargetId] = useState(screeningTargets[0]?.id ?? "");
+  const [address, setAddress] = useState("");
+  const [result, setResult] = useState<AddressScreeningView | undefined>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+  const inputId = useId();
+  const target = screeningTargets.find((entry) => entry.id === targetId) ?? screeningTargets[0];
+  const pendingId = result?.status === "pending" ? result.id : undefined;
+
+  useEffect(() => {
+    if (!pendingId) return;
+    const timer = window.setInterval(() => {
+      api.addressScreening(pendingId).then(setResult).catch(() => undefined);
+    }, 3_000);
+    return () => window.clearInterval(timer);
+  }, [pendingId]);
+
+  const reset = () => {
+    setResult(undefined);
+    setUnavailable(false);
+    setError(undefined);
+  };
+
+  const check = () => {
+    if (!target) return;
+    reset();
+    setBusy(true);
+    api.screenAddress(target.asset, target.network, address.trim())
+      .then(setResult)
+      .catch((reason: unknown) => {
+        if (reason instanceof ApiError && reason.code === "screening_unavailable") {
+          setUnavailable(true);
+          return;
+        }
+        setError(reason instanceof ApiError ? screeningErrors[reason.code] ?? "Не удалось выполнить проверку." : "Не удалось связаться с тестовым сервером.");
+      })
+      .finally(() => setBusy(false));
+  };
+
+  const status: AddressScreeningStatus | undefined = unavailable ? "unavailable" : result?.status;
+  const badge = status ? screeningBadges[status] : undefined;
+
+  return (
+    <Sheet title="Проверить адрес (тест)" onClose={close}>
+      <p className="notice-banner">
+        <Icon name="shield-check" size="sm" />
+        Тестовый режим — перевод не выполняется
+      </p>
+      <p className="sheet__note">Адрес проверяется симулятором KYT. Результат носит рекомендательный характер и ничего не разрешает и не блокирует.</p>
+      <div className="segment" role="tablist" aria-label="Актив и сеть">
+        {screeningTargets.map((entry) => (
+          <button
+            type="button"
+            role="tab"
+            key={entry.id}
+            aria-selected={entry.id === target?.id}
+            onClick={() => {
+              setTargetId(entry.id);
+              reset();
+            }}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
+      <label className="form-control" htmlFor={inputId}>
+        <span>Адрес · {target?.networkLabel}</span>
+        <input
+          id={inputId}
+          value={address}
+          placeholder={target?.placeholder}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={64}
+          onChange={(event) => {
+            setAddress(event.target.value);
+            reset();
+          }}
+        />
+      </label>
+      <button type="button" className="cta cta--secondary" disabled={busy || address.trim() === ""} onClick={check}>
+        Проверить адрес
+      </button>
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {badge ? (
+        <div className="screening-result" aria-live="polite">
+          <span className={`pill pill--${badge.tone}`}>{badge.label}</span>
+          <span>{badge.detail}</span>
+        </div>
       ) : null}
     </Sheet>
   );

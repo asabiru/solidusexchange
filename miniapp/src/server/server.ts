@@ -18,6 +18,13 @@ import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
 import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
 import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
+import {
+  type AddressScreeningService,
+  ScreeningInputError,
+  ScreeningRateLimitError,
+  ScreeningUnavailableError,
+  createAddressScreeningService
+} from "./address-screening.js";
 import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
 import {
   type NotificationOutbox,
@@ -52,6 +59,8 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/profile" },
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "POST", path: "/bff/kyc/applications" },
+  { method: "POST", path: "/bff/address-screening" },
+  { method: "GET", path: "/bff/address-screening/:id" },
   { method: "GET", path: "/bff/kyc/status" },
   { method: "GET", path: "/bff/notifications" },
   { method: "POST", path: "/bff/notifications/read" }
@@ -63,6 +72,7 @@ export interface MiniappServerOptions {
   quoteProvider?: QuoteProvider;
   customerApi?: CustomerApiClient;
   kyc?: KycService;
+  addressScreening?: AddressScreeningService;
   notifications?: NotificationOutbox;
 }
 
@@ -188,6 +198,13 @@ export function createMiniappServer(
     seed: config.kycSeed,
     scenario: config.kycScenario,
     reviewTimeoutSeconds: config.kycReviewTimeoutSeconds,
+    clock
+  });
+
+  const addressScreening = options.addressScreening ?? createAddressScreeningService({
+    seed: config.kytSeed,
+    scenario: config.kytScenario,
+    screeningTimeoutSeconds: config.kytScreeningTimeoutSeconds,
     clock
   });
 
@@ -350,6 +367,46 @@ export function createMiniappServer(
         return;
       }
 
+      if (path === "/bff/address-screening") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const body = await readJsonBody(request, ["asset", "network", "address"]);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        if (session.kyc !== "verified") {
+          json(response, 403, { error: "kyc_required" });
+          return;
+        }
+        try {
+          const { created, view } = await addressScreening.submit(session.subject, body);
+          json(response, created ? 202 : 200, view);
+        } catch (error) {
+          if (error instanceof ScreeningInputError) {
+            json(response, 400, { error: error.code });
+            return;
+          }
+          if (error instanceof ScreeningRateLimitError) {
+            json(response, 429, { error: "screening_rate_limited" });
+            return;
+          }
+          if (error instanceof ScreeningUnavailableError) {
+            json(response, 503, { error: "screening_unavailable", screening: error.view });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
       if (path === "/bff/notifications/read") {
         if (!origin) {
           json(response, 403, { error: "origin_rejected" });
@@ -446,6 +503,23 @@ export function createMiniappServer(
         return;
       }
       json(response, 200, notificationsView(session.subject));
+      return;
+    }
+    if (path.startsWith("/bff/address-screening/")) {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      if (session.kyc !== "verified") {
+        json(response, 403, { error: "kyc_required" });
+        return;
+      }
+      const screening = addressScreening.view(session.subject, path.slice("/bff/address-screening/".length));
+      if (!screening) {
+        json(response, 404, { error: "not_found" });
+        return;
+      }
+      json(response, 200, screening);
       return;
     }
     if (path === "/bff/quotes/preview") {
