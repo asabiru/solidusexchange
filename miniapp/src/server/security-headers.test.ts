@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
 import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -122,6 +122,7 @@ function tonTestnetAddress(fill: number): string {
 const schemeOnlySource = /^[a-z][a-z0-9+.-]*:$/;
 
 function assertStrictDocumentCsp(header: string): void {
+  const strictSources = new Set(["'self'", "'none'", "data:", ...telegramFrameAncestors]);
   const csp = parseCsp(header);
   assert.deepEqual(csp.get("default-src"), ["'self'"]);
   assert.deepEqual(csp.get("script-src"), ["'self'"]);
@@ -134,8 +135,7 @@ function assertStrictDocumentCsp(header: string): void {
   assert.deepEqual(csp.get("frame-ancestors"), ["https://web.telegram.org", "https://*.telegram.org"]);
   for (const [name, sources] of csp) {
     for (const source of sources) {
-      assert.notEqual(source, "'unsafe-eval'", name);
-      assert.notEqual(source, "'unsafe-inline'", name);
+      assert.ok(strictSources.has(source), `${name} ${source}`);
       assert.notEqual(source, "*", name);
       if (schemeOnlySource.test(source)) assert.equal(`${name} ${source}`, "img-src data:");
       if (source.includes("*")) assert.equal(`${name} ${source}`, "frame-ancestors https://*.telegram.org");
@@ -170,7 +170,7 @@ describe("Mini App security header sets", () => {
     assert.equal(documentSecurityHeaders["x-content-type-options"], "nosniff");
   });
 
-  it("relax only script, style and HMR connect sources in Vite dev, never unsafe-eval", () => {
+  it("relax only script, style and HMR connect sources in Vite dev, never script evaluation", () => {
     const changed = Object.keys(devDocumentCspDirectives).filter((name) =>
       serializeCsp({ [name]: devDocumentCspDirectives[name] }) !== serializeCsp({ [name]: documentCspDirectives[name] ?? [] })
     );
@@ -178,7 +178,8 @@ describe("Mini App security header sets", () => {
     assert.deepEqual(devDocumentCspDirectives["script-src"], ["'self'", "'unsafe-inline'"]);
     assert.deepEqual(devDocumentCspDirectives["style-src"], ["'self'", "'unsafe-inline'"]);
     assert.deepEqual(devDocumentCspDirectives["connect-src"], ["'self'", "ws://127.0.0.1:4183", "ws://localhost:4183"]);
-    assert.equal(devDocumentSecurityHeaders["content-security-policy"].includes("'unsafe-eval'"), false);
+    const keywords = new Set(Object.values(devDocumentCspDirectives).flat().filter((source) => source.startsWith("'")));
+    assert.deepEqual([...keywords].sort(), ["'none'", "'self'", "'unsafe-inline'"]);
     assert.equal(devDocumentSecurityHeaders["content-security-policy"].includes("*.telegram.org"), true);
   });
 });
@@ -351,7 +352,7 @@ describe("Mini App Vite document security headers", () => {
     assert.deepEqual(resolved.preview.headers, { ...documentSecurityHeaders });
     assertStrictDocumentCsp(String(resolved.preview.headers?.["content-security-policy"]));
 
-    const outDir = join(tmpdir(), `miniapp-csp-${process.pid}`);
+    const outDir = mkdtempSync(join(tmpdir(), "miniapp-csp-"));
     try {
       await build({ root: miniappRoot, configFile, logLevel: "silent", build: { outDir, emptyOutDir: true } });
       const html = readFileSync(join(outDir, "index.html"), "utf8");
@@ -392,7 +393,7 @@ describe("Mini App Vite document security headers", () => {
   it("index.html loads no inline or third-party script so the strict script-src holds", () => {
     const html = readFileSync(`${miniappRoot}index.html`, "utf8");
     const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
-    assert.deepEqual(scripts.map(([, attributes]) => attributes.trim()), ['type="module" src="/src/main.tsx"']);
+    assert.deepEqual(scripts.map(([, attributes]) => /\bsrc="([^"]*)"/.exec(attributes)?.[1]), ["/src/main.tsx"]);
     assert.equal(scripts[0][2].trim(), "");
     assert.equal(html.includes("telegram.org"), false);
   });
