@@ -43,7 +43,8 @@ describe("Vite dev proxy boundary", () => {
       const address = vite.httpServer?.address() as AddressInfo | null;
       assert.ok(address && typeof address === "object");
       assert.equal(address.address, "127.0.0.1");
-      assert.equal(vite.config.server.proxy?.["/bff"], "http://127.0.0.1:4184");
+      const proxy = vite.config.server.proxy?.["/bff"];
+      assert.equal(typeof proxy === "object" ? proxy.target : proxy, "http://127.0.0.1:4184");
       for (const host of externalIpv4Addresses()) {
         assert.equal(await canConnect(host, address.port), false, host);
       }
