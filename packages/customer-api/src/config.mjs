@@ -1,14 +1,19 @@
 import { DEV_TOKEN_KEY_PATTERN } from "./auth.mjs";
 import { LOG_MODES, METRICS_MODES } from "./observability.mjs";
 
+/** @type {readonly string[]} */
 export const LOOPBACK_HOSTS = Object.freeze(["127.0.0.1", "::1"]);
 const PORT_PATTERN = /^(?:0|[1-9][0-9]{0,4})$/u;
 const RATE_LIMIT_PATTERN = /^[1-9][0-9]{0,4}$/u;
 
+/** @param {string} address */
 export function isLoopbackAddress(address) {
   return LOOPBACK_HOSTS.includes(address);
 }
 
+/** @typedef {ReturnType<typeof loadConfig>} CustomerApiConfig */
+
+/** @param {Readonly<Record<string, string | undefined>>} env */
 export function loadConfig(env) {
   if (String(env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
     throw new Error("customer-api is dev-only and refuses NODE_ENV=production");

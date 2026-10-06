@@ -9,6 +9,7 @@ export const API_METADATA = Object.freeze({
   production_providers_enabled: false
 });
 
+/** @type {readonly string[]} */
 export const PLATFORMS = Object.freeze([
   "web",
   "ios",

@@ -45,5 +45,11 @@ jobs:
       - name: Audit dependencies
         run: npm audit --audit-level=moderate
 
+      - name: Lint sources
+        run: npm run lint
+
+      - name: Typecheck sources
+        run: npm run typecheck
+
       - name: Verify runtime boundary and contract conformance
         run: npm test
