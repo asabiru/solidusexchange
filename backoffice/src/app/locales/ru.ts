@@ -1,5 +1,5 @@
 export const ru = {
-  "app.documentTitle": "SolidChange · бэк-офис",
+  "app.documentTitle": "SOLID · бэк-офис",
   "app.brandSubtitle": "Операторский бэк-офис",
   "app.skipToContent": "Перейти к содержимому",
   "app.collapseNavigation": "Свернуть навигацию",

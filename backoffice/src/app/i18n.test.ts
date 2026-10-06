@@ -99,6 +99,10 @@ describe("i18n: catalog parity", () => {
     const copied = Object.keys(ru).filter((key) => cyrillic.test(ru[key as MessageKey]) && en[key as MessageKey] === ru[key as MessageKey]);
     assert.deepEqual(copied, []);
     assert.deepEqual(localeNames, { ru: "Русский", en: "English" });
+    for (const locale of locales) {
+      assert.match(catalogs[locale]["app.documentTitle"], /^SOLID\b/, locale);
+      for (const value of Object.values(catalogs[locale])) assert.doesNotMatch(value, /SolidChange/, locale);
+    }
   });
 
   it("names every screen, navigation group and role", () => {
@@ -239,7 +243,7 @@ describe("i18n: locale formatting", () => {
 
 const appDirectory = new URL("../../src/app/", import.meta.url);
 const uiAttributes = new Set(["aria-label", "aria-description", "aria-valuetext", "title", "placeholder", "alt", "label", "description", "message"]);
-const brandText = new Set(["SC", "SolidChange"]);
+const brandText = new Set(["S", "SOLID"]);
 const contractLiterals = new Set(["not_for_submission"]);
 const letter = /\p{L}/u;
 const sentence = /^[A-Z][a-z]+(?:[ -][A-Za-z]+)+[.!?…]?$/;
@@ -316,7 +320,7 @@ describe("i18n: no hard-coded UI strings in components", () => {
     ].join("\n");
     const found = uiStringViolations("sample.tsx", sample);
     assert.equal(found.length, 6, found.join("\n"));
-    assert.deepEqual(uiStringViolations("ok.tsx", 'const a = <p className="x" data-tone="warning">{t("app.skipToContent")}{state === "verified" ? "—" : ""}SolidChange</p>;'), []);
+    assert.deepEqual(uiStringViolations("ok.tsx", 'const a = <p className="x" data-tone="warning">{t("app.skipToContent")}{state === "verified" ? "—" : ""}SOLID</p>;'), []);
     assert.deepEqual(uiStringViolations("error.ts", 'throw new Error("Backoffice root element is missing");'), []);
   });
 

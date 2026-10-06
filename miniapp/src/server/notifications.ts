@@ -22,7 +22,7 @@ export const defaultMaxTotal = 1_000;
 const marker = "Тестовый режим";
 
 export const notificationTexts: Readonly<Record<NotificationTemplate, string>> = Object.freeze({
-  session_login: `${marker}. Выполнен вход в SolidChange.`,
+  session_login: `${marker}. Выполнен вход в SOLID.`,
   kyc_submitted: `${marker}. Заявка на проверку личности принята.`,
   kyc_in_review: `${marker}. Заявка на проверку личности рассматривается.`,
   kyc_approved: `${marker}. Проверка личности пройдена.`,

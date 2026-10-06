@@ -1,7 +1,7 @@
 import type { Messages } from "./ru.js";
 
 export const en: Messages = {
-  "app.documentTitle": "SolidChange backoffice",
+  "app.documentTitle": "SOLID backoffice",
   "app.brandSubtitle": "Operator backoffice",
   "app.skipToContent": "Skip to content",
   "app.collapseNavigation": "Collapse navigation",

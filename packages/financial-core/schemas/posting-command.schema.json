@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://solidchange.example/schemas/financial-core/posting-command.schema.json",
-  "title": "SolidChange ledger posting command",
+  "title": "SOLID ledger posting command",
   "type": "object",
   "additionalProperties": false,
   "required": [
