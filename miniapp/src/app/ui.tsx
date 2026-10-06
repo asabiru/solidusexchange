@@ -1,19 +1,19 @@
 import { type ReactNode, useEffect, useId, useRef } from "react";
 import type { OperationStatus, OperationSummary } from "../shared/api";
 import { type AssetCode, assets } from "../shared/assets";
-import { dateTime, signedLeg, statusLabels } from "./format";
+import { statusLabelKeys } from "./format";
+import { useI18n } from "./i18n-context";
 import { Icon, type IconName } from "./Icon";
 
-export const unavailableTitle = "Недоступно в тестовой версии";
-
-export function Unavailable({ title = unavailableTitle, children }: { title?: string; children: ReactNode }) {
+export function Unavailable({ title, children }: { title?: string; children: ReactNode }) {
+  const { t } = useI18n();
   return (
     <div className="unavailable" aria-live="polite">
       <span className="unavailable__mark">
         <Icon name="lock" size="sm" />
       </span>
       <div>
-        <strong>{title}</strong>
+        <strong>{title ?? t("common.unavailable")}</strong>
         <span>{children}</span>
       </div>
     </div>
@@ -22,13 +22,14 @@ export function Unavailable({ title = unavailableTitle, children }: { title?: st
 
 export function DisabledCta({ label, hint }: { label: string; hint?: string }) {
   const hintId = useId();
+  const { t } = useI18n();
   return (
     <div className="disabled-cta">
       <button type="button" className="cta" disabled aria-describedby={hintId}>
         <Icon name="lock" size="sm" />
         {label}
       </button>
-      <span id={hintId} className="disabled-cta__hint">{hint ?? unavailableTitle}</span>
+      <span id={hintId} className="disabled-cta__hint">{hint ?? t("common.unavailable")}</span>
     </div>
   );
 }
@@ -36,6 +37,7 @@ export function DisabledCta({ label, hint }: { label: string; hint?: string }) {
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const { t } = useI18n();
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
@@ -55,7 +57,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         <div className="sheet__grabber" />
         <header className="sheet__head">
           <h3 id={titleId}>{title}</h3>
-          <button type="button" className="icon-btn icon-btn--outlined" aria-label="Закрыть" onClick={onClose}>
+          <button type="button" className="icon-btn icon-btn--outlined" aria-label={t("common.close")} onClick={onClose}>
             <Icon name="close" />
           </button>
         </header>
@@ -80,7 +82,8 @@ const statusTones: Readonly<Record<OperationStatus, string>> = {
 };
 
 export function StatusPill({ status }: { status: OperationStatus }) {
-  return <span className={`pill pill--${statusTones[status]}`}>{statusLabels[status]}</span>;
+  const { t } = useI18n();
+  return <span className={`pill pill--${statusTones[status]}`}>{t(statusLabelKeys[status])}</span>;
 }
 
 export function Coin({ asset }: { asset: AssetCode }) {
@@ -89,6 +92,7 @@ export function Coin({ asset }: { asset: AssetCode }) {
 
 export function OperationRow({ operation, onOpen }: { operation: OperationSummary; onOpen: (id: string) => void }) {
   const [primary, secondary] = operation.legs;
+  const { format } = useI18n();
   return (
     <button type="button" className="row" onClick={() => onOpen(operation.id)}>
       <span className={`coin coin--status coin--${statusTones[operation.status]}`} aria-hidden="true">
@@ -96,12 +100,12 @@ export function OperationRow({ operation, onOpen }: { operation: OperationSummar
       </span>
       <span className="row__main">
         <strong>{operation.title}</strong>
-        <span className="num">{dateTime(operation.createdAt)} · {operation.reference}</span>
+        <span className="num">{format.dateTime(operation.createdAt)} · {operation.reference}</span>
         <StatusPill status={operation.status} />
       </span>
       <span className="row__amount">
-        <strong className={`num${primary.direction === "in" ? " is-credit" : ""}`}>{signedLeg(primary)}</strong>
-        <span className="num">{secondary ? signedLeg(secondary) : operation.channel}</span>
+        <strong className={`num${primary.direction === "in" ? " is-credit" : ""}`}>{format.signedLeg(primary)}</strong>
+        <span className="num">{secondary ? format.signedLeg(secondary) : operation.channel}</span>
       </span>
     </button>
   );

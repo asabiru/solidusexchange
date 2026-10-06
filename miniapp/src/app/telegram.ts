@@ -1,7 +1,10 @@
+import { languageCodeFromInitData } from "./i18n";
+
 type ColorScheme = "light" | "dark";
 
 interface TelegramWebApp {
   initData?: string;
+  initDataUnsafe?: { user?: { language_code?: unknown } };
   colorScheme?: ColorScheme;
   ready?: () => void;
   expand?: () => void;
@@ -21,6 +24,13 @@ export function readInitData(): string | undefined {
   const fromSdk = telegramWebApp()?.initData;
   if (fromSdk) return fromSdk;
   return launchParams().get("tgWebAppData") || undefined;
+}
+
+/** Telegram user language; only picks the UI locale and is never trusted for access decisions. */
+export function telegramLanguageCode(): string | undefined {
+  const fromSdk = telegramWebApp()?.initDataUnsafe?.user?.language_code;
+  if (typeof fromSdk === "string") return fromSdk;
+  return languageCodeFromInitData(readInitData());
 }
 
 export function telegramColorScheme(): ColorScheme | undefined {

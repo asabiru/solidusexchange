@@ -398,8 +398,11 @@ describe("activity: browser bundle and UI boundary", () => {
   it("reads activity from the BFF only and offers no money-moving action", () => {
     const screen = readFileSync(join(sourceRoot, "app", "screens", "OperationsScreen.tsx"), "utf8");
     assert.match(screen, /api\.activity\(\)/);
-    assert.match(screen, /Тестовый режим — операции не выполняются/);
-    assert.match(screen, /Событий пока нет/);
+    assert.match(screen, /t\("activity\.banner"\)/);
+    assert.match(screen, /t\("activity\.emptyTitle"\)/);
+    const catalog = readFileSync(join(sourceRoot, "app", "locales", "ru.ts"), "utf8");
+    assert.match(catalog, /"activity\.banner": "Тестовый режим — операции не выполняются"/);
+    assert.match(catalog, /"activity\.emptyTitle": "Событий пока нет"/);
     assert.doesNotMatch(screen, /syntheticData|operations=|openSheet|DisabledCta|cta"/);
     assert.doesNotMatch(screen, /Отправить|Перевести|Вывести|Пополнить|Обменять|Подтвердить|withdraw|transfer|deposit|execute|executable: true/i);
     const client = readFileSync(join(sourceRoot, "app", "api.ts"), "utf8");

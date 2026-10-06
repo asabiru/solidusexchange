@@ -1,38 +1,36 @@
 import { useState } from "react";
 import type { WalletView } from "../../shared/api";
 import type { AssetCode } from "../../shared/assets";
-import { money } from "../format";
 import { Icon } from "../Icon";
+import { useI18n } from "../i18n-context";
 import type { SheetRequest } from "../navigation";
 import { Coin, ScreenTitle } from "../ui";
 
 export function QrScreen({ wallet, openSheet }: { wallet: WalletView; openSheet: (sheet: SheetRequest) => void }) {
   const [source, setSource] = useState<AssetCode>("RUB");
+  const { t, format } = useI18n();
   return (
     <section className="screen" aria-label="QR">
-      <ScreenTitle>Оплата по QR</ScreenTitle>
+      <ScreenTitle>{t("qr.title")}</ScreenTitle>
       <div className="qr-panel">
         <div className="qr-frame"><Icon name="qr" size="lg" /></div>
-        <strong>Камера не используется</strong>
-        <p>
-          В тестовой версии сканирование отключено. Перед оплатой SolidChange покажет получателя,
-          актив, сеть, сумму и комиссию.
-        </p>
+        <strong>{t("qr.cameraOff")}</strong>
+        <p>{t("qr.intro")}</p>
         <div className="qr-actions">
           <button type="button" onClick={() => openSheet({ kind: "qr-image" })}>
             <Icon name="gallery" size="sm" />
-            Выбрать изображение
+            {t("qr.pickImage")}
           </button>
           <button type="button" onClick={() => openSheet({ kind: "qr-manual" })}>
             <Icon name="keyboard" size="sm" />
-            Ввести вручную
+            {t("qr.enterManually")}
           </button>
         </div>
       </div>
 
       <div className="heading">
-        <h3>Списать с</h3>
-        <button type="button" className="link" onClick={() => openSheet({ kind: "deposit" })}>Пополнить</button>
+        <h3>{t("qr.debitFrom")}</h3>
+        <button type="button" className="link" onClick={() => openSheet({ kind: "deposit" })}>{t("common.deposit")}</button>
       </div>
       <div className="qr-sources">
         {wallet.assets.filter((entry) => entry.code !== "TON").map((entry) => (
@@ -45,18 +43,15 @@ export function QrScreen({ wallet, openSheet }: { wallet: WalletView; openSheet:
           >
             <Coin asset={entry.code} />
             <span>
-              <strong>{entry.code === "RUB" ? "Рубли" : entry.code}</strong>
-              <small className="num">{money(entry.code, entry.available)} доступно</small>
+              <strong>{entry.code === "RUB" ? t("qr.rubles") : entry.code}</strong>
+              <small className="num">{t("qr.availableSuffix", { amount: format.money(entry.code, entry.available) })}</small>
             </span>
           </button>
         ))}
       </div>
       <p className="note">
         <span className="note__icon"><Icon name="info" size="xs" /></span>
-        <span>
-          В приложении камера запрашивается только после нажатия центральной кнопки. Здесь доступ к камере
-          не запрашивается вовсе.
-        </span>
+        <span>{t("qr.note")}</span>
       </p>
     </section>
   );

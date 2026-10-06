@@ -2,34 +2,35 @@ import { useEffect, useMemo, useState } from "react";
 import type { ActivityItem, ActivityKind, KycActivity, SessionSource } from "../../shared/api";
 import { screeningTargetOf } from "../../shared/address-screening";
 import { api } from "../api";
-import { dateTime, money } from "../format";
+import type { MessageKey } from "../i18n";
+import { useI18n } from "../i18n-context";
 import { Icon, type IconName } from "../Icon";
-import { screeningBadges } from "../sheets";
+import { screeningBadges, screeningNetworkKeys } from "../sheets";
 import { EmptyState, ScreenTitle } from "../ui";
 
 type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening";
 
-const groupFilters: readonly { value: ActivityGroup; label: string }[] = [
-  { value: "all", label: "Все" },
-  { value: "login", label: "Входы" },
-  { value: "kyc", label: "Проверка личности" },
-  { value: "quote", label: "Котировки" },
-  { value: "screening", label: "Проверка адреса" }
+const groupFilters: readonly { value: ActivityGroup; label: MessageKey }[] = [
+  { value: "all", label: "activity.filterAll" },
+  { value: "login", label: "activity.filterLogin" },
+  { value: "kyc", label: "activity.filterKyc" },
+  { value: "quote", label: "activity.filterQuote" },
+  { value: "screening", label: "activity.filterScreening" }
 ];
 
-const sourceLabels: Readonly<Record<SessionSource, string>> = {
-  telegram: "Telegram",
-  "dev-synthetic": "Тестовый вход"
+const sourceLabels: Readonly<Record<SessionSource, MessageKey>> = {
+  telegram: "activity.sourceTelegram",
+  "dev-synthetic": "activity.sourceDev"
 };
 
-const kycTexts: Readonly<Record<KycActivity["kind"], { title: string; tone: string; icon: IconName }>> = {
-  kyc_submitted: { title: "Заявка на проверку личности принята", tone: "warning", icon: "id-card" },
-  kyc_in_review: { title: "Заявка на проверку рассматривается", tone: "warning", icon: "clock" },
-  kyc_approved: { title: "Проверка личности пройдена", tone: "success", icon: "shield-check" },
-  kyc_rejected: { title: "Проверка личности не пройдена", tone: "risk", icon: "close" },
-  kyc_needs_more_data: { title: "Нужны дополнительные данные", tone: "risk", icon: "alert" },
-  kyc_timed_out: { title: "Срок рассмотрения заявки истёк", tone: "risk", icon: "clock" },
-  kyc_unavailable: { title: "Сервис проверки временно недоступен", tone: "risk", icon: "alert" }
+const kycTexts: Readonly<Record<KycActivity["kind"], { title: MessageKey; tone: string; icon: IconName }>> = {
+  kyc_submitted: { title: "activity.kycSubmitted", tone: "warning", icon: "id-card" },
+  kyc_in_review: { title: "activity.kycInReview", tone: "warning", icon: "clock" },
+  kyc_approved: { title: "activity.kycApproved", tone: "success", icon: "shield-check" },
+  kyc_rejected: { title: "activity.kycRejected", tone: "risk", icon: "close" },
+  kyc_needs_more_data: { title: "activity.kycNeedsMoreData", tone: "risk", icon: "alert" },
+  kyc_timed_out: { title: "activity.kycTimedOut", tone: "risk", icon: "clock" },
+  kyc_unavailable: { title: "activity.kycUnavailable", tone: "risk", icon: "alert" }
 };
 
 function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
@@ -39,18 +40,16 @@ function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
   return "kyc";
 }
 
-function when(at: number): string {
-  return dateTime(new Date(at).toISOString());
-}
-
 function ActivityRow({ item }: { item: ActivityItem }) {
+  const { t, format } = useI18n();
+  const when = (at: number) => format.dateTime(new Date(at).toISOString());
   if (item.kind === "session_login") {
     return (
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="user" size="sm" /></span>
         <span className="row__main">
-          <strong>Вход в SolidChange</strong>
-          <span className="num">{when(item.at)} · {sourceLabels[item.source]}</span>
+          <strong>{t("activity.login")}</strong>
+          <span className="num">{when(item.at)} · {t(sourceLabels[item.source])}</span>
         </span>
       </li>
     );
@@ -60,13 +59,13 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="swap" size="sm" /></span>
         <span className="row__main">
-          <strong>Расчёт обмена {item.from} → {item.to}</strong>
+          <strong>{t("activity.quoteTitle", { from: item.from, to: item.to })}</strong>
           <span className="num">{when(item.at)} · {item.pair}</span>
-          <span className="pill pill--muted">Только расчёт</span>
+          <span className="pill pill--muted">{t("activity.quoteOnly")}</span>
         </span>
         <span className="row__amount">
-          <strong className="num">{money(item.from, item.amountIn)}</strong>
-          <span className="num">≈ {money(item.to, item.amountOut)}</span>
+          <strong className="num">{format.money(item.from, item.amountIn)}</strong>
+          <span className="num">≈ {format.money(item.to, item.amountOut)}</span>
         </span>
       </li>
     );
@@ -78,9 +77,9 @@ function ActivityRow({ item }: { item: ActivityItem }) {
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="shield" size="sm" /></span>
         <span className="row__main">
-          <strong>Проверка адреса · {target?.label ?? item.asset}</strong>
-          <span className="num">{when(item.at)} · {target?.networkLabel ?? item.network}</span>
-          <span className={`pill pill--${badge.tone}`}>{badge.label}</span>
+          <strong>{t("activity.screeningTitle", { target: target?.label ?? item.asset })}</strong>
+          <span className="num">{when(item.at)} · {t(screeningNetworkKeys[item.network])}</span>
+          <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
         </span>
       </li>
     );
@@ -90,8 +89,8 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     <li className="row">
       <span className={`coin coin--status coin--${kyc.tone}`} aria-hidden="true"><Icon name={kyc.icon} size="sm" /></span>
       <span className="row__main">
-        <strong>{kyc.title}</strong>
-        <span className="num">{when(item.at)} · симулятор KYC</span>
+        <strong>{t(kyc.title)}</strong>
+        <span className="num">{when(item.at)} · {t("activity.kycSource")}</span>
       </span>
     </li>
   );
@@ -101,6 +100,7 @@ export function OperationsScreen() {
   const [items, setItems] = useState<readonly ActivityItem[] | undefined>();
   const [failed, setFailed] = useState(false);
   const [group, setGroup] = useState<ActivityGroup>("all");
+  const { t } = useI18n();
 
   useEffect(() => {
     let active = true;
@@ -116,13 +116,13 @@ export function OperationsScreen() {
   );
 
   return (
-    <section className="screen" aria-label="Операции">
-      <ScreenTitle>Операции</ScreenTitle>
+    <section className="screen" aria-label={t("tab.activity")}>
+      <ScreenTitle>{t("tab.activity")}</ScreenTitle>
       <div className="notice-banner">
         <Icon name="info" size="sm" />
-        <span>Тестовый режим — операции не выполняются</span>
+        <span>{t("activity.banner")}</span>
       </div>
-      <fieldset className="filter-row" aria-label="Тип события">
+      <fieldset className="filter-row" aria-label={t("activity.filterLabel")}>
         {groupFilters.map((filter) => (
           <button
             type="button"
@@ -131,34 +131,30 @@ export function OperationsScreen() {
             aria-pressed={group === filter.value}
             onClick={() => setGroup(filter.value)}
           >
-            {filter.label}
+            {t(filter.label)}
           </button>
         ))}
       </fieldset>
       <div className="filter-tools">
         <span className="filter-tools__count num" aria-live="polite">
-          {items === undefined ? "Загружаем…" : `Найдено: ${filtered.length}`}
+          {items === undefined ? t("common.loading") : t("activity.found", { count: filtered.length })}
         </span>
       </div>
 
-      {failed ? <p className="form-error" role="alert">Не удалось загрузить историю.</p> : null}
+      {failed ? <p className="form-error" role="alert">{t("activity.loadFailed")}</p> : null}
       {items?.length === 0 ? (
-        <EmptyState title="Событий пока нет">
-          Здесь появятся входы, этапы проверки личности, расчёты обмена и проверки адресов.
-        </EmptyState>
+        <EmptyState title={t("activity.emptyTitle")}>{t("activity.emptyDetail")}</EmptyState>
       ) : items && filtered.length === 0 ? (
         <EmptyState
-          title="По выбранному фильтру событий нет."
-          action={<button type="button" className="link" onClick={() => setGroup("all")}>Сбросить фильтр</button>}
+          title={t("activity.filterEmpty")}
+          action={<button type="button" className="link" onClick={() => setGroup("all")}>{t("activity.resetFilter")}</button>}
         />
       ) : filtered.length > 0 ? (
-        <ul className="list activity" aria-label="История тестового режима">
+        <ul className="list activity" aria-label={t("activity.listLabel")}>
           {filtered.map((item) => <ActivityRow key={item.id} item={item} />)}
         </ul>
       ) : null}
-      <p className="note">
-        История ведётся только на сервере и хранится в памяти. Расчёты обмена не исполняются, деньги не двигаются.
-      </p>
+      <p className="note">{t("activity.note")}</p>
     </section>
   );
 }
