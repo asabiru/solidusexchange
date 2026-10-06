@@ -544,6 +544,22 @@ button {
   box-shadow: 0 0 0 3px rgba(var(--success), .2);
 }
 
+.locale-select {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(var(--edge), var(--edge-a));
+  border-radius: 999px;
+  color: rgb(var(--text));
+  background: rgba(var(--sub), var(--sub-a));
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.locale-select option {
+  color: #172238;
+  background: #faf8f3;
+}
+
 .icon-button,
 .avatar {
   display: grid;
@@ -2079,6 +2095,10 @@ main[tabindex="-1"]:focus {
   .environment {
     order: 2;
     margin-right: auto;
+  }
+
+  .locale-select {
+    order: 2;
   }
 
   .density-button {
