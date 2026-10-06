@@ -43,10 +43,36 @@ import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
  * }} ServerOptions
  */
 
-const BASE_HEADERS = Object.freeze({
+export const PERMISSIONS_POLICY = [
+  "accelerometer",
+  "bluetooth",
+  "camera",
+  "display-capture",
+  "geolocation",
+  "gyroscope",
+  "hid",
+  "magnetometer",
+  "microphone",
+  "midi",
+  "payment",
+  "serial",
+  "usb",
+  "xr-spatial-tracking"
+]
+  .map((feature) => `${feature}=()`)
+  .join(", ");
+export const SECURITY_HEADERS = Object.freeze({
   "cache-control": "no-store",
-  "content-type": "application/json; charset=utf-8",
-  "x-content-type-options": "nosniff"
+  "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  "cross-origin-resource-policy": "same-origin",
+  "permissions-policy": PERMISSIONS_POLICY,
+  "referrer-policy": "no-referrer",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY"
+});
+const BASE_HEADERS = Object.freeze({
+  ...SECURITY_HEADERS,
+  "content-type": "application/json; charset=utf-8"
 });
 const SCOPE_PATTERN = /^[a-z][a-z0-9.:-]{0,127}$/u;
 // Every peer of this loopback-only server is local, and a local client can pick

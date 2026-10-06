@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { devDocumentSecurityHeaders, devServerPort, documentSecurityHeaders } from "./src/server/security-headers";
 
 // Dev metrics stay on the BFF's own loopback port, never via the app origin,
 // including dot-segment, %2e or backslash spellings that normalize to the path.
@@ -19,10 +20,14 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: 4173,
+    port: devServerPort,
     strictPort: true,
+    headers: { ...devDocumentSecurityHeaders },
     proxy: {
       "/bff": { target: "http://127.0.0.1:4174", bypass: (request) => (isMetricsPath(request.url) ? false : undefined) }
     }
+  },
+  preview: {
+    headers: { ...documentSecurityHeaders }
   }
 });
