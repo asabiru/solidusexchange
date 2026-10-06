@@ -108,4 +108,16 @@ describe("decimal formatting", () => {
     assert.equal(normalizeAmountInput(" 1 000 "), "1000");
     assert.equal(isDecimalString(normalizeAmountInput("1,5e3"), 2), false);
   });
+
+  it("parses commas as thousands separators only when the decimal separator is a point", () => {
+    const point = { group: ",", decimal: "." };
+    const comma = { group: nbsp, decimal: "," };
+    assert.equal(normalizeAmountInput("1,000", point), "1000");
+    assert.equal(normalizeAmountInput("1,000", comma), "1.000");
+    assert.equal(normalizeAmountInput("1,000"), "1.000");
+    assert.equal(normalizeAmountInput("10,000,000.25", point), "10000000.25");
+    for (const value of ["1,5", "1,0000", "1,000.5,0", "1.000.5", ",000"]) {
+      assert.equal(isDecimalString(normalizeAmountInput(value, point), 6), false, value);
+    }
+  });
 });

@@ -180,6 +180,18 @@ const statusRules = [".status", ...["info", "success", "warning", "danger"].map(
   }
 );
 
+describe("contrast arithmetic", () => {
+  it("matches published WCAG reference ratios so token checks are not vacuous", () => {
+    assert.equal(contrast([0, 0, 0], [255, 255, 255]).toFixed(2), "21.00");
+    assert.equal(contrast([255, 255, 255], [255, 255, 255]), 1);
+    assert.equal(contrast([118, 118, 118], [255, 255, 255]).toFixed(2), "4.54");
+    assert.ok(contrast([119, 119, 119], [255, 255, 255]) < 4.5);
+    assert.equal(contrast([0, 0, 255], [255, 255, 255]).toFixed(2), "8.59");
+    assert.deepEqual(over([255, 255, 255], 0.5, [0, 0, 0]), [127.5, 127.5, 127.5]);
+    assert.ok(minContrast([118, 118, 118], [[255, 255, 255], [119, 119, 119]]) < 1.02);
+  });
+});
+
 const textTokens = ["text", "muted", "accent-text", "info", "success", "warning", "danger"];
 const textThreshold = 4.5;
 const uiThreshold = 3;
@@ -542,5 +554,92 @@ describe("focus and motion styles", () => {
     for (const rule of moving) {
       for (const selector of rule.selectors) assert.ok(neutralized.has(selector), `${selector} moves under reduced motion`);
     }
+  });
+});
+
+describe("accessibility changes keep security behaviour", () => {
+  const sensitiveName = /^(?:verificationCode|challenge|grant|token|secret|password|code|address|reference|subject|customer|email|phone)$/i;
+
+  function identifiersIn(node: ts.Node): string[] {
+    const names: string[] = [];
+    function visit(child: ts.Node) {
+      if (ts.isIdentifier(child)) names.push(child.text);
+      ts.forEachChild(child, visit);
+    }
+    visit(node);
+    return names;
+  }
+
+  it("live regions only announce fixed status text and the active section label", () => {
+    const uses = appJsx.filter((entry) => entry.tag === "LiveStatus");
+    assert.ok(uses.length >= 4);
+    const allowed = new Set(["previewState", "stepUpState", "preview", "exportState", "detailState", "activeItem", "label"]);
+    for (const entry of uses) {
+      const initializer = entry.attributes.get("message")?.initializer;
+      assert.ok(initializer, `${entry.functionName} LiveStatus needs a message`);
+      for (const name of identifiersIn(initializer)) {
+        assert.ok(allowed.has(name), `${entry.functionName} LiveStatus announces ${name}`);
+      }
+    }
+    const live = appJsx.filter((entry) => entry.attributes.has("aria-live"));
+    assert.deepEqual(live.map((entry) => entry.functionName), ["LiveStatus"]);
+  });
+
+  it("alerts never announce step-up codes, challenges or customer data", () => {
+    const alerts = appJsx.filter((entry) => staticAttribute(entry, "role") === "alert");
+    assert.ok(alerts.length >= 7);
+    for (const entry of alerts) {
+      for (const name of identifiersIn(entry.node)) {
+        assert.doesNotMatch(name, sensitiveName, `${entry.functionName} alert reads ${name}`);
+      }
+    }
+  });
+
+  it("Escape only dismisses the tooltip and is the single keyboard shortcut", () => {
+    assert.equal(appSource.match(/"Escape"/g)?.length, 1);
+    assert.equal(appSource.match(/addEventListener\("keydown"/g)?.length, 1);
+    assert.doesNotMatch(appSource, /onKeyDown=|onKeyUp=|onKeyPress=/);
+    const handler = /function onKeyDown\(event: KeyboardEvent\) \{([^}]*)\}/.exec(appSource);
+    assert.ok(handler);
+    assert.deepEqual(identifiersIn(parseTsx("handler.ts", handler[1] ?? "")), ["event", "key", "setTooltip", "undefined"]);
+  });
+
+  it("capability-gated controls stay disabled without the capability", () => {
+    assert.match(appSource, /const mayPreview = capabilities\.includes\("approvals:preview"\);/);
+    assert.match(appSource, /const mayStepUp = capabilities\.includes\("approvals:step-up"\);/);
+    const gated = new Map([
+      ["loadPreview", /^\{!mayPreview \|\| /],
+      ["startStepUp", /^\{!mayStepUp \|\| /],
+      ["verifyStepUp", /verificationCode\.length !== 6\}$/]
+    ]);
+    for (const [action, pattern] of gated) {
+      const button = appJsx.find((entry) => entry.tag === "button" && (attributeText(entry, "onClick") ?? "").includes(`${action}()`));
+      assert.ok(button, action);
+      assert.match(attributeText(button, "disabled") ?? "", pattern, action);
+    }
+    const auditExport = appJsx.filter(
+      (entry) => entry.functionName === "AuditView" && entry.tag === "button" && entry.attributes.has("disabled")
+    );
+    assert.ok(auditExport.some((entry) => /^\{!mayExport \|\| /.test(attributeText(entry, "disabled") ?? "")));
+    const ariaDisabled = appJsx.filter((item) => item.attributes.has("aria-disabled"));
+    assert.ok(ariaDisabled.length >= 1);
+    for (const entry of ariaDisabled) {
+      assert.equal(entry.tag, "button");
+      assert.equal(attributeText(entry, "onClick"), "{() => selectScreen(item)}", "aria-disabled controls must still guard the click");
+    }
+    assert.match(
+      appSource,
+      /function selectScreen\(item: NavigationItem\) \{\n {4}if \(item\.capability && !hasCapability\(session, item\.capability\)\) return;/
+    );
+  });
+
+  it("the skip link only moves focus and the main landmark is its only target", () => {
+    assert.equal(appSource.match(/ref=\{mainRef\}/g)?.length, 1);
+    assert.equal(appSource.match(/mainRef\.current/g)?.length, 1);
+    const skip = appJsx.find((entry) => staticAttribute(entry, "className") === "skip-link");
+    assert.ok(skip);
+    assert.equal(attributeText(skip, "onClick"), "{() => mainRef.current?.focus()}");
+    assert.equal(skip.tag, "button");
+    assert.equal(staticAttribute(skip, "type"), "button");
   });
 });
