@@ -1,4 +1,4 @@
-import type { Capability } from "../auth/access";
+import type { Capability } from "../auth/access.js";
 
 export type ScreenId =
   | "dashboard"
@@ -28,41 +28,42 @@ export type ScreenId =
   | "admin"
   | "audit";
 
+export type NavigationGroup = "workspace" | "customer-risk" | "money-movement" | "service" | "control" | "system";
+
 export interface NavigationItem {
   id: ScreenId;
-  label: string;
-  group: string;
+  group: NavigationGroup;
   capability?: Capability;
   implemented: boolean;
 }
 
 export const navigation: readonly NavigationItem[] = [
-  { id: "dashboard", label: "Operations center", group: "Workspace", capability: "dashboard:read", implemented: true },
-  { id: "customers", label: "Customers 360", group: "Customer risk", capability: "customers:read", implemented: true },
-  { id: "kyc", label: "KYC / KYB", group: "Customer risk", capability: "kyc:read", implemented: true },
-  { id: "aml", label: "AML / KYT", group: "Customer risk", capability: "aml:read", implemented: true },
-  { id: "investigations", label: "Investigations", group: "Customer risk", capability: "investigations:read", implemented: true },
-  { id: "fraud", label: "Fraud controls", group: "Customer risk", capability: "fraud:read", implemented: true },
-  { id: "operations", label: "Operations", group: "Money movement", implemented: false },
-  { id: "withdrawal", label: "Withdrawals", group: "Money movement", implemented: false },
-  { id: "payments", label: "Fiat payments", group: "Money movement", implemented: false },
-  { id: "custody", label: "Wallets & custody", group: "Money movement", implemented: false },
-  { id: "liquidity", label: "Exchange & liquidity", group: "Money movement", implemented: false },
-  { id: "treasury-planning", label: "Treasury planning", group: "Money movement", implemented: false },
-  { id: "ledger", label: "Ledger & reconciliation", group: "Money movement", implemented: false },
-  { id: "cards", label: "Cards", group: "Service", implemented: false },
-  { id: "support", label: "Support & complaints", group: "Service", implemented: false },
-  { id: "channels", label: "Customer channels", group: "Service", implemented: false },
-  { id: "approvals", label: "Approval inbox", group: "Control", capability: "approvals:read", implemented: true },
-  { id: "analytics", label: "Analytics", group: "Control", implemented: false },
-  { id: "regulatory", label: "Regulatory", group: "Control", implemented: false },
-  { id: "vendor-risk", label: "Vendor risk", group: "Control", implemented: false },
-  { id: "reports", label: "Отчёты", group: "Control", capability: "reports:read", implemented: true },
-  { id: "privacy", label: "Privacy", group: "Control", implemented: false },
-  { id: "incidents", label: "Incidents", group: "System", implemented: false },
-  { id: "resilience", label: "Resilience", group: "System", implemented: false },
-  { id: "admin", label: "Administration", group: "System", implemented: false },
-  { id: "audit", label: "Audit trail", group: "System", capability: "audit:read", implemented: true }
+  { id: "dashboard", group: "workspace", capability: "dashboard:read", implemented: true },
+  { id: "customers", group: "customer-risk", capability: "customers:read", implemented: true },
+  { id: "kyc", group: "customer-risk", capability: "kyc:read", implemented: true },
+  { id: "aml", group: "customer-risk", capability: "aml:read", implemented: true },
+  { id: "investigations", group: "customer-risk", capability: "investigations:read", implemented: true },
+  { id: "fraud", group: "customer-risk", capability: "fraud:read", implemented: true },
+  { id: "operations", group: "money-movement", implemented: false },
+  { id: "withdrawal", group: "money-movement", implemented: false },
+  { id: "payments", group: "money-movement", implemented: false },
+  { id: "custody", group: "money-movement", implemented: false },
+  { id: "liquidity", group: "money-movement", implemented: false },
+  { id: "treasury-planning", group: "money-movement", implemented: false },
+  { id: "ledger", group: "money-movement", implemented: false },
+  { id: "cards", group: "service", implemented: false },
+  { id: "support", group: "service", implemented: false },
+  { id: "channels", group: "service", implemented: false },
+  { id: "approvals", group: "control", capability: "approvals:read", implemented: true },
+  { id: "analytics", group: "control", implemented: false },
+  { id: "regulatory", group: "control", implemented: false },
+  { id: "vendor-risk", group: "control", implemented: false },
+  { id: "reports", group: "control", capability: "reports:read", implemented: true },
+  { id: "privacy", group: "control", implemented: false },
+  { id: "incidents", group: "system", implemented: false },
+  { id: "resilience", group: "system", implemented: false },
+  { id: "admin", group: "system", implemented: false },
+  { id: "audit", group: "system", capability: "audit:read", implemented: true }
 ];
 
-export const navigationGroups = [...new Set(navigation.map((item) => item.group))];
+export const navigationGroups: readonly NavigationGroup[] = [...new Set(navigation.map((item) => item.group))];

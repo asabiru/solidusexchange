@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import ts from "typescript";
+import { hasMessage, type Messages } from "./i18n.js";
+import { en } from "./locales/en.js";
+import { ru } from "./locales/ru.js";
 
 type Rgb = readonly [number, number, number];
 
@@ -330,6 +333,22 @@ function staticAttribute(entry: JsxNode, name: string): string | undefined {
   return initializer && ts.isStringLiteral(initializer) ? initializer.text : undefined;
 }
 
+const catalogs: readonly Messages[] = [ru, en];
+
+function catalogKey(node: ts.Node | undefined): string | undefined {
+  const expression = node && ts.isJsxExpression(node) ? node.expression : node;
+  if (!expression || !ts.isCallExpression(expression) || expression.expression.getText(appFile) !== "t") return undefined;
+  const [key] = expression.arguments;
+  return key && ts.isStringLiteral(key) && hasMessage(key.text) ? key.text : undefined;
+}
+
+function catalogAttribute(entry: JsxNode, name: string, catalog: Messages): string | undefined {
+  const initializer = entry.attributes.get(name)?.initializer;
+  if (initializer && ts.isStringLiteral(initializer)) return initializer.text;
+  const key = catalogKey(initializer);
+  return key && hasMessage(key) ? catalog[key] : undefined;
+}
+
 function hasVisibleText(node: ts.Node): boolean {
   if (ts.isJsxText(node)) return node.text.trim().length > 0;
   if (ts.isJsxExpression(node)) return Boolean(node.expression);
@@ -450,7 +469,11 @@ describe("backoffice markup semantics", () => {
     const navs = appJsx.filter((entry) => entry.tag === "nav");
     assert.ok(navs.length >= 2);
     for (const nav of navs) assert.ok(nav.attributes.has("aria-label"), "every nav landmark needs a distinct label");
-    assert.equal(new Set(navs.map((nav) => staticAttribute(nav, "aria-label"))).size, navs.length);
+    for (const catalog of catalogs) {
+      const names = navs.map((nav) => catalogAttribute(nav, "aria-label", catalog));
+      for (const name of names) assert.ok(name?.trim(), "nav landmark labels must resolve to catalog text");
+      assert.equal(new Set(names).size, navs.length);
+    }
     assert.ok(appJsx.some((entry) => entry.functionName === "AccessGate" && entry.tag === "main"));
   });
 
@@ -516,6 +539,21 @@ describe("backoffice markup semantics", () => {
     }
   });
 
+  it("the language switch is a labelled native select that only changes the locale", () => {
+    const selects = appJsx.filter((entry) => staticAttribute(entry, "className") === "locale-select");
+    assert.equal(selects.length, 1);
+    const [select] = selects;
+    assert.equal(select.tag, "select");
+    assert.equal(select.functionName, "App");
+    assert.ok(select.ancestors.some((ancestor) => ancestor.tag === "header"), "language switch belongs in the operator header");
+    for (const catalog of catalogs) assert.ok(catalogAttribute(select, "aria-label", catalog)?.trim());
+    assert.equal(attributeText(select, "value"), "{locale}");
+    assert.match(attributeText(select, "onChange") ?? "", /^\{\(event\) => \{\n\s+if \(isLocale\(event\.target\.value\)\) setLocale\(event\.target\.value\);\n\s+\}\}$/);
+    const options = appJsx.filter((entry) => entry.tag === "option" && isDescendant(entry, select));
+    assert.equal(options.length, 1);
+    assert.equal(attributeText(options[0], "lang"), "{candidate}");
+  });
+
   it("Escape dismisses the rail tooltip", () => {
     assert.match(appSource, /if \(event\.key === "Escape"\) setTooltip\(undefined\);/);
     assert.match(appSource, /document\.addEventListener\("keydown", onKeyDown\);/);
@@ -573,12 +611,21 @@ describe("accessibility changes keep security behaviour", () => {
   it("live regions only announce fixed status text and the active section label", () => {
     const uses = appJsx.filter((entry) => entry.tag === "LiveStatus");
     assert.ok(uses.length >= 4);
-    const allowed = new Set(["previewState", "stepUpState", "preview", "exportState", "detailState", "activeItem", "label"]);
+    const allowed = new Set(["previewState", "stepUpState", "preview", "exportState", "detailState", "activeItem", "label", "t"]);
     for (const entry of uses) {
       const initializer = entry.attributes.get("message")?.initializer;
       assert.ok(initializer, `${entry.functionName} LiveStatus needs a message`);
       for (const name of identifiersIn(initializer)) {
         assert.ok(allowed.has(name), `${entry.functionName} LiveStatus announces ${name}`);
+      }
+      const calls: ts.CallExpression[] = [];
+      function visit(child: ts.Node) {
+        if (ts.isCallExpression(child)) calls.push(child);
+        ts.forEachChild(child, visit);
+      }
+      visit(initializer);
+      for (const call of calls) {
+        assert.ok(catalogKey(call), `${entry.functionName} LiveStatus may only announce fixed catalog messages`);
       }
     }
     const live = appJsx.filter((entry) => entry.attributes.has("aria-live"));
