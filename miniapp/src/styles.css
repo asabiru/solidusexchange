@@ -389,6 +389,12 @@ fieldset {
   font-weight: 600;
 }
 
+.sessions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 .notifications {
   margin: 0 0 12px;
   padding: 0;
