@@ -407,7 +407,7 @@ describe("support routes: no operator and no external delivery", () => {
   it("has no network, Telegram, email or logging access in the support module", async () => {
     for (const file of ["./support.js", "../shared/support.js"]) {
       const source = await readFile(new URL(file, import.meta.url), "utf8");
-      assert.doesNotMatch(source, /fetch\(|node:https?|node:net|node:dgram|node:child_process|api\.telegram\.org|sendMessage|smtp|nodemailer|mailto:|console\.|process\.stdout/i, file);
+      assert.doesNotMatch(source, /fetch\(|node:https?|node:net|node:dgram|node:child_process|api\.telegram\.org|sendMessage|smtp|nodemailer|mailto:|console\.|\bprocess\b/i, file);
     }
   });
 });
