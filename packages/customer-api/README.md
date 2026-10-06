@@ -1,4 +1,4 @@
-# SolidChange Customer API (dev-only runtime)
+# SOLID Customer API (dev-only runtime)
 
 First runtime for the canonical customer contract in
 [`packages/api-contracts/openapi.yaml`](../api-contracts/openapi.yaml). It is a

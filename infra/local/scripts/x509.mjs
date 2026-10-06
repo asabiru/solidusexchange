@@ -63,7 +63,7 @@ function utcTime(date) {
 
 function name(commonName) {
   return sequence(
-    set(sequence(objectIdentifier(OID.organizationName), utf8String("SolidChange local dev (synthetic)"))),
+    set(sequence(objectIdentifier(OID.organizationName), utf8String("SOLID local dev (synthetic)"))),
     set(sequence(objectIdentifier(OID.commonName), utf8String(commonName)))
   );
 }
@@ -126,8 +126,8 @@ export function createDevTlsMaterial({ now = new Date(), validityDays = 30, ipAd
   const serverKey = generateKeyPairSync("ec", { namedCurve: "P-256" });
 
   const ca = certificate({
-    subject: "SolidChange local dev CA (synthetic)",
-    issuer: "SolidChange local dev CA (synthetic)",
+    subject: "SOLID local dev CA (synthetic)",
+    issuer: "SOLID local dev CA (synthetic)",
     subjectKey: caKey,
     issuerKey: caKey,
     notBefore,
@@ -143,8 +143,8 @@ export function createDevTlsMaterial({ now = new Date(), validityDays = 30, ipAd
     ...dnsNames.map((dnsName) => tlv(0x82, Buffer.from(dnsName, "ascii")))
   ];
   const server = certificate({
-    subject: "SolidChange local audit database (synthetic)",
-    issuer: "SolidChange local dev CA (synthetic)",
+    subject: "SOLID local audit database (synthetic)",
+    issuer: "SOLID local dev CA (synthetic)",
     subjectKey: serverKey,
     issuerKey: caKey,
     issuerSpki: ca.spki,

@@ -220,7 +220,7 @@ export function App() {
           <span className="brand">
             <span className="brand__mark" aria-hidden="true">S</span>
             <span className="brand__text">
-              <span className="brand__name serif">SolidChange</span>
+              <span className="brand__name serif">SOLID</span>
               <span className="topbar__title" aria-hidden="true">{t(tabs.find((item) => item.id === tab)?.label ?? "tab.home")}</span>
             </span>
           </span>
