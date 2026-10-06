@@ -107,6 +107,24 @@ export function runToExit(entry, env) {
   });
 }
 
+export async function listen(server) {
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+export function closeServer(server) {
+  return new Promise((resolve) => {
+    server.close(() => resolve());
+    server.closeAllConnections?.();
+  });
+}
+
+export function cookieOf(response) {
+  const cookie = response.headers.get("set-cookie");
+  assert.ok(cookie, "session cookie expected");
+  return cookie.split(";")[0];
+}
+
 export async function readJson(response) {
   assert.match(response.headers.get("content-type") ?? "", /^application\/json/);
   return response.json();

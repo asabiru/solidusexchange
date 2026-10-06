@@ -11,8 +11,8 @@
   },
   "scripts": {
     "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
-    "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs",
-    "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs",
+    "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs",
+    "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs",
     "typecheck": "npm run lint"
   }
 }

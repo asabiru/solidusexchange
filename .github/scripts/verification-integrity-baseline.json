@@ -38,8 +38,8 @@
     },
     "packages/e2e-dev/package.json": {
       "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
-      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs",
-      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs",
+      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs",
+      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs",
       "typecheck": "npm run lint"
     },
     "packages/financial-core/package.json": {
@@ -490,8 +490,8 @@
       "minCases": 5
     },
     "miniapp/src/server/customer-api-client.test.ts": {
-      "minLines": 124,
-      "minCases": 5
+      "minLines": 170,
+      "minCases": 6
     },
     "miniapp/src/server/dev-server.test.ts": {
       "minLines": 50,
@@ -649,8 +649,16 @@
       "minLines": 538,
       "minCases": 17
     },
+    "packages/e2e-dev/tests/load.test.mjs": {
+      "minLines": 348,
+      "minCases": 5
+    },
+    "packages/e2e-dev/tests/resilience.test.mjs": {
+      "minLines": 511,
+      "minCases": 17
+    },
     "packages/e2e-dev/tests/stack.mjs": {
-      "minLines": 126
+      "minLines": 141
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44
