@@ -1,5 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { KycVerificationState, KycVerificationView, OperationDetail, ProfileView, WalletView } from "../shared/api";
+import type {
+  KycVerificationState,
+  KycVerificationView,
+  NotificationDraft,
+  NotificationsView,
+  OperationDetail,
+  ProfileView,
+  WalletView
+} from "../shared/api";
 import { type AssetCode, assets } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { dateTime, money, rate } from "./format";
@@ -14,9 +22,10 @@ interface Props {
   close: () => void;
   open: (sheet: SheetRequest) => void;
   onKycVerified: () => Promise<void>;
+  onNotificationsRead: (view: NotificationsView) => void;
 }
 
-export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified }: Props) {
+export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, onNotificationsRead }: Props) {
   switch (sheet.kind) {
     case "asset":
       return <AssetSheet asset={sheet.asset} wallet={wallet} close={close} open={open} />;
@@ -43,6 +52,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified }
       return <OperationSheet id={sheet.id} close={close} />;
     case "qr-manual":
       return <QrManualSheet close={close} />;
+    case "notifications":
+      return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":
       return (
         <Sheet title="Выбрать изображение" onClose={close}>
@@ -399,6 +410,61 @@ function QrManualSheet({ close }: { close: () => void }) {
       {checked ? (
         <Unavailable>Оплата по QR недоступна в тестовой версии. Код не проверяется и не отправляется на сервер.</Unavailable>
       ) : null}
+    </Sheet>
+  );
+}
+
+function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (view: NotificationsView) => void }) {
+  const [drafts, setDrafts] = useState<readonly NotificationDraft[] | undefined>();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      const view = await api.notifications();
+      if (!active) return;
+      setDrafts(view.notifications);
+      const unread = view.notifications.filter((draft) => !draft.read).map((draft) => draft.id);
+      if (unread.length === 0) return;
+      const marked = await api.markNotificationsRead(unread);
+      if (active) {
+        onRead({
+          ...view,
+          unread: marked.unread,
+          notifications: view.notifications.map((draft) => ({ ...draft, read: true }))
+        });
+      }
+    }
+    load().catch(() => { if (active) setFailed(true); });
+    return () => { active = false; };
+  }, [onRead]);
+
+  return (
+    <Sheet title="Уведомления" onClose={close}>
+      <div className="notice-banner">
+        <Icon name="info" size="sm" />
+        <span>Тестовый режим — сообщения не отправляются</span>
+      </div>
+      {failed ? <p className="form-error" role="alert">Не удалось загрузить уведомления.</p> : null}
+      {drafts === undefined && !failed ? <p className="sheet__note">Загружаем…</p> : null}
+      {drafts?.length === 0 ? <p className="sheet__note">Уведомлений пока нет.</p> : null}
+      {drafts && drafts.length > 0 ? (
+        <ul className="list notifications" aria-label="Черновики уведомлений">
+          {drafts.map((draft) => (
+            <li key={draft.id} className={`row row--static${draft.read ? "" : " is-unread"}`}>
+              <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
+              <span className="row__main">
+                <strong>{draft.text}</strong>
+                <span className="num">{dateTime(new Date(draft.createdAt).toISOString())} · черновик Telegram, не отправлен</span>
+              </span>
+              {draft.read ? null : <span className="unread-dot"><span className="visually-hidden">Новое</span></span>}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <p className="sheet__note">
+        Здесь собираются черновики уведомлений о входе и проверке личности. В тестовой версии они никуда не доставляются.
+      </p>
+      <button type="button" className="cta cta--ghost" onClick={close}>Закрыть</button>
     </Sheet>
   );
 }

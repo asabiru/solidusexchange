@@ -5,13 +5,26 @@ import {
   type Server,
   type ServerResponse
 } from "node:http";
-import type { HealthView, KycStatus, SessionView } from "../shared/api.js";
+import type {
+  HealthView,
+  KycStatus,
+  KycVerificationState,
+  NotificationTemplate,
+  NotificationsView,
+  SessionView
+} from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
 import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
 import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
 import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
+import {
+  type NotificationOutbox,
+  createNotificationOutbox,
+  defaultMaxPerSubject,
+  notificationIdPattern
+} from "./notifications.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
@@ -39,7 +52,9 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/profile" },
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "POST", path: "/bff/kyc/applications" },
-  { method: "GET", path: "/bff/kyc/status" }
+  { method: "GET", path: "/bff/kyc/status" },
+  { method: "GET", path: "/bff/notifications" },
+  { method: "POST", path: "/bff/notifications/read" }
 ] satisfies Route[]);
 
 export interface MiniappServerOptions {
@@ -48,6 +63,25 @@ export interface MiniappServerOptions {
   quoteProvider?: QuoteProvider;
   customerApi?: CustomerApiClient;
   kyc?: KycService;
+  notifications?: NotificationOutbox;
+}
+
+const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTemplate>>> = Object.freeze({
+  submitted: "kyc_submitted",
+  in_review: "kyc_in_review",
+  approved: "kyc_approved",
+  rejected: "kyc_rejected",
+  needs_more_data: "kyc_needs_more_data",
+  timed_out: "kyc_timed_out",
+  unavailable: "kyc_unavailable"
+});
+
+const maxReadIds = defaultMaxPerSubject;
+
+function parseNotificationIds(value: string): readonly string[] | undefined {
+  const ids = value.split(",");
+  if (ids.length > maxReadIds || new Set(ids).size !== ids.length) return undefined;
+  return ids.every((id) => notificationIdPattern.test(id)) ? ids : undefined;
 }
 
 function securityHeaders(response: ServerResponse): void {
@@ -157,6 +191,21 @@ export function createMiniappServer(
     clock
   });
 
+  const outbox = options.notifications ?? createNotificationOutbox({ clock });
+  const unsubscribeKyc = kycOnboarding.subscribe((subject, state) => {
+    const template = kycTemplates[state];
+    if (template) outbox.record(subject, template);
+  });
+
+  function notificationsView(subject: string): NotificationsView {
+    return {
+      mode: "test",
+      delivery: "disabled",
+      unread: outbox.unread(subject),
+      notifications: outbox.list(subject, defaultMaxPerSubject)
+    };
+  }
+
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
     const id = parseCookies(request)[sessionCookie];
     const session = id ? sessions.get(id) : undefined;
@@ -179,6 +228,7 @@ export function createMiniappServer(
     };
     sessions.set(created.id, created);
     sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
+    outbox.record(created.subject, "session_login");
     response.setHeader("set-cookie", sessionCookieValue(created.id, config.sessionTtlSeconds, origin));
     json(response, 201, sessionView(created));
   }
@@ -300,6 +350,31 @@ export function createMiniappServer(
         return;
       }
 
+      if (path === "/bff/notifications/read") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const body = await readJsonBody(request, ["ids"]);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        const ids = parseNotificationIds(body.ids);
+        if (!ids) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const marked = outbox.markRead(session.subject, ids);
+        json(response, 200, { marked, unread: outbox.unread(session.subject) });
+        return;
+      }
+
       json(response, 404, { error: "not_found" });
       return;
     }
@@ -365,6 +440,14 @@ export function createMiniappServer(
       json(response, 200, kycOnboarding.view(session.subject, session.kyc));
       return;
     }
+    if (path === "/bff/notifications") {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      json(response, 200, notificationsView(session.subject));
+      return;
+    }
     if (path === "/bff/quotes/preview") {
       const from = url.searchParams.get("from") ?? "";
       const to = url.searchParams.get("to") ?? "";
@@ -393,7 +476,7 @@ export function createMiniappServer(
     json(response, 404, { error: "not_found" });
   }
 
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
     handle(request, response).catch((error: unknown) => {
       if (error instanceof RequestBodyError) {
         json(response, error.status, { error: error.status === 415 ? "unsupported_media_type" : "invalid_request" });
@@ -402,4 +485,6 @@ export function createMiniappServer(
       json(response, 500, { error: "internal_error" });
     });
   });
+  server.once("close", unsubscribeKyc);
+  return server;
 }

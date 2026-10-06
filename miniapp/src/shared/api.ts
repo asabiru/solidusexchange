@@ -146,3 +146,32 @@ export interface QuotePreview {
   executable: false;
   executionUnavailableReason: "dev_test_version";
 }
+
+export type NotificationTemplate =
+  | "session_login"
+  | "kyc_submitted"
+  | "kyc_in_review"
+  | "kyc_approved"
+  | "kyc_rejected"
+  | "kyc_needs_more_data"
+  | "kyc_timed_out"
+  | "kyc_unavailable";
+
+export interface NotificationDraft {
+  id: string;
+  createdAt: number;
+  channel: "telegram-draft";
+  template: NotificationTemplate;
+  locale: "ru";
+  text: string;
+  mode: "test";
+  delivered: false;
+  read: boolean;
+}
+
+export interface NotificationsView {
+  mode: "test";
+  delivery: "disabled";
+  unread: number;
+  notifications: readonly NotificationDraft[];
+}

@@ -10,11 +10,12 @@ interface Props {
   session: SessionView;
   wallet: WalletView;
   operations: readonly OperationSummary[];
+  unreadNotifications: number;
   openSheet: (sheet: SheetRequest) => void;
   openTab: (tab: Tab) => void;
 }
 
-export function HomeScreen({ session, wallet, operations, openSheet, openTab }: Props) {
+export function HomeScreen({ session, wallet, operations, unreadNotifications, openSheet, openTab }: Props) {
   const [hidden, setHidden] = useState(false);
   const verified = wallet.kyc === "verified";
   const gate = (sheet: SheetRequest) => openSheet(verified ? sheet : { kind: "kyc-required" });
@@ -29,6 +30,17 @@ export function HomeScreen({ session, wallet, operations, openSheet, openTab }: 
           <strong>Добрый день, {session.displayName}</strong>
           <span className="num">SolidChange ID · {session.customerRef}</span>
         </div>
+        <button
+          type="button"
+          className="icon-btn bell"
+          aria-label={unreadNotifications > 0 ? `Уведомления: ${unreadNotifications} новых` : "Уведомления"}
+          onClick={() => openSheet({ kind: "notifications" })}
+        >
+          <Icon name="bell" />
+          {unreadNotifications > 0 ? (
+            <span className="bell__badge num" aria-hidden="true">{unreadNotifications > 9 ? "9+" : unreadNotifications}</span>
+          ) : null}
+        </button>
       </div>
 
       {verified ? (

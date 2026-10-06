@@ -41,7 +41,8 @@ export type IconName =
   | "network"
   | "credit-card"
   | "bookmark-check"
-  | "sliders";
+  | "sliders"
+  | "bell";
 
 export const iconShapes: Readonly<Record<IconName, readonly IconShape[]>> = {
   "home": [{"tag": "path", "d": "M3.5 10.5 12 3.7l8.5 6.8v9a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1Z"}],
@@ -82,4 +83,5 @@ export const iconShapes: Readonly<Record<IconName, readonly IconShape[]>> = {
   "credit-card": [{"tag": "rect", "x": "3", "y": "5", "width": "18", "height": "14", "rx": "2.5"}, {"tag": "path", "d": "M3 10h18M7 15h4"}],
   "bookmark-check": [{"tag": "path", "d": "M6 4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18l-6-4-6 4Z"}, {"tag": "path", "d": "m9 9 2 2 4-4"}],
   "sliders": [{"tag": "path", "d": "M4 7h10M18 7h2M4 17h2M10 17h10"}, {"tag": "circle", "cx": "16", "cy": "7", "r": "2"}, {"tag": "circle", "cx": "8", "cy": "17", "r": "2"}],
+  "bell": [{"tag": "path", "d": "M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15Z"}, {"tag": "path", "d": "M10 20.5a2.2 2.2 0 0 0 4 0"}],
 };

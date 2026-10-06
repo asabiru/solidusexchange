@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type {
   HealthView,
   KycStatus,
+  NotificationsView,
   OperationSummary,
   ProfileView,
   SessionView,
@@ -24,6 +25,7 @@ interface CustomerData {
   wallet: WalletView;
   operations: readonly OperationSummary[];
   profile: ProfileView;
+  notifications: NotificationsView;
 }
 
 type Launch =
@@ -54,8 +56,13 @@ function initialTheme(): Theme {
 }
 
 async function loadCustomerData(): Promise<CustomerData> {
-  const [wallet, operations, profile] = await Promise.all([api.wallet(), api.operations(), api.profile()]);
-  return { wallet, operations: operations.operations, profile };
+  const [wallet, operations, profile, notifications] = await Promise.all([
+    api.wallet(),
+    api.operations(),
+    api.profile(),
+    api.notifications()
+  ]);
+  return { wallet, operations: operations.operations, profile, notifications };
 }
 
 export function App() {
@@ -137,6 +144,17 @@ export function App() {
     await enter(await api.session());
   }, [enter]);
 
+  const setNotifications = useCallback((notifications: NotificationsView) => {
+    setLaunch((current) => current.state === "ready"
+      ? { ...current, data: { ...current.data, notifications } }
+      : current);
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    setSheet(undefined);
+    api.notifications().then(setNotifications).catch(() => undefined);
+  }, [setNotifications]);
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => undefined);
     setSheet(undefined);
@@ -203,6 +221,7 @@ export function App() {
                 session={launch.session}
                 wallet={launch.data.wallet}
                 operations={launch.data.operations}
+                unreadNotifications={launch.data.notifications.unread}
                 openSheet={setSheet}
                 openTab={openTab}
               />
@@ -241,9 +260,10 @@ export function App() {
               sheet={sheet}
               wallet={launch.data.wallet}
               profile={launch.data.profile}
-              close={() => setSheet(undefined)}
+              close={closeSheet}
               open={setSheet}
               onKycVerified={refreshSession}
+              onNotificationsRead={setNotifications}
             />
           ) : null}
         </>

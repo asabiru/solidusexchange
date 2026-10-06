@@ -31,7 +31,10 @@ export type KycCallbackResult =
   | { readonly verified: true; readonly action: InboxAction }
   | { readonly verified: false; readonly reason: string };
 
+export type KycTransitionListener = (subject: string, state: KycVerificationState) => void;
+
 export interface KycService {
+  subscribe(listener: KycTransitionListener): () => void;
   submit(subject: string): Promise<{ created: boolean }>;
   view(subject: string, sessionKyc: KycStatus): KycVerificationView;
   isVerified(subject: string): boolean;
@@ -59,6 +62,7 @@ interface ApplicantRecord {
   attempt: number;
   unavailable: boolean;
   application?: Application;
+  lastState?: KycVerificationState;
 }
 
 const providerStates: readonly KycVerificationState[] = ["submitted", "in_review", "approved", "rejected", "needs_more_data"];
@@ -101,6 +105,20 @@ export function createKycService(options: KycServiceOptions): KycService {
   const inbox = createKycCallbackInbox();
   const records = new Map<string, ApplicantRecord>();
   const applicantsByReference = new Map<string, string>();
+  const subjectsByReference = new Map<string, string>();
+  const listeners = new Set<KycTransitionListener>();
+
+  function transition(subject: string, state: KycVerificationState): void {
+    const record = records.get(subject);
+    if (!record || record.lastState === state) return;
+    record.lastState = state;
+    for (const listener of listeners) listener(subject, state);
+  }
+
+  function transitionFor(reference: string, state: KycVerificationState): void {
+    const subject = subjectsByReference.get(reference);
+    if (subject && records.get(subject)?.application?.providerReference === reference) transition(subject, state);
+  }
 
   function recordOf(subject: string): ApplicantRecord {
     let record = records.get(subject);
@@ -119,14 +137,19 @@ export function createKycService(options: KycServiceOptions): KycService {
     if (typeof reference !== "string" || applicantsByReference.get(reference) !== payload.applicant_ref) {
       return { verified: false, reason: "unknown_application" };
     }
-    return { verified: true, action: inbox.accept(payload, { receivedAt }).action };
+    const accepted = inbox.accept(payload, { receivedAt });
+    for (const status of accepted.appliedStatuses) {
+      const state = providerStates.find((candidate) => candidate === status);
+      if (state) transitionFor(reference, state);
+    }
+    return { verified: true, action: accepted.action };
   }
 
   function sync(): void {
     for (const delivery of simulator.drainCallbacks()) {
       receiveCallback(delivery, delivery.deliverAt);
     }
-    inbox.expire(nowSeconds());
+    for (const reference of inbox.expire(nowSeconds())) transitionFor(reference, "timed_out");
   }
 
   function stateOf(application: Application): KycVerificationState {
@@ -137,6 +160,13 @@ export function createKycService(options: KycServiceOptions): KycService {
   }
 
   return Object.freeze({
+    subscribe(listener: KycTransitionListener): () => void {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+
     async submit(subject: string): Promise<{ created: boolean }> {
       sync();
       const record = recordOf(subject);
@@ -152,6 +182,7 @@ export function createKycService(options: KycServiceOptions): KycService {
       } catch (error) {
         if (error instanceof ProviderError && error.code === "provider_unavailable") {
           record.unavailable = true;
+          transition(subject, "unavailable");
           throw new KycUnavailableError();
         }
         throw error;
@@ -163,6 +194,7 @@ export function createKycService(options: KycServiceOptions): KycService {
       const deadline = Date.parse(submission.review_deadline) / 1_000;
       inbox.openSubject(submission.provider_reference, { deadline });
       applicantsByReference.set(submission.provider_reference, applicantRef);
+      subjectsByReference.set(submission.provider_reference, subject);
       record.application = {
         providerReference: submission.provider_reference,
         applicantRef,
@@ -170,6 +202,7 @@ export function createKycService(options: KycServiceOptions): KycService {
         deadline
       };
       record.unavailable = false;
+      transition(subject, "submitted");
       return { created: true };
     },
 
@@ -205,6 +238,7 @@ export function createKycService(options: KycServiceOptions): KycService {
       record.attempt += 1;
       record.unavailable = false;
       record.application = undefined;
+      record.lastState = undefined;
     },
 
     drainDeliveries(): readonly ScheduledDelivery[] {
