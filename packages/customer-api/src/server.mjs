@@ -7,7 +7,7 @@ import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
-export async function startCustomerApi(config, { kycDirectory, clock } = {}) {
+export async function startCustomerApi(config, { kycDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -16,7 +16,10 @@ export async function startCustomerApi(config, { kycDirectory, clock } = {}) {
     verifier,
     kycDirectory: kycDirectory ?? createSyntheticKycDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
-    clock
+    clock,
+    observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
+    logSink,
+    timer
   });
 
   await new Promise((resolve, reject) => {

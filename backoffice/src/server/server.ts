@@ -33,6 +33,7 @@ import {
   listReports,
   reportAccessEvent
 } from "./reports.js";
+import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import {
   StepUpRejectedError,
@@ -119,6 +120,43 @@ function exactLoopbackOrigin(request: IncomingMessage, config: ServerConfig): bo
   }
 }
 
+/** Frozen route templates; observability labels never carry raw paths. */
+export const routeTemplates: readonly string[] = Object.freeze([
+  "/bff/healthz",
+  "/bff/metrics",
+  "/bff/auth/login",
+  "/bff/auth/device",
+  "/bff/auth/status",
+  "/bff/auth/callback",
+  "/bff/auth/dev-session",
+  "/bff/auth/logout",
+  "/bff/api/signing-key",
+  "/bff/api/signing-keys",
+  "/bff/api/session",
+  "/bff/api/dashboard",
+  "/bff/api/customers",
+  "/bff/api/kyc",
+  "/bff/api/aml",
+  "/bff/api/investigations",
+  "/bff/api/fraud-alerts",
+  "/bff/api/approvals",
+  "/bff/api/audit",
+  "/bff/api/audit/export",
+  "/bff/api/reports",
+  "/bff/api/reports/:reportId",
+  "/bff/api/reports/:reportId/export",
+  "/bff/api/approvals/:approvalId/step-up/challenges",
+  "/bff/api/approvals/:approvalId/step-up/challenges/:challengeId/verify",
+  "/bff/api/approvals/:approvalId/preview"
+]);
+
+export interface ObservabilityOptions {
+  /** Receives one JSON log line per completed request when BACKOFFICE_LOG=json. */
+  logSink?: (line: string) => void;
+  /** Monotonic milliseconds for request durations. */
+  timer?: () => number;
+}
+
 function defaultAuditStore(config: ServerConfig): AuditStore {
   if (config.audit.storage !== "memory") {
     throw new AuditUnavailableError("PostgreSQL audit storage must be initialized before BFF");
@@ -129,7 +167,8 @@ function defaultAuditStore(config: ServerConfig): AuditStore {
 export function createBackofficeServer(
   config: ServerConfig,
   auditStore: AuditStore = defaultAuditStore(config),
-  injectedSigningKeys?: EphemeralSigningKeyProvider
+  injectedSigningKeys?: EphemeralSigningKeyProvider,
+  observability: ObservabilityOptions = {}
 ) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
   const sessions = new ExpiringStore<OperatorSession>();
@@ -280,10 +319,51 @@ export function createBackofficeServer(
   );
   rotationTimer.unref();
 
+  const observer = createRequestObserver({
+    service: "backoffice-bff",
+    routes: routeTemplates,
+    config: config.observability,
+    sink: observability.logSink,
+    timer: observability.timer
+  });
+  const gauges: readonly Gauge[] = Object.freeze([
+    { name: "solidchange_backoffice_sessions_active", help: "Unexpired operator sessions.", value: () => sessions.size() },
+    {
+      name: "solidchange_backoffice_audit_events",
+      help: "Events in the verified audit chain.",
+      value: async () => {
+        try {
+          return (await auditStore.snapshot()).status.length;
+        } catch {
+          return undefined;
+        }
+      }
+    }
+  ]);
+
   const server = createServer(async (request, response) => {
+    observer.observe(request, response);
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
       const path = url.pathname;
+
+      if (path === "/bff/metrics") {
+        if (!observer.metricsEnabled || !metricsRequestAllowed(request)) {
+          json(response, 404, { error: "not_found" });
+          return;
+        }
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const body = await observer.renderMetrics(gauges);
+        securityHeaders(response);
+        response.statusCode = 200;
+        response.setHeader("content-type", metricsContentType);
+        response.end(body);
+        return;
+      }
 
       if (request.method === "GET" && path === "/bff/healthz") {
         const audit = await auditStore.snapshot();

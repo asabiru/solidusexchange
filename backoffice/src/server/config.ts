@@ -1,4 +1,5 @@
 import type { OperatorRole } from "../auth/access.js";
+import { type ObservabilityConfig, logModes, metricsModes } from "./observability.js";
 
 export interface OidcConfig {
   issuer: string;
@@ -47,6 +48,7 @@ export interface ServerConfig {
   signing: SigningConfig;
   deviceBinding?: DeviceBindingConfig;
   oidc?: OidcConfig;
+  observability?: ObservabilityConfig;
 }
 
 const roles = new Set<OperatorRole>([
@@ -215,6 +217,14 @@ function integerSetting(name: string, fallback: number, minimum: number, maximum
   return value;
 }
 
+function modeSetting<T extends string>(name: string, modes: readonly T[]): T {
+  const value = process.env[name]?.trim() || "off";
+  if (!modes.includes(value as T)) {
+    throw new Error(`${name} must be one of ${modes.join(", ")}`);
+  }
+  return value as T;
+}
+
 function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost"
     || hostname === "127.0.0.1"
@@ -340,6 +350,10 @@ export function loadServerConfig(): ServerConfig {
     stepUp: loadStepUpConfig(),
     signing: loadSigningConfig(),
     deviceBinding: loadDeviceBindingConfig(),
-    oidc: loadOidcConfig(allowedOrigins)
+    oidc: loadOidcConfig(allowedOrigins),
+    observability: {
+      log: modeSetting("BACKOFFICE_LOG", logModes),
+      metrics: modeSetting("BACKOFFICE_METRICS", metricsModes)
+    }
   };
 }

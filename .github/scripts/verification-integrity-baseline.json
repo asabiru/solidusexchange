@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -414,6 +414,10 @@
       "minLines": 49,
       "minCases": 1
     },
+    "backoffice/src/server/observability.test.ts": {
+      "minLines": 276,
+      "minCases": 9
+    },
     "backoffice/src/server/oidc-session.test.ts": {
       "minLines": 289,
       "minCases": 6
@@ -504,6 +508,10 @@
     "miniapp/src/server/notifications.test.ts": {
       "minLines": 383,
       "minCases": 15
+    },
+    "miniapp/src/server/observability.test.ts": {
+      "minLines": 312,
+      "minCases": 10
     },
     "miniapp/src/server/provider-quotes.test.ts": {
       "minLines": 114,
@@ -612,6 +620,10 @@
     },
     "packages/customer-api/tests/http-client.mjs": {
       "minLines": 125
+    },
+    "packages/customer-api/tests/observability.test.mjs": {
+      "minLines": 215,
+      "minCases": 9
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
       "minLines": 191,

@@ -82,6 +82,8 @@ services:
       - src/server.mjs
     environment:
       NODE_ENV: development
+      CUSTOMER_API_LOG: json
+      CUSTOMER_API_METRICS: loopback
       CUSTOMER_API_HOST: 127.0.0.1
       CUSTOMER_API_PORT: "4185"
       CUSTOMER_API_DEV_AUTH: synthetic
@@ -117,6 +119,8 @@ services:
       - .server-dist/server/index.js
     environment:
       NODE_ENV: development
+      MINIAPP_LOG: json
+      MINIAPP_METRICS: loopback
       MINIAPP_BFF_HOST: 127.0.0.1
       MINIAPP_BFF_PORT: "4184"
       MINIAPP_ALLOW_DEV_LOGIN: "true"
@@ -263,6 +267,8 @@ services:
       - .server-dist/server/index.js
     environment:
       NODE_ENV: development
+      BACKOFFICE_LOG: json
+      BACKOFFICE_METRICS: loopback
       NODE_EXTRA_CA_CERTS: /run/solidchange-dev/dev-ca.crt
       BACKOFFICE_MODE: dev-dry-run
       BACKOFFICE_BFF_HOST: 127.0.0.1

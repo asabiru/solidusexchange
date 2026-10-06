@@ -73,6 +73,8 @@ export interface AddressScreeningService {
   /** Test seam: internal inbox state of one of the subject's screenings. */
   inspect(subject: string, id: string): InboxSubject | undefined;
   size(subject: string): number;
+  /** Screenings tracked across all subjects (metrics gauge, no identifiers). */
+  trackedCount(): number;
 }
 
 export interface AddressScreeningServiceOptions {
@@ -367,6 +369,7 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
       const assessmentId = find(subject, id)?.assessmentId;
       return assessmentId === undefined ? undefined : inbox.get(assessmentId);
     },
-    size: (subject: string) => subjects.get(subject)?.screenings.size ?? 0
+    size: (subject: string) => subjects.get(subject)?.screenings.size ?? 0,
+    trackedCount: () => [...subjects.values()].reduce((total, record) => total + record.screenings.size, 0)
   });
 }
