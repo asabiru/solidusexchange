@@ -1,3 +1,6 @@
+import { type IncomingMessage, type Server, type ServerResponse, STATUS_CODES } from "node:http";
+import type { Duplex } from "node:stream";
+
 export type CspDirectives = Readonly<Record<string, readonly string[]>>;
 
 export const devServerPort = 4173;
@@ -83,3 +86,36 @@ function documentHeaders(directives: CspDirectives): Readonly<Record<string, str
 
 export const documentSecurityHeaders = documentHeaders(documentCspDirectives);
 export const devDocumentSecurityHeaders = documentHeaders(devDocumentCspDirectives);
+
+type HeaderSet = Readonly<Record<string, string>>;
+
+const clientErrorStatuses: ReadonlyMap<string, number> = new Map([
+  ["ERR_HTTP_REQUEST_TIMEOUT", 408],
+  ["HPE_HEADER_OVERFLOW", 431]
+]);
+
+// Node (and Vite's own clientError listener) answer malformed requests and
+// unmet Expect headers before any request handler or middleware runs, so
+// those replies need the set too.
+export function guardRawResponses(server: Server, headers: HeaderSet): void {
+  server.prependListener("clientError", (error: NodeJS.ErrnoException, socket: Duplex) => {
+    const pending = (socket as Duplex & { _httpMessage?: { headersSent?: boolean } })._httpMessage;
+    if (error.code === "ECONNRESET" || !socket.writable || pending?.headersSent) {
+      socket.destroy();
+      return;
+    }
+    const status = clientErrorStatuses.get(error.code ?? "") ?? 400;
+    const head = [
+      `HTTP/1.1 ${status} ${STATUS_CODES[status]}`,
+      ...Object.entries(headers).map(([name, value]) => `${name}: ${value}`),
+      "content-length: 0",
+      "connection: close"
+    ];
+    socket.end(`${head.join("\r\n")}\r\n\r\n`);
+  });
+  server.on("checkExpectation", (_request: IncomingMessage, response: ServerResponse) => {
+    for (const [name, value] of Object.entries(headers)) response.setHeader(name, value);
+    response.setHeader("connection", "close");
+    response.writeHead(417).end();
+  });
+}

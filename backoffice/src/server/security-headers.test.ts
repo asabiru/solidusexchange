@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { connect, createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -55,6 +55,48 @@ function freePort(): Promise<number> {
       probe.close(() => resolve(port));
     });
   });
+}
+
+interface RawReply {
+  status: number;
+  headers: Map<string, string>;
+}
+
+function rawExchange(port: number, text: string): Promise<RawReply> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const chunks: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.on("error", () => socket.destroy());
+    socket.on("close", () => {
+      const [statusLine, ...lines] = Buffer.concat(chunks).toString("latin1").split("\r\n\r\n")[0].split("\r\n");
+      resolve({
+        status: Number(statusLine.split(" ")[1]),
+        headers: new Map(lines.map((line) => {
+          const colon = line.indexOf(":");
+          return [line.slice(0, colon).toLowerCase(), line.slice(colon + 1).trim()];
+        }))
+      });
+    });
+    socket.write(text);
+  });
+}
+
+const rawRejections: readonly (readonly [number, string])[] = [
+  [400, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nmalformed header line\r\n\r\n"],
+  [431, `GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nx-fill: ${"a".repeat(20_000)}\r\n\r\n`],
+  [417, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nExpect: synthetic-unmet\r\n\r\n"]
+];
+
+async function assertRawRejections(port: number, headers: Readonly<Record<string, string>>, label: string): Promise<void> {
+  for (const [status, text] of rawRejections) {
+    const reply = await rawExchange(port, text);
+    assert.equal(reply.status, status, `${label} ${status}`);
+    assert.equal(reply.headers.get("connection"), "close", `${label} ${status}`);
+    for (const [name, value] of Object.entries(headers)) {
+      assert.equal(reply.headers.get(name), value, `${label} ${status}: ${name}`);
+    }
+  }
 }
 
 function parseCsp(header: string): Map<string, string[]> {
@@ -403,6 +445,10 @@ describe("Backoffice BFF security headers on every route", () => {
       assert.ok(statuses.has(status), String(status));
     }
   });
+
+  it("keeps the frozen JSON header set on Node's own parser and Expect rejections", async () => {
+    await assertRawRejections(Number(new URL(baseUrl).port), apiSecurityHeaders, "BFF");
+  });
 });
 
 describe("Backoffice Vite document security headers", () => {
@@ -425,6 +471,37 @@ describe("Backoffice Vite document security headers", () => {
           assert.equal(response.headers.get(name), value, `${path}: ${name}`);
         }
       }
+    } finally {
+      await vite.close();
+    }
+  });
+
+  it("keeps the dev header set on Vite's own 403, 404, 500, preflight and raw rejections", async () => {
+    const vite = await createViteServer({
+      root: backofficeRoot,
+      configFile: `${backofficeRoot}vite.config.ts`,
+      logLevel: "silent",
+      server: { port: await freePort(), strictPort: true, proxy: { "/bff": { target: `http://127.0.0.1:${await freePort()}` } } },
+      optimizeDeps: { noDiscovery: true, include: [] }
+    });
+    try {
+      await vite.listen();
+      const { port } = vite.httpServer?.address() as AddressInfo;
+      const base = `http://127.0.0.1:${port}`;
+      const responses: [number, Response][] = [
+        [403, await fetch(`${base}/@fs/etc/passwd`)],
+        [404, await fetch(`${base}/`, { method: "POST" })],
+        [204, await fetch(`${base}/`, { method: "OPTIONS", headers: { "access-control-request-method": "POST" } })],
+        [500, await fetch(`${base}/bff/health`)]
+      ];
+      for (const [status, response] of responses) {
+        await response.arrayBuffer();
+        assert.equal(response.status, status);
+        for (const [name, value] of Object.entries(devDocumentSecurityHeaders)) {
+          assert.equal(response.headers.get(name), value, `${status}: ${name}`);
+        }
+      }
+      await assertRawRejections(port, devDocumentSecurityHeaders, "Vite dev");
     } finally {
       await vite.close();
     }
@@ -466,6 +543,19 @@ describe("Backoffice Vite document security headers", () => {
             assert.equal(response.headers.get(name), value, `${path}: ${name}`);
           }
         }
+        const base = `http://127.0.0.1:${port}`;
+        const fallbacks: [number, Response][] = [
+          [404, await fetch(`${base}/`, { method: "POST" })],
+          [204, await fetch(`${base}/`, { method: "OPTIONS" })]
+        ];
+        for (const [status, response] of fallbacks) {
+          await response.arrayBuffer();
+          assert.equal(response.status, status);
+          for (const [name, value] of Object.entries(documentSecurityHeaders)) {
+            assert.equal(response.headers.get(name), value, `preview ${status}: ${name}`);
+          }
+        }
+        await assertRawRejections(port, documentSecurityHeaders, "preview");
       } finally {
         await server.close();
       }
