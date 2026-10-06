@@ -15,6 +15,7 @@
   "include": [
     "src/auth/access.ts",
     "src/data/demo.ts",
+    "src/data/provider-evidence.ts",
     "src/server/**/*.ts"
   ],
   "exclude": [

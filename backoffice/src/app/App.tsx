@@ -43,6 +43,12 @@ import type {
   Tone,
   WorkflowCheck
 } from "../data/demo";
+import type {
+  KycProviderEvidence,
+  KytProviderEvidence,
+  ProviderCallbackRecord,
+  ProviderEvidenceFeed
+} from "../data/provider-evidence";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 import { ScreenIcon, UiIcon } from "./icons";
@@ -290,6 +296,122 @@ function WorkflowChecks({ checks }: { checks: readonly WorkflowCheck[] }) {
   );
 }
 
+function linkedEvidence<T extends KycProviderEvidence | KytProviderEvidence>(
+  feed: ProviderEvidenceFeed<T>,
+  caseId: string
+): string {
+  const ids = feed.cases.filter((item) => item.linkedCaseId === caseId).map((item) => item.id);
+  return ids.length ? ids.join(", ") : "Not linked";
+}
+
+function CallbackList({ records }: { records: readonly ProviderCallbackRecord[] }) {
+  if (!records.length) return <div className="empty">Callbacks отсутствуют</div>;
+  return (
+    <div className="check-list">
+      {records.map((record) => (
+        <div key={record.deliveryId}>
+          <span>
+            <strong>
+              {record.deliveryId}
+              {record.sequence !== null ? ` · seq ${record.sequence}` : ""}
+              {record.status ? ` · ${record.status}` : ""}
+            </strong>
+            <small>
+              {record.deliveredAt} · {record.origin}
+              {record.probe ? ` (${record.probe})` : ""}
+              {record.verificationReason ? ` · ${record.verificationReason}` : ""}
+            </small>
+          </span>
+          <Status tone={record.verification === "rejected" ? "danger" : record.accepted ? "success" : "warning"}>
+            {record.verification === "rejected" ? "rejected" : record.inboxAction ?? "verified"}
+          </Status>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEvidence>({
+  title,
+  feed
+}: {
+  title: string;
+  feed: ProviderEvidenceFeed<T>;
+}) {
+  const [selectedId, setSelectedId] = useState(feed.cases[0]?.id ?? "");
+  const selected = feed.cases.find((item) => item.id === selectedId) ?? feed.cases[0];
+
+  return (
+    <section className="grid risk-grid">
+      <article className="panel">
+        <header className="panel-heading">
+          <div><h2>{title}</h2><p>{feed.cases.length} synthetic simulator runs · signed callbacks verified before projection</p></div>
+          <Status tone="info">Evidence only</Status>
+        </header>
+        <TableShell label={title}>
+          <table>
+            <thead><tr><th>Run</th><th>Scenario</th><th>Provider claim</th><th>Projection</th><th>Seq</th><th>Callbacks</th></tr></thead>
+            <tbody>
+              {feed.cases.map((item) => (
+                <tr key={item.id} data-selected={item.id === selected?.id}>
+                  <td>
+                    <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      {item.id}
+                    </button>
+                    <small className="cell-note">{item.linkedCaseId ?? "unlinked"}</small>
+                  </td>
+                  <td>{item.label}<small className="cell-note">{item.scenario}</small></td>
+                  <td>{item.providerStatus}</td>
+                  <td><Status tone={item.tone}>{item.projectedStatus}</Status></td>
+                  <td className="numeric">{item.sequence}</td>
+                  <td>
+                    {item.verification.verified}/{item.verification.delivered} verified
+                    <small className="cell-note">{item.verification.rejected} rejected · {item.verification.heldForReview} held</small>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableShell>
+      </article>
+      {selected && (
+        <aside className="panel case-detail">
+          <header className="panel-heading">
+            <div><h2>{selected.id}</h2><p>{selected.source} · {selected.environment}</p></div>
+            <Status tone={selected.tone}>{selected.projectedStatus}</Status>
+          </header>
+          <dl className="detail-list">
+            <div><dt>Provider reference</dt><dd className="hash-value">{selected.providerReference ?? "—"}</dd></div>
+            {selected.domain === "kyc" ? (
+              <div><dt>Applicant</dt><dd>{selected.applicantRef} · {selected.level}</dd></div>
+            ) : (
+              <>
+                <div><dt>Binding</dt><dd>{selected.asset} · {selected.network} · {selected.direction}</dd></div>
+                <div><dt>Risk</dt><dd>{selected.riskLevel ?? "—"} · {selected.riskScore ?? "—"}{selected.sanctionsHit ? " · sanctions hit" : ""}</dd></div>
+              </>
+            )}
+            <div><dt>Reason codes</dt><dd>{selected.reasonCodes.length ? selected.reasonCodes.join(", ") : "—"}</dd></div>
+            {selected.domain === "kyc" && selected.requestedItems.length > 0 && (
+              <div><dt>Requested items</dt><dd>{selected.requestedItems.join(", ")}</dd></div>
+            )}
+            <div><dt>Verification</dt><dd>{selected.verification.result}</dd></div>
+            <div><dt>Deadline</dt><dd>{selected.deadline ?? "—"}{selected.timedOut ? " · timed out" : ""}</dd></div>
+            {selected.outage && <div><dt>Outage</dt><dd>{selected.outage.code}{selected.outage.retryable ? " · retryable" : ""}</dd></div>}
+          </dl>
+          <h3 className="detail-section-title">Received callbacks</h3>
+          <CallbackList records={selected.receivedCallbacks} />
+          <h3 className="detail-section-title">Rejected callbacks</h3>
+          <CallbackList records={selected.rejectedCallbacks} />
+          <div className="safe-action">
+            <strong>Evidence only · decision via maker-checker</strong>
+            <p>Provider status never decides a case; operator dispositions stay on the approval path with step-up.</p>
+          </div>
+        </aside>
+      )}
+    </section>
+  );
+}
+
 function KycView({ query, data }: { query: string; data: KycPayload }) {
   const cases = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
@@ -318,7 +440,7 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no provider calls</p></div>
+            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no live provider calls</p></div>
             <Status tone="info">Read-only</Status>
           </header>
           <TableShell label="KYC и KYB cases">
@@ -346,13 +468,14 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
             </table>
           </TableShell>
         </article>
-        {selected && <KycCaseDetail item={selected} />}
+        {selected && <KycCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
+      <ProviderEvidencePanel title="KYC provider evidence" feed={data.providerEvidence} />
     </>
   );
 }
 
-function KycCaseDetail({ item }: { item: KycCase }) {
+function KycCaseDetail({ item, providerEvidence }: { item: KycCase; providerEvidence: string }) {
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -369,6 +492,7 @@ function KycCaseDetail({ item }: { item: KycCase }) {
         <div><dt>SLA</dt><dd>{item.sla}</dd></div>
         {item.uboSummary && <div><dt>UBO</dt><dd>{item.uboSummary}</dd></div>}
         <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
       </dl>
       <h3 className="detail-section-title">Evidence</h3>
       <EvidenceList items={item.evidenceItems} />
@@ -409,7 +533,7 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · provider payloads absent</p></div>
+            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · simulator evidence only</p></div>
             <Status tone="warning">Decision gated</Status>
           </header>
           <TableShell label="AML cases">
@@ -438,13 +562,14 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
             </table>
           </TableShell>
         </article>
-        {selected && <AmlCaseDetail item={selected} />}
+        {selected && <AmlCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
+      <ProviderEvidencePanel title="KYT provider evidence" feed={data.providerEvidence} />
     </>
   );
 }
 
-function AmlCaseDetail({ item }: { item: AmlCase }) {
+function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; providerEvidence: string }) {
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -456,6 +581,7 @@ function AmlCaseDetail({ item }: { item: AmlCase }) {
         <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
         <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
         <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
       </dl>
       <h3 className="detail-section-title">Screening</h3>
       <WorkflowChecks checks={item.screenings} />
