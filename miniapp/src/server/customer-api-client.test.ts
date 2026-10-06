@@ -158,6 +158,99 @@ describe("customer API client", () => {
     assert.ok(capabilities(5_000).length > maxCustomerApiResponseBytes);
   });
 
+  it("rejects malformed content-length and encodings and cancels the body on every failure", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const session = JSON.stringify({ subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" });
+    const capabilities = JSON.stringify({ capabilities: [], commands_enabled: false });
+    const encoder = new TextEncoder();
+    const invalidUtf8 = Buffer.from(session.replace("2026", "\u00ff026"), "latin1");
+    const cases: [string, number, Record<string, string>, Uint8Array[] | "endless" | "error"][] = [
+      ["control", 200, { "content-length": String(session.length) }, [encoder.encode(session)]],
+      ["negative length", 200, { "content-length": "-1" }, [encoder.encode(session)]],
+      ["NaN length", 200, { "content-length": "abc" }, [encoder.encode(session)]],
+      ["exponent length", 200, { "content-length": "1e2" }, [encoder.encode(session)]],
+      ["signed length", 200, { "content-length": "+120" }, [encoder.encode(session)]],
+      ["duplicate length", 200, { "content-length": "120, 120" }, [encoder.encode(session)]],
+      ["huge length", 200, { "content-length": "99999999999999999999" }, [encoder.encode(session)]],
+      ["declared oversize", 200, { "content-length": String(maxCustomerApiResponseBytes + 1) }, [encoder.encode(session)]],
+      ["error status", 500, {}, [encoder.encode(session)]],
+      ["wrong type", 200, { "content-type": "text/html" }, [encoder.encode(session)]],
+      ["endless chunks", 200, {}, "endless"],
+      ["invalid utf-8", 200, {}, [invalidUtf8]],
+      ["stream error", 200, {}, "error"]
+    ];
+    const originalFetch = globalThis.fetch;
+    try {
+      for (const [label, status, headers, body] of cases) {
+        let cancelled = false;
+        let pulls = 0;
+        const stream = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            pulls += 1;
+            if (body === "endless") controller.enqueue(new Uint8Array(1_024));
+            else if (body === "error") controller.error(new Error("synthetic upstream reset"));
+            else if (body.length > 0) controller.enqueue(body.shift() as Uint8Array);
+            else controller.close();
+          },
+          cancel() {
+            cancelled = true;
+          }
+        });
+        globalThis.fetch = (async (input: string | URL | Request) => {
+          const path = new URL(String(input)).pathname;
+          if (path.endsWith("/capabilities")) {
+            return new Response(capabilities, { headers: { "content-type": "application/json" } });
+          }
+          return new Response(stream, { status, headers: { "content-type": "application/json", ...headers } });
+        }) as typeof fetch;
+        const client = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key });
+        const result = await client.access("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, label === "control" ? "connected" : "unavailable", label);
+        const consumed = label === "control" || label === "invalid utf-8" || label === "stream error";
+        assert.equal(cancelled, !consumed, `${label}: cancelled=${cancelled}`);
+        if (label === "endless chunks") assert.ok(pulls * 1_024 <= maxCustomerApiResponseBytes + 2_048, label);
+      }
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("aborts a stalled body at the timeout and releases the upstream connection", async () => {
+    const key = randomBytes(32).toString("hex");
+    let released!: () => void;
+    const closed = new Promise<void>((resolve) => {
+      released = resolve;
+    });
+    const server = createServer((_request, response) => {
+      response.once("close", () => released());
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write('{"subject":');
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const client = createCustomerApiClient({
+        baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+        devTokenKey: key,
+        timeoutMs: 300
+      });
+      const started = Date.now();
+      assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+      const elapsed = Date.now() - started;
+      assert.ok(elapsed >= 250 && elapsed < 5_000, `elapsed ${elapsed} ms`);
+      let timer: NodeJS.Timeout | undefined;
+      await Promise.race([
+        closed,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error("upstream response was never released")), 2_000);
+        })
+      ]).finally(() => clearTimeout(timer));
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

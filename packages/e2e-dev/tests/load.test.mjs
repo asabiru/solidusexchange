@@ -42,6 +42,7 @@ const runtimeBudgetMs = 60_000;
 const rssGrowthBudgetBytes = 256 * 1024 * 1024;
 const customerApiRateLimit = 40;
 const maxSessionsPerSubject = 5;
+const documentedStatuses = new Set([200, 201, 202, 429, 503]);
 const documented503 = new Set(["audit_integrity_unavailable", "kyc_unavailable", "quote_unavailable", "screening_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -102,7 +103,7 @@ async function outcome(kind, pending) {
 
 function assertDocumented(results) {
   for (const result of results) {
-    assert.ok(result.status < 500 || result.status === 503, `${result.kind}: ${result.status}`);
+    assert.ok(documentedStatuses.has(result.status), `${result.kind}: ${result.status}`);
     if (result.status === 503) {
       assert.ok(documented503.has(result.body?.error), `${result.kind}: ${JSON.stringify(result.body)}`);
     }

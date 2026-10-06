@@ -103,7 +103,7 @@ export function metricsRequestAllowed(request: IncomingMessage): boolean {
   const { headers } = request;
   if (!isLoopbackPeer(request.socket.remoteAddress) || !isLoopbackHost(headers.host)) return false;
   if (headers.origin !== undefined || headers.forwarded !== undefined || headers.via !== undefined) return false;
-  if (Object.keys(headers).some((name) => name.startsWith("x-forwarded-"))) return false;
+  if (Object.keys(headers).some((name) => name.startsWith("x-forwarded-") || name === "x-real-ip")) return false;
   const fetchSite = headers["sec-fetch-site"];
   return fetchSite === undefined || fetchSite === "none";
 }
@@ -164,11 +164,12 @@ export function createRequestObserver(options: RequestObserverOptions): RequestO
     const route = path === undefined ? unmatchedRoute : routeOf(path);
     response.setHeader("x-request-id", requestId);
     let done = false;
-    const finish = () => {
+    // A response closed before "finish" was aborted: record status 0 ("other"),
+    // not the 200 default of an unwritten response.
+    const finish = (status: number) => {
       if (done) return;
       done = true;
       const durationMs = Math.max(0, timer() - started);
-      const status = response.statusCode;
       if (config.metrics === "loopback") record(method, route, status, durationMs);
       if (config.log === "json") {
         sink(JSON.stringify({
@@ -182,8 +183,8 @@ export function createRequestObserver(options: RequestObserverOptions): RequestO
         }));
       }
     };
-    response.once("finish", finish);
-    response.once("close", finish);
+    response.once("finish", () => finish(response.statusCode));
+    response.once("close", () => finish(0));
     return requestId;
   }
 

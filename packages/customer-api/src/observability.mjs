@@ -1,10 +1,13 @@
 import { randomBytes } from "node:crypto";
 
+/** @type {readonly string[]} */
 export const LOG_MODES = Object.freeze(["off", "json"]);
+/** @type {readonly string[]} */
 export const METRICS_MODES = Object.freeze(["off", "loopback"]);
 export const METRICS_PATH = "/metrics";
 export const UNMATCHED_ROUTE = "unmatched";
 export const DURATION_BUCKETS_SECONDS = Object.freeze([0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5]);
+/** @type {readonly string[]} */
 export const METHOD_LABELS = Object.freeze(["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]);
 export const METRICS_CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8";
 
@@ -13,26 +16,35 @@ const DURATION_METRIC = "solidchange_http_request_duration_seconds";
 const SEPARATOR = "\u0000";
 const IPV4_LOOPBACK_PATTERN = /^(?:::ffff:)?127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/iu;
 
+/** @typedef {{ log: string, metrics: string }} ObservabilityConfig */
+/** @typedef {ReturnType<typeof createRequestObserver>} RequestObserver */
+
+/** @param {string} method */
 function methodLabel(method) {
   return METHOD_LABELS.includes(method) ? method : "OTHER";
 }
 
+/** @param {number} status */
 function statusClass(status) {
   return Number.isInteger(status) && status >= 100 && status < 600 ? `${Math.floor(status / 100)}xx` : "other";
 }
 
+/** @param {string} value */
 function escapeLabel(value) {
   return value.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"').replace(/\n/gu, "\\n");
 }
 
+/** @param {Record<string, string>} values */
 function labels(values) {
   return `{${Object.entries(values).map(([name, value]) => `${name}="${escapeLabel(value)}"`).join(",")}}`;
 }
 
+/** @param {string | undefined} address */
 function isLoopbackPeer(address) {
   return address === "::1" || (typeof address === "string" && IPV4_LOOPBACK_PATTERN.test(address));
 }
 
+/** @param {string} host */
 function isLoopbackHost(host) {
   if (typeof host !== "string" || host === "") {
     return false;
@@ -44,6 +56,9 @@ function isLoopbackHost(host) {
 /**
  * Metrics are for a developer on the same machine: loopback peer and Host,
  * no browser cross-site context and no proxy hop.
+ *
+ * @param {import("node:http").IncomingMessage} request
+ * @param {ReadonlyMap<string, readonly string[]>} headers
  */
 export function metricsRequestAllowed(request, headers) {
   const host = headers.get("host");
@@ -53,7 +68,7 @@ export function metricsRequestAllowed(request, headers) {
   if (headers.has("origin") || headers.has("forwarded") || headers.has("via")) {
     return false;
   }
-  if ([...headers.keys()].some((name) => name.startsWith("x-forwarded-"))) {
+  if ([...headers.keys()].some((name) => name.startsWith("x-forwarded-") || name === "x-real-ip")) {
     return false;
   }
   const fetchSite = headers.get("sec-fetch-site");
@@ -64,6 +79,14 @@ export function metricsRequestAllowed(request, headers) {
  * Dev-only request logging and in-memory metrics. Log lines and labels only
  * carry the route template, method label, status and a server-generated id:
  * never headers, tokens, bodies, query strings, subjects or peer addresses.
+ *
+ * @param {object} options
+ * @param {string} options.service
+ * @param {readonly string[]} options.routes
+ * @param {ObservabilityConfig} [options.config]
+ * @param {(line: string) => void} [options.sink]
+ * @param {() => number} [options.timer]
+ * @param {() => number} [options.wallClock]
  */
 export function createRequestObserver({
   service,
@@ -74,14 +97,23 @@ export function createRequestObserver({
   wallClock = () => Date.now()
 }) {
   const templates = new Set(routes);
+  /** @type {Map<string, number>} */
   const counters = new Map();
+  /** @type {Map<string, { buckets: number[], sum: number, count: number }>} */
   const histograms = new Map();
   const metricsEnabled = config.metrics === "loopback";
 
+  /** @param {string} url */
   function routeOf(url) {
     return templates.has(url) ? url : UNMATCHED_ROUTE;
   }
 
+  /**
+   * @param {string} method
+   * @param {string} route
+   * @param {number} status
+   * @param {number} durationMs
+   */
   function complete(method, route, status, durationMs) {
     const requestId = randomBytes(16).toString("hex");
     if (metricsEnabled) {
@@ -117,21 +149,30 @@ export function createRequestObserver({
     }
   }
 
+  /**
+   * @param {import("node:http").IncomingMessage} request
+   * @param {import("node:http").ServerResponse} response
+   */
   function observe(request, response) {
     const started = timer();
-    const method = methodLabel(request.method);
-    const route = routeOf(request.url);
+    // Requests from http.Server always carry a method and url.
+    const method = methodLabel(/** @type {string} */ (request.method));
+    const route = routeOf(/** @type {string} */ (request.url));
     let done = false;
-    const finish = () => {
+    // A response closed before "finish" was aborted: record status 0 ("other"),
+    // not the 200 default of an unwritten response.
+    /** @param {number} status */
+    const finish = (status) => {
       if (!done) {
         done = true;
-        complete(method, route, response.statusCode, Math.max(0, timer() - started));
+        complete(method, route, status, Math.max(0, timer() - started));
       }
     };
-    response.once("finish", finish);
-    response.once("close", finish);
+    response.once("finish", () => finish(response.statusCode));
+    response.once("close", () => finish(0));
   }
 
+  /** @param {number} status */
   function recordRejected(status) {
     complete("OTHER", UNMATCHED_ROUTE, status, 0);
   }

@@ -4,6 +4,20 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 // principal is `{ subject, actorType, scopes, expiresAt }`. A future IdP
 // adapter replaces the dev-only synthetic verifier behind this interface.
 
+/**
+ * @typedef {object} Principal
+ * @property {string} subject
+ * @property {string} actorType
+ * @property {readonly string[]} scopes
+ * @property {string} expiresAt
+ */
+
+/**
+ * @typedef {object} TokenVerifier
+ * @property {string} kind
+ * @property {(token: string) => Promise<Principal | null>} verify
+ */
+
 export const CUSTOMER_SCOPES = Object.freeze([
   "customer.session.read",
   "customer.capabilities.read"
@@ -18,18 +32,30 @@ const TOKEN_MAX_LENGTH = 160;
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-dev-token-v1";
 const BEARER_PATTERN = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/iu;
 
+/**
+ * @param {unknown} key
+ * @returns {asserts key is string}
+ */
 function assertKey(key) {
   if (typeof key !== "string" || !DEV_TOKEN_KEY_PATTERN.test(key)) {
     throw new Error("Synthetic dev token key must be 64 lowercase hex characters");
   }
 }
 
+/**
+ * @param {string} key
+ * @param {string} subject
+ * @param {number | string} expiresAtSeconds
+ */
 function sign(key, subject, expiresAtSeconds) {
   return createHmac("sha256", Buffer.from(key, "hex"))
     .update(`${SIGNATURE_DOMAIN}\n${subject}\n${expiresAtSeconds}`)
     .digest("hex");
 }
 
+/**
+ * @param {{ key: unknown, subject: unknown, expiresAtSeconds: number }} options
+ */
 export function mintSyntheticCustomerToken({ key, subject, expiresAtSeconds }) {
   assertKey(key);
   if (typeof subject !== "string" || !SYNTHETIC_SUBJECT_PATTERN.test(subject)) {
@@ -45,6 +71,7 @@ export function mintSyntheticCustomerToken({ key, subject, expiresAtSeconds }) {
   return `scdev1.${subject}.${expiresAtSeconds}.${sign(key, subject, expiresAtSeconds)}`;
 }
 
+/** @param {unknown} value */
 export function parseBearerAuthorization(value) {
   if (typeof value !== "string") {
     return null;
@@ -53,6 +80,7 @@ export function parseBearerAuthorization(value) {
   return match ? match[1] : null;
 }
 
+/** @returns {TokenVerifier} */
 export function createDenyAllVerifier() {
   return Object.freeze({
     kind: "deny-all",
@@ -62,6 +90,10 @@ export function createDenyAllVerifier() {
   });
 }
 
+/**
+ * @param {{ key: unknown, clock?: () => number, maxTtlSeconds?: number }} options
+ * @returns {TokenVerifier}
+ */
 export function createSyntheticTokenVerifier({
   key,
   clock = () => Date.now(),

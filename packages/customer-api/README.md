@@ -78,6 +78,9 @@ exists in `Documentation/regulated-core/decision-register.md` and is still `Open
 
 ```bash
 cd packages/customer-api
+npm ci                                     # dev-only tooling: typescript, @types/node
+npm run lint                               # node --check on every .mjs file + boundary check
+npm run typecheck                          # tsc --noEmit, checkJs + strict over src/ and scripts/
 npm test                                   # boundary check + conformance suite
 npm run dev                                # deny-all auth on 127.0.0.1:8790
 
@@ -93,6 +96,14 @@ curl -s http://127.0.0.1:8790/api/v1/customer/capabilities \
 
 Other settings: `CUSTOMER_API_HOST` (loopback only), `CUSTOMER_API_PORT`,
 `CUSTOMER_API_RATE_LIMIT_PER_MINUTE`.
+
+## No build step
+
+The package is plain Node ESM (`.mjs`) and runs directly from `src/`, so there
+is no `build` script and nothing to compile or bundle. Types are JSDoc
+annotations checked by `npm run typecheck` (`tsconfig.json`, `noEmit`). The
+only devDependencies are the exact `typescript` and `@types/node` versions
+pinned by `scripts/check-boundary.mjs`; runtime dependencies stay forbidden.
 
 ## Conformance tests
 
