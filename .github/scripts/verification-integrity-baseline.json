@@ -395,12 +395,12 @@
       "minCases": 44
     },
     "backoffice/src/app/a11y.test.ts": {
-      "minLines": 623,
+      "minLines": 624,
       "minCases": 29
     },
     "backoffice/src/app/i18n.test.ts": {
-      "minLines": 325,
-      "minCases": 32
+      "minLines": 412,
+      "minCases": 38
     },
     "backoffice/src/auth/access.test.ts": {
       "minLines": 67,

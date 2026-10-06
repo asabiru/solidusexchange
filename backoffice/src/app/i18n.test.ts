@@ -14,6 +14,7 @@ import {
   hasMessage,
   initialLocale,
   intlLocale,
+  intlSupported,
   isLocale,
   type Locale,
   type LocaleStorage,
@@ -28,6 +29,7 @@ import {
   translate
 } from "./i18n.js";
 import { en } from "./locales/en.js";
+import { ky } from "./locales/ky.js";
 import { ru } from "./locales/ru.js";
 import { navigation, navigationGroups } from "./navigation.js";
 
@@ -65,12 +67,14 @@ describe("i18n: catalog parity", () => {
     assert.equal(Object.keys(extra).length, Object.keys(ru).length + 1);
   });
 
-  it("gives en exactly the Russian keys", () => {
+  it("gives ky and en exactly the Russian keys", () => {
     const expected = Object.keys(ru).sort();
     assert.ok(expected.length > 250);
+    assert.deepEqual(Object.keys(ky).sort(), expected);
     assert.deepEqual(Object.keys(en).sort(), expected);
     assert.deepEqual([...locales].sort(), Object.keys(catalogs).sort());
-    assert.deepEqual([...locales], ["ru", "en"]);
+    assert.deepEqual([...locales], ["ru", "ky", "en"]);
+    assert.equal(catalogs.ky, ky);
   });
 
   it("has no empty or whitespace-only strings in any locale", () => {
@@ -88,6 +92,7 @@ describe("i18n: catalog parity", () => {
     for (const [key, value] of Object.entries(ru)) {
       const expected = placeholdersOf(value);
       if (expected.length) withPlaceholders += 1;
+      assert.deepEqual(placeholdersOf(ky[key as MessageKey]), expected, `ky:${key}`);
       assert.deepEqual(placeholdersOf(en[key as MessageKey]), expected, `en:${key}`);
     }
     assert.ok(withPlaceholders >= 20);
@@ -98,10 +103,55 @@ describe("i18n: catalog parity", () => {
     for (const [key, value] of Object.entries(en)) assert.doesNotMatch(value, cyrillic, `en:${key}`);
     const copied = Object.keys(ru).filter((key) => cyrillic.test(ru[key as MessageKey]) && en[key as MessageKey] === ru[key as MessageKey]);
     assert.deepEqual(copied, []);
-    assert.deepEqual(localeNames, { ru: "Русский", en: "English" });
+    assert.deepEqual(localeNames, { ru: "Русский", ky: "Кыргызча", en: "English" });
     for (const locale of locales) {
       assert.match(catalogs[locale]["app.documentTitle"], /^SOLID\b/, locale);
       for (const value of Object.values(catalogs[locale])) assert.doesNotMatch(value, /SolidChange/, locale);
+    }
+  });
+
+  it("translates the Kyrgyz catalog in Cyrillic, sharing only loanwords with Russian", () => {
+    const sharedLoanwords = [
+      "app.documentTitle",
+      "group.system",
+      "screen.fraud",
+      "screen.analytics",
+      "common.case",
+      "common.subject",
+      "common.category",
+      "common.scenario",
+      "evidence.projection",
+      "aml.screening",
+      "investigations.timeline",
+      "fraud.alert",
+      "fraud.score",
+      "audit.resource",
+      "audit.hash",
+      "reports.digest"
+    ];
+    const copied = Object.keys(ru).filter((key) => cyrillic.test(ru[key as MessageKey]) && ky[key as MessageKey] === ru[key as MessageKey]);
+    assert.deepEqual(copied, sharedLoanwords);
+    const cyrillicKeys = Object.keys(ru).filter((key) => cyrillic.test(ru[key as MessageKey]));
+    for (const key of cyrillicKeys) assert.match(ky[key as MessageKey], cyrillic, `ky:${key}`);
+    for (const [key, value] of Object.entries(ky)) assert.doesNotMatch(value, /[A-Za-z]{3,}[\u0400-\u04ff]|[\u0400-\u04ff][A-Za-z]/, `ky:${key}`);
+    assert.match(ky["screen.investigations"], /[өүң]/);
+  });
+
+  it("keeps regulated acronyms and contract terms in Latin in Kyrgyz", () => {
+    for (const key of ["screen.kyc", "screen.aml", "customers.kyc", "kyc.ubo", "common.sla", "preview.makerChecker", "preview.stepUpMfa", "audit.storagePostgres"] as const) {
+      assert.equal(ky[key], ru[key], key);
+    }
+    for (const [key, term] of [
+      ["kyc.tableLabel", "KYC"],
+      ["aml.casesTitle", "AML"],
+      ["aml.providerEvidence", "KYT"],
+      ["evidence.decisionTitle", "maker-checker"],
+      ["approvals.pendingDescription", "Maker-checker"],
+      ["approvals.noPreviewCapability", "approvals:preview"],
+      ["audit.description", "SHA-256"],
+      ["blocker.step_up_mfa_required", "Step-up MFA"]
+    ] as const) {
+      assert.ok(ky[key].includes(term), `${key} keeps ${term}`);
     }
   });
 
@@ -134,12 +184,15 @@ describe("i18n: persistence and fallback", () => {
     assert.deepEqual(storage.values, { [localeStorageKey]: "en" });
     assert.equal(readStoredLocale(storage), "en");
     assert.equal(initialLocale(storage), "en");
+    assert.equal(storeLocale(storage, "ky"), true);
+    assert.deepEqual(storage.values, { [localeStorageKey]: "ky" });
+    assert.equal(initialLocale(storage), "ky");
     storeLocale(storage, "ru");
     assert.equal(initialLocale(storage), "ru");
   });
 
   it("ignores unknown stored values", () => {
-    for (const stored of ["de", "", "EN", "en-US", "ky", "null", "__proto__"]) {
+    for (const stored of ["de", "", "EN", "en-US", "KY", "ky-KG", "kg", "kk", "null", "__proto__"]) {
       const storage = memoryStorage({ [localeStorageKey]: stored });
       assert.equal(readStoredLocale(storage), undefined, stored);
       assert.equal(initialLocale(storage), "ru", stored);
@@ -160,6 +213,9 @@ describe("i18n: persistence and fallback", () => {
     applyDocumentLocale(document, "en");
     assert.equal(document.documentElement.lang, "en");
     assert.equal(document.title, en["app.documentTitle"]);
+    applyDocumentLocale(document, "ky");
+    assert.equal(document.documentElement.lang, "ky");
+    assert.equal(document.title, ky["app.documentTitle"]);
     applyDocumentLocale(document, "ru");
     assert.equal(document.documentElement.lang, "ru");
     assert.equal(document.title, ru["app.documentTitle"]);
@@ -168,6 +224,9 @@ describe("i18n: persistence and fallback", () => {
   it("interpolates parameters and leaves unknown placeholders visible", () => {
     assert.equal(translate("ru", "app.greeting", { name: "Аудитор" }), "Добрый день, Аудитор");
     assert.equal(translate("en", "app.greeting", { name: "Auditor" }), "Good afternoon, Auditor");
+    assert.equal(translate("ky", "app.greeting", { name: "Аудитор" }), "Саламатсызбы, Аудитор");
+    assert.equal(translate("ky", "app.greeting"), "Саламатсызбы, {name}");
+    assert.equal(translate("ky", "kyc.stageOwner", { stage: "A", owner: "B" }), "A · жооптуу: B");
     assert.equal(translate("en", "app.greeting"), "Good afternoon, {name}");
     assert.equal(translate("en", "app.greeting", { other: "x" }), "Good afternoon, {name}");
     assert.equal(translate("en", "customers.count", { count: 3 }), en["customers.count"].replace("{count}", "3"));
@@ -178,6 +237,21 @@ describe("i18n: persistence and fallback", () => {
     assert.equal(translate("en", "missing.key" as MessageKey), "missing.key");
     assert.equal(intlLocale("de" as Locale), "ru-RU");
     assert.equal(intlLocale("en"), "en-US");
+  });
+
+  it("falls back to Russian for keys missing or empty in the Kyrgyz catalog", () => {
+    const mutable = ky as Record<MessageKey, string>;
+    const original = mutable["app.skipToContent"];
+    try {
+      mutable["app.skipToContent"] = "";
+      assert.equal(translate("ky", "app.skipToContent"), ru["app.skipToContent"]);
+      delete (mutable as Partial<Record<MessageKey, string>>)["app.skipToContent"];
+      assert.equal(translate("ky", "app.skipToContent"), ru["app.skipToContent"]);
+    } finally {
+      mutable["app.skipToContent"] = original;
+    }
+    assert.equal(translate("ky", "app.skipToContent"), "Мазмунга өтүү");
+    assert.equal(translate("ky", "missing.key" as MessageKey), "missing.key");
   });
 });
 
@@ -221,6 +295,23 @@ describe("i18n: locale formatting", () => {
     assert.match(formatLongDate("ru", new Date(Date.UTC(2026, 9, 5, 12))), /^[А-Я]/);
     assert.match(formatLongDate("en", new Date(Date.UTC(2026, 9, 5, 12))), /October/);
     assert.match(formatTime("en", "2026-10-05T12:00:00.000Z"), /\d/);
+  });
+
+  it("formats Kyrgyz with ky-KG and falls back to Russian numbers and numeric dates without Kyrgyz Intl data", () => {
+    const noKyrgyz = (tag: string) => !tag.startsWith("ky");
+    const always = () => true;
+    assert.equal(intlLocale("ky", always), "ky-KG");
+    assert.equal(intlLocale("ky", noKyrgyz), "ru-RU");
+    assert.equal(intlLocale("en", noKyrgyz), "en-US");
+    assert.equal(intlSupported("en-US"), true);
+    assert.equal(formatCount("ky", 12345, noKyrgyz), formatCount("ru", 12345));
+    assert.equal(formatDate("ky", "2026-10-05T23:30:00.000Z", noKyrgyz), "05.10.2026");
+    assert.equal(formatLongDate("ky", new Date(Date.UTC(2026, 9, 5, 12)), noKyrgyz), "05.10.2026");
+    assert.match(formatTime("ky", "2026-10-05T12:00:00.000Z", noKyrgyz), /\d/);
+    assert.match(formatDate("ky", "2026-10-05T23:30:00.000Z", always), /2026/);
+    assert.match(formatDate("ky", "2026-10-05T23:30:00.000Z", always), /5/);
+    assert.doesNotMatch(formatDate("ky", "2026-10-05T23:30:00.000Z", always), /октября/);
+    assert.doesNotMatch(formatLongDate("ky", new Date(Date.UTC(2026, 9, 5, 12)), always), /понедельник/i);
   });
 
   it("renders a dash instead of throwing for invalid dates", () => {
