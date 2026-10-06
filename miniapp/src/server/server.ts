@@ -38,7 +38,7 @@ import {
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
-import { apiSecurityHeaders } from "./security-headers.js";
+import { apiSecurityHeaders, guardRawResponses } from "./security-headers.js";
 import {
   type CustomerSession,
   ExpiringStore,
@@ -718,6 +718,7 @@ export function createMiniappServer(
       json(response, 500, { error: "internal_error" });
     });
   });
+  guardRawResponses(server, apiSecurityHeaders);
   server.once("close", unsubscribeKyc);
   return server;
 }

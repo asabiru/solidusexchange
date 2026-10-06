@@ -455,8 +455,8 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 456,
-      "minCases": 10
+      "minLines": 540,
+      "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
       "minLines": 1211,
@@ -558,8 +558,8 @@
       "minCases": 8
     },
     "miniapp/src/server/security-headers.test.ts": {
-      "minLines": 382,
-      "minCases": 10
+      "minLines": 461,
+      "minCases": 12
     },
     "miniapp/src/server/server.test.ts": {
       "minLines": 337,
@@ -678,8 +678,8 @@
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
-      "minLines": 117,
-      "minCases": 5
+      "minLines": 126,
+      "minCases": 6
     },
     "packages/e2e-dev/tests/boundaries.test.mjs": {
       "minLines": 111,

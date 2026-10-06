@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest, type IncomingHttpHeaders } from "node:http";
-import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { connect, createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -73,6 +73,48 @@ function freePort(): Promise<number> {
   });
 }
 
+interface RawReply {
+  status: number;
+  headers: Map<string, string>;
+}
+
+function rawExchange(port: number, text: string): Promise<RawReply> {
+  return new Promise((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    const chunks: Buffer[] = [];
+    socket.on("data", (chunk: Buffer) => chunks.push(chunk));
+    socket.on("error", () => socket.destroy());
+    socket.on("close", () => {
+      const [statusLine, ...lines] = Buffer.concat(chunks).toString("latin1").split("\r\n\r\n")[0].split("\r\n");
+      resolve({
+        status: Number(statusLine.split(" ")[1]),
+        headers: new Map(lines.map((line) => {
+          const colon = line.indexOf(":");
+          return [line.slice(0, colon).toLowerCase(), line.slice(colon + 1).trim()];
+        }))
+      });
+    });
+    socket.write(text);
+  });
+}
+
+const rawRejections: readonly (readonly [number, string])[] = [
+  [400, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nmalformed header line\r\n\r\n"],
+  [431, `GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nx-fill: ${"a".repeat(20_000)}\r\n\r\n`],
+  [417, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\nExpect: synthetic-unmet\r\n\r\n"]
+];
+
+async function assertRawRejections(port: number, headers: Readonly<Record<string, string>>, label: string): Promise<void> {
+  for (const [status, text] of rawRejections) {
+    const reply = await rawExchange(port, text);
+    assert.equal(reply.status, status, `${label} ${status}`);
+    assert.equal(reply.headers.get("connection"), "close", `${label} ${status}`);
+    for (const [name, value] of Object.entries(headers)) {
+      assert.equal(reply.headers.get(name), value, `${label} ${status}: ${name}`);
+    }
+  }
+}
+
 function postJson(port: number, path: string, body: unknown, headers: Record<string, string> = {}): Promise<Reply> {
   return send(port, "POST", path, {
     headers: { "content-type": "application/json", origin, ...headers },
@@ -132,13 +174,13 @@ function assertStrictDocumentCsp(header: string): void {
   assert.deepEqual(csp.get("object-src"), ["'none'"]);
   assert.deepEqual(csp.get("base-uri"), ["'none'"]);
   assert.deepEqual(csp.get("form-action"), ["'self'"]);
-  assert.deepEqual(csp.get("frame-ancestors"), ["https://web.telegram.org", "https://*.telegram.org"]);
+  assert.deepEqual(csp.get("frame-ancestors"), ["https://web.telegram.org", "https://webk.telegram.org", "https://weba.telegram.org"]);
   for (const [name, sources] of csp) {
     for (const source of sources) {
       assert.ok(strictSources.has(source), `${name} ${source}`);
       assert.notEqual(source, "*", name);
       if (schemeOnlySource.test(source)) assert.equal(`${name} ${source}`, "img-src data:");
-      if (source.includes("*")) assert.equal(`${name} ${source}`, "frame-ancestors https://*.telegram.org");
+      assert.equal(source.includes("*"), false, `${name} ${source}`);
     }
   }
 }
@@ -180,7 +222,8 @@ describe("Mini App security header sets", () => {
     assert.deepEqual(devDocumentCspDirectives["connect-src"], ["'self'", "ws://127.0.0.1:4183", "ws://localhost:4183"]);
     const keywords = new Set(Object.values(devDocumentCspDirectives).flat().filter((source) => source.startsWith("'")));
     assert.deepEqual([...keywords].sort(), ["'none'", "'self'", "'unsafe-inline'"]);
-    assert.equal(devDocumentSecurityHeaders["content-security-policy"].includes("*.telegram.org"), true);
+    assert.deepEqual(parseCsp(devDocumentSecurityHeaders["content-security-policy"]).get("frame-ancestors"), [...telegramFrameAncestors]);
+    assert.equal(devDocumentSecurityHeaders["content-security-policy"].includes("*"), false);
   });
 });
 
@@ -330,6 +373,10 @@ describe("Mini App BFF security headers on every route", () => {
       assert.ok(statuses.has(status), String(status));
     }
   });
+
+  it("keeps the frozen JSON header set on Node's own parser and Expect rejections", async () => {
+    await assertRawRejections(running.port, apiSecurityHeaders, "BFF");
+  });
 });
 
 describe("Mini App Vite document security headers", () => {
@@ -351,6 +398,36 @@ describe("Mini App Vite document security headers", () => {
           assert.equal(reply.headers[name], value, `${path}: ${name}`);
         }
       }
+    } finally {
+      await vite.close();
+    }
+  });
+
+  it("keeps the dev header set on Vite's own 403, 404, 500, preflight and raw rejections", async () => {
+    const vite = await createViteServer({
+      root: miniappRoot,
+      configFile: `${miniappRoot}vite.config.ts`,
+      logLevel: "silent",
+      server: { port: await freePort(), strictPort: true, proxy: { "/bff": { target: `http://127.0.0.1:${await freePort()}` } } },
+      optimizeDeps: { noDiscovery: true, include: [] }
+    });
+    try {
+      await vite.listen();
+      const { port } = vite.httpServer?.address() as AddressInfo;
+      const preflight = { origin: "https://frame.example.test", "access-control-request-method": "POST" };
+      const replies: [number, Reply][] = [
+        [403, await send(port, "GET", "/@fs/etc/passwd")],
+        [404, await send(port, "POST", "/")],
+        [204, await send(port, "OPTIONS", "/", { headers: preflight })],
+        [500, await send(port, "GET", "/bff/health")]
+      ];
+      for (const [status, reply] of replies) {
+        assert.equal(reply.status, status);
+        for (const [name, value] of Object.entries(devDocumentSecurityHeaders)) {
+          assert.equal(reply.headers[name], value, `${status}: ${name}`);
+        }
+      }
+      await assertRawRejections(port, devDocumentSecurityHeaders, "Vite dev");
     } finally {
       await vite.close();
     }
@@ -392,6 +469,14 @@ describe("Mini App Vite document security headers", () => {
           }
           assert.equal(reply.headers["x-frame-options"], undefined, path);
         }
+        const fallbacks: [number, Reply][] = [[404, await send(port, "POST", "/")], [204, await send(port, "OPTIONS", "/")]];
+        for (const [status, reply] of fallbacks) {
+          assert.equal(reply.status, status);
+          for (const [name, value] of Object.entries(documentSecurityHeaders)) {
+            assert.equal(reply.headers[name], value, `preview ${status}: ${name}`);
+          }
+        }
+        await assertRawRejections(port, documentSecurityHeaders, "preview");
       } finally {
         await server.close();
       }

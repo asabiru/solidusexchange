@@ -131,3 +131,13 @@ test("raw socket rejections keep the security headers", async () => {
     }
   });
 });
+
+test("unmet Expect headers are rejected with the security headers instead of a bare 417", async () => {
+  await withServer({}, async (port) => {
+    const [operation] = OPERATIONS;
+    const response = await rawExchange(port, `GET ${operation.path} HTTP/1.1\r\nHost: 127.0.0.1\r\nExpect: synthetic-unmet\r\n\r\n`);
+    assert.equal(response.status, 417);
+    assertSecurityHeaders(response, "417");
+    assert.equal(header(response, "connection"), "close");
+  });
+});
