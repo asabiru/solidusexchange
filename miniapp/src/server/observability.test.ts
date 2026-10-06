@@ -204,13 +204,14 @@ describe("Mini App BFF observability enabled", () => {
   it("bounds route labels to the frozen route table under random paths", async () => {
     for (let index = 0; index < 60; index += 1) {
       const random = randomBytes(8).toString("hex");
-      const paths = [`/bff/${random}`, `/${random}/x?${random}=1`, `/bff/operations/${random}`, `/bff/health/${random}`];
+      const paths = [`/bff/${random}`, `/${random}/x?${random}=1`, `/bff/operations/${random}`, `/bff/health/${random}`, `/bff/activity?cursor=${random}`];
       for (const path of paths) await fetch(`${running.base}${path}`);
     }
     const metrics = await scrape(running);
     for (const label of routeLabels(metrics)) assert.ok(templates.has(label), label);
     assert.ok(routeLabels(metrics).has("unmatched"));
     assert.ok(routeLabels(metrics).has("/bff/operations/:id"));
+    assert.ok(routeLabels(metrics).has("/bff/activity"));
     const series = metrics.split("\n").filter((line) => line.startsWith("solidchange_http_requests_total{"));
     assert.ok(series.length <= templates.size * 8 * 6, String(series.length));
     assert.ok(!/[0-9a-f]{16}/.test(metrics.replace(/solidchange_[a-z_]+/g, "")));

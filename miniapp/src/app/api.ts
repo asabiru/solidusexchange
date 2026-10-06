@@ -1,4 +1,5 @@
 import type {
+  ActivityView,
   AddressScreeningView,
   HealthView,
   KycStatus,
@@ -55,6 +56,7 @@ export const api = {
   kycStatus: () => call<KycVerificationView>("/bff/kyc/status"),
   submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
   notifications: () => call<NotificationsView>("/bff/notifications"),
+  activity: () => call<ActivityView>("/bff/activity"),
   markNotificationsRead: (ids: readonly string[]) =>
     call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
   screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>
