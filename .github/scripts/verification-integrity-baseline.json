@@ -285,6 +285,20 @@
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       }
     ],
+    ".github/workflows/local-dev-stack-ci.yml": [
+      {
+        "run": "node --test .github/scripts/check-dev-stack.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-dev-stack.mjs"
+      },
+      {
+        "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs"
+      },
+      {
+        "run": "docker compose -f infra/local/compose.yaml config --quiet"
+      }
+    ],
     ".github/workflows/miniapp-ci.yml": [
       {
         "run": "working-directory: miniapp"
@@ -356,6 +370,10 @@
     ]
   },
   "testFiles": {
+    ".github/scripts/check-dev-stack.test.mjs": {
+      "minLines": 201,
+      "minCases": 21
+    },
     ".github/scripts/check-regulated-core-status.test.mjs": {
       "minLines": 215,
       "minCases": 13
@@ -430,6 +448,22 @@
     },
     "backoffice/tsconfig.test.json": {
       "minLines": 25
+    },
+    "infra/local/tests/dev-material.test.mjs": {
+      "minLines": 93,
+      "minCases": 5
+    },
+    "infra/local/tests/healthcheck.test.mjs": {
+      "minLines": 60,
+      "minCases": 5
+    },
+    "infra/local/tests/loopback-edge.test.mjs": {
+      "minLines": 72,
+      "minCases": 6
+    },
+    "infra/local/tests/x509.test.mjs": {
+      "minLines": 67,
+      "minCases": 5
     },
     "miniapp/src/server/address-screening-routes.test.ts": {
       "minLines": 360,
