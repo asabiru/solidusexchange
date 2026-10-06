@@ -75,6 +75,13 @@ describe("dev BFF configuration", () => {
       syntheticToken
     );
   });
+
+  it("refuses NODE_ENV=production in any casing or padding", () => {
+    for (const value of ["production", " Production ", "PRODUCTION"]) {
+      assert.throws(() => loadServerConfig({ NODE_ENV: value, MINIAPP_ALLOW_DEV_LOGIN: "true" }), /NODE_ENV=production/);
+    }
+    assert.equal(loadServerConfig({ NODE_ENV: "development" }).host, "127.0.0.1");
+  });
 });
 
 describe("session and Origin boundary", () => {

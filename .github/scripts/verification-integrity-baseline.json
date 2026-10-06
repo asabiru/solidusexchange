@@ -36,6 +36,12 @@
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
       "test": "npm run check && node --test tests/*.test.mjs"
     },
+    "packages/e2e-dev/package.json": {
+      "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
+      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs",
+      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs",
+      "typecheck": "npm run lint"
+    },
     "packages/financial-core/package.json": {
       "check": "node scripts/check-foundation.mjs",
       "test": "node --test tests/*.test.mjs",
@@ -148,6 +154,29 @@
       }
     ],
     ".github/workflows/deploy.yml": [],
+    ".github/workflows/e2e-dev-ci.yml": [
+      {
+        "run": "working-directory: packages/e2e-dev"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm ci --prefix ../../miniapp"
+      },
+      {
+        "run": "npm ci --prefix ../../backoffice"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
     ".github/workflows/financial-core-ci.yml": [
       {
         "run": "working-directory: packages/financial-core"
@@ -356,8 +385,8 @@
       "minCases": 3
     },
     "backoffice/src/server/config.test.ts": {
-      "minLines": 221,
-      "minCases": 14
+      "minLines": 257,
+      "minCases": 16
     },
     "backoffice/src/server/controls.test.ts": {
       "minLines": 65,
@@ -451,8 +480,8 @@
       "minCases": 8
     },
     "miniapp/src/server/server.test.ts": {
-      "minLines": 331,
-      "minCases": 21
+      "minLines": 337,
+      "minCases": 22
     },
     "miniapp/src/shared/decimal.test.ts": {
       "minLines": 98,
@@ -557,6 +586,17 @@
     "packages/customer-api/tests/routing.test.mjs": {
       "minLines": 179,
       "minCases": 10
+    },
+    "packages/e2e-dev/tests/boundaries.test.mjs": {
+      "minLines": 111,
+      "minCases": 4
+    },
+    "packages/e2e-dev/tests/dev-stack.test.mjs": {
+      "minLines": 538,
+      "minCases": 17
+    },
+    "packages/e2e-dev/tests/stack.mjs": {
+      "minLines": 126
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44

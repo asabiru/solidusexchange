@@ -280,6 +280,9 @@ function loadDeviceBindingConfig(): DeviceBindingConfig {
 }
 
 export function loadServerConfig(): ServerConfig {
+  if (process.env.NODE_ENV?.trim().toLowerCase() === "production") {
+    throw new Error("Backoffice BFF is dev-only and refuses NODE_ENV=production");
+  }
   if ((process.env.BACKOFFICE_MODE ?? "dev-dry-run") !== "dev-dry-run") {
     throw new Error("Backoffice BFF refuses to start outside dev-dry-run mode");
   }
@@ -313,6 +316,11 @@ export function loadServerConfig(): ServerConfig {
     throw new Error("BACKOFFICE_ALLOWED_ORIGINS must not mix HTTP and HTTPS origins");
   }
 
+  const host = process.env.BACKOFFICE_BFF_HOST ?? "127.0.0.1";
+  if (!["127.0.0.1", "localhost", "::1"].includes(host)) {
+    throw new Error("BACKOFFICE_BFF_HOST must be a loopback address; the dev BFF is never exposed");
+  }
+
   const port = Number(process.env.BACKOFFICE_BFF_PORT ?? "4174");
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("BACKOFFICE_BFF_PORT is invalid");
@@ -323,7 +331,7 @@ export function loadServerConfig(): ServerConfig {
   }
 
   return {
-    host: process.env.BACKOFFICE_BFF_HOST ?? "127.0.0.1",
+    host,
     port,
     allowedOrigins,
     allowDevLogin: process.env.BACKOFFICE_ALLOW_DEV_LOGIN === "true",

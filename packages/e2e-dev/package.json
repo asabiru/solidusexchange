@@ -1,0 +1,18 @@
+{
+  "name": "@solidchange/e2e-dev",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "dependencies": {
+    "@solidchange/customer-api": "file:../customer-api"
+  },
+  "scripts": {
+    "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
+    "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs",
+    "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs",
+    "typecheck": "npm run lint"
+  }
+}
