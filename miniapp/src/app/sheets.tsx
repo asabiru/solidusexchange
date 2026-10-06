@@ -1,5 +1,5 @@
-import { useEffect, useId, useState } from "react";
-import type { OperationDetail, ProfileView, WalletView } from "../shared/api";
+import { useEffect, useId, useRef, useState } from "react";
+import type { KycVerificationState, KycVerificationView, OperationDetail, ProfileView, WalletView } from "../shared/api";
 import { type AssetCode, assets } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { dateTime, money, rate } from "./format";
@@ -13,9 +13,10 @@ interface Props {
   profile: ProfileView;
   close: () => void;
   open: (sheet: SheetRequest) => void;
+  onKycVerified: () => Promise<void>;
 }
 
-export function SheetHost({ sheet, wallet, profile, close, open }: Props) {
+export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified }: Props) {
   switch (sheet.kind) {
     case "asset":
       return <AssetSheet asset={sheet.asset} wallet={wallet} close={close} open={open} />;
@@ -24,7 +25,7 @@ export function SheetHost({ sheet, wallet, profile, close, open }: Props) {
     case "withdraw":
       return <MoneyFlowSheet mode="withdraw" initial={sheet.asset} close={close} />;
     case "kyc-required":
-      return <KycRequiredSheet close={close} />;
+      return <KycOnboardingSheet close={close} onVerified={onKycVerified} />;
     case "kyc":
       return <KycSheet profile={profile} close={close} />;
     case "limits":
@@ -146,23 +147,114 @@ function MoneyFlowSheet({ mode, initial, close }: { mode: "deposit" | "withdraw"
   );
 }
 
-function KycRequiredSheet({ close }: { close: () => void }) {
+type StepState = "done" | "current" | "pending" | "blocked";
+
+const kycOutcomes: Readonly<Record<KycVerificationState, { title: string; detail: string }>> = {
+  not_started: { title: "Подтвердите личность", detail: "Проверка открывает обмен, пополнение и вывод." },
+  submitted: { title: "Заявка отправлена", detail: "Ожидает начала проверки. Статус обновляется автоматически." },
+  in_review: { title: "Заявка на проверке", detail: "Симулятор провайдера рассматривает заявку. Статус обновляется автоматически." },
+  approved: { title: "Проверка пройдена", detail: "Решение пришло подписанным уведомлением. Обмен и кошелёк открыты." },
+  rejected: { title: "Проверка отклонена", detail: "Так завершился тестовый сценарий. Обмен и вывод остаются закрыты." },
+  needs_more_data: { title: "Нужны дополнительные данные", detail: "В тестовой версии документы не загружаются, поэтому продолжить нельзя." },
+  timed_out: { title: "Проверка не завершилась вовремя", detail: "Решение не пришло до срока. Обмен и вывод остаются закрыты." },
+  unavailable: { title: "Провайдер недоступен", detail: "Симулятор провайдера не ответил. Попробуйте ещё раз." }
+};
+
+const decisionSteps: Readonly<Partial<Record<KycVerificationState, { title: string; detail: string; state: StepState }>>> = {
+  approved: { title: "Одобрено", detail: "Личность подтверждена в тестовом режиме", state: "done" },
+  rejected: { title: "Отклонено", detail: "Тестовый сценарий отказа", state: "blocked" },
+  needs_more_data: { title: "Нужны данные", detail: "Загрузка документов не поддерживается", state: "blocked" },
+  timed_out: { title: "Нет решения", detail: "Срок проверки истёк", state: "blocked" }
+};
+
+function kycSteps(state: KycVerificationState): { title: string; detail: string; state: StepState }[] {
+  const started = state !== "not_started" && state !== "unavailable";
+  const reviewing = state === "in_review";
+  return [
+    { title: "Заявка отправлена", detail: "Синтетическая заявка без документов и личных данных", state: started ? "done" : "pending" },
+    {
+      title: "На проверке",
+      detail: "Решение принимает симулятор KYC-провайдера",
+      state: reviewing ? "current" : started && state !== "submitted" ? "done" : "pending"
+    },
+    decisionSteps[state] ?? { title: "Решение", detail: "Одобрено, отклонено или нужны данные", state: "pending" }
+  ];
+}
+
+function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerified: () => Promise<void> }) {
+  const [view, setView] = useState<KycVerificationView | undefined>();
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const notified = useRef(false);
+  const state = view?.state;
+
+  useEffect(() => {
+    let active = true;
+    const load = () => api.kycStatus()
+      .then((value) => { if (active) setView(value); })
+      .catch(() => { if (active) setFailed(true); });
+    if (state === undefined) void load();
+    if (state !== "submitted" && state !== "in_review") return () => { active = false; };
+    const timer = window.setInterval(load, 4_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [state]);
+
+  useEffect(() => {
+    if (view?.sessionKyc === "verified" && !notified.current) {
+      notified.current = true;
+      void onVerified();
+    }
+  }, [view, onVerified]);
+
+  async function submit() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      setView(await api.submitKyc());
+    } catch (error) {
+      if (error instanceof ApiError && error.code === "kyc_unavailable") setView(await api.kycStatus().catch(() => view));
+      else setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const outcome = kycOutcomes[state ?? "not_started"];
   return (
-    <Sheet title="Уровень Standard" onClose={close}>
+    <Sheet title="Идентификация" onClose={close}>
       <div className="sheet__summary">
-        <span className="sheet__eyebrow">Требуется для операции</span>
-        <span className="sheet__amount">Подтвердите личность</span>
-        <span className="sheet__summary-meta">Проверка открывает обмен и вывод, защищает аккаунт и обычно занимает до 10 минут.</span>
+        <span className="sheet__eyebrow">Тестовый режим · симулятор KYC</span>
+        <span className="sheet__amount">{outcome.title}</span>
+        <span className="sheet__summary-meta">
+          <span>{outcome.detail}</span>
+          <span className="pill pill--warning">Тест</span>
+        </span>
       </div>
-      <ol className="timeline">
-        <li className="timeline__step is-pending"><span className="timeline__mark num">1</span><span><strong>Подтвердить контакты</strong><span>Телефон и email</span></span></li>
-        <li className="timeline__step is-pending"><span className="timeline__mark num">2</span><span><strong>Документ и селфи</strong><span>Паспортные данные и проверка лица</span></span></li>
-        <li className="timeline__step is-blocked"><span className="timeline__mark"><Icon name="alert" size="xs" /></span><span><strong>Только свои реквизиты</strong><span>Платёж третьего лица будет возвращён</span></span></li>
+      <ol className="timeline" aria-label="Шаги проверки (тест)">
+        {kycSteps(state ?? "not_started").map((step, index) => (
+          <li key={step.title} className={`timeline__step is-${step.state}`}>
+            <span className="timeline__mark num">
+              {step.state === "done" ? <Icon name="check" size="xs" /> : step.state === "blocked" ? <Icon name="alert" size="xs" /> : index + 1}
+            </span>
+            <span><strong>{step.title}</strong><span>{step.detail}</span></span>
+          </li>
+        ))}
       </ol>
-      <Unavailable>KYC-провайдер не подключён: идентификацию нельзя пройти в тестовой версии.</Unavailable>
+      <p className="sheet__note">
+        Тестовый режим: заявка синтетическая, документы и фото не загружаются, реальные провайдеры не подключены.
+      </p>
+      {failed ? <p className="form-error" role="alert">Не удалось связаться с тестовым сервером.</p> : null}
       <div className="sheet__actions">
-        <DisabledCta label="Перейти к идентификации" />
-        <button type="button" className="cta cta--ghost" onClick={close}>Отмена</button>
+        {view?.canSubmit ? (
+          <button type="button" className="cta" disabled={busy} onClick={submit}>
+            <Icon name="id-card" size="sm" />
+            {state === "unavailable" ? "Повторить проверку (тест)" : "Пройти проверку (тест)"}
+          </button>
+        ) : null}
+        <button type="button" className="cta cta--ghost" onClick={close}>{state === "approved" ? "Готово" : "Закрыть"}</button>
       </div>
     </Sheet>
   );

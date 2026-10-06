@@ -45,7 +45,7 @@ export function HomeScreen({ session, wallet, operations, openSheet, openTab }: 
           <span className="kyc__mark"><Icon name="id-card" /></span>
           <span className="kyc__main">
             <strong>Подтвердите личность</strong>
-            <span>Обмен, пополнение и вывод откроются после проверки</span>
+            <span>Пройти проверку (тест) · обмен, пополнение и вывод откроются после неё</span>
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>

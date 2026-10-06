@@ -1,4 +1,4 @@
-import type { QuoteScenario } from "@solidchange/provider-simulators";
+import type { KycScenario, QuoteScenario } from "@solidchange/provider-simulators";
 import type { QuoteSource } from "./provider-quotes.js";
 
 export interface ServerConfig {
@@ -13,6 +13,9 @@ export interface ServerConfig {
   quoteSource: QuoteSource;
   quoteSeed: string;
   quoteScenario: QuoteScenario;
+  kycScenario: KycScenario;
+  kycSeed: string;
+  kycReviewTimeoutSeconds: number;
   customerApiUrl?: string;
   customerApiDevTokenKey?: string;
 }
@@ -21,7 +24,17 @@ export type Environment = Readonly<Record<string, string | undefined>>;
 
 const quoteSources: readonly QuoteSource[] = ["local", "provider-simulator"];
 const quoteScenarios: readonly QuoteScenario[] = ["fresh_quote", "expired_quote", "stale_price", "provider_outage"];
-const quoteSeedPattern = /^[A-Za-z0-9._:-]{1,64}$/;
+const kycScenarios: readonly KycScenario[] = [
+  "approve",
+  "reject",
+  "needs_more_data",
+  "pending_timeout",
+  "provider_outage",
+  "duplicate_callback",
+  "out_of_order_callback",
+  "late_callback"
+];
+const seedPattern = /^[A-Za-z0-9._:-]{1,64}$/;
 const devTokenKeyPattern = /^[0-9a-f]{64}$/;
 const botTokenPattern = /^[0-9]{1,20}:[A-Za-z0-9_-]{30,64}$/;
 const defaultOrigins = "http://127.0.0.1:4183,http://localhost:4183";
@@ -97,9 +110,9 @@ function parseCustomerApi(env: Environment): { customerApiUrl?: string; customer
   return { customerApiUrl: url, customerApiDevTokenKey: key };
 }
 
-function quoteSeed(env: Environment): string {
-  const value = env.MINIAPP_QUOTE_SEED?.trim() || "miniapp-dev";
-  if (!quoteSeedPattern.test(value)) throw new Error("MINIAPP_QUOTE_SEED must match ^[A-Za-z0-9._:-]{1,64}$");
+function seedSetting(env: Environment, name: string, fallback: string): string {
+  const value = env[name]?.trim() || fallback;
+  if (!seedPattern.test(value)) throw new Error(`${name} must match ^[A-Za-z0-9._:-]{1,64}$`);
   return value;
 }
 
@@ -122,8 +135,11 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     initDataMaxAgeSeconds: integerSetting(env, "MINIAPP_INIT_DATA_MAX_AGE_SECONDS", 300, 30, 86_400),
     quoteTtlSeconds: integerSetting(env, "MINIAPP_QUOTE_TTL_SECONDS", 30, 10, 120),
     quoteSource: oneOf(env, "MINIAPP_QUOTE_SOURCE", quoteSources, "local"),
-    quoteSeed: quoteSeed(env),
+    quoteSeed: seedSetting(env, "MINIAPP_QUOTE_SEED", "miniapp-dev"),
     quoteScenario: oneOf(env, "MINIAPP_QUOTE_SCENARIO", quoteScenarios, "fresh_quote"),
+    kycScenario: oneOf(env, "MINIAPP_KYC_SCENARIO", kycScenarios, "approve"),
+    kycSeed: seedSetting(env, "MINIAPP_KYC_SEED", "miniapp-dev-kyc"),
+    kycReviewTimeoutSeconds: integerSetting(env, "MINIAPP_KYC_REVIEW_TIMEOUT_SECONDS", 3_600, 600, 3_600),
     ...parseCustomerApi(env)
   };
 }

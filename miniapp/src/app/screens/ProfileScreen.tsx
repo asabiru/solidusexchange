@@ -55,7 +55,7 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
         <MenuRow
           icon={verified ? "shield-check" : "id-card"}
           title="Идентификация"
-          detail={verified ? "Пройдена · синтетический сценарий" : "Не пройдена · требуется для операций"}
+          detail={verified ? "Пройдена · синтетический сценарий" : "Не пройдена · Пройти проверку (тест)"}
           onClick={() => openSheet({ kind: verified ? "kyc" : "kyc-required" })}
         />
         <MenuRow

@@ -11,6 +11,7 @@ import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
 import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
 import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
+import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
@@ -35,7 +36,9 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/operations" },
   { method: "GET", path: "/bff/operations/:id" },
   { method: "GET", path: "/bff/profile" },
-  { method: "GET", path: "/bff/quotes/preview" }
+  { method: "GET", path: "/bff/quotes/preview" },
+  { method: "POST", path: "/bff/kyc/applications" },
+  { method: "GET", path: "/bff/kyc/status" }
 ] satisfies Route[]);
 
 export interface MiniappServerOptions {
@@ -43,6 +46,7 @@ export interface MiniappServerOptions {
   devBotToken?: string;
   quoteProvider?: QuoteProvider;
   customerApi?: CustomerApiClient;
+  kyc?: KycService;
 }
 
 function securityHeaders(response: ServerResponse): void {
@@ -142,9 +146,18 @@ export function createMiniappServer(
     devTokenKey: config.customerApiDevTokenKey
   });
 
+  const kycOnboarding = options.kyc ?? createKycService({
+    seed: config.kycSeed,
+    scenario: config.kycScenario,
+    reviewTimeoutSeconds: config.kycReviewTimeoutSeconds,
+    clock
+  });
+
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
     const id = parseCookies(request)[sessionCookie];
-    return id ? sessions.get(id) : undefined;
+    const session = id ? sessions.get(id) : undefined;
+    if (session?.kyc === "kyc-gated" && kycOnboarding.isVerified(session.subject)) session.kyc = "verified";
+    return session;
   }
 
   function startSession(
@@ -206,8 +219,10 @@ export function createMiniappServer(
           json(response, 500, { error: "dev_session_unavailable" });
           return;
         }
+        const subject = pseudonymousSubject(verified.value.user.id);
+        kycOnboarding.reset(subject);
         startSession(request, response, origin, {
-          subject: pseudonymousSubject(verified.value.user.id),
+          subject,
           source: "dev-synthetic",
           kyc: kyc as KycStatus
         });
@@ -249,6 +264,34 @@ export function createMiniappServer(
         if (id) sessions.delete(id);
         response.setHeader("set-cookie", sessionCookieValue("", 0, origin));
         json(response, 200, { ok: true });
+        return;
+      }
+
+      if (path === "/bff/kyc/applications") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        await readJsonBody(request, []);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        if (session.kyc === "verified") {
+          json(response, 409, { error: "kyc_already_verified" });
+          return;
+        }
+        try {
+          const { created } = await kycOnboarding.submit(session.subject);
+          json(response, created ? 202 : 200, kycOnboarding.view(session.subject, session.kyc));
+        } catch (error) {
+          if (error instanceof KycUnavailableError) {
+            json(response, 503, { error: "kyc_unavailable" });
+            return;
+          }
+          throw error;
+        }
         return;
       }
 
@@ -311,6 +354,10 @@ export function createMiniappServer(
     if (path === "/bff/profile") {
       const apiAccess = await customerApi.access(session.subject, clock());
       json(response, 200, { ...syntheticData.profile(session.kyc, displayName, customerRef(session.subject)), apiAccess });
+      return;
+    }
+    if (path === "/bff/kyc/status") {
+      json(response, 200, kycOnboarding.view(session.subject, session.kyc));
       return;
     }
     if (path === "/bff/quotes/preview") {

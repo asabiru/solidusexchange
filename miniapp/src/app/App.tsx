@@ -133,6 +133,10 @@ export function App() {
     }
   }, [enter]);
 
+  const refreshSession = useCallback(async () => {
+    await enter(await api.session());
+  }, [enter]);
+
   const logout = useCallback(async () => {
     await api.logout().catch(() => undefined);
     setSheet(undefined);
@@ -239,6 +243,7 @@ export function App() {
               profile={launch.data.profile}
               close={() => setSheet(undefined)}
               open={setSheet}
+              onKycVerified={refreshSession}
             />
           ) : null}
         </>

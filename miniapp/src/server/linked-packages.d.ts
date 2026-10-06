@@ -111,6 +111,96 @@ declare module "@solidchange/provider-simulators" {
     maxAgeSeconds?: number;
     maxFutureSeconds?: number;
   }): (input: { headers: unknown; body: unknown; now: number }) => QuoteVerification;
+  export type KycScenario =
+    | "approve"
+    | "reject"
+    | "needs_more_data"
+    | "pending_timeout"
+    | "provider_outage"
+    | "duplicate_callback"
+    | "out_of_order_callback"
+    | "late_callback";
+  export type KycProviderStatus = "submitted" | "in_review" | "approved" | "rejected" | "needs_more_data";
+
+  export interface KycSubmission {
+    readonly provider_reference: string;
+    readonly applicant_ref: string;
+    readonly level: "basic" | "enhanced";
+    readonly status: "submitted";
+    readonly submitted_at: string;
+    readonly review_deadline: string;
+  }
+
+  export interface ScheduledDelivery {
+    readonly deliverAt: number;
+    readonly headers: Record<string, string>;
+    readonly body: Buffer;
+  }
+
+  export interface KycSimulator {
+    readonly providerId: string;
+    submitApplicant(request: { applicant_ref: string; level: "basic" | "enhanced"; idempotency_key: string }): Promise<KycSubmission>;
+    getApplicantStatus(providerReference: string): Promise<{
+      readonly provider_reference: string;
+      readonly status: KycProviderStatus;
+      readonly sequence: number;
+      readonly updated_at: string;
+    }>;
+    drainCallbacks(): ScheduledDelivery[];
+    pendingCallbacks(): number;
+  }
+
+  export type CallbackVerification =
+    | { readonly ok: true; readonly payload: Readonly<Record<string, unknown>>; readonly keyId: string; readonly timestamp: number; readonly nonce: string }
+    | { readonly ok: false; readonly reason: string };
+
+  export type InboxAction =
+    | "applied"
+    | "buffered"
+    | "duplicate"
+    | "conflict"
+    | "stale"
+    | "late"
+    | "invalid_transition"
+    | "unknown_subject";
+
+  export interface InboxSubject {
+    readonly status: string;
+    readonly sequence: number;
+    readonly deadline: number;
+    readonly timedOut: boolean;
+    readonly lateEvents: number;
+    readonly reviewEvents: number;
+    readonly buffered: number;
+  }
+
+  export interface CallbackInbox {
+    openSubject(subjectId: string, options: { deadline: number }): void;
+    accept(payload: Readonly<Record<string, unknown>>, options: { receivedAt: number }): {
+      readonly action: InboxAction;
+      readonly status: string | null;
+      readonly appliedStatuses: readonly string[];
+    };
+    expire(now: number): string[];
+    get(subjectId: string): InboxSubject | undefined;
+  }
+
+  export const KYC_SCENARIOS: Readonly<Record<KycScenario, unknown>>;
+  export function createKycSimulator(options: {
+    seed: string;
+    key: SimulatorKey;
+    clock?: SimulatedClock;
+    scenarios?: Readonly<Record<string, KycScenario>>;
+    defaultScenario?: KycScenario;
+    reviewTimeoutSeconds?: number;
+  }): KycSimulator;
+  export function createKycCallbackVerifier(options: {
+    keyring: ReadonlyMap<string, VerificationKey>;
+    nonceStore: NonceStore;
+    maxAgeSeconds?: number;
+    maxFutureSeconds?: number;
+  }): (input: { headers: unknown; body: unknown; now: number }) => CallbackVerification;
+  export function createKycCallbackInbox(): CallbackInbox;
   export function validateSignedQuote(payload: Readonly<Record<string, unknown>>): string | null;
   export function assessQuote(
     quote: Readonly<Record<string, unknown>>,
