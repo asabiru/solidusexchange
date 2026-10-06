@@ -400,7 +400,9 @@ describe("customer negative paths", () => {
       "/bff/kyc/applications",
       "/bff/notifications/read",
       "/bff/address-screening",
-      "/bff/auth/logout"
+      "/bff/auth/logout",
+      "/bff/sessions/revoke",
+      "/bff/sessions/revoke-others"
     ]) {
       const response = await fetch(`${miniappBase}${path}`, {
         method: "POST",

@@ -188,7 +188,7 @@ describe("activity route: authentication and strict input", () => {
     const activityRoutes = routeTable.filter((route) => route.path.startsWith("/bff/activity"));
     assert.deepEqual(activityRoutes, [{ method: "GET", path: "/bff/activity" }]);
     const postPaths = routeTable.filter((route) => route.method === "POST").map((route) => route.path);
-    assert.deepEqual(postPaths.sort(), ["/bff/address-screening", "/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram"]);
+    assert.deepEqual(postPaths.sort(), ["/bff/address-screening", "/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram", "/bff/sessions/revoke", "/bff/sessions/revoke-others", "/bff/support/requests"]);
   });
 });
 

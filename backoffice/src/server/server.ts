@@ -35,6 +35,7 @@ import {
 } from "./reports.js";
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
+import { apiSecurityHeaders, guardRawResponses } from "./security-headers.js";
 import {
   StepUpRejectedError,
   SyntheticStepUpService
@@ -53,10 +54,7 @@ const validRoles = new Set<OperatorRole>([
 ]);
 
 function securityHeaders(response: ServerResponse): void {
-  response.setHeader("cache-control", "no-store");
-  response.setHeader("content-security-policy", "default-src 'none'; frame-ancestors 'none'");
-  response.setHeader("referrer-policy", "no-referrer");
-  response.setHeader("x-content-type-options", "nosniff");
+  for (const [name, value] of Object.entries(apiSecurityHeaders)) response.setHeader(name, value);
 }
 
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -879,6 +877,7 @@ export function createBackofficeServer(
       json(response, 500, { error: "request_failed" });
     }
   });
+  guardRawResponses(server, apiSecurityHeaders);
   server.once("close", () => clearInterval(rotationTimer));
   return server;
 }

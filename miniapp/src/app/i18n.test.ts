@@ -111,6 +111,47 @@ describe("i18n: catalog parity", () => {
   });
 });
 
+describe("i18n: support and complaints", () => {
+  const supportKeys = [
+    "support.banner",
+    "support.note",
+    "support.safety",
+    "support.categoryQuestion",
+    "support.categoryOperation",
+    "support.categoryComplaint",
+    "support.categoryData",
+    "support.complaintTitle",
+    "support.complaintAck",
+    "support.errorTopic",
+    "support.errorMessage",
+    "support.errorReference",
+    "support.errorRateLimited",
+    "support.created"
+  ] as const;
+
+  it("carries the test banner, categories and complaint acknowledgement in every locale", () => {
+    for (const locale of locales) {
+      for (const key of supportKeys) assert.ok(catalogs[locale][key].trim(), `${locale}:${key}`);
+      assert.equal(new Set(["support.categoryQuestion", "support.categoryOperation", "support.categoryComplaint", "support.categoryData"].map((key) => catalogs[locale][key as MessageKey])).size, 4, locale);
+      assert.match(catalogs[locale]["support.complaintAck"], /^SOLID /, locale);
+      assert.match(catalogs[locale]["support.note"], /Telegram/, locale);
+      assert.deepEqual(placeholdersOf(catalogs[locale]["support.errorTopic"]), ["max"], locale);
+    }
+    assert.match(ru["support.banner"], /^Тестовая версия: .*никто не получит/);
+    assert.match(ky["support.banner"], /^Сыноо версиясы: .*эч ким албайт/);
+    assert.match(en["support.banner"], /^Test version: nobody receives this request/);
+    assert.match(ru["support.complaintAck"], /не закрывает жалобу/);
+    assert.match(ky["support.complaintAck"], /даттанууну жаппайт/);
+    assert.match(en["support.complaintAck"], /does not close the complaint/);
+  });
+
+  it("tells customers support never asks for secrets, in every locale", () => {
+    assert.match(ru["support.safety"], /пароли.*приватные ключи.*одноразовые коды/);
+    assert.match(ky["support.safety"], /сырсөз.*жеке ачкычтарды.*бир жолку коддорду/);
+    assert.match(en["support.safety"], /passwords.*private keys.*one-time codes/);
+  });
+});
+
 describe("i18n: locale detection", () => {
   it("maps Telegram language codes to ky, en, or the Russian default", () => {
     assert.equal(defaultLocale, "ru");
@@ -177,6 +218,29 @@ describe("i18n: persistence and fallback", () => {
     assert.equal(document.documentElement.lang, "ky");
     applyDocumentLocale(document, "en");
     assert.equal(document.documentElement.lang, "en");
+  });
+
+  it("translates device sessions in every locale with matching placeholders", () => {
+    assert.equal(translate("ru", "profile.sessionsTitle"), "Устройства и сессии");
+    assert.equal(translate("ky", "profile.sessionsTitle"), "Түзмөктөр жана сеанстар");
+    assert.equal(translate("en", "profile.sessionsTitle"), "Devices and sessions");
+    assert.equal(translate("ru", "sessions.signOutOthers"), "Выйти на всех других устройствах");
+    assert.equal(translate("ky", "sessions.signOutOthers"), "Башка бардык түзмөктөрдөн чыгуу");
+    assert.equal(translate("en", "sessions.signOutOthers"), "Sign out of all other devices");
+    assert.equal(translate("en", "activity.sessionRevokedOthers", { count: 2 }), "Signed out other devices: 2");
+    const keys = Object.keys(catalogs.ru).filter((key) => key.startsWith("sessions.")) as (keyof typeof catalogs.ru)[];
+    assert.ok(keys.length >= 15);
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+    for (const key of [...keys, "profile.sessionsTitle", "profile.sessionsDetail", "activity.sessionRevokedOne", "activity.sessionRevokedOthers", "common.cancel"] as const) {
+      for (const locale of locales) {
+        assert.ok(catalogs[locale][key].trim(), `${locale} ${key}`);
+        assert.deepEqual(placeholders(catalogs[locale][key]), placeholders(catalogs.ru[key]), `${locale} ${key}`);
+      }
+    }
+    for (const locale of locales) {
+      assert.match(catalogs[locale]["sessions.note"], /SOLID/);
+      assert.doesNotMatch(catalogs[locale]["sessions.note"], /SolidChange|Solidus/i);
+    }
   });
 
   it("interpolates parameters and leaves unknown placeholders visible", () => {

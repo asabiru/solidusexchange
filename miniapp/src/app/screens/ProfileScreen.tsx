@@ -77,6 +77,12 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
           detail={t("profile.securityDetail")}
           onClick={() => openSheet({ kind: "security" })}
         />
+        <MenuRow
+          icon="device"
+          title={t("profile.sessionsTitle")}
+          detail={t("profile.sessionsDetail")}
+          onClick={() => openSheet({ kind: "sessions" })}
+        />
         <div className="row row--static">
           <span className="coin coin--menu" aria-hidden="true"><Icon name="shield" size="sm" /></span>
           <span className="row__main">

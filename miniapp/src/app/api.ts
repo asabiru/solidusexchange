@@ -1,6 +1,7 @@
 import type {
   ActivityView,
   AddressScreeningView,
+  DeviceSessionsView,
   HealthView,
   KycStatus,
   KycVerificationView,
@@ -10,10 +11,13 @@ import type {
   ProfileView,
   QuotePreview,
   SessionView,
+  SupportRequestView,
+  SupportRequestsView,
   WalletView
 } from "../shared/api";
 import type { ScreeningAsset, ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
+import type { SupportCategory } from "../shared/support";
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, readonly reason?: string) {
@@ -57,10 +61,16 @@ export const api = {
   submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
   notifications: () => call<NotificationsView>("/bff/notifications"),
   activity: () => call<ActivityView>("/bff/activity"),
+  sessions: () => call<DeviceSessionsView>("/bff/sessions"),
+  revokeSession: (handle: string) => call<DeviceSessionsView>("/bff/sessions/revoke", { handle }),
+  revokeOtherSessions: () => call<DeviceSessionsView>("/bff/sessions/revoke-others", {}),
   markNotificationsRead: (ids: readonly string[]) =>
     call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
   screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>
     call<AddressScreeningView>("/bff/address-screening", { asset, network, address }),
+  supportRequests: () => call<SupportRequestsView>("/bff/support/requests"),
+  createSupportRequest: (category: SupportCategory, topic: string, message: string, activityId?: string) =>
+    call<SupportRequestView>("/bff/support/requests", activityId ? { category, topic, message, activityId } : { category, topic, message }),
   addressScreening: (id: string) => call<AddressScreeningView>(`/bff/address-screening/${encodeURIComponent(id)}`),
   quote: (from: AssetCode, to: AssetCode, amount: string) => {
     const query = new URLSearchParams({ from, to, amount });
