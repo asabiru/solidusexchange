@@ -38,6 +38,11 @@ test("synthetic auth requires the explicit flag and a 32-byte hex key", () => {
 test("configuration refuses production and non-loopback binds", () => {
   assert.throws(() => loadConfig({ NODE_ENV: "production" }), /dev-only/u);
   assert.throws(() => loadConfig({ ...SYNTHETIC, NODE_ENV: "production" }), /dev-only/u);
+  for (const value of ["Production", "PRODUCTION", " production", "production ", "production\n", "\tProduction"]) {
+    assert.throws(() => loadConfig({ NODE_ENV: value }), /dev-only/u, JSON.stringify(value));
+    assert.throws(() => loadConfig({ ...SYNTHETIC, NODE_ENV: value }), /dev-only/u, JSON.stringify(value));
+  }
+  assert.equal(loadConfig({ NODE_ENV: "development" }).authMode, "deny-all");
   for (const host of ["0.0.0.0", "::", "localhost", "127.0.0.2", "::ffff:127.0.0.1", "10.0.0.1", "", " 127.0.0.1"]) {
     assert.throws(() => loadConfig({ ...SYNTHETIC, CUSTOMER_API_HOST: host }), /loopback/u, host);
     assert.throws(() => loadConfig({ CUSTOMER_API_HOST: host }), /loopback/u, host);

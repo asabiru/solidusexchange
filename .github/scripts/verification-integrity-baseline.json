@@ -509,7 +509,7 @@
       "minCases": 13
     },
     "packages/customer-api/tests/auth-config.test.mjs": {
-      "minLines": 132,
+      "minLines": 137,
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
@@ -517,8 +517,8 @@
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 225,
-      "minCases": 13
+      "minLines": 235,
+      "minCases": 14
     },
     "packages/customer-api/tests/contract-validator.mjs": {
       "minLines": 256

@@ -9,7 +9,7 @@ export function isLoopbackAddress(address) {
 }
 
 export function loadConfig(env) {
-  if (env.NODE_ENV === "production") {
+  if (String(env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
     throw new Error("customer-api is dev-only and refuses NODE_ENV=production");
   }
 
