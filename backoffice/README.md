@@ -1,4 +1,4 @@
-# SolidChange backoffice
+# SOLID backoffice
 
 Wave 2 starts as an independently built operator frontend inside the repository. It is not imported by the customer Laravel application and is intended for a separate origin, deployment and session boundary.
 

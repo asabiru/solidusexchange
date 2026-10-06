@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "SolidChange Canonical API",
+    "title": "SOLID Canonical API",
     "version": "1.0.0-draft",
     "description": "Contract-only foundation. It does not expose live providers, financial commands or production customer data."
   },
