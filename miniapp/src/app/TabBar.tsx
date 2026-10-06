@@ -42,14 +42,16 @@ export function TabBar({
     const tab = tabAt(event.clientX, event.clientY);
     if (!tab) return;
     drag.current = { pointerId: event.pointerId, startX: event.clientX, moved: false, hovered: tab };
-    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const move = (event: PointerEvent<HTMLDivElement>) => {
     const current = drag.current;
     if (!current || current.pointerId !== event.pointerId) return;
-    if (!current.moved && Math.abs(event.clientX - current.startX) < dragThreshold) return;
-    current.moved = true;
+    if (!current.moved) {
+      if (Math.abs(event.clientX - current.startX) < dragThreshold) return;
+      current.moved = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
     const tab = tabAt(event.clientX, event.clientY);
     if (tab) current.hovered = tab;
     setHovered(current.hovered);
