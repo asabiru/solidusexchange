@@ -6,6 +6,11 @@
   "engines": {
     "node": ">=22.18 <25"
   },
+  "exports": {
+    "./dev-server": "./src/server.mjs",
+    "./request-id": "./src/request-id.mjs",
+    "./synthetic-token": "./src/auth.mjs"
+  },
   "scripts": {
     "check": "node scripts/check-boundary.mjs",
     "dev": "node src/server.mjs",

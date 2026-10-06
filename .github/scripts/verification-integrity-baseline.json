@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -394,6 +394,10 @@
     "backoffice/tsconfig.test.json": {
       "minLines": 23
     },
+    "miniapp/src/server/customer-api-client.test.ts": {
+      "minLines": 124,
+      "minCases": 5
+    },
     "miniapp/src/server/dev-server.test.ts": {
       "minLines": 50,
       "minCases": 1
@@ -401,6 +405,14 @@
     "miniapp/src/server/init-data.test.ts": {
       "minLines": 150,
       "minCases": 18
+    },
+    "miniapp/src/server/integration.test.ts": {
+      "minLines": 76,
+      "minCases": 3
+    },
+    "miniapp/src/server/provider-quotes.test.ts": {
+      "minLines": 114,
+      "minCases": 8
     },
     "miniapp/src/server/quotes.test.ts": {
       "minLines": 83,

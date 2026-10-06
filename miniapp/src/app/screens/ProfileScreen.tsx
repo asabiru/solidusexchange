@@ -1,4 +1,4 @@
-import type { KycStatus, ProfileView, SessionView } from "../../shared/api";
+import type { CustomerApiAccess, KycStatus, ProfileView, SessionView } from "../../shared/api";
 import { Icon, type IconName } from "../Icon";
 import type { SheetRequest } from "../navigation";
 import { ScreenTitle, Switch } from "../ui";
@@ -24,6 +24,18 @@ function MenuRow({ icon, title, detail, onClick }: { icon: IconName; title: stri
       {onClick ? <Icon name="chevron-right" size="sm" /> : <span className="pill pill--muted">Скоро</span>}
     </button>
   );
+}
+
+const capabilityLabels: Readonly<Record<string, string>> = {
+  "customer.session.read": "сессия",
+  "customer.capabilities.read": "права доступа"
+};
+
+function apiAccessDetail(access: CustomerApiAccess): string {
+  if (access.status === "not-configured") return "Не подключён · локальные тестовые данные";
+  if (access.status === "unavailable") return "Недоступен · проверьте тестовый сервер";
+  const granted = access.granted.map((capability) => capabilityLabels[capability] ?? capability).join(", ");
+  return `Подключён · только чтение: ${granted || "нет прав"} · операции с деньгами отключены`;
 }
 
 export function ProfileScreen({ session, profile, openSheet, switchScenario, logout, theme, setTheme }: Props) {
@@ -58,6 +70,13 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
           detail="Центр безопасности · заглушки"
           onClick={() => openSheet({ kind: "security" })}
         />
+        <div className="row row--static">
+          <span className="coin coin--menu" aria-hidden="true"><Icon name="shield" size="sm" /></span>
+          <span className="row__main">
+            <strong>Клиентский API</strong>
+            <span>{apiAccessDetail(profile.apiAccess)}</span>
+          </span>
+        </div>
         <MenuRow icon="bank" title="Реквизиты и адреса" detail="Банковский счёт · whitelist адресов" />
         <MenuRow icon="file" title="Документы" detail="Чеки, выписки и соглашения" />
         <MenuRow icon="help" title="Поддержка" detail="Открыть обращение или FAQ" onClick={() => openSheet({ kind: "support" })} />

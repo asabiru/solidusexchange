@@ -80,6 +80,11 @@ export interface ProfileStep {
   state: "done" | "required";
 }
 
+export type CustomerApiAccess =
+  | { status: "connected"; granted: readonly string[]; commandsEnabled: false }
+  | { status: "not-configured" }
+  | { status: "unavailable" };
+
 export interface ProfileView {
   displayName: string;
   customerRef: string;
@@ -96,6 +101,7 @@ export interface ProfileView {
   };
   fees: readonly { title: string; value: string }[];
   security: readonly { title: string; detail: string; status: "placeholder" }[];
+  apiAccess: CustomerApiAccess;
 }
 
 export interface QuotePreview {

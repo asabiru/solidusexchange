@@ -1,3 +1,6 @@
+import type { QuoteScenario } from "@solidchange/provider-simulators";
+import type { QuoteSource } from "./provider-quotes.js";
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -7,10 +10,19 @@ export interface ServerConfig {
   sessionTtlSeconds: number;
   initDataMaxAgeSeconds: number;
   quoteTtlSeconds: number;
+  quoteSource: QuoteSource;
+  quoteSeed: string;
+  quoteScenario: QuoteScenario;
+  customerApiUrl?: string;
+  customerApiDevTokenKey?: string;
 }
 
 export type Environment = Readonly<Record<string, string | undefined>>;
 
+const quoteSources: readonly QuoteSource[] = ["local", "provider-simulator"];
+const quoteScenarios: readonly QuoteScenario[] = ["fresh_quote", "expired_quote", "stale_price", "provider_outage"];
+const quoteSeedPattern = /^[A-Za-z0-9._:-]{1,64}$/;
+const devTokenKeyPattern = /^[0-9a-f]{64}$/;
 const botTokenPattern = /^[0-9]{1,20}:[A-Za-z0-9_-]{30,64}$/;
 const defaultOrigins = "http://127.0.0.1:4183,http://localhost:4183";
 
@@ -55,6 +67,42 @@ function parseOrigins(value: string): readonly string[] {
   return Object.freeze(origins);
 }
 
+function oneOf<T extends string>(env: Environment, name: string, allowed: readonly T[], fallback: T): T {
+  const value = env[name]?.trim() || fallback;
+  if (!(allowed as readonly string[]).includes(value)) {
+    throw new Error(`${name} must be one of ${allowed.join(", ")}`);
+  }
+  return value as T;
+}
+
+function parseCustomerApi(env: Environment): { customerApiUrl?: string; customerApiDevTokenKey?: string } {
+  const url = env.MINIAPP_CUSTOMER_API_URL?.trim() || undefined;
+  const key = env.MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY?.trim() || undefined;
+  if (url === undefined && key === undefined) return {};
+  if (url === undefined || key === undefined) {
+    throw new Error("MINIAPP_CUSTOMER_API_URL and MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY must be set together");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("MINIAPP_CUSTOMER_API_URL must be an absolute origin");
+  }
+  if (parsed.protocol !== "http:" || parsed.origin !== url || !isLoopbackHostname(parsed.hostname)) {
+    throw new Error("MINIAPP_CUSTOMER_API_URL must be an exact loopback http origin; the dev customer API is never remote");
+  }
+  if (!devTokenKeyPattern.test(key)) {
+    throw new Error("MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY must be 64 lowercase hex characters");
+  }
+  return { customerApiUrl: url, customerApiDevTokenKey: key };
+}
+
+function quoteSeed(env: Environment): string {
+  const value = env.MINIAPP_QUOTE_SEED?.trim() || "miniapp-dev";
+  if (!quoteSeedPattern.test(value)) throw new Error("MINIAPP_QUOTE_SEED must match ^[A-Za-z0-9._:-]{1,64}$");
+  return value;
+}
+
 export function loadServerConfig(env: Environment = process.env): ServerConfig {
   const host = env.MINIAPP_BFF_HOST?.trim() || "127.0.0.1";
   if (!isLoopbackHostname(host)) {
@@ -72,6 +120,10 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     telegramBotToken,
     sessionTtlSeconds: integerSetting(env, "MINIAPP_SESSION_TTL_SECONDS", 1_800, 60, 3_600),
     initDataMaxAgeSeconds: integerSetting(env, "MINIAPP_INIT_DATA_MAX_AGE_SECONDS", 300, 30, 86_400),
-    quoteTtlSeconds: integerSetting(env, "MINIAPP_QUOTE_TTL_SECONDS", 30, 10, 120)
+    quoteTtlSeconds: integerSetting(env, "MINIAPP_QUOTE_TTL_SECONDS", 30, 10, 120),
+    quoteSource: oneOf(env, "MINIAPP_QUOTE_SOURCE", quoteSources, "local"),
+    quoteSeed: quoteSeed(env),
+    quoteScenario: oneOf(env, "MINIAPP_QUOTE_SCENARIO", quoteScenarios, "fresh_quote"),
+    ...parseCustomerApi(env)
   };
 }
