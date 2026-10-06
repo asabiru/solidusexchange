@@ -34,6 +34,7 @@ import {
   defaultMaxPerSubject,
   notificationIdPattern
 } from "./notifications.js";
+import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
@@ -66,7 +67,8 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/kyc/status" },
   { method: "GET", path: "/bff/notifications" },
   { method: "GET", path: "/bff/activity" },
-  { method: "POST", path: "/bff/notifications/read" }
+  { method: "POST", path: "/bff/notifications/read" },
+  { method: "GET", path: "/bff/metrics" }
 ] satisfies Route[]);
 
 export interface MiniappServerOptions {
@@ -78,6 +80,10 @@ export interface MiniappServerOptions {
   addressScreening?: AddressScreeningService;
   notifications?: NotificationOutbox;
   activity?: ActivityLog;
+  /** Receives one JSON log line per completed request when MINIAPP_LOG=json. */
+  logSink?: (line: string) => void;
+  /** Monotonic milliseconds for request durations. */
+  timer?: () => number;
 }
 
 const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTemplate>>> = Object.freeze({
@@ -227,6 +233,37 @@ export function createMiniappServer(
     activity.recordKyc(subject, state);
   });
 
+  const observer = createRequestObserver({
+    service: "miniapp-bff",
+    routes: routeTable.map((route) => route.path),
+    config: config.observability,
+    sink: options.logSink,
+    timer: options.timer,
+    wallClock: clock
+  });
+  const gauges: readonly Gauge[] = Object.freeze([
+    { name: "solidchange_miniapp_sessions_active", help: "Unexpired Mini App BFF sessions.", value: () => sessions.size() },
+    { name: "solidchange_miniapp_notification_drafts", help: "Draft notifications held in the test-mode outbox.", value: () => outbox.size() },
+    { name: "solidchange_miniapp_address_screenings", help: "Address screenings tracked in memory.", value: () => addressScreening.trackedCount() }
+  ]);
+
+  async function metrics(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    if (!observer.metricsEnabled || !metricsRequestAllowed(request)) {
+      json(response, 404, { error: "not_found" });
+      return;
+    }
+    if (request.method !== "GET") {
+      response.setHeader("allow", "GET");
+      json(response, 405, { error: "method_not_allowed" });
+      return;
+    }
+    const body = await observer.renderMetrics(gauges);
+    securityHeaders(response);
+    response.statusCode = 200;
+    response.setHeader("content-type", metricsContentType);
+    response.end(body);
+  }
+
   function notificationsView(subject: string): NotificationsView {
     return {
       mode: "test",
@@ -271,6 +308,11 @@ export function createMiniappServer(
     }
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const path = url.pathname;
+
+    if (path === "/bff/metrics") {
+      await metrics(request, response);
+      return;
+    }
 
     if (request.method === "POST") {
       const origin = exactOrigin(request, config);
@@ -579,6 +621,7 @@ export function createMiniappServer(
   }
 
   const server = createServer((request, response) => {
+    observer.observe(request, response);
     handle(request, response).catch((error: unknown) => {
       if (error instanceof RequestBodyError) {
         json(response, error.status, { error: error.status === 415 ? "unsupported_media_type" : "invalid_request" });

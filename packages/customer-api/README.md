@@ -62,6 +62,18 @@ exists in `Documentation/regulated-core/decision-register.md` and is still `Open
   source address does not reset the limit.
 - Unexpected failures return a generic `500 INTERNAL_ERROR` without internals.
 
+## Dev observability
+
+- `CUSTOMER_API_LOG=json` writes one JSON line per completed request to stdout:
+  `{ ts, service, method, route, status, duration_ms, request_id }`. `route` is
+  a contract path, `/metrics` or `unmatched`; `request_id` is a server-generated
+  random hex value, never the client `X-Request-Id`. No headers, tokens, query
+  strings, subjects or peer addresses are logged.
+- `CUSTOMER_API_METRICS=loopback` serves Prometheus text at `GET /metrics` to
+  loopback peers only (no `Origin`, proxy or cross-site headers); non-GET is
+  `405`. It is outside the customer contract and `404` when the flag is unset.
+- Both default to `off`; any other value fails startup.
+
 ## Run
 
 ```bash
