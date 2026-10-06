@@ -1,4 +1,4 @@
-# SolidChange local dev stack (dev-only, synthetic data, loopback-only).
+# SOLID local dev stack (dev-only, synthetic data, loopback-only).
 # Not a production deployment. Run from the repository root:
 #   docker compose -f infra/local/compose.yaml up --build --wait
 #

@@ -1,6 +1,6 @@
 # Contract compatibility policy
 
-This policy applies to the canonical SolidChange API and domain events.
+This policy applies to the canonical SOLID API and domain events.
 
 ## Version identifiers
 
