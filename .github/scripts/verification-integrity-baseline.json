@@ -482,8 +482,8 @@
       "minCases": 5
     },
     "miniapp/src/app/a11y.test.ts": {
-      "minLines": 322,
-      "minCases": 22
+      "minLines": 323,
+      "minCases": 24
     },
     "miniapp/src/app/i18n.test.ts": {
       "minLines": 356,

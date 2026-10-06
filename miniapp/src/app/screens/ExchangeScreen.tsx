@@ -131,7 +131,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
             inputMode="decimal"
             autoComplete="off"
             value={input}
-            aria-invalid={input !== "" && !valid}
+            aria-invalid={(input !== "" && !valid) || error === quoteErrors.invalid_amount || error === quoteErrors.amount_too_small}
             aria-describedby={errorId}
             onChange={(event) => {
               setInput(event.target.value);

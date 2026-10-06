@@ -127,22 +127,16 @@ function elements(text: string): Element[] {
 
 function visibleText(node: ts.Node, source: ts.SourceFile): boolean {
   if (ts.isJsxText(node)) return node.text.trim() !== "";
-  if (ts.isJsxExpression(node)) {
-    if (!node.expression) return false;
-    if (ts.isConditionalExpression(node.expression)) {
-      return [node.expression.whenTrue, node.expression.whenFalse].some((branch) =>
-        branch.kind !== ts.SyntaxKind.NullKeyword && (ts.isJsxElement(branch) ? visibleText(branch, source) : !ts.isJsxSelfClosingElement(branch))
-      );
-    }
-    return true;
-  }
+  if (ts.isJsxExpression(node)) return node.expression ? visibleText(node.expression, source) : false;
+  if (ts.isParenthesizedExpression(node)) return visibleText(node.expression, source);
+  if (ts.isConditionalExpression(node)) return visibleText(node.whenTrue, source) || visibleText(node.whenFalse, source);
   if (ts.isJsxElement(node)) {
     const tag = node.openingElement.tagName.getText(source);
     if (["Icon", "Coin", "svg"].includes(tag)) return false;
     if (node.openingElement.attributes.properties.some((attribute) => ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "aria-hidden")) return false;
     return node.children.some((child) => visibleText(child, source));
   }
-  return false;
+  return ts.isIdentifier(node) || ts.isCallExpression(node) || ts.isPropertyAccessExpression(node) || ts.isElementAccessExpression(node) || ts.isStringLiteral(node) || ts.isBinaryExpression(node);
 }
 
 const jsx = sources.flatMap(elements);
@@ -344,6 +338,14 @@ describe("Mini App WCAG 2.2 AA CSS", () => {
       const value = rule.declarations.get("min-height");
       if (value?.endsWith("px")) assert.ok(Number.parseFloat(value) >= 24, rule.selectors.join(","));
     }
+  });
+
+  it("keeps keyboard focus clear of fixed navigation and clipped groups", () => {
+    assert.equal(declaration("button", "scroll-margin-block"), "80px 110px");
+    assert.equal(declaration(".segment :focus-visible", "outline-offset"), "-3px");
+    assert.equal(declaration(".list :focus-visible", "outline-offset"), "-3px");
+    assert.equal(declaration(".balance", "--focus"), "var(--hero-ink)");
+    assert.equal(declaration(".qr-panel", "--focus"), "var(--hero-ink)");
   });
 
   it("disables animations, springs and smooth scrolling for reduced motion", () => {
