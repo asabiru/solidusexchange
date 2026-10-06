@@ -395,8 +395,8 @@
       "minCases": 44
     },
     "backoffice/src/app/a11y.test.ts": {
-      "minLines": 489,
-      "minCases": 21
+      "minLines": 580,
+      "minCases": 28
     },
     "backoffice/src/auth/access.test.ts": {
       "minLines": 67,
@@ -482,8 +482,8 @@
       "minCases": 5
     },
     "miniapp/src/app/i18n.test.ts": {
-      "minLines": 223,
-      "minCases": 19
+      "minLines": 356,
+      "minCases": 33
     },
     "miniapp/src/server/activity-routes.test.ts": {
       "minLines": 373,
@@ -550,8 +550,8 @@
       "minCases": 22
     },
     "miniapp/src/shared/decimal.test.ts": {
-      "minLines": 98,
-      "minCases": 12
+      "minLines": 109,
+      "minCases": 13
     },
     "miniapp/src/shared/quote.test.ts": {
       "minLines": 41,

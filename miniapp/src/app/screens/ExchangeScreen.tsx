@@ -1,10 +1,10 @@
 import { useEffect, useId, useState } from "react";
 import type { QuotePreview, WalletView } from "../../shared/api";
 import { type AssetCode, assets } from "../../shared/assets";
-import { fromUnits, isDecimalString, normalizeAmountInput, toUnits } from "../../shared/decimal";
+import { fromUnits, isDecimalString, toUnits } from "../../shared/decimal";
 import { formatCountdown, quoteSecondsRemaining, quoteState } from "../../shared/quote";
 import { ApiError, api } from "../api";
-import type { MessageKey } from "../i18n";
+import { type MessageKey, messageKeyFor } from "../i18n";
 import { useI18n } from "../i18n-context";
 import { Icon } from "../Icon";
 import type { SheetRequest } from "../navigation";
@@ -50,7 +50,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
 
   const from: AssetCode = side === "buy" ? "RUB" : crypto;
   const to: AssetCode = side === "buy" ? crypto : "RUB";
-  const normalized = normalizeAmountInput(input);
+  const normalized = format.parseAmountInput(input);
   const valid = isDecimalString(normalized, assets[from].scale) && toUnits(normalized, assets[from].scale) > 0n;
   const available = wallet.assets.find((entry) => entry.code === from)?.available ?? "0";
   const now = useNow(quote !== undefined);
@@ -78,7 +78,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       setQuote({ value, offset: value.serverTime - Date.now() });
     } catch (caught) {
       setQuote(undefined);
-      setError(caught instanceof ApiError ? quoteErrors[caught.code] ?? "exchange.errorQuoteFailed" : "exchange.errorQuoteFailed");
+      setError(caught instanceof ApiError ? messageKeyFor(quoteErrors, caught.code) ?? "exchange.errorQuoteFailed" : "exchange.errorQuoteFailed");
     } finally {
       setLoading(false);
     }

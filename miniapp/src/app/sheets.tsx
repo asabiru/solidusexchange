@@ -14,7 +14,7 @@ import { type ScreeningNetwork, screeningTargets } from "../shared/address-scree
 import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { assetNameKeys, assetNetworkKeys } from "./format";
-import type { MessageKey } from "./i18n";
+import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
 import type { SheetRequest } from "./navigation";
@@ -503,7 +503,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
           setUnavailable(true);
           return;
         }
-        setError(reason instanceof ApiError ? screeningErrors[reason.code] ?? "screening.errorFailed" : "common.serverUnreachable");
+        setError(reason instanceof ApiError ? messageKeyFor(screeningErrors, reason.code) ?? "screening.errorFailed" : "common.serverUnreachable");
       })
       .finally(() => setBusy(false));
   };
