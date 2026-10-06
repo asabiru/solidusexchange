@@ -19,6 +19,7 @@ import { OperationsScreen } from "./screens/OperationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { QrScreen } from "./screens/QrScreen";
 import { SheetHost } from "./sheets";
+import { TabBar } from "./TabBar";
 import { onTelegramThemeChange, readInitData, telegramColorScheme, telegramLanguageCode, telegramWebApp } from "./telegram";
 
 type Theme = "light" | "dark";
@@ -279,20 +280,12 @@ export function App() {
                 />
               ) : null}
             </main>
-            <nav className="bottom-nav" aria-label={t("app.navLabel")}>
-              {tabs.map((item) => (
-                <button
-                  type="button"
-                  key={item.id}
-                  className={`nav${item.id === "qr" ? " nav--qr" : ""}`}
-                  aria-current={tab === item.id ? "page" : undefined}
-                  onClick={() => openTab(item.id)}
-                >
-                  <span className="nav__icon"><Icon name={item.icon} /></span>
-                  <span className="nav__label">{t(item.label)}</span>
-                </button>
-              ))}
-            </nav>
+            <TabBar
+              items={tabs.map((item) => ({ ...item, label: t(item.label) }))}
+              active={tab}
+              open={openTab}
+              ariaLabel={t("app.navLabel")}
+            />
             {sheet ? (
               <SheetHost
                 sheet={sheet}
