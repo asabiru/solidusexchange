@@ -21,6 +21,11 @@
   --red: #c0362c;
   --red-soft: rgba(192, 54, 44, 0.1);
   --bar: rgba(247, 245, 240, 0.78);
+  --tabbar-bg: rgba(255, 255, 255, 0.82);
+  --tabbar-border: rgba(23, 42, 73, 0.1);
+  --tabbar-ink: rgba(23, 42, 73, 0.62);
+  --tabbar-indicator: rgba(155, 94, 57, 0.13);
+  --tabbar-indicator-border: rgba(155, 94, 57, 0.18);
   --shadow-card: 0 1px 2px rgba(23, 42, 73, 0.05), 0 6px 20px rgba(23, 42, 73, 0.06);
   --shadow-float: 0 2px 6px rgba(23, 42, 73, 0.08), 0 18px 40px rgba(23, 42, 73, 0.14);
   --hero-from: #22406e;
@@ -58,6 +63,11 @@
   --red: #ff7d70;
   --red-soft: rgba(255, 125, 112, 0.14);
   --bar: rgba(9, 14, 24, 0.74);
+  --tabbar-bg: rgba(17, 24, 38, 0.86);
+  --tabbar-border: rgba(241, 238, 231, 0.12);
+  --tabbar-ink: rgba(241, 238, 231, 0.86);
+  --tabbar-indicator: rgba(241, 238, 231, 0.12);
+  --tabbar-indicator-border: rgba(241, 238, 231, 0.14);
   --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 8px 24px rgba(0, 0, 0, 0.35);
   --shadow-float: 0 18px 44px rgba(0, 0, 0, 0.55);
   --hero-from: #1f3866;
@@ -1311,34 +1321,69 @@ button.row:active:not(:disabled) {
   z-index: 20;
   display: flex;
   justify-content: center;
-  padding: 6px max(8px, calc(50% - 222px)) calc(6px + var(--safe-bottom));
-  border-top: 0.5px solid var(--separator);
-  background: var(--bar);
-  -webkit-backdrop-filter: saturate(180%) blur(20px);
-  backdrop-filter: saturate(180%) blur(20px);
+  padding: 0 10px calc(10px + var(--safe-bottom));
+  pointer-events: none;
+}
+
+.tabbar {
+  --tab-pad: 5px;
+  position: relative;
+  display: flex;
+  width: 100%;
+  max-width: 440px;
+  padding: var(--tab-pad);
+  border: 0.5px solid var(--tabbar-border);
+  border-radius: 28px;
+  background: var(--tabbar-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--shadow-float);
+  pointer-events: auto;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tabbar__indicator {
+  position: absolute;
+  top: var(--tab-pad);
+  bottom: var(--tab-pad);
+  left: var(--tab-pad);
+  width: calc((100% - 2 * var(--tab-pad)) / var(--tab-count, 5));
+  border: 0.5px solid var(--tabbar-indicator-border);
+  border-radius: 23px;
+  background: var(--tabbar-indicator);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 6px 16px rgba(0, 0, 0, 0.14);
+  transform: translateX(calc(var(--tab-index, 0) * 100%));
+  pointer-events: none;
 }
 
 .nav {
+  position: relative;
+  z-index: 1;
   display: grid;
   flex: 1 1 0;
   justify-items: center;
   align-content: center;
-  gap: 2px;
+  gap: 1px;
   min-width: 0;
-  min-height: 52px;
-  padding: 2px 0;
+  min-height: 54px;
+  padding: 4px 0 3px;
   border: 0;
+  border-radius: 23px;
   background: transparent;
-  color: var(--faint);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0;
+  color: var(--tabbar-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .nav__icon {
   display: grid;
   place-items: center;
-  width: 32px;
+  width: 30px;
   height: 28px;
 }
 
@@ -1349,22 +1394,20 @@ button.row:active:not(:disabled) {
   text-overflow: ellipsis;
 }
 
-.nav[aria-current="page"] {
+.nav[aria-current="page"],
+.tabbar[data-dragging="true"] .nav[data-hovered="true"] {
   color: var(--tint-text);
+  font-weight: 700;
+}
+
+.tabbar[data-dragging="true"] .nav[aria-current="page"]:not([data-hovered="true"]) {
+  color: var(--tabbar-ink);
   font-weight: 600;
 }
 
-.nav[aria-current="page"] .ui-icon {
-  stroke-width: 2.3;
-}
-
-.nav--qr .nav__icon {
-  width: 40px;
-  height: 30px;
-  border-radius: 10px;
-  background: var(--tint);
-  color: var(--tint-ink);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--tint) 40%, transparent);
+.nav[aria-current="page"] .ui-icon,
+.tabbar[data-dragging="true"] .nav[data-hovered="true"] .ui-icon {
+  stroke-width: 2.4;
 }
 
 /* Sheets */
@@ -1730,6 +1773,18 @@ button.row:active:not(:disabled) {
   .balance__visibility:active {
     transform: scale(0.96);
     transition-duration: 0.12s;
+  }
+
+  .tabbar__indicator {
+    transition: transform 0.5s var(--spring);
+  }
+
+  .tabbar[data-dragging="true"] .tabbar__indicator {
+    transition-duration: 0.28s;
+  }
+
+  .tabbar[data-dragging="true"] .nav[data-hovered="true"] {
+    transform: translateY(-2px) scale(1.06);
   }
 
   .swap-arrow:active {

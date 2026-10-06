@@ -8,7 +8,7 @@ import type {
   WalletView
 } from "../shared/api";
 import { ApiError, api } from "./api";
-import { Icon, type IconName } from "./Icon";
+import { Icon } from "./Icon";
 import type { SheetRequest, Tab } from "./navigation";
 import { ExchangeScreen } from "./screens/ExchangeScreen";
 import { HomeScreen } from "./screens/HomeScreen";
@@ -16,6 +16,7 @@ import { OperationsScreen } from "./screens/OperationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { QrScreen } from "./screens/QrScreen";
 import { SheetHost } from "./sheets";
+import { type TabItem, TabBar } from "./TabBar";
 import { onTelegramThemeChange, readInitData, telegramColorScheme, telegramWebApp } from "./telegram";
 
 type Theme = "light" | "dark";
@@ -31,7 +32,7 @@ type Launch =
   | { state: "signed-out"; health?: HealthView; message?: string }
   | { state: "ready"; session: SessionView; data: CustomerData };
 
-const tabs: readonly { id: Tab; label: string; icon: IconName }[] = [
+const tabs: readonly TabItem[] = [
   { id: "home", label: "Главная", icon: "home" },
   { id: "exchange", label: "Обмен", icon: "swap" },
   { id: "qr", label: "QR", icon: "qr" },
@@ -218,20 +219,7 @@ export function App() {
               />
             ) : null}
           </main>
-          <nav className="bottom-nav" aria-label="Основная навигация">
-            {tabs.map((item) => (
-              <button
-                type="button"
-                key={item.id}
-                className={`nav${item.id === "qr" ? " nav--qr" : ""}`}
-                aria-current={tab === item.id ? "page" : undefined}
-                onClick={() => openTab(item.id)}
-              >
-                <span className="nav__icon"><Icon name={item.icon} /></span>
-                <span className="nav__label">{item.label}</span>
-              </button>
-            ))}
-          </nav>
+          <TabBar items={tabs} active={tab} open={openTab} />
           {sheet ? (
             <SheetHost
               sheet={sheet}
