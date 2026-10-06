@@ -1,11 +1,27 @@
+import { createHmac, randomBytes } from "node:crypto";
+
 export type KycState = "verified" | "kyc-gated";
+
+export const sessionHandlePattern = /^ses_[0-9a-f]{32}$/;
+/** Last-seen is refreshed at most once per minute per session. */
+export const lastSeenGranularityMs = 60_000;
 
 export interface CustomerSession {
   id: string;
   subject: string;
   source: "telegram" | "dev-synthetic";
   kyc: KycState;
+  createdAt: number;
+  lastSeenAt: number;
   expiresAt: number;
+}
+
+/**
+ * Opaque per-process session handles: an HMAC of the session id under a key
+ * that never leaves memory, so a handle cannot be turned back into a cookie.
+ */
+export function createSessionHandles(key: Buffer = randomBytes(32)): (id: string) => string {
+  return (id) => `ses_${createHmac("sha256", key).update(`solidchange-miniapp-session-handle|${id}`).digest("hex").slice(0, 32)}`;
 }
 
 export class ExpiringStore<T extends { expiresAt: number }> {
@@ -40,6 +56,12 @@ export class ExpiringStore<T extends { expiresAt: number }> {
     for (const [key] of matching.slice(0, Math.max(0, matching.length - limit))) {
       this.#entries.delete(key);
     }
+  }
+
+  /** Unexpired entries matching `match`, in insertion order. */
+  entries(match: (value: T) => boolean): readonly (readonly [string, T])[] {
+    const now = this.#clock();
+    return [...this.#entries].filter(([, value]) => value.expiresAt > now && match(value));
   }
 
   delete(key: string): void {

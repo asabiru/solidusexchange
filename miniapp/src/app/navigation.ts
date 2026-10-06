@@ -10,6 +10,7 @@ export type SheetRequest =
   | { kind: "kyc" }
   | { kind: "limits" }
   | { kind: "security" }
+  | { kind: "sessions" }
   | { kind: "support" }
   | { kind: "operation"; id: string }
   | { kind: "qr-manual" }

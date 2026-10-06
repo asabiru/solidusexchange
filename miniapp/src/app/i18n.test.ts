@@ -179,6 +179,29 @@ describe("i18n: persistence and fallback", () => {
     assert.equal(document.documentElement.lang, "en");
   });
 
+  it("translates device sessions in every locale with matching placeholders", () => {
+    assert.equal(translate("ru", "profile.sessionsTitle"), "Устройства и сессии");
+    assert.equal(translate("ky", "profile.sessionsTitle"), "Түзмөктөр жана сеанстар");
+    assert.equal(translate("en", "profile.sessionsTitle"), "Devices and sessions");
+    assert.equal(translate("ru", "sessions.signOutOthers"), "Выйти на всех других устройствах");
+    assert.equal(translate("ky", "sessions.signOutOthers"), "Башка бардык түзмөктөрдөн чыгуу");
+    assert.equal(translate("en", "sessions.signOutOthers"), "Sign out of all other devices");
+    assert.equal(translate("en", "activity.sessionRevokedOthers", { count: 2 }), "Signed out other devices: 2");
+    const keys = Object.keys(catalogs.ru).filter((key) => key.startsWith("sessions.")) as (keyof typeof catalogs.ru)[];
+    assert.ok(keys.length >= 15);
+    const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((match) => match[1]).sort();
+    for (const key of [...keys, "profile.sessionsTitle", "profile.sessionsDetail", "activity.sessionRevokedOne", "activity.sessionRevokedOthers", "common.cancel"] as const) {
+      for (const locale of locales) {
+        assert.ok(catalogs[locale][key].trim(), `${locale} ${key}`);
+        assert.deepEqual(placeholders(catalogs[locale][key]), placeholders(catalogs.ru[key]), `${locale} ${key}`);
+      }
+    }
+    for (const locale of locales) {
+      assert.match(catalogs[locale]["sessions.note"], /SOLID/);
+      assert.doesNotMatch(catalogs[locale]["sessions.note"], /SolidChange|Solidus/i);
+    }
+  });
+
   it("interpolates parameters and leaves unknown placeholders visible", () => {
     assert.equal(translate("ru", "home.greeting", { name: "Тимур" }), "Добрый день, Тимур");
     assert.equal(translate("ky", "home.greeting", { name: "Тимур" }), "Саламатсызбы, Тимур");

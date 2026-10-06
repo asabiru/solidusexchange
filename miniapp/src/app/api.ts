@@ -1,6 +1,7 @@
 import type {
   ActivityView,
   AddressScreeningView,
+  DeviceSessionsView,
   HealthView,
   KycStatus,
   KycVerificationView,
@@ -57,6 +58,9 @@ export const api = {
   submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
   notifications: () => call<NotificationsView>("/bff/notifications"),
   activity: () => call<ActivityView>("/bff/activity"),
+  sessions: () => call<DeviceSessionsView>("/bff/sessions"),
+  revokeSession: (handle: string) => call<DeviceSessionsView>("/bff/sessions/revoke", { handle }),
+  revokeOtherSessions: () => call<DeviceSessionsView>("/bff/sessions/revoke-others", {}),
   markNotificationsRead: (ids: readonly string[]) =>
     call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
   screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>

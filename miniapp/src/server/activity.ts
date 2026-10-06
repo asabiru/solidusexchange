@@ -22,6 +22,7 @@ export type ScreeningStatusLookup = () => AddressScreeningStatus | undefined;
 
 export interface ActivityLog {
   recordLogin(subject: string, source: SessionSource): void;
+  recordSessionsRevoked(subject: string, scope: "single" | "others", count: number): void;
   recordKyc(subject: string, state: KycVerificationState): void;
   recordQuote(subject: string, quote: QuotePreview): void;
   recordScreening(subject: string, view: AddressScreeningView, current?: ScreeningStatusLookup): void;
@@ -43,7 +44,7 @@ function bound(value: number | undefined, fallback: number): number {
 
 /**
  * Test-mode customer activity history. Entries come only from server-side
- * events (session start, trusted KYC transitions, quote previews and address
+ * events (session start and revocation, trusted KYC transitions, quote previews and address
  * screenings); clients cannot create them. Only display-safe fields are kept:
  * no addresses, provider references or personal data. Bounded per subject and
  * by subject count (least recently active subject first out).
@@ -88,6 +89,11 @@ export function createActivityLog(options: ActivityLogOptions): ActivityLog {
   return Object.freeze({
     recordLogin(subject: string, source: SessionSource): void {
       append(subject, { item: Object.freeze({ id: nextId(subject), at: options.clock(), kind: "session_login", source }) });
+    },
+
+    recordSessionsRevoked(subject: string, scope: "single" | "others", count: number): void {
+      if (!Number.isSafeInteger(count) || count < 1) return;
+      append(subject, { item: Object.freeze({ id: nextId(subject), at: options.clock(), kind: "session_revoked", scope, count }) });
     },
 
     recordKyc(subject: string, state: KycVerificationState): void {
