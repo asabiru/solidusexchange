@@ -17,6 +17,16 @@ const BASE_HEADERS = Object.freeze({
   "x-content-type-options": "nosniff"
 });
 const SCOPE_PATTERN = /^[a-z][a-z0-9.:-]{0,127}$/u;
+// Every peer of this loopback-only server is local, and a local client can pick
+// any 127.0.0.0/8 source address, so the whole range shares one bucket.
+const IPV4_LOOPBACK_PATTERN = /^(?:::ffff:)?127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/iu;
+
+function rateLimitKey(address) {
+  if (typeof address !== "string") {
+    return "unknown";
+  }
+  return IPV4_LOOPBACK_PATTERN.test(address) ? "127.0.0.0/8" : address;
+}
 
 function collectHeaders(rawHeaders) {
   const headers = new Map();
@@ -155,7 +165,7 @@ export function createCustomerApiHandler({
       return;
     }
 
-    const limit = rateLimiter.consume(request.socket.remoteAddress ?? "unknown");
+    const limit = rateLimiter.consume(rateLimitKey(request.socket.remoteAddress));
     if (!limit.allowed) {
       fail(429, "RATE_LIMITED", undefined, { "retry-after": String(limit.retryAfterSeconds) });
       return;
