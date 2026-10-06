@@ -20,7 +20,8 @@ interface Props {
 const quoteErrors: Readonly<Record<string, string>> = {
   invalid_amount: "Введите сумму больше нуля.",
   amount_too_small: "Сумма слишком мала для обмена.",
-  invalid_pair: "Эта пара недоступна."
+  invalid_pair: "Эта пара недоступна.",
+  quote_unavailable: "Поставщик котировок временно недоступен. Попробуйте позже."
 };
 
 function useNow(active: boolean): number {

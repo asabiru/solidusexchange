@@ -1,0 +1,132 @@
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { type IncomingHttpHeaders, createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import { describe, it } from "node:test";
+import { startCustomerApi } from "@solidchange/customer-api/dev-server";
+import { loadServerConfig } from "./config.js";
+import { createCustomerApiClient, customerApiPlatform, customerApiSubject } from "./customer-api-client.js";
+
+const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+async function withCustomerApi<T>(key: string, run: (baseUrl: string) => Promise<T>): Promise<T> {
+  const { server, address } = await startCustomerApi({
+    host: "127.0.0.1",
+    port: 0,
+    rateLimitPerMinute: 60,
+    authMode: "synthetic-dev",
+    devTokenKey: key
+  });
+  try {
+    return await run(`http://127.0.0.1:${address.port}`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+async function withFakeApi<T>(
+  respond: (path: string) => unknown,
+  run: (baseUrl: string, seen: IncomingHttpHeaders[]) => Promise<T>
+): Promise<T> {
+  const seen: IncomingHttpHeaders[] = [];
+  const server = createServer((request, response) => {
+    seen.push(request.headers);
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(respond(request.url ?? "")));
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    return await run(`http://127.0.0.1:${(server.address() as AddressInfo).port}`, seen);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+describe("customer API client", () => {
+  it("maps BFF subjects onto the synthetic customer subject space", () => {
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    assert.match(subject, /^syn_cust_[0-9a-f]{24}$/);
+    assert.equal(customerApiSubject("tg-0123456789abcdef"), subject);
+    assert.notEqual(customerApiSubject("tg-fedcba9876543210"), subject);
+  });
+
+  it("reads session and capabilities from the dev customer API without X-Device-Id", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      assert.equal(client.configured, true);
+      assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), {
+        status: "connected",
+        granted: ["customer.session.read", "customer.capabilities.read"],
+        commandsEnabled: false
+      });
+      const wrongKey = createCustomerApiClient({ baseUrl, devTokenKey: randomBytes(32).toString("hex") });
+      assert.deepEqual(await wrongKey.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+    });
+  });
+
+  it("sends exactly the customer request headers", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    await withFakeApi(
+      (path) => path === "/api/v1/customer/session"
+        ? { subject, actor_type: "customer", scopes: ["customer.session.read"], expires_at: "2026-10-06T00:00:00Z" }
+        : { capabilities: ["customer.session.read"], commands_enabled: false },
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.equal((await client.access("tg-0123456789abcdef", Date.now())).status, "connected");
+        assert.equal(seen.length, 2);
+        for (const headers of seen) {
+          assert.equal(headers["x-device-id"], undefined);
+          assert.equal(headers["x-platform"], customerApiPlatform);
+          assert.match(String(headers["x-request-id"]), uuidV7);
+          assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        }
+        assert.notEqual(seen[0]["x-request-id"], seen[1]["x-request-id"]);
+      }
+    );
+  });
+
+  it("fails closed on unexpected responses", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const session = { subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" };
+    for (const [sessionBody, capabilitiesBody] of [
+      [{ ...session, subject: "syn_cust_someoneelse00" }, { capabilities: [], commands_enabled: false }],
+      [{ ...session, actor_type: "operator" }, { capabilities: [], commands_enabled: false }],
+      [{ ...session, extra: true }, { capabilities: [], commands_enabled: false }],
+      [session, { capabilities: ["customer.withdrawals.create"], commands_enabled: true }],
+      [session, { capabilities: [42], commands_enabled: false }],
+      [session, { capabilities: ["operator.payouts.approve"], commands_enabled: false }]
+    ]) {
+      await withFakeApi(
+        (path) => path === "/api/v1/customer/session" ? sessionBody : capabilitiesBody,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" }, JSON.stringify([sessionBody, capabilitiesBody]));
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
+    const client = createCustomerApiClient({});
+    assert.equal(client.configured, false);
+    assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+    const key = "a".repeat(64);
+    assert.equal(loadServerConfig({}).customerApiUrl, undefined);
+    assert.equal(loadServerConfig({ MINIAPP_CUSTOMER_API_URL: "http://127.0.0.1:4185", MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key }).customerApiUrl, "http://127.0.0.1:4185");
+    for (const env of [
+      { MINIAPP_CUSTOMER_API_URL: "http://127.0.0.1:4185" },
+      { MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key },
+      { MINIAPP_CUSTOMER_API_URL: "https://api.example.com", MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key },
+      { MINIAPP_CUSTOMER_API_URL: "http://10.0.0.5:4185", MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key },
+      { MINIAPP_CUSTOMER_API_URL: "http://127.0.0.1:4185/api", MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key },
+      { MINIAPP_CUSTOMER_API_URL: "http://127.0.0.1:4185", MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: "A".repeat(64) }
+    ]) {
+      assert.throws(() => loadServerConfig(env), /MINIAPP_CUSTOMER_API/, JSON.stringify(env));
+    }
+  });
+});

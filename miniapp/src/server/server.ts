@@ -9,7 +9,9 @@ import type { HealthView, KycStatus, SessionView } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
-import { QuoteError, simulateQuote } from "./quotes.js";
+import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
+import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
+import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
 import { syntheticData } from "./synthetic.js";
@@ -39,6 +41,8 @@ export const routeTable: readonly Route[] = Object.freeze([
 export interface MiniappServerOptions {
   clock?: () => number;
   devBotToken?: string;
+  quoteProvider?: QuoteProvider;
+  customerApi?: CustomerApiClient;
 }
 
 function securityHeaders(response: ServerResponse): void {
@@ -125,6 +129,18 @@ export function createMiniappServer(
   const clock = options.clock ?? Date.now;
   const devBotToken = options.devBotToken ?? `0:${randomBytes(32).toString("base64url")}`;
   const sessions = new ExpiringStore<CustomerSession>(clock);
+  const quoteProvider = options.quoteProvider ?? (config.quoteSource === "provider-simulator"
+    ? createSimulatorQuoteProvider({
+      seed: config.quoteSeed,
+      ttlSeconds: config.quoteTtlSeconds,
+      scenario: config.quoteScenario,
+      clock
+    })
+    : createLocalQuoteProvider());
+  const customerApi = options.customerApi ?? createCustomerApiClient({
+    baseUrl: config.customerApiUrl,
+    devTokenKey: config.customerApiDevTokenKey
+  });
 
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
     const id = parseCookies(request)[sessionCookie];
@@ -293,7 +309,8 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/profile") {
-      json(response, 200, syntheticData.profile(session.kyc, displayName, customerRef(session.subject)));
+      const apiAccess = await customerApi.access(session.subject, clock());
+      json(response, 200, { ...syntheticData.profile(session.kyc, displayName, customerRef(session.subject)), apiAccess });
       return;
     }
     if (path === "/bff/quotes/preview") {
@@ -301,7 +318,8 @@ export function createMiniappServer(
       const to = url.searchParams.get("to") ?? "";
       const amount = url.searchParams.get("amount") ?? "";
       try {
-        const quote = simulateQuote({ from, to, amount }, {
+        const quote = await quoteProvider.preview({ from, to, amount }, {
+          subject: session.subject,
           nowMs: clock(),
           ttlSeconds: config.quoteTtlSeconds,
           available: isAssetCode(from) ? syntheticData.available(session.kyc, from) : undefined,
@@ -310,7 +328,9 @@ export function createMiniappServer(
         json(response, 200, quote);
       } catch (error) {
         if (error instanceof QuoteError) {
-          json(response, 400, { error: error.code });
+          json(response, error.code === "quote_unavailable" ? 503 : 400, error.reason
+            ? { error: error.code, reason: error.reason }
+            : { error: error.code });
           return;
         }
         throw error;
