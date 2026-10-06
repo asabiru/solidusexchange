@@ -12,7 +12,8 @@ import type {
   KycVerificationState,
   NotificationTemplate,
   NotificationsView,
-  SessionView
+  SessionView,
+  SupportRequestsView
 } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
 import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
@@ -39,6 +40,13 @@ import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { apiSecurityHeaders } from "./security-headers.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
+import {
+  type SupportDesk,
+  SupportInputError,
+  SupportLimitError,
+  SupportRateLimitError,
+  createSupportDesk
+} from "./support.js";
 import { syntheticData } from "./synthetic.js";
 
 export const sessionCookie = "solidchange_ma_session";
@@ -69,6 +77,9 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/notifications" },
   { method: "GET", path: "/bff/activity" },
   { method: "POST", path: "/bff/notifications/read" },
+  { method: "POST", path: "/bff/support/requests" },
+  { method: "GET", path: "/bff/support/requests" },
+  { method: "GET", path: "/bff/support/requests/:id" },
   { method: "GET", path: "/bff/metrics" }
 ] satisfies Route[]);
 
@@ -81,6 +92,7 @@ export interface MiniappServerOptions {
   addressScreening?: AddressScreeningService;
   notifications?: NotificationOutbox;
   activity?: ActivityLog;
+  support?: SupportDesk;
   /** Receives one JSON log line per completed request when MINIAPP_LOG=json. */
   logSink?: (line: string) => void;
   /** Monotonic milliseconds for request durations. */
@@ -225,6 +237,7 @@ export function createMiniappServer(
 
   const outbox = options.notifications ?? createNotificationOutbox({ clock });
   const activity = options.activity ?? createActivityLog({ clock });
+  const support = options.support ?? createSupportDesk({ clock });
   const unsubscribeKyc = kycOnboarding.subscribe((subject, state) => {
     const template = kycTemplates[state];
     if (template) outbox.record(subject, template);
@@ -242,7 +255,8 @@ export function createMiniappServer(
   const gauges: readonly Gauge[] = Object.freeze([
     { name: "solidchange_miniapp_sessions_active", help: "Unexpired Mini App BFF sessions.", value: () => sessions.size() },
     { name: "solidchange_miniapp_notification_drafts", help: "Draft notifications held in the test-mode outbox.", value: () => outbox.size() },
-    { name: "solidchange_miniapp_address_screenings", help: "Address screenings tracked in memory.", value: () => addressScreening.trackedCount() }
+    { name: "solidchange_miniapp_address_screenings", help: "Address screenings tracked in memory.", value: () => addressScreening.trackedCount() },
+    { name: "solidchange_miniapp_support_requests", help: "Test-mode support request drafts held in memory.", value: () => support.size() }
   ]);
 
   async function metrics(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -466,6 +480,46 @@ export function createMiniappServer(
         return;
       }
 
+      if (path === "/bff/support/requests") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const body = await readJsonBody(request, ["category", "topic", "message"], ["activityId"]);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        const subject = session.subject;
+        try {
+          const created = support.create(subject, body, (id) => activity.kindOf(subject, id));
+          activity.recordSupport(subject, created.category, created.id);
+          outbox.record(subject, created.category === "complaint" ? "complaint_received" : "support_received");
+          observer.event("support_request_created", { category: created.category, support_id: created.id });
+          json(response, 201, created);
+        } catch (error) {
+          if (error instanceof SupportInputError) {
+            json(response, 400, { error: error.code });
+            return;
+          }
+          if (error instanceof SupportRateLimitError) {
+            json(response, 429, { error: "support_rate_limited" });
+            return;
+          }
+          if (error instanceof SupportLimitError) {
+            json(response, error.code === "support_capacity" ? 503 : 409, { error: error.code });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
       if (path === "/bff/notifications/read") {
         if (!origin) {
           json(response, 403, { error: "origin_rejected" });
@@ -572,6 +626,24 @@ export function createMiniappServer(
       }
       const view: ActivityView = { mode: "test", items: activity.list(session.subject, limit), executable: false };
       json(response, 200, view);
+      return;
+    }
+    if (path === "/bff/support/requests" || path.startsWith("/bff/support/requests/")) {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      if (path === "/bff/support/requests") {
+        const view: SupportRequestsView = { mode: "test", delivery: "disabled", requests: support.list(session.subject) };
+        json(response, 200, view);
+        return;
+      }
+      const found = support.view(session.subject, path.slice("/bff/support/requests/".length));
+      if (!found) {
+        json(response, 404, { error: "not_found" });
+        return;
+      }
+      json(response, 200, found);
       return;
     }
     if (path.startsWith("/bff/address-screening/")) {

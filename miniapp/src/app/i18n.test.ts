@@ -111,6 +111,47 @@ describe("i18n: catalog parity", () => {
   });
 });
 
+describe("i18n: support and complaints", () => {
+  const supportKeys = [
+    "support.banner",
+    "support.note",
+    "support.safety",
+    "support.categoryQuestion",
+    "support.categoryOperation",
+    "support.categoryComplaint",
+    "support.categoryData",
+    "support.complaintTitle",
+    "support.complaintAck",
+    "support.errorTopic",
+    "support.errorMessage",
+    "support.errorReference",
+    "support.errorRateLimited",
+    "support.created"
+  ] as const;
+
+  it("carries the test banner, categories and complaint acknowledgement in every locale", () => {
+    for (const locale of locales) {
+      for (const key of supportKeys) assert.ok(catalogs[locale][key].trim(), `${locale}:${key}`);
+      assert.equal(new Set(["support.categoryQuestion", "support.categoryOperation", "support.categoryComplaint", "support.categoryData"].map((key) => catalogs[locale][key as MessageKey])).size, 4, locale);
+      assert.match(catalogs[locale]["support.complaintAck"], /^SOLID /, locale);
+      assert.match(catalogs[locale]["support.note"], /Telegram/, locale);
+      assert.deepEqual(placeholdersOf(catalogs[locale]["support.errorTopic"]), ["max"], locale);
+    }
+    assert.match(ru["support.banner"], /^Тестовая версия: .*никто не получит/);
+    assert.match(ky["support.banner"], /^Сыноо версиясы: .*эч ким албайт/);
+    assert.match(en["support.banner"], /^Test version: nobody receives this request/);
+    assert.match(ru["support.complaintAck"], /не закрывает жалобу/);
+    assert.match(ky["support.complaintAck"], /даттанууну жаппайт/);
+    assert.match(en["support.complaintAck"], /does not close the complaint/);
+  });
+
+  it("tells customers support never asks for secrets, in every locale", () => {
+    assert.match(ru["support.safety"], /пароли.*приватные ключи.*одноразовые коды/);
+    assert.match(ky["support.safety"], /сырсөз.*жеке ачкычтарды.*бир жолку коддорду/);
+    assert.match(en["support.safety"], /passwords.*private keys.*one-time codes/);
+  });
+});
+
 describe("i18n: locale detection", () => {
   it("maps Telegram language codes to ky, en, or the Russian default", () => {
     assert.equal(defaultLocale, "ru");

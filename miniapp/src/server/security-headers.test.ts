@@ -238,6 +238,7 @@ describe("Mini App BFF security headers on every route", () => {
     const gated = await devLogin("kyc-gated");
     const get = (path: string, cookie = verified) => send(port, "GET", path, { headers: { cookie } });
     const screening = { asset: "TON", network: "TON_TESTNET", address: tonTestnetAddress(1) };
+    const supportDraft = { category: "question", topic: "Synthetic subject", message: "Synthetic message" };
     const successes: Record<string, () => Promise<Reply>> = {
       "GET /bff/health": () => send(port, "GET", "/bff/health"),
       "GET /bff/session": () => get("/bff/session"),
@@ -264,6 +265,12 @@ describe("Mini App BFF security headers on every route", () => {
       "POST /bff/notifications/read": async () => {
         const inbox = JSON.parse((await get("/bff/notifications")).body) as { notifications: { id: string }[] };
         return postJson(port, "/bff/notifications/read", { ids: inbox.notifications[0].id }, { cookie: verified });
+      },
+      "POST /bff/support/requests": () => postJson(port, "/bff/support/requests", supportDraft, { cookie: verified }),
+      "GET /bff/support/requests": () => get("/bff/support/requests"),
+      "GET /bff/support/requests/:id": async () => {
+        const created = JSON.parse((await postJson(port, "/bff/support/requests", supportDraft, { cookie: verified })).body) as { id: string };
+        return get(`/bff/support/requests/${created.id}`);
       },
       "GET /bff/metrics": () => send(port, "GET", "/bff/metrics")
     };

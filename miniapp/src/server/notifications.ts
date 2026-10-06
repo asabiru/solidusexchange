@@ -29,7 +29,9 @@ export const notificationTexts: Readonly<Record<NotificationTemplate, string>> =
   kyc_rejected: `${marker}. Проверка личности не пройдена.`,
   kyc_needs_more_data: `${marker}. Для проверки личности нужны дополнительные данные.`,
   kyc_timed_out: `${marker}. Срок рассмотрения заявки истёк.`,
-  kyc_unavailable: `${marker}. Сервис проверки личности временно недоступен.`
+  kyc_unavailable: `${marker}. Сервис проверки личности временно недоступен.`,
+  support_received: `${marker}. Обращение сохранено, его никто не получит.`,
+  complaint_received: `${marker}. Жалоба сохранена, её никто не получит.`
 });
 
 interface Entry {
