@@ -80,9 +80,9 @@ export function rawTranscript(port, text) {
   });
 }
 
-export function rawExchange(port, text, { expectBody = true } = {}) {
+export function rawExchange(port, text, { expectBody = true, localAddress } = {}) {
   return new Promise((resolve, reject) => {
-    const socket = connect(port, "127.0.0.1");
+    const socket = connect({ port, host: "127.0.0.1", localAddress });
     let buffer = Buffer.alloc(0);
     let settled = false;
     const finish = (value) => {
@@ -109,12 +109,12 @@ export function rawExchange(port, text, { expectBody = true } = {}) {
   });
 }
 
-export function request(port, { method = "GET", path, headers = [] }) {
+export function request(port, { method = "GET", path, headers = [], localAddress }) {
   const lines = [`${method} ${path} HTTP/1.1`, "Host: 127.0.0.1"];
   for (const [name, value] of headers) {
     lines.push(`${name}: ${value}`);
   }
-  return rawExchange(port, `${lines.join("\r\n")}\r\n\r\n`, { expectBody: method !== "HEAD" });
+  return rawExchange(port, `${lines.join("\r\n")}\r\n\r\n`, { expectBody: method !== "HEAD", localAddress });
 }
 
 export function header(response, name) {

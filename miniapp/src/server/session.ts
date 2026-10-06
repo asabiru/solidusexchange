@@ -34,6 +34,14 @@ export class ExpiringStore<T extends { expiresAt: number }> {
     this.#entries.set(key, value);
   }
 
+  /** Keeps only the `limit` most recently stored entries matching `match`. */
+  retainNewest(match: (value: T) => boolean, limit: number): void {
+    const matching = [...this.#entries].filter(([, value]) => match(value));
+    for (const [key] of matching.slice(0, Math.max(0, matching.length - limit))) {
+      this.#entries.delete(key);
+    }
+  }
+
   delete(key: string): void {
     this.#entries.delete(key);
   }
