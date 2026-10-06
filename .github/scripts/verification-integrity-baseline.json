@@ -478,8 +478,8 @@
       "minCases": 5
     },
     "miniapp/src/app/i18n.test.ts": {
-      "minLines": 210,
-      "minCases": 18
+      "minLines": 223,
+      "minCases": 19
     },
     "miniapp/src/server/activity-routes.test.ts": {
       "minLines": 373,
