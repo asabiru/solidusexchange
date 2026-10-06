@@ -22,6 +22,7 @@ Engineering может готовить contracts и simulators, пока реш
 | D-016 | Staff SSO and VPN/ZTNA | CTO + Security | Open | Synthetic/local IdP only; no production operator access | IdP contract, FIDO2/step-up policy, JML lifecycle |
 | D-017 | Backup retention and restore targets | SRE + Security + Compliance | Open | No production data storage | Approved RPO/RTO, retention schedule, restore drill |
 | D-018 | Protected runner strategy | SRE + Security | Proposed | No long-lived production credentials in CI | OIDC credentials, isolated runners, signed artifacts |
+| D-019 | In-chat customer-to-customer checks in Telegram and allowed check types | Legal + MLRO + Product | Open | Dev-only contracts and simulators; no check moves funds | Legal memo on transfer scope, AML risk assessment, posting-rule review |
 
 ## Decision record template
 
