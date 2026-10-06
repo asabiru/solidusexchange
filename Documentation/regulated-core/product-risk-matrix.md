@@ -36,6 +36,7 @@
 | Exchange quote | Medium | TTL, price source, fee disclosure | No execution authority |
 | Exchange execution | Critical | Limits, AML/KYT, hold, approval, ledger, reconciliation | Prohibited |
 | Withdrawal | Critical | Step-up, address/risk controls, maker-checker, custody policy | Prohibited |
+| In-chat check (create/claim) | Critical | Both parties KYC-verified, step-up, limits, screening, idempotent ledger postings, D-019 | Prohibited |
 | Card issuance/action | Critical | Issuer policy, step-up, approval and evidence | Prohibited |
 | AML case closure | Critical | MLRO-controlled decision | Prohibited |
 | Customer block/freeze | Critical | Human approval and appeal/evidence policy | Prohibited |

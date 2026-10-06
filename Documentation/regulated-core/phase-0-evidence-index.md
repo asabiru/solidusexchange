@@ -26,6 +26,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Safeguarding baseline | Finance / Legal / Compliance / Treasury / Custody | Customer asset segregation, entitlement, provider/custody evidence, reconciliation, shortfall and wind-down controls | Proposed; legal model, provider/custody scope, treasury policy, reconciliation and domain approvals pending |
 | Compliance-operations baseline | MLRO / Compliance / Legal / Risk Operations | CDD, sanctions/PEP, KYT, transaction monitoring, cases, reporting assessment, restrictions and compliance stop conditions | Proposed; D-001/D-011/D-012/D-014, policy, provider, case-management and reporting approvals pending |
 | Own HSM custody program | CTO / Security / Custody / Treasury | Wallet tiers, in-HSM transaction policy, custodians, ceremonies, backup/recovery, independent assurance and delivery phases | Proposed; D-002/D-003, legal key-location review, vendor proof of concept and independent design review pending |
+| In-chat crypto checks | Product / CTO / Compliance | Telegram inline-mode check flow, ledger model, compliance and security controls and delivery phases | Proposed; D-019, D-014 limits, posting-rule review and legal memo pending |
 | Finance model | CFO / Financial Core | Chart of accounts and reconciliation sign-off | Required before ledger build |
 
 ## Review checklist
