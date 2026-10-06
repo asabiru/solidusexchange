@@ -1,4 +1,4 @@
-# SolidChange Custody Core
+# SOLID Custody Core
 
 This package establishes a dev-only custody orchestration boundary for synthetic testnet withdrawal intents.
 

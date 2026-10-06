@@ -1,5 +1,5 @@
 import type { CustomerApiAccess, KycStatus, ProfileView, SessionView } from "../../shared/api";
-import { type Locale, localeNames, locales, type MessageKey } from "../i18n";
+import { type Locale, localeNames, locales, type MessageKey, messageKeyFor } from "../i18n";
 import { useI18n } from "../i18n-context";
 import { Icon, type IconName } from "../Icon";
 import type { SheetRequest } from "../navigation";
@@ -38,7 +38,7 @@ function apiAccessDetail(access: CustomerApiAccess, t: (key: MessageKey, params?
   if (access.status === "not-configured") return t("profile.apiNotConfigured");
   if (access.status === "unavailable") return t("profile.apiUnavailable");
   const granted = access.granted.map((capability) => {
-    const key = capabilityLabels[capability];
+    const key = messageKeyFor(capabilityLabels, capability);
     return key ? t(key) : capability;
   }).join(", ");
   return t("profile.apiConnected", { granted: granted || t("profile.apiNoRights") });
@@ -89,7 +89,7 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
         <MenuRow icon="help" title={t("common.support")} detail={t("profile.supportDetail")} onClick={() => openSheet({ kind: "support" })} />
       </div>
 
-      <span className="section-label">{t("profile.appearance")}</span>
+      <h2 className="section-label">{t("profile.appearance")}</h2>
       <div className="list">
         <div className="row row--static">
           <span className="coin coin--menu" aria-hidden="true"><Icon name="moon" size="sm" /></span>
@@ -101,7 +101,7 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
         </div>
       </div>
 
-      <span className="section-label">{t("profile.language")}</span>
+      <h2 className="section-label">{t("profile.language")}</h2>
       <fieldset className="segment segment--compact" aria-label={t("profile.languagePicker")}>
         {locales.map((value: Locale) => (
           <button type="button" key={value} lang={value} aria-pressed={locale === value} onClick={() => setLocale(value)}>
@@ -113,7 +113,7 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
 
       {session.source === "dev-synthetic" ? (
         <div className="dev-panel">
-          <span className="section-label">{t("profile.devScenario")}</span>
+          <h2 className="section-label">{t("profile.devScenario")}</h2>
           <fieldset className="segment segment--compact" aria-label={t("profile.devScenarioLabel")}>
             <button type="button" aria-pressed={verified} onClick={() => switchScenario("verified")}>{t("profile.scenarioVerified")}</button>
             <button type="button" aria-pressed={!verified} onClick={() => switchScenario("kyc-gated")}>{t("profile.scenarioGated")}</button>

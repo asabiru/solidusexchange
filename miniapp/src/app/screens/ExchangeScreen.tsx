@@ -1,10 +1,10 @@
 import { useEffect, useId, useState } from "react";
 import type { QuotePreview, WalletView } from "../../shared/api";
 import { type AssetCode, assets } from "../../shared/assets";
-import { fromUnits, isDecimalString, normalizeAmountInput, toUnits } from "../../shared/decimal";
+import { fromUnits, isDecimalString, toUnits } from "../../shared/decimal";
 import { formatCountdown, quoteSecondsRemaining, quoteState } from "../../shared/quote";
 import { ApiError, api } from "../api";
-import type { MessageKey } from "../i18n";
+import { type MessageKey, messageKeyFor } from "../i18n";
 import { useI18n } from "../i18n-context";
 import { Icon } from "../Icon";
 import type { SheetRequest } from "../navigation";
@@ -45,12 +45,13 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
   const [loading, setLoading] = useState(false);
   const amountId = useId();
   const assetId = useId();
+  const errorId = useId();
   const { t, format } = useI18n();
   const { amount, money, rate } = format;
 
   const from: AssetCode = side === "buy" ? "RUB" : crypto;
   const to: AssetCode = side === "buy" ? crypto : "RUB";
-  const normalized = normalizeAmountInput(input);
+  const normalized = format.parseAmountInput(input);
   const valid = isDecimalString(normalized, assets[from].scale) && toUnits(normalized, assets[from].scale) > 0n;
   const available = wallet.assets.find((entry) => entry.code === from)?.available ?? "0";
   const now = useNow(quote !== undefined);
@@ -78,7 +79,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       setQuote({ value, offset: value.serverTime - Date.now() });
     } catch (caught) {
       setQuote(undefined);
-      setError(caught instanceof ApiError ? quoteErrors[caught.code] ?? "exchange.errorQuoteFailed" : "exchange.errorQuoteFailed");
+      setError(caught instanceof ApiError ? messageKeyFor(quoteErrors, caught.code) ?? "exchange.errorQuoteFailed" : "exchange.errorQuoteFailed");
     } finally {
       setLoading(false);
     }
@@ -94,13 +95,12 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
     <section className="screen screen--exchange" aria-label={t("tab.exchange")}>
       <ScreenTitle>{t("tab.exchange")}</ScreenTitle>
 
-      <div className="segment" role="tablist" aria-label={t("exchange.directionLabel")}>
+      <fieldset className="segment" aria-label={t("exchange.directionLabel")}>
         {(["buy", "sell"] as const).map((value) => (
           <button
             type="button"
-            role="tab"
             key={value}
-            aria-selected={side === value}
+            aria-pressed={side === value}
             onClick={() => {
               setSide(value);
               reset();
@@ -109,7 +109,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
             {t(value === "buy" ? "exchange.buy" : "exchange.sell")}
           </button>
         ))}
-      </div>
+      </fieldset>
 
       {wallet.kyc !== "verified" ? (
         <button type="button" className="inline-alert" onClick={() => openSheet({ kind: "kyc-required" })}>
@@ -131,7 +131,8 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
             inputMode="decimal"
             autoComplete="off"
             value={input}
-            aria-invalid={input !== "" && !valid}
+            aria-invalid={(input !== "" && !valid) || error === quoteErrors.invalid_amount || error === quoteErrors.amount_too_small}
+            aria-describedby={errorId}
             onChange={(event) => {
               setInput(event.target.value);
               reset();
@@ -197,7 +198,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
           <span
             className={`exchange-summary__status num is-${state ?? "empty"}`}
             role="timer"
-            aria-live={state === "expired" ? "assertive" : "off"}
+            aria-live="off"
           >
             {statusText}
           </span>
@@ -239,7 +240,12 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
         ) : null}
       </div>
 
-      {error ? <p className="form-error" role="alert">{t(error)}</p> : null}
+      <p className="form-error" id={errorId} aria-live="polite">
+        {error ? t(error) : input !== "" && !valid ? t("exchange.errorInvalidAmount") : ""}
+      </p>
+      <p className="visually-hidden" aria-live="polite" aria-atomic="true">
+        {loading ? t("exchange.requesting") : quote ? t(state === "expired" ? "exchange.statusExpired" : "a11y.quoteReady") : t("exchange.statusNone")}
+      </p>
 
       <button type="button" className="cta cta--secondary" onClick={requestQuote} disabled={loading}>
         {t(loading ? "exchange.requesting" : quote ? "exchange.refreshQuote" : "exchange.getQuote")}

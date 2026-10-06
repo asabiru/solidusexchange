@@ -1,6 +1,6 @@
 import type { ExchangeRate, OperationLeg, OperationStatus } from "../shared/api.js";
 import { type AssetCode, assets } from "../shared/assets.js";
-import { type FormatOptions, formatDecimal } from "../shared/decimal.js";
+import { type FormatOptions, formatDecimal, normalizeAmountInput } from "../shared/decimal.js";
 import { decimalSeparators, type IntlSupport, intlLocale, intlSupported, type Locale, type MessageKey } from "./i18n.js";
 
 export const statusLabelKeys: Readonly<Record<OperationStatus, MessageKey>> = {
@@ -30,6 +30,7 @@ export interface Formatter {
   rate: (value: ExchangeRate) => string;
   dateTime: (iso: string) => string;
   amountInput: (asset: AssetCode, value: string) => string;
+  parseAmountInput: (input: string) => string;
 }
 
 function withUnit(asset: AssetCode, formatted: string): string {
@@ -77,10 +78,14 @@ export function createFormatter(locale: Locale, supported: IntlSupport = intlSup
       const quote = value.quote === "RUB" ? "₽" : value.quote;
       return `1 ${value.base} = ${formatted}\u00a0${quote}`;
     },
-    dateTime: (iso) => dateFormat.format(new Date(iso)),
+    dateTime: (iso) => {
+      const date = new Date(iso);
+      return Number.isNaN(date.getTime()) ? "—" : dateFormat.format(date);
+    },
     amountInput: (asset, value) => {
       const plain = formatDecimal(value, { fractionDigits: assets[asset].scale, minFractionDigits: 0 });
       return plain.replace(/\u00a0/g, "").replace(",", separators.decimal);
-    }
+    },
+    parseAmountInput: (input) => normalizeAmountInput(input, separators)
   };
 }

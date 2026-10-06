@@ -56,6 +56,8 @@ import type {
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 import { ScreenIcon, UiIcon } from "./icons";
+import { hasMessage, isLocale, localeNames, locales, type MessageKey } from "./i18n";
+import { useI18n } from "./i18n-context";
 
 type Theme = "light" | "dark";
 type Density = "compact" | "comfortable";
@@ -64,6 +66,10 @@ function initialScreen(): ScreenId {
   const candidate = window.location.hash.slice(1);
   const item = navigation.find((entry) => entry.id === candidate);
   return item?.id ?? "dashboard";
+}
+
+function screenKey(id: ScreenId): MessageKey {
+  return `screen.${id}`;
 }
 
 function Status({ children, tone = "neutral" }: { children: React.ReactNode; tone?: Tone }) {
@@ -92,6 +98,7 @@ function Backdrop() {
 }
 
 function QueueChart({ queues }: { queues: readonly QueueRow[] }) {
+  const { t } = useI18n();
   const width = 300;
   const height = 132;
   const pad = 14;
@@ -103,7 +110,7 @@ function QueueChart({ queues }: { queues: readonly QueueRow[] }) {
   const area = `${line("total")} L${x(queues.length - 1).toFixed(1)} ${height - pad} L${x(0).toFixed(1)} ${height - pad} Z`;
   return (
     <figure className="queue-chart">
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Всего и критично по очередям">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={t("dashboard.chartLabel")}>
         <path className="queue-chart-area" d={area} />
         <path className="queue-chart-total" d={line("total")} />
         <path className="queue-chart-critical" d={line("critical")} />
@@ -125,13 +132,11 @@ function DisabledSwitch({ label }: { label: string }) {
 }
 
 function DashboardView({ data }: { data: DashboardPayload }) {
+  const { t } = useI18n();
   return (
     <>
-      <PageHeading
-        title="Operations center"
-        description="Синтетическая dev-only сводка · команды и live-провайдеры отключены"
-      />
-      <section className="metrics" aria-label="Операционные показатели">
+      <PageHeading title={t("screen.dashboard")} description={t("dashboard.description")} />
+      <section className="metrics" aria-label={t("dashboard.metricsLabel")}>
         {data.metrics.map((metric, index) => (
           <article className="metric" data-accent={index === 0 ? "true" : undefined} key={metric.label}>
             <div><span>{metric.label}</span><i data-tone={metric.tone} /></div>
@@ -143,11 +148,11 @@ function DashboardView({ data }: { data: DashboardPayload }) {
       <section className="bento">
         <article className="panel bento-queues">
           <header className="panel-heading">
-            <div><h2>Приоритетные очереди</h2><p>Риск, SLA и сумма раньше технических деталей</p></div>
+            <div><h2>{t("dashboard.queuesTitle")}</h2><p>{t("dashboard.queuesDescription")}</p></div>
           </header>
-          <TableShell label="Приоритетные очереди">
+          <TableShell label={t("dashboard.queuesTitle")}>
             <table>
-              <thead><tr><th scope="col">Очередь</th><th scope="col">Критично</th><th scope="col">Всего</th><th scope="col">Старейшая</th><th scope="col">SLA</th></tr></thead>
+              <thead><tr><th scope="col">{t("dashboard.queue")}</th><th scope="col">{t("dashboard.critical")}</th><th scope="col">{t("dashboard.total")}</th><th scope="col">{t("dashboard.oldest")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
               <tbody>
                 {data.queues.map((row) => (
                   <tr key={row.queue}>
@@ -164,19 +169,19 @@ function DashboardView({ data }: { data: DashboardPayload }) {
         </article>
         <article className="panel bento-chart">
           <header className="panel-heading">
-            <div><h2>Нагрузка очередей</h2><p>Всего и критично · synthetic snapshot</p></div>
+            <div><h2>{t("dashboard.loadTitle")}</h2><p>{t("dashboard.loadDescription")}</p></div>
           </header>
           <QueueChart queues={data.queues} />
         </article>
         <aside className="panel health-panel">
           <header className="panel-heading">
-            <div><h2>System readiness</h2><p>Fail-closed foundation state</p></div>
+            <div><h2>{t("dashboard.readinessTitle")}</h2><p>{t("dashboard.readinessDescription")}</p></div>
           </header>
           <dl className="health-list">
-            <div><dt>Runtime</dt><dd><Status tone="success">{runtime.mode}</Status></dd></div>
-            <div><dt>Data source</dt><dd>{runtime.dataSource}</dd></div>
-            <div><dt>Command clients</dt><dd><DisabledSwitch label="Command clients выключены" /><Status tone="warning">Not installed</Status></dd></div>
-            <div><dt>Customer systems</dt><dd><DisabledSwitch label="Customer systems отключены" /><Status>Disconnected</Status></dd></div>
+            <div><dt>{t("dashboard.runtime")}</dt><dd><Status tone="success">{runtime.mode}</Status></dd></div>
+            <div><dt>{t("dashboard.dataSource")}</dt><dd>{t("dashboard.dataSourceValue")}</dd></div>
+            <div><dt>{t("dashboard.commandClients")}</dt><dd><DisabledSwitch label={t("dashboard.commandClientsOff")} /><Status tone="warning">{t("dashboard.notInstalled")}</Status></dd></div>
+            <div><dt>{t("dashboard.customerSystems")}</dt><dd><DisabledSwitch label={t("dashboard.customerSystemsOff")} /><Status>{t("dashboard.disconnected")}</Status></dd></div>
           </dl>
         </aside>
       </section>
@@ -185,6 +190,7 @@ function DashboardView({ data }: { data: DashboardPayload }) {
 }
 
 function CustomersView({ query, data }: { query: string; data: CustomersPayload }) {
+  const { t, count } = useI18n();
   const customers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.customers;
@@ -205,19 +211,16 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
 
   return (
     <>
-      <PageHeading
-        title="Customers 360"
-        description="Masked risk projection · case links only · документы и PII не загружаются"
-      />
+      <PageHeading title={t("screen.customers")} description={t("customers.description")} />
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Клиенты</h2><p>{customers.length} synthetic masked profiles</p></div>
-            <Status tone="info">No raw PII</Status>
+            <div><h2>{t("customers.title")}</h2><p>{t("customers.count", { count: count(customers.length) })}</p></div>
+            <Status tone="info">{t("customers.noRawPii")}</Status>
           </header>
-          <TableShell label="Список клиентов">
+          <TableShell label={t("customers.listLabel")}>
             <table>
-              <thead><tr><th scope="col">Клиент</th><th scope="col">KYC / KYB</th><th scope="col">Risk</th><th scope="col">30d volume</th><th scope="col">Next action</th></tr></thead>
+              <thead><tr><th scope="col">{t("customers.customer")}</th><th scope="col">{t("customers.kyc")}</th><th scope="col">{t("common.risk")}</th><th scope="col">{t("customers.volume")}</th><th scope="col">{t("customers.nextAction")}</th></tr></thead>
               <tbody>
                 {customers.map((customer) => (
                   <tr key={customer.id} data-selected={customer.id === selected?.id}>
@@ -242,7 +245,7 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
                   </tr>
                 ))}
                 {!customers.length && (
-                  <tr><td colSpan={5}><div className="empty">Совпадений не найдено</div></td></tr>
+                  <tr><td colSpan={5}><div className="empty">{t("common.noMatches")}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -255,19 +258,19 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
               <Status tone={selected.tone}>{selected.risk}</Status>
             </header>
             <div className="risk-score">
-              <span>Risk score</span>
+              <span>{t("common.riskScore")}</span>
               <strong>{selected.riskScore}</strong>
               <p>{selected.riskReason}</p>
             </div>
             <dl className="detail-list">
-              <div><dt>KYC / KYB case</dt><dd>{selected.kycCaseId}</dd></div>
-              <div><dt>Open AML cases</dt><dd>{selected.openAmlCases}</dd></div>
-              <div><dt>Restriction</dt><dd>{selected.restriction}</dd></div>
-              <div><dt>Last reviewed</dt><dd>{selected.lastReviewedAt}</dd></div>
+              <div><dt>{t("customers.kycCase")}</dt><dd>{selected.kycCaseId}</dd></div>
+              <div><dt>{t("customers.openAmlCases")}</dt><dd>{selected.openAmlCases}</dd></div>
+              <div><dt>{t("customers.restriction")}</dt><dd>{selected.restriction}</dd></div>
+              <div><dt>{t("customers.lastReviewed")}</dt><dd>{selected.lastReviewedAt}</dd></div>
             </dl>
             <div className="safe-action">
-              <strong>Read-only customer projection</strong>
-              <p>Документы, полные идентификаторы и provider payloads отсутствуют; решения связаны с отдельными case и approval records.</p>
+              <strong>{t("customers.projectionTitle")}</strong>
+              <p>{t("customers.projectionNote")}</p>
             </div>
           </aside>
         )}
@@ -313,11 +316,12 @@ function linkedEvidence<T extends KycProviderEvidence | KytProviderEvidence>(
   caseId: string
 ): string {
   const ids = feed.cases.filter((item) => item.linkedCaseId === caseId).map((item) => item.id);
-  return ids.length ? ids.join(", ") : "Not linked";
+  return ids.join(", ");
 }
 
 function CallbackList({ records }: { records: readonly ProviderCallbackRecord[] }) {
-  if (!records.length) return <div className="empty">Callbacks отсутствуют</div>;
+  const { t } = useI18n();
+  if (!records.length) return <div className="empty">{t("evidence.noCallbacks")}</div>;
   return (
     <div className="check-list">
       {records.map((record) => (
@@ -325,7 +329,7 @@ function CallbackList({ records }: { records: readonly ProviderCallbackRecord[] 
           <span>
             <strong>
               {record.deliveryId}
-              {record.sequence !== null ? ` · seq ${record.sequence}` : ""}
+              {record.sequence !== null ? ` · ${t("evidence.callbackSequence", { sequence: record.sequence })}` : ""}
               {record.status ? ` · ${record.status}` : ""}
             </strong>
             <small>
@@ -335,7 +339,7 @@ function CallbackList({ records }: { records: readonly ProviderCallbackRecord[] 
             </small>
           </span>
           <Status tone={record.verification === "rejected" ? "danger" : record.accepted ? "success" : "warning"}>
-            {record.verification === "rejected" ? "rejected" : record.inboxAction ?? "verified"}
+            {record.verification === "rejected" ? t("common.callbackRejected") : record.inboxAction ?? t("common.callbackVerified")}
           </Status>
         </div>
       ))}
@@ -350,6 +354,7 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
   title: string;
   feed: ProviderEvidenceFeed<T>;
 }) {
+  const { t, count } = useI18n();
   const [selectedId, setSelectedId] = useState(feed.cases[0]?.id ?? "");
   const selected = feed.cases.find((item) => item.id === selectedId) ?? feed.cases[0];
 
@@ -357,12 +362,12 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
     <section className="grid risk-grid">
       <article className="panel">
         <header className="panel-heading">
-          <div><h2>{title}</h2><p>{feed.cases.length} synthetic simulator runs · signed callbacks verified before projection</p></div>
-          <Status tone="info">Evidence only</Status>
+          <div><h2>{title}</h2><p>{t("evidence.count", { count: count(feed.cases.length) })}</p></div>
+          <Status tone="info">{t("evidence.only")}</Status>
         </header>
         <TableShell label={title}>
           <table>
-            <thead><tr><th scope="col">Run</th><th scope="col">Scenario</th><th scope="col">Provider claim</th><th scope="col">Projection</th><th scope="col">Seq</th><th scope="col">Callbacks</th></tr></thead>
+            <thead><tr><th scope="col">{t("evidence.run")}</th><th scope="col">{t("common.scenario")}</th><th scope="col">{t("evidence.providerClaim")}</th><th scope="col">{t("evidence.projection")}</th><th scope="col">{t("evidence.sequence")}</th><th scope="col">{t("evidence.callbacks")}</th></tr></thead>
             <tbody>
               {feed.cases.map((item) => (
                 <tr key={item.id} data-selected={item.id === selected?.id}>
@@ -370,15 +375,15 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
                     <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                       {item.id}
                     </button>
-                    <small className="cell-note">{item.linkedCaseId ?? "unlinked"}</small>
+                    <small className="cell-note">{item.linkedCaseId ?? t("evidence.unlinked")}</small>
                   </td>
                   <td>{item.label}<small className="cell-note">{item.scenario}</small></td>
                   <td>{item.providerStatus}</td>
                   <td><Status tone={item.tone}>{item.projectedStatus}</Status></td>
                   <td className="numeric">{item.sequence}</td>
                   <td>
-                    {item.verification.verified}/{item.verification.delivered} verified
-                    <small className="cell-note">{item.verification.rejected} rejected · {item.verification.heldForReview} held</small>
+                    {t("evidence.verifiedCount", { verified: item.verification.verified, delivered: item.verification.delivered })}
+                    <small className="cell-note">{t("evidence.rejectedHeld", { rejected: item.verification.rejected, held: item.verification.heldForReview })}</small>
                   </td>
                 </tr>
               ))}
@@ -393,30 +398,30 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
             <Status tone={selected.tone}>{selected.projectedStatus}</Status>
           </header>
           <dl className="detail-list">
-            <div><dt>Provider reference</dt><dd className="hash-value">{selected.providerReference ?? "—"}</dd></div>
+            <div><dt>{t("evidence.providerReference")}</dt><dd className="hash-value">{selected.providerReference ?? "—"}</dd></div>
             {selected.domain === "kyc" ? (
-              <div><dt>Applicant</dt><dd>{selected.applicantRef} · {selected.level}</dd></div>
+              <div><dt>{t("evidence.applicant")}</dt><dd>{selected.applicantRef} · {selected.level}</dd></div>
             ) : (
               <>
-                <div><dt>Binding</dt><dd>{selected.asset} · {selected.network} · {selected.direction}</dd></div>
-                <div><dt>Risk</dt><dd>{selected.riskLevel ?? "—"} · {selected.riskScore ?? "—"}{selected.sanctionsHit ? " · sanctions hit" : ""}</dd></div>
+                <div><dt>{t("evidence.binding")}</dt><dd>{selected.asset} · {selected.network} · {selected.direction}</dd></div>
+                <div><dt>{t("common.risk")}</dt><dd>{selected.riskLevel ?? "—"} · {selected.riskScore ?? "—"}{selected.sanctionsHit ? ` · ${t("evidence.sanctionsHit")}` : ""}</dd></div>
               </>
             )}
-            <div><dt>Reason codes</dt><dd>{selected.reasonCodes.length ? selected.reasonCodes.join(", ") : "—"}</dd></div>
+            <div><dt>{t("evidence.reasonCodes")}</dt><dd>{selected.reasonCodes.length ? selected.reasonCodes.join(", ") : "—"}</dd></div>
             {selected.domain === "kyc" && selected.requestedItems.length > 0 && (
-              <div><dt>Requested items</dt><dd>{selected.requestedItems.join(", ")}</dd></div>
+              <div><dt>{t("evidence.requestedItems")}</dt><dd>{selected.requestedItems.join(", ")}</dd></div>
             )}
-            <div><dt>Verification</dt><dd>{selected.verification.result}</dd></div>
-            <div><dt>Deadline</dt><dd>{selected.deadline ?? "—"}{selected.timedOut ? " · timed out" : ""}</dd></div>
-            {selected.outage && <div><dt>Outage</dt><dd>{selected.outage.code}{selected.outage.retryable ? " · retryable" : ""}</dd></div>}
+            <div><dt>{t("evidence.verification")}</dt><dd>{selected.verification.result}</dd></div>
+            <div><dt>{t("evidence.deadline")}</dt><dd>{selected.deadline ?? "—"}{selected.timedOut ? ` · ${t("evidence.timedOut")}` : ""}</dd></div>
+            {selected.outage && <div><dt>{t("evidence.outage")}</dt><dd>{selected.outage.code}{selected.outage.retryable ? ` · ${t("evidence.retryable")}` : ""}</dd></div>}
           </dl>
-          <h3 className="detail-section-title">Received callbacks</h3>
+          <h3 className="detail-section-title">{t("evidence.receivedCallbacks")}</h3>
           <CallbackList records={selected.receivedCallbacks} />
-          <h3 className="detail-section-title">Rejected callbacks</h3>
+          <h3 className="detail-section-title">{t("evidence.rejectedCallbacks")}</h3>
           <CallbackList records={selected.rejectedCallbacks} />
           <div className="safe-action">
-            <strong>Evidence only · decision via maker-checker</strong>
-            <p>Provider status never decides a case; operator dispositions stay on the approval path with step-up.</p>
+            <strong>{t("evidence.decisionTitle")}</strong>
+            <p>{t("evidence.decisionNote")}</p>
           </div>
         </aside>
       )}
@@ -425,6 +430,7 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
 }
 
 function KycView({ query, data }: { query: string; data: KycPayload }) {
+  const { t, count } = useI18n();
   const cases = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.cases;
@@ -445,19 +451,16 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
 
   return (
     <>
-      <PageHeading
-        title="KYC / KYB"
-        description="Signed case projection · evidence readiness · approval-linked decisions"
-      />
+      <PageHeading title={t("screen.kyc")} description={t("kyc.description")} />
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no live provider calls</p></div>
-            <Status tone="info">Read-only</Status>
+            <div><h2>{t("kyc.casesTitle")}</h2><p>{t("kyc.count", { count: count(cases.length) })}</p></div>
+            <Status tone="info">{t("common.readOnly")}</Status>
           </header>
-          <TableShell label="KYC и KYB cases">
+          <TableShell label={t("kyc.tableLabel")}>
             <table>
-              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Stage</th><th scope="col">Risk</th><th scope="col">SLA</th></tr></thead>
+              <thead><tr><th scope="col">{t("common.case")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.stage")}</th><th scope="col">{t("common.risk")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
@@ -474,7 +477,7 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
                   </tr>
                 ))}
                 {!cases.length && (
-                  <tr><td colSpan={5}><div className="empty">Совпадений не найдено</div></td></tr>
+                  <tr><td colSpan={5}><div className="empty">{t("common.noMatches")}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -482,12 +485,13 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
         </article>
         {selected && <KycCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
-      <ProviderEvidencePanel title="KYC provider evidence" feed={data.providerEvidence} />
+      <ProviderEvidencePanel title={t("kyc.providerEvidence")} feed={data.providerEvidence} />
     </>
   );
 }
 
 function KycCaseDetail({ item, providerEvidence }: { item: KycCase; providerEvidence: string }) {
+  const { t } = useI18n();
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -495,30 +499,31 @@ function KycCaseDetail({ item, providerEvidence }: { item: KycCase; providerEvid
         <Status tone={item.tone}>{item.status}</Status>
       </header>
       <div className="risk-score">
-        <span>Risk score</span>
+        <span>{t("common.riskScore")}</span>
         <strong>{item.riskScore}</strong>
-        <p>{item.stage} · owner: {item.owner}</p>
+        <p>{t("kyc.stageOwner", { stage: item.stage, owner: item.owner })}</p>
       </div>
       <dl className="detail-list">
-        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
-        <div><dt>SLA</dt><dd>{item.sla}</dd></div>
-        {item.uboSummary && <div><dt>UBO</dt><dd>{item.uboSummary}</dd></div>}
-        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
-        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
+        <div><dt>{t("common.opened")}</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>{t("common.sla")}</dt><dd>{item.sla}</dd></div>
+        {item.uboSummary && <div><dt>{t("kyc.ubo")}</dt><dd>{item.uboSummary}</dd></div>}
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>{t("common.providerEvidence")}</dt><dd>{providerEvidence || t("common.notLinked")}</dd></div>
       </dl>
-      <h3 className="detail-section-title">Evidence</h3>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={item.evidenceItems} />
-      <h3 className="detail-section-title">Checks</h3>
+      <h3 className="detail-section-title">{t("common.checks")}</h3>
       <WorkflowChecks checks={item.checks} />
       <div className="safe-action">
-        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
-        <p>Case decision cannot be executed here; this view exposes only signed evidence and policy references.</p>
+        <strong>{item.linkedApprovalId ? t("common.linkedApproval", { id: item.linkedApprovalId }) : t("common.approvalNotRequested")}</strong>
+        <p>{t("kyc.decisionNote")}</p>
       </div>
     </aside>
   );
 }
 
 function AmlView({ query, data }: { query: string; data: AmlPayload }) {
+  const { t, count } = useI18n();
   const cases = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.cases;
@@ -538,19 +543,16 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
 
   return (
     <>
-      <PageHeading
-        title="AML / KYT"
-        description="Sanctions, PEP and KYT review · evidence-linked · no disposition mutation"
-      />
+      <PageHeading title={t("screen.aml")} description={t("aml.description")} />
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · simulator evidence only</p></div>
-            <Status tone="warning">Decision gated</Status>
+            <div><h2>{t("aml.casesTitle")}</h2><p>{t("aml.count", { count: count(cases.length) })}</p></div>
+            <Status tone="warning">{t("common.decisionGated")}</Status>
           </header>
-          <TableShell label="AML cases">
+          <TableShell label={t("aml.casesTitle")}>
             <table>
-              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Source</th><th scope="col">Severity</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
+              <thead><tr><th scope="col">{t("common.case")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.source")}</th><th scope="col">{t("common.severity")}</th><th scope="col">{t("common.exposure")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
@@ -568,7 +570,7 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
                   </tr>
                 ))}
                 {!cases.length && (
-                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -576,12 +578,13 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
         </article>
         {selected && <AmlCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
-      <ProviderEvidencePanel title="KYT provider evidence" feed={data.providerEvidence} />
+      <ProviderEvidencePanel title={t("aml.providerEvidence")} feed={data.providerEvidence} />
     </>
   );
 }
 
 function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; providerEvidence: string }) {
+  const { t } = useI18n();
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -589,23 +592,23 @@ function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; providerEvid
         <Status tone={item.tone}>{item.state}</Status>
       </header>
       <dl className="detail-list">
-        <div><dt>Owner</dt><dd>{item.owner}</dd></div>
-        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
-        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
-        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
-        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
+        <div><dt>{t("common.owner")}</dt><dd>{item.owner}</dd></div>
+        <div><dt>{t("common.opened")}</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>{t("common.exposure")}</dt><dd>{item.exposure}</dd></div>
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>{t("common.providerEvidence")}</dt><dd>{providerEvidence || t("common.notLinked")}</dd></div>
       </dl>
-      <h3 className="detail-section-title">Screening</h3>
+      <h3 className="detail-section-title">{t("aml.screening")}</h3>
       <WorkflowChecks checks={item.screenings} />
-      <h3 className="detail-section-title">Risk factors</h3>
+      <h3 className="detail-section-title">{t("aml.riskFactors")}</h3>
       <ul className="factor-list">
         {item.riskFactors.map((factor) => <li key={factor}>{factor}</li>)}
       </ul>
-      <h3 className="detail-section-title">Evidence</h3>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={item.evidenceItems} />
       <div className="safe-action">
-        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
-        <p>Sanctions, PEP and KYT outcomes are synthetic; disposition and restriction commands are not installed.</p>
+        <strong>{item.linkedApprovalId ? t("common.linkedApproval", { id: item.linkedApprovalId }) : t("common.approvalNotRequested")}</strong>
+        <p>{t("aml.decisionNote")}</p>
       </div>
     </aside>
   );
@@ -626,6 +629,7 @@ function InvestigationsView({
   query: string;
   data: InvestigationsPayload;
 }) {
+  const { t, count } = useI18n();
   const cases = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.cases;
@@ -648,19 +652,16 @@ function InvestigationsView({
 
   return (
     <>
-      <PageHeading
-        title="Investigations"
-        description="Cross-control case timeline · evidence links · no enforcement or customer mutation"
-      />
+      <PageHeading title={t("screen.investigations")} description={t("investigations.description")} />
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Investigation cases</h2><p>{cases.length} synthetic cases · signed read-only projection</p></div>
-            <Status tone="warning">Decision gated</Status>
+            <div><h2>{t("investigations.casesTitle")}</h2><p>{t("investigations.count", { count: count(cases.length) })}</p></div>
+            <Status tone="warning">{t("common.decisionGated")}</Status>
           </header>
-          <TableShell label="Investigation cases">
+          <TableShell label={t("investigations.casesTitle")}>
             <table>
-              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
+              <thead><tr><th scope="col">{t("common.case")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.category")}</th><th scope="col">{t("common.priority")}</th><th scope="col">{t("common.exposure")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
@@ -678,7 +679,7 @@ function InvestigationsView({
                   </tr>
                 ))}
                 {!cases.length && (
-                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -691,6 +692,7 @@ function InvestigationsView({
 }
 
 function InvestigationDetail({ item }: { item: InvestigationCase }) {
+  const { t } = useI18n();
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -698,22 +700,22 @@ function InvestigationDetail({ item }: { item: InvestigationCase }) {
         <Status tone={item.tone}>{item.state}</Status>
       </header>
       <div className="case-summary">
-        <strong>{item.priority} priority</strong>
+        <strong>{t("investigations.priority", { priority: item.priority })}</strong>
         <p>{item.summary}</p>
       </div>
       <dl className="detail-list">
-        <div><dt>Owner</dt><dd>{item.owner}</dd></div>
-        <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
-        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
-        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>{t("common.owner")}</dt><dd>{item.owner}</dd></div>
+        <div><dt>{t("common.opened")}</dt><dd>{item.openedAt}</dd></div>
+        <div><dt>{t("common.exposure")}</dt><dd>{item.exposure}</dd></div>
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
       </dl>
-      <h3 className="detail-section-title">Related records</h3>
+      <h3 className="detail-section-title">{t("investigations.relatedRecords")}</h3>
       <LinkedRecords values={[...item.relatedAlertIds, ...item.relatedCaseIds]} />
-      <h3 className="detail-section-title">Hypotheses</h3>
+      <h3 className="detail-section-title">{t("investigations.hypotheses")}</h3>
       <ul className="factor-list">
         {item.hypotheses.map((hypothesis) => <li key={hypothesis}>{hypothesis}</li>)}
       </ul>
-      <h3 className="detail-section-title">Timeline</h3>
+      <h3 className="detail-section-title">{t("investigations.timeline")}</h3>
       <div className="timeline-list">
         {item.timeline.map((event) => (
           <div key={event.id}>
@@ -727,17 +729,18 @@ function InvestigationDetail({ item }: { item: InvestigationCase }) {
           </div>
         ))}
       </div>
-      <h3 className="detail-section-title">Evidence</h3>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={item.evidenceItems} />
       <div className="safe-action">
-        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "Approval not requested"}</strong>
-        <p>Escalation and restriction commands are absent; the case exposes only signed evidence, hypotheses and immutable audit references.</p>
+        <strong>{item.linkedApprovalId ? t("common.linkedApproval", { id: item.linkedApprovalId }) : t("common.approvalNotRequested")}</strong>
+        <p>{t("investigations.decisionNote")}</p>
       </div>
     </aside>
   );
 }
 
 function FraudView({ query, data }: { query: string; data: FraudPayload }) {
+  const { t, count } = useI18n();
   const alerts = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
     if (!normalized) return data.alerts;
@@ -759,19 +762,16 @@ function FraudView({ query, data }: { query: string; data: FraudPayload }) {
 
   return (
     <>
-      <PageHeading
-        title="Fraud controls"
-        description="Detection signals in monitor-only mode · no blocking, freezing or customer mutation"
-      />
+      <PageHeading title={t("screen.fraud")} description={t("fraud.description")} />
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Fraud alerts</h2><p>{alerts.length} synthetic alerts · control engine disconnected</p></div>
-            <Status tone="info">Monitor-only</Status>
+            <div><h2>{t("fraud.alertsTitle")}</h2><p>{t("fraud.count", { count: count(alerts.length) })}</p></div>
+            <Status tone="info">{t("fraud.monitorOnly")}</Status>
           </header>
-          <TableShell label="Fraud alerts">
+          <TableShell label={t("fraud.alertsTitle")}>
             <table>
-              <thead><tr><th scope="col">Alert</th><th scope="col">Subject</th><th scope="col">Scenario</th><th scope="col">Score</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
+              <thead><tr><th scope="col">{t("fraud.alert")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.scenario")}</th><th scope="col">{t("fraud.score")}</th><th scope="col">{t("common.exposure")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
               <tbody>
                 {alerts.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
@@ -789,7 +789,7 @@ function FraudView({ query, data }: { query: string; data: FraudPayload }) {
                   </tr>
                 ))}
                 {!alerts.length && (
-                  <tr><td colSpan={6}><div className="empty">Совпадений не найдено</div></td></tr>
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
                 )}
               </tbody>
             </table>
@@ -802,6 +802,7 @@ function FraudView({ query, data }: { query: string; data: FraudPayload }) {
 }
 
 function FraudDetail({ item }: { item: FraudAlert }) {
+  const { t } = useI18n();
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -809,23 +810,23 @@ function FraudDetail({ item }: { item: FraudAlert }) {
         <Status tone={item.tone}>{item.severity}</Status>
       </header>
       <div className="risk-score">
-        <span>Fraud score</span>
+        <span>{t("fraud.fraudScore")}</span>
         <strong>{item.score}</strong>
-        <p>{item.scenario} · detected {item.detectedAt}</p>
+        <p>{t("fraud.detected", { scenario: item.scenario, detectedAt: item.detectedAt })}</p>
       </div>
       <dl className="detail-list">
-        <div><dt>Control mode</dt><dd><Status tone="info">{item.controlMode}</Status></dd></div>
-        <div><dt>Linked investigation</dt><dd>{item.linkedInvestigationId ?? "Not opened"}</dd></div>
-        <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
-        <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>{t("fraud.controlMode")}</dt><dd><Status tone="info">{item.controlMode}</Status></dd></div>
+        <div><dt>{t("fraud.linkedInvestigation")}</dt><dd>{item.linkedInvestigationId ?? t("fraud.notOpened")}</dd></div>
+        <div><dt>{t("common.exposure")}</dt><dd>{item.exposure}</dd></div>
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
       </dl>
-      <h3 className="detail-section-title">Signals</h3>
+      <h3 className="detail-section-title">{t("fraud.signals")}</h3>
       <WorkflowChecks checks={item.signals} />
-      <h3 className="detail-section-title">Evidence</h3>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={item.evidenceItems} />
       <div className="safe-action">
-        <strong>{item.linkedApprovalId ? `Linked approval · ${item.linkedApprovalId}` : "No protected decision requested"}</strong>
-        <p>Rules are observable only. Blocking, freezing, notification and provider actions are not installed in this slice.</p>
+        <strong>{item.linkedApprovalId ? t("common.linkedApproval", { id: item.linkedApprovalId }) : t("fraud.noDecision")}</strong>
+        <p>{t("fraud.decisionNote")}</p>
       </div>
     </aside>
   );
@@ -838,6 +839,7 @@ function ApprovalsView({
   capabilities: readonly Capability[];
   data: ApprovalsPayload;
 }) {
+  const { t, count, time } = useI18n();
   const approvals = data.approvals;
   const [selected, setSelected] = useState<ApprovalSummary>(approvals[0]);
   const [preview, setPreview] = useState<ApprovalPreview>();
@@ -932,19 +934,16 @@ function ApprovalsView({
 
   return (
     <>
-      <PageHeading
-        title="Approval inbox"
-        description="Signed evidence и side-effect-free command preview · execution отсутствует"
-      />
+      <PageHeading title={t("screen.approvals")} description={t("approvals.description")} />
       <section className="grid approval-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Pending approvals</h2><p>Maker-checker queue · synthetic data</p></div>
-            <Status tone="warning">{approvals.length} pending</Status>
+            <div><h2>{t("approvals.pendingTitle")}</h2><p>{t("approvals.pendingDescription")}</p></div>
+            <Status tone="warning">{t("approvals.pendingCount", { count: count(approvals.length) })}</Status>
           </header>
-          <TableShell label="Ожидающие approvals">
+          <TableShell label={t("approvals.pendingTitle")}>
             <table>
-              <thead><tr><th scope="col">ID</th><th scope="col">Action</th><th scope="col">Exposure</th><th scope="col">Evidence</th><th scope="col">Age</th><th scope="col">State</th></tr></thead>
+              <thead><tr><th scope="col">{t("approvals.id")}</th><th scope="col">{t("approvals.action")}</th><th scope="col">{t("common.exposure")}</th><th scope="col">{t("common.evidence")}</th><th scope="col">{t("approvals.age")}</th><th scope="col">{t("approvals.state")}</th></tr></thead>
               <tbody>
                 {approvals.map((approval) => (
                   <tr key={approval.id} data-selected={approval.id === selected.id}>
@@ -983,10 +982,10 @@ function ApprovalsView({
             <Status tone={selected.tone}>{selected.state}</Status>
           </header>
           <dl className="detail-list">
-            <div><dt>Maker</dt><dd>{selected.maker}</dd></div>
-            <div><dt>Exposure</dt><dd>{selected.exposure}</dd></div>
-            <div><dt>Evidence readiness</dt><dd>{selected.evidence}</dd></div>
-            <div><dt>Required approvers</dt><dd>{selected.completedApprovals} / {selected.requiredApprovals}</dd></div>
+            <div><dt>{t("approvals.maker")}</dt><dd>{selected.maker}</dd></div>
+            <div><dt>{t("common.exposure")}</dt><dd>{selected.exposure}</dd></div>
+            <div><dt>{t("approvals.evidenceReadiness")}</dt><dd>{selected.evidence}</dd></div>
+            <div><dt>{t("approvals.requiredApprovers")}</dt><dd>{selected.completedApprovals} / {selected.requiredApprovals}</dd></div>
           </dl>
           <div className="evidence-list">
             {selected.evidenceItems.map((item) => (
@@ -1000,32 +999,31 @@ function ApprovalsView({
             ))}
           </div>
           <div className="safe-action">
-            <strong>Preview не выполняет команду</strong>
-            <p>Сервер проверит maker-checker, evidence, step-up MFA и audit anchor, но command client отсутствует.</p>
+            <strong>{t("approvals.safeTitle")}</strong>
+            <p>{t("approvals.safeNote")}</p>
           </div>
           {selected.stepUpRequired && (
-            <section className="step-up-panel" aria-label="Synthetic dev-only step-up">
+            <section className="step-up-panel" aria-label={t("stepUp.title")}>
               <header>
                 <div>
-                  <strong>Synthetic step-up · dev-only</strong>
-                  <small>Не является production MFA или вторым фактором.</small>
+                  <strong>{t("stepUp.title")}</strong>
+                  <small>{t("stepUp.notMfa")}</small>
                 </div>
                 <Status tone={stepUpState === "verified" ? "success" : "warning"}>
-                  {stepUpState === "verified" ? "verified" : "required"}
+                  {stepUpState === "verified" ? t("stepUp.verified") : t("stepUp.required")}
                 </Status>
               </header>
               {challenge ? (
                 <>
                   <div className="dev-code">
-                    <span>Dev verification code</span>
+                    <span>{t("stepUp.devCode")}</span>
                     <strong>{challenge.devVerificationCode}</strong>
                     <small>
-                      {challenge.attemptsRemaining} attempts · до{" "}
-                      {new Date(challenge.expiresAt).toLocaleTimeString("ru-RU")}
+                      {t("stepUp.attemptsUntil", { attempts: challenge.attemptsRemaining, time: time(challenge.expiresAt) })}
                     </small>
                   </div>
                   <label className="step-up-input">
-                    <span>Введите 6-значный код</span>
+                    <span>{t("stepUp.enterCode")}</span>
                     <input
                       autoComplete="one-time-code"
                       inputMode="numeric"
@@ -1040,7 +1038,7 @@ function ApprovalsView({
                   </label>
                   {stepUpState === "retry" && (
                     <p className="step-up-result" data-state="failed" id={stepUpErrorId} role="alert">
-                      Код отклонён. Challenge остаётся активным до лимита попыток.
+                      {t("stepUp.codeRejected")}
                     </p>
                   )}
                   <button
@@ -1049,22 +1047,18 @@ function ApprovalsView({
                     disabled={stepUpState === "verifying" || verificationCode.length !== 6}
                     onClick={() => void verifyStepUp()}
                   >
-                    {stepUpState === "verifying"
-                      ? "Проверяем и формируем preview…"
-                      : "Проверить одноразовый код"}
+                    {stepUpState === "verifying" ? t("stepUp.verifying") : t("stepUp.verify")}
                   </button>
                 </>
               ) : stepUpState === "verified" ? (
                 <p className="step-up-result">
-                  Одноразовый grant использован для этого preview и больше не принимается.
+                  {t("stepUp.grantUsed")}
                 </p>
               ) : (
                 <>
                   {(stepUpState === "failed" || stepUpState === "locked") && (
                     <p className="step-up-result" data-state="failed" role="alert">
-                      {stepUpState === "locked"
-                        ? "Challenge заблокирован после исчерпания попыток."
-                        : "Challenge отклонён или устарел. Запустите новый."}
+                      {stepUpState === "locked" ? t("stepUp.locked") : t("stepUp.failed")}
                     </p>
                   )}
                   <button
@@ -1073,9 +1067,7 @@ function ApprovalsView({
                     disabled={!mayStepUp || stepUpState === "creating"}
                     onClick={() => void startStepUp()}
                   >
-                    {stepUpState === "creating"
-                      ? "Создаём challenge…"
-                      : "Начать synthetic step-up"}
+                    {stepUpState === "creating" ? t("stepUp.creating") : t("stepUp.start")}
                   </button>
                 </>
               )}
@@ -1088,27 +1080,25 @@ function ApprovalsView({
             aria-describedby={previewReasonId}
             onClick={() => void loadPreview()}
           >
-            {previewState === "loading" ? "Формируем preview…" : "Сформировать безопасный preview"}
+            {previewState === "loading" ? t("approvals.previewLoading") : t("approvals.previewBuild")}
           </button>
           <small className="disabled-reason" id={previewReasonId}>
-            {!mayPreview
-              ? "Роль не имеет approvals:preview."
-              : "Финансовая команда не создаётся и не отправляется."}
+            {!mayPreview ? t("approvals.noPreviewCapability") : t("approvals.noCommand")}
           </small>
           {previewState === "failed" && (
-            <div className="preview-error" role="alert">Preview отклонён BFF или устарел.</div>
+            <div className="preview-error" role="alert">{t("approvals.previewFailed")}</div>
           )}
           {preview && <ApprovalPreviewPanel preview={preview} />}
           <LiveStatus
             message={
               previewState === "loading"
-                ? "Формируем безопасный preview"
+                ? t("approvals.livePreviewLoading")
                 : stepUpState === "creating"
-                  ? "Создаём synthetic step-up challenge"
+                  ? t("approvals.liveStepUpCreating")
                   : stepUpState === "verifying"
-                    ? "Проверяем одноразовый код"
+                    ? t("approvals.liveVerifying")
                     : preview
-                      ? "Preview сформирован"
+                      ? t("approvals.livePreviewReady")
                       : ""
             }
           />
@@ -1119,35 +1109,33 @@ function ApprovalsView({
 }
 
 function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) {
-  const blockerLabels: Readonly<Record<string, string>> = {
-    maker_cannot_approve: "Maker не может быть approver",
-    evidence_incomplete: "Evidence неполный",
-    step_up_mfa_required: "Требуется step-up MFA",
-    approvals_incomplete: "Недостаточно approvers",
-    command_client_absent: "Command client отсутствует"
-  };
+  const { t } = useI18n();
+  function blockerLabel(blocker: string): string {
+    const key = `blocker.${blocker}`;
+    return hasMessage(key) ? t(key) : blocker;
+  }
   return (
-    <section className="preview-panel" aria-label="Результат command preview">
+    <section className="preview-panel" aria-label={t("preview.label")}>
       <header>
-        <div><strong>Policy preview</strong><small>{preview.command.digest.slice(0, 16)}…</small></div>
-        <Status tone="warning">Blocked</Status>
+        <div><strong>{t("preview.policy")}</strong><small>{preview.command.digest.slice(0, 16)}…</small></div>
+        <Status tone="warning">{t("preview.blocked")}</Status>
       </header>
       <dl className="preview-checks">
         <div>
-          <dt>Maker-checker</dt>
+          <dt>{t("preview.makerChecker")}</dt>
           <dd><Status tone={preview.policy.independentApprover ? "success" : "danger"}>
-            {preview.policy.independentApprover ? "independent" : "conflict"}
+            {preview.policy.independentApprover ? t("preview.independent") : t("preview.conflict")}
           </Status></dd>
         </div>
-        <div><dt>Step-up MFA</dt><dd><Status tone={preview.policy.stepUpMfa === "verified" ? "success" : "warning"}>
+        <div><dt>{t("preview.stepUpMfa")}</dt><dd><Status tone={preview.policy.stepUpMfa === "verified" ? "success" : "warning"}>
           {preview.policy.stepUpMfa}
         </Status></dd></div>
-        <div><dt>Evidence</dt><dd>{preview.evidence.ready} / {preview.evidence.total}</dd></div>
-        <div><dt>Audit anchor</dt><dd>#{preview.auditAnchor.sequence} · {preview.auditAnchor.hash.slice(0, 10)}…</dd></div>
+        <div><dt>{t("common.evidence")}</dt><dd>{preview.evidence.ready} / {preview.evidence.total}</dd></div>
+        <div><dt>{t("preview.auditAnchor")}</dt><dd>#{preview.auditAnchor.sequence} · {preview.auditAnchor.hash.slice(0, 10)}…</dd></div>
       </dl>
       <ul>
         {preview.policy.blockers.map((blocker) => (
-          <li key={blocker}>{blockerLabels[blocker] ?? blocker}</li>
+          <li key={blocker}>{blockerLabel(blocker)}</li>
         ))}
       </ul>
     </section>
@@ -1155,6 +1143,7 @@ function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) {
 }
 
 function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean }) {
+  const { t, count } = useI18n();
   const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
 
   async function downloadExport() {
@@ -1180,58 +1169,55 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
 
   return (
     <>
-      <PageHeading
-        title="Audit trail"
-        description="Signed read-only evidence · SHA-256 hash chain · fail-closed verification"
-      />
+      <PageHeading title={t("screen.audit")} description={t("audit.description")} />
       <section className="audit-summary">
         <article className="metric">
-          <div><span>Chain integrity</span><i data-tone="success" /></div>
-          <strong>{data.chain.verified ? "Verified" : "Invalid"}</strong>
-          <small>{data.chain.length} immutable events</small>
+          <div><span>{t("audit.integrity")}</span><i data-tone="success" /></div>
+          <strong>{data.chain.verified ? t("audit.verified") : t("audit.invalid")}</strong>
+          <small>{t("audit.eventCount", { count: count(data.chain.length) })}</small>
         </article>
         <article className="metric audit-head">
-          <div><span>Head hash</span><i data-tone="info" /></div>
+          <div><span>{t("audit.headHash")}</span><i data-tone="info" /></div>
           <strong>{data.chain.headHash.slice(0, 16)}…</strong>
-          <small>Bound to the latest event</small>
+          <small>{t("audit.headBound")}</small>
         </article>
         <article className="metric">
-          <div><span>Evidence storage</span><i data-tone={data.chain.durable ? "success" : "warning"} /></div>
-          <strong>{data.chain.durable ? "PostgreSQL" : "Synthetic memory"}</strong>
-          <small>Minimum retention · {data.chain.retentionDays} days</small>
+          <div><span>{t("audit.storage")}</span><i data-tone={data.chain.durable ? "success" : "warning"} /></div>
+          <strong>{data.chain.durable ? t("audit.storagePostgres") : t("audit.storageMemory")}</strong>
+          <small>{t("audit.retention", { days: count(data.chain.retentionDays) })}</small>
         </article>
       </section>
       <article className="panel">
         <header className="panel-heading">
-          <div><h2>Append-only events</h2><p>Previous hash связывает каждую запись с предшествующей</p></div>
+          <div><h2>{t("audit.eventsTitle")}</h2><p>{t("audit.eventsDescription")}</p></div>
           <div className="audit-actions">
-            <Status tone="success">Verified chain</Status>
+            <Status tone="success">{t("audit.verifiedChain")}</Status>
             <button
               className="button"
               type="button"
               disabled={!mayExport || exportState === "loading"}
               onClick={() => void downloadExport()}
             >
-              {exportState === "loading" ? "Экспорт…" : "Экспорт evidence"}
+              {exportState === "loading" ? t("common.exporting") : t("audit.export")}
             </button>
           </div>
         </header>
         {exportState === "failed" && (
-          <div className="preview-error" role="alert">Экспорт отклонён или integrity verification недоступна.</div>
+          <div className="preview-error" role="alert">{t("audit.exportFailed")}</div>
         )}
-        <LiveStatus message={exportState === "loading" ? "Экспорт evidence…" : ""} />
-        <TableShell label="Audit trail">
+        <LiveStatus message={exportState === "loading" ? t("audit.liveExporting") : ""} />
+        <TableShell label={t("screen.audit")}>
           <table>
             <thead>
               <tr>
-                <th scope="col">Seq</th>
-                <th scope="col">Event</th>
-                <th scope="col">Actor</th>
-                <th scope="col">Resource</th>
-                <th scope="col">Outcome</th>
-                <th scope="col">Evidence</th>
-                <th scope="col">Previous hash</th>
-                <th scope="col">Hash</th>
+                <th scope="col">{t("audit.sequence")}</th>
+                <th scope="col">{t("audit.event")}</th>
+                <th scope="col">{t("audit.actor")}</th>
+                <th scope="col">{t("audit.resource")}</th>
+                <th scope="col">{t("audit.outcome")}</th>
+                <th scope="col">{t("common.evidence")}</th>
+                <th scope="col">{t("audit.previousHash")}</th>
+                <th scope="col">{t("audit.hash")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1255,9 +1241,9 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
   );
 }
 
-const draftLabel = "Черновик — не для подачи регулятору";
-
 function ReportsView({ data }: { data: ReportListPayload }) {
+  const { t, count, date } = useI18n();
+  const draftLabel = t("reports.draftLabel");
   const [selected, setSelected] = useState<ReportId | undefined>(data.reports[0]?.id);
   const [report, setReport] = useState<DraftReport | undefined>();
   const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
@@ -1303,20 +1289,22 @@ function ReportsView({ data }: { data: ReportListPayload }) {
 
   return (
     <>
-      <PageHeading
-        title="Отчёты"
-        description="Draft compliance reports · synthetic dev data · read-only signed evidence"
-      />
+      <PageHeading title={t("screen.reports")} description={t("reports.description")} />
       <section className="report-draft-banner" role="note">
         <strong>{draftLabel}</strong>
         <span>
-          status: {data.status} · not_for_submission · {data.environment} · период {data.period.from.slice(0, 10)}
+          {t("reports.bannerDetail", {
+            status: data.status,
+            marker: "not_for_submission",
+            environment: data.environment,
+            from: date(data.period.from)
+          })}
         </span>
       </section>
       <section className="reports-layout">
         <article className="panel report-list">
           <header className="panel-heading">
-            <div><h2>Доступные черновики</h2><p>{data.reports.length} deterministic reports</p></div>
+            <div><h2>{t("reports.available")}</h2><p>{t("reports.count", { count: count(data.reports.length) })}</p></div>
           </header>
           <ul>
             {data.reports.map((item) => (
@@ -1328,41 +1316,41 @@ function ReportsView({ data }: { data: ReportListPayload }) {
                 >
                   <strong>{item.title}</strong>
                   <small>{item.description}</small>
-                  <Status tone="warning">draft</Status>
+                  <Status tone="warning">{t("reports.draftChip")}</Status>
                 </button>
               </li>
             ))}
           </ul>
         </article>
         <article className="panel report-detail">
-          {detailState === "loading" && <div className="empty">Загрузка черновика…</div>}
+          {detailState === "loading" && <div className="empty">{t("reports.loading")}</div>}
           <LiveStatus
-            message={detailState === "loading" ? "Загрузка черновика…" : exportState === "loading" ? "Экспорт CSV…" : ""}
+            message={detailState === "loading" ? t("reports.loading") : exportState === "loading" ? t("reports.liveCsvExporting") : ""}
           />
           {detailState === "failed" && (
-            <div className="preview-error" role="alert">Отчёт отклонён или integrity verification недоступна.</div>
+            <div className="preview-error" role="alert">{t("reports.failed")}</div>
           )}
           {report && (
             <>
               <header className="panel-heading">
                 <div>
                   <h2>{report.title}</h2>
-                  <p>{draftLabel} · digest {report.contentDigest.slice(0, 12)}…</p>
+                  <p>{t("reports.digest", { draft: draftLabel, digest: report.contentDigest.slice(0, 12) })}</p>
                 </div>
                 <div className="audit-actions">
-                  <Status tone="warning">Черновик</Status>
+                  <Status tone="warning">{t("reports.draftStatus")}</Status>
                   <button
                     className="button"
                     type="button"
                     disabled={exportState === "loading"}
                     onClick={() => void downloadCsv(report.id)}
                   >
-                    {exportState === "loading" ? "Экспорт…" : "Скачать CSV"}
+                    {exportState === "loading" ? t("common.exporting") : t("reports.downloadCsv")}
                   </button>
                 </div>
               </header>
               {exportState === "failed" && (
-                <div className="preview-error" role="alert">CSV экспорт отклонён или integrity verification недоступна.</div>
+                <div className="preview-error" role="alert">{t("reports.csvFailed")}</div>
               )}
               <div className="report-sections">
                 {report.sections.map((item) => (
@@ -1407,25 +1395,28 @@ function ReportsView({ data }: { data: ReportListPayload }) {
 }
 
 function PlaceholderView({ item }: { item: NavigationItem }) {
+  const { t, intlTag } = useI18n();
+  const label = t(screenKey(item.id));
   return (
     <>
-      <PageHeading title={item.label} description="Запланировано для следующего Wave 2 slice" />
+      <PageHeading title={label} description={t("placeholder.description")} />
       <section className="panel placeholder">
-        <span>{item.label.slice(0, 2).toUpperCase()}</span>
-        <h2>Контракт раздела зафиксирован</h2>
-        <p>UI, query API, evidence model и role capabilities будут добавлены отдельным проверяемым vertical slice.</p>
+        <span>{label.slice(0, 2).toLocaleUpperCase(intlTag)}</span>
+        <h2>{t("placeholder.title")}</h2>
+        <p>{t("placeholder.note")}</p>
       </section>
     </>
   );
 }
 
 function PageHeading({ title, description }: { title: string; description: string }) {
+  const { t } = useI18n();
   return (
     <header className="page-heading">
       <div><h1>{title}</h1><p>{description}</p></div>
       <div className="page-actions">
-        <Status tone="success">DEV</Status>
-        <Status>dry-run</Status>
+        <Status tone="success">{t("common.dev")}</Status>
+        <Status>{t("common.dryRun")}</Status>
       </div>
     </header>
   );
@@ -1447,7 +1438,7 @@ interface WorkspaceData {
 type AccessState =
   | { status: "loading" }
   | { status: "signed-out"; health: HealthPayload }
-  | { status: "failed"; message: string }
+  | { status: "failed"; reason: MessageKey; detail?: string }
   | { status: "ready"; health: HealthPayload; data: WorkspaceData };
 
 function hasCapability(session: SessionPayload, capability: Capability): boolean {
@@ -1463,6 +1454,7 @@ function AccessGate({
   theme: Theme;
   onDevLogin: (role: OperatorRole) => Promise<void>;
 }) {
+  const { t } = useI18n();
   const [role, setRole] = useState<OperatorRole>("compliance-lead");
   const [submitting, setSubmitting] = useState(false);
 
@@ -1480,44 +1472,47 @@ function AccessGate({
       <Backdrop />
       <main className="access-card">
         <div className="brand access-brand">
-          <span>SC</span>
+          <span>S</span>
           <div>
-            <strong>SolidChange</strong>
-            <small className="access-subtitle">Operator backoffice</small>
+            <strong>SOLID</strong>
+            <small className="access-subtitle">{t("app.brandSubtitle")}</small>
           </div>
         </div>
         {state.status === "loading" && (
           <>
-            <h1 className="access-title">Проверяем операторскую сессию</h1>
-            <p className="access-copy">Доступ fail-closed: интерфейс не загрузит данные без BFF и подписанного ответа.</p>
-            <Status tone="info">Session check</Status>
+            <h1 className="access-title">{t("access.loadingTitle")}</h1>
+            <p className="access-copy">{t("access.loadingCopy")}</p>
+            <Status tone="info">{t("access.sessionCheck")}</Status>
           </>
         )}
         {state.status === "failed" && (
           <>
-            <h1 className="access-title">Backoffice недоступен</h1>
-            <p className="access-copy" role="alert">{state.message}</p>
-            <Status tone="danger">Fail closed</Status>
+            <h1 className="access-title">{t("access.failedTitle")}</h1>
+            <p className="access-copy" role="alert">
+              {t(state.reason)}
+              {state.detail ? ` ${t("access.errorDetail", { detail: state.detail })}` : ""}
+            </p>
+            <Status tone="danger">{t("access.failClosed")}</Status>
           </>
         )}
         {state.status === "signed-out" && (
           <>
-            <h1 className="access-title">Вход для оператора</h1>
-            <p className="access-copy">OIDC/SSO токены обрабатываются только BFF и не передаются в браузерное приложение.</p>
+            <h1 className="access-title">{t("access.signedOutTitle")}</h1>
+            <p className="access-copy">{t("access.signedOutCopy")}</p>
             {state.health.oidcConfigured && (
-              <a className="button primary access-action access-button" href="/bff/auth/login">Войти через SSO</a>
+              <a className="button primary access-action access-button" href="/bff/auth/login">{t("access.ssoLogin")}</a>
             )}
             {state.health.devLoginEnabled && (
               <div className="dev-login">
                 <label>
-                  <span>Dev-only роль</span>
+                  <span>{t("access.devRole")}</span>
                   <select
                     className="dev-role-select"
                     value={role}
                     onChange={(event) => setRole(event.target.value as OperatorRole)}
                   >
                     {roleProfiles.map((candidate) => (
-                      <option value={candidate.id} key={candidate.id}>{candidate.label}</option>
+                      <option value={candidate.id} key={candidate.id}>{t(`role.${candidate.id}`)}</option>
                     ))}
                   </select>
                 </label>
@@ -1527,12 +1522,12 @@ function AccessGate({
                   disabled={submitting}
                   onClick={submitDevLogin}
                 >
-                  Открыть synthetic workspace
+                  {t("access.openWorkspace")}
                 </button>
               </div>
             )}
             {!state.health.oidcConfigured && !state.health.devLoginEnabled && (
-              <Status tone="warning">OIDC not configured</Status>
+              <Status tone="warning">{t("access.oidcNotConfigured")}</Status>
             )}
           </>
         )}
@@ -1542,6 +1537,7 @@ function AccessGate({
 }
 
 export function App() {
+  const { t, locale, setLocale, longDate } = useI18n();
   const [access, setAccess] = useState<AccessState>({ status: "loading" });
   const [screen, setScreen] = useState<ScreenId>(initialScreen);
   const [query, setQuery] = useState("");
@@ -1600,7 +1596,8 @@ export function App() {
     } catch (error) {
       setAccess({
         status: "failed",
-        message: error instanceof Error ? error.message : "Не удалось проверить границу доступа"
+        reason: "access.errorBoundary",
+        detail: error instanceof Error ? error.message : undefined
       });
     }
   }, []);
@@ -1617,7 +1614,8 @@ export function App() {
     } catch (error) {
       setAccess({
         status: "failed",
-        message: error instanceof Error ? error.message : "Dev-only session rejected"
+        reason: "access.errorDevSession",
+        detail: error instanceof Error ? error.message : undefined
       });
     }
   }
@@ -1632,7 +1630,8 @@ export function App() {
     } catch (error) {
       setAccess({
         status: "failed",
-        message: error instanceof Error ? error.message : "Не удалось завершить сессию"
+        reason: "access.errorLogout",
+        detail: error instanceof Error ? error.message : undefined
       });
     }
   }
@@ -1668,12 +1667,8 @@ export function App() {
   const activeItem = navigation.find((item) => item.id === screen) ?? navigation[0];
   const isDenied = (item: NavigationItem) =>
     Boolean(item.capability && !hasCapability(session, item.capability));
-  const today = new Intl.DateTimeFormat("ru-RU", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  }).format(new Date());
+  const label = t(screenKey(activeItem.id));
+  const today = longDate(new Date());
 
   function showTooltip(target: HTMLElement, label: string) {
     const rect = target.getBoundingClientRect();
@@ -1683,17 +1678,17 @@ export function App() {
   return (
     <div className="app" data-theme={theme} data-density={density} data-rail={railExpanded ? "expanded" : "collapsed"}>
       <button className="skip-link" type="button" onClick={() => mainRef.current?.focus()}>
-        Перейти к содержимому
+        {t("app.skipToContent")}
       </button>
       <Backdrop />
       <aside className="sidebar">
-        <div className="brand"><span>SC</span><div><strong>SolidChange</strong><small>Operator backoffice</small></div></div>
+        <div className="brand"><span>S</span><div><strong>SOLID</strong><small>{t("app.brandSubtitle")}</small></div></div>
         <button
           className="rail-toggle"
           type="button"
           aria-expanded={railExpanded}
           aria-controls={navigationId}
-          aria-label={railExpanded ? "Свернуть навигацию" : "Развернуть навигацию"}
+          aria-label={railExpanded ? t("app.collapseNavigation") : t("app.expandNavigation")}
           onClick={() => {
             setTooltip(undefined);
             setRailExpanded(!railExpanded);
@@ -1701,13 +1696,18 @@ export function App() {
         >
           <UiIcon name={railExpanded ? "collapse" : "expand"} />
         </button>
-        <nav id={navigationId} aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
+        <nav id={navigationId} aria-label={t("app.navigationLabel")} onScroll={() => setTooltip(undefined)}>
           {navigationGroups.map((group) => (
             <div className="nav-group" key={group}>
-              <p>{group}</p>
+              <p>{t(`group.${group}`)}</p>
               {navigation.filter((item) => item.group === group).map((item) => {
                 const denied = isDenied(item);
-                const hint = `${item.label}${denied ? " · недоступно роли" : !item.implemented ? " · Soon" : ""}`;
+                const itemLabel = t(screenKey(item.id));
+                const hint = denied
+                  ? t("nav.deniedHint", { label: itemLabel })
+                  : !item.implemented
+                    ? t("nav.soonHint", { label: itemLabel })
+                    : itemLabel;
                 return (
                   <button
                     key={item.id}
@@ -1715,25 +1715,25 @@ export function App() {
                     aria-current={screen === item.id ? "page" : undefined}
                     aria-disabled={denied}
                     onClick={() => selectScreen(item)}
-                    title={!item.implemented ? "Следующий Wave 2 slice" : denied ? "Недоступно выбранной роли" : ""}
+                    title={!item.implemented ? t("nav.nextSlice") : denied ? t("nav.denied") : ""}
                     onMouseEnter={(event) => showTooltip(event.currentTarget, hint)}
                     onMouseLeave={() => setTooltip(undefined)}
                     onFocus={(event) => showTooltip(event.currentTarget, hint)}
                     onBlur={() => setTooltip(undefined)}
                   >
                     <span><ScreenIcon id={item.id} /></span>
-                    <strong>{item.label}</strong>
-                    {!item.implemented && <small>Soon</small>}
+                    <strong>{itemLabel}</strong>
+                    {!item.implemented && <small>{t("nav.soon")}</small>}
                   </button>
                 );
               })}
             </div>
           ))}
         </nav>
-        <div className="session-note" title="Protected workspace · Signed queries · audit chain · preview only">
+        <div className="session-note" title={`${t("app.protectedTitle")} · ${t("app.protectedDetail")}`}>
           <UiIcon name="shield" />
-          <strong>Protected workspace</strong>
-          <span>Signed queries · audit chain · preview only</span>
+          <strong>{t("app.protectedTitle")}</strong>
+          <span>{t("app.protectedDetail")}</span>
         </div>
       </aside>
       {!railExpanded && tooltip && (
@@ -1745,8 +1745,8 @@ export function App() {
       <div className="workspace">
         <header className="topbar">
           <div className="greeting">
-            <strong>Добрый день, {profile.label}</strong>
-            <small>{today.charAt(0).toLocaleUpperCase("ru") + today.slice(1)}</small>
+            <strong>{t("app.greeting", { name: t(`role.${profile.role}`) })}</strong>
+            <small>{today}</small>
           </div>
           <label className="search">
             <span aria-hidden="true"><UiIcon name="search" /></span>
@@ -1754,18 +1754,31 @@ export function App() {
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Клиент, case или operation ID"
-              aria-label="Глобальный поиск"
+              placeholder={t("app.searchPlaceholder")}
+              aria-label={t("app.searchLabel")}
             />
           </label>
           <div className="topbar-spacer" />
-          <span className="environment"><i />DEV · dry-run</span>
+          <span className="environment"><i />{t("app.environment")}</span>
+          <select
+            className="locale-select"
+            value={locale}
+            onChange={(event) => {
+              if (isLocale(event.target.value)) setLocale(event.target.value);
+            }}
+            aria-label={t("app.languageLabel")}
+            title={t("app.languageLabel")}
+          >
+            {locales.map((candidate) => (
+              <option value={candidate} key={candidate} lang={candidate}>{localeNames[candidate]}</option>
+            ))}
+          </select>
           <button
             className="icon-button density-button"
             type="button"
             onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
-            aria-label={density === "compact" ? "Переключить на просторную плотность" : "Переключить на компактную плотность"}
-            title={density === "compact" ? "Просторная плотность" : "Компактная плотность"}
+            aria-label={density === "compact" ? t("app.switchToComfortable") : t("app.switchToCompact")}
+            title={density === "compact" ? t("app.comfortableDensity") : t("app.compactDensity")}
           >
             <UiIcon name={density === "compact" ? "density" : "comfortable"} />
           </button>
@@ -1773,8 +1786,8 @@ export function App() {
             className="icon-button"
             type="button"
             onClick={() => setTheme(theme === "light" ? "dark" : "light")}
-            aria-label={theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}
-            title={theme === "light" ? "Тёмная тема" : "Светлая тема"}
+            aria-label={theme === "light" ? t("app.switchToDark") : t("app.switchToLight")}
+            title={theme === "light" ? t("app.darkTheme") : t("app.lightTheme")}
           >
             <UiIcon name={theme === "light" ? "moon" : "sun"} />
           </button>
@@ -1785,27 +1798,27 @@ export function App() {
               <select
                 value={profile.role}
                 onChange={(event) => void switchDevRole(event.target.value as OperatorRole)}
-                aria-label="Dev-only серверная роль"
+                aria-label={t("app.devRoleLabel")}
               >
                 {roleProfiles.map((candidate) => (
-                  <option value={candidate.id} key={candidate.id}>{candidate.label}</option>
+                  <option value={candidate.id} key={candidate.id}>{t(`role.${candidate.id}`)}</option>
                 ))}
               </select>
             </label>
           ) : (
             <div className="role">
               <span>{profile.name}</span>
-              <small>{profile.label}</small>
+              <small>{t(`role.${profile.role}`)}</small>
             </div>
           )}
-          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию" title="Завершить сессию">
+          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label={t("app.endSession")} title={t("app.endSession")}>
             <UiIcon name="logout" />
           </button>
         </header>
 
         <main ref={mainRef} tabIndex={-1}>
-          <LiveStatus message={`Раздел: ${activeItem.label}`} />
-          <nav className="segmented" aria-label="Группы разделов">
+          <LiveStatus message={t("app.currentSection", { label })} />
+          <nav className="segmented" aria-label={t("app.sectionGroupsLabel")}>
             {navigationGroups.map((group) => {
               const target = navigation.find((item) => item.group === group && !isDenied(item));
               return (
@@ -1818,7 +1831,7 @@ export function App() {
                     if (target) selectScreen(target);
                   }}
                 >
-                  {group}
+                  {t(`group.${group}`)}
                 </button>
               );
             })}

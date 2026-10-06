@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   HealthView,
   KycStatus,
@@ -9,7 +9,7 @@ import type {
   WalletView
 } from "../shared/api";
 import { ApiError, api } from "./api";
-import { applyDocumentLocale, initialLocale, type Locale, type LocaleStorage, type MessageKey, storeLocale, translate } from "./i18n";
+import { applyDocumentLocale, initialLocale, type Locale, type LocaleStorage, type MessageKey, messageKeyFor, storeLocale, translate } from "./i18n";
 import { I18nProvider } from "./i18n-context";
 import { Icon, type IconName } from "./Icon";
 import type { SheetRequest, Tab } from "./navigation";
@@ -86,7 +86,21 @@ export function App() {
   const [launch, setLaunch] = useState<Launch>({ state: "loading" });
   const [tab, setTab] = useState<Tab>("home");
   const [sheet, setSheet] = useState<SheetRequest | undefined>();
+  const sheetOpener = useRef<HTMLElement | undefined>(undefined);
   const [collapsed, setCollapsed] = useState(false);
+
+  const openSheet = useCallback((next: SheetRequest) => {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && !active.closest("dialog")) sheetOpener.current = active;
+    setSheet(next);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!sheet && sheetOpener.current) {
+      if (sheetOpener.current.isConnected) sheetOpener.current.focus({ preventScroll: true });
+      sheetOpener.current = undefined;
+    }
+  }, [sheet]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -143,7 +157,7 @@ export function App() {
           return;
         } catch (error) {
           const code = error instanceof ApiError ? error.reason ?? error.code : "request_failed";
-          if (active) setLaunch({ state: "signed-out", health, message: rejectionMessages[code] ?? "launch.errorTelegramFailed" });
+          if (active) setLaunch({ state: "signed-out", health, message: messageKeyFor(rejectionMessages, code) ?? "launch.errorTelegramFailed" });
           return;
         }
       }
@@ -207,7 +221,7 @@ export function App() {
           <span className="brand">
             <span className="brand__mark" aria-hidden="true">S</span>
             <span className="brand__text">
-              <span className="brand__name serif">SolidChange</span>
+              <span className="brand__name serif">SOLID</span>
               <span className="topbar__title" aria-hidden="true">{t(tabs.find((item) => item.id === tab)?.label ?? "tab.home")}</span>
             </span>
           </span>
@@ -215,7 +229,7 @@ export function App() {
           {toggleTheme}
         </header>
 
-        {launch.state === "loading" ? <div className="launch"><p>{t("launch.checking")}</p></div> : null}
+        {launch.state === "loading" ? <main className="launch"><h1 className="visually-hidden">{t("launch.welcome")}</h1><p aria-live="polite">{t("launch.checking")}</p></main> : null}
 
         {launch.state === "signed-out" ? (
           <main className="launch">
@@ -247,18 +261,18 @@ export function App() {
                   wallet={launch.data.wallet}
                   operations={launch.data.operations}
                   unreadNotifications={launch.data.notifications.unread}
-                  openSheet={setSheet}
+                  openSheet={openSheet}
                   openTab={openTab}
                 />
               ) : null}
-              {tab === "exchange" ? <ExchangeScreen wallet={launch.data.wallet} openSheet={setSheet} /> : null}
-              {tab === "qr" ? <QrScreen wallet={launch.data.wallet} openSheet={setSheet} /> : null}
+              {tab === "exchange" ? <ExchangeScreen wallet={launch.data.wallet} openSheet={openSheet} /> : null}
+              {tab === "qr" ? <QrScreen wallet={launch.data.wallet} openSheet={openSheet} /> : null}
               {tab === "activity" ? <OperationsScreen /> : null}
               {tab === "profile" ? (
                 <ProfileScreen
                   session={launch.session}
                   profile={launch.data.profile}
-                  openSheet={setSheet}
+                  openSheet={openSheet}
                   switchScenario={devLogin}
                   logout={logout}
                   theme={theme}
@@ -278,7 +292,7 @@ export function App() {
                 wallet={launch.data.wallet}
                 profile={launch.data.profile}
                 close={closeSheet}
-                open={setSheet}
+                open={openSheet}
                 onKycVerified={refreshSession}
                 onNotificationsRead={setNotifications}
               />

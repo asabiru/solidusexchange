@@ -14,7 +14,7 @@ import { type ScreeningNetwork, screeningTargets } from "../shared/address-scree
 import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { assetNameKeys, assetNetworkKeys } from "./format";
-import type { MessageKey } from "./i18n";
+import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
 import type { SheetRequest } from "./navigation";
@@ -259,9 +259,9 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
   const outcome = kycOutcomes[state ?? "not_started"];
   return (
     <Sheet title={t("kyc.title")} onClose={close}>
-      <div className="sheet__summary">
+      <div className="sheet__summary" aria-live="polite" aria-atomic="true">
         <span className="sheet__eyebrow">{t("kyc.eyebrow")}</span>
-        <span className="sheet__amount">{t(outcome.title)}</span>
+        <span className="sheet__amount">{t(busy || !view ? "common.loading" : outcome.title)}</span>
         <span className="sheet__summary-meta">
           <span>{t(outcome.detail)}</span>
           <span className="pill pill--warning">{t("common.test")}</span>
@@ -278,7 +278,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
         ))}
       </ol>
       <p className="sheet__note">{t("kyc.testNote")}</p>
-      {failed ? <p className="form-error" role="alert">{t("common.serverUnreachable")}</p> : null}
+      <p className="form-error" aria-live="polite">{failed ? t("common.serverUnreachable") : ""}</p>
       <div className="sheet__actions">
         {view?.canSubmit ? (
           <button type="button" className="cta" disabled={busy} onClick={submit}>
@@ -326,7 +326,7 @@ function LimitsSheet({ profile, close }: { profile: ProfileView; close: () => vo
           <span className="pill pill--muted num">{t("limits.decision", { decision: profile.limits.decision })}</span>
         </div>
       </div>
-      <span className="section-label">{t("limits.fees")}</span>
+      <h3 className="section-label">{t("limits.fees")}</h3>
       <dl className="meta-list">
         {profile.fees.map((fee) => (
           <div key={fee.title}><dt>{fee.title}</dt><dd>{fee.value}</dd></div>
@@ -391,7 +391,7 @@ function OperationSheet({ id, close }: { id: string; close: () => void }) {
         {detail.rate ? <div><dt>{t("common.rate")}</dt><dd className="num">{format.rate(detail.rate)}</dd></div> : null}
         <div><dt>{t("operation.channel")}</dt><dd>{detail.channel}</dd></div>
       </dl>
-      <span className="section-label">{t("operation.progress")}</span>
+      <h3 className="section-label">{t("operation.progress")}</h3>
       <ol className="timeline">
         {detail.timeline.map((step) => (
           <li key={step.title} className={`timeline__step is-${step.state}`}>
@@ -474,6 +474,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
   const [error, setError] = useState<MessageKey | undefined>();
   const [busy, setBusy] = useState(false);
   const inputId = useId();
+  const errorId = useId();
   const { t } = useI18n();
   const target = screeningTargets.find((entry) => entry.id === targetId) ?? screeningTargets[0];
   const pendingId = result?.status === "pending" ? result.id : undefined;
@@ -503,7 +504,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
           setUnavailable(true);
           return;
         }
-        setError(reason instanceof ApiError ? screeningErrors[reason.code] ?? "screening.errorFailed" : "common.serverUnreachable");
+        setError(reason instanceof ApiError ? messageKeyFor(screeningErrors, reason.code) ?? "screening.errorFailed" : "common.serverUnreachable");
       })
       .finally(() => setBusy(false));
   };
@@ -518,13 +519,12 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
         {t("screening.banner")}
       </p>
       <p className="sheet__note">{t("screening.note")}</p>
-      <div className="segment" role="tablist" aria-label={t("screening.targetLabel")}>
+      <fieldset className="segment" aria-label={t("screening.targetLabel")}>
         {screeningTargets.map((entry) => (
           <button
             type="button"
-            role="tab"
             key={entry.id}
-            aria-selected={entry.id === target?.id}
+            aria-pressed={entry.id === target?.id}
             onClick={() => {
               setTargetId(entry.id);
               reset();
@@ -533,7 +533,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
             {entry.label}
           </button>
         ))}
-      </div>
+      </fieldset>
       <label className="form-control" htmlFor={inputId}>
         <span>{t("screening.addressLabel", { network: target ? t(screeningNetworkKeys[target.network]) : "" })}</span>
         <input
@@ -545,6 +545,8 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
           autoCorrect="off"
           spellCheck={false}
           maxLength={64}
+          aria-invalid={error === "screening.errorInvalidAddress"}
+          aria-describedby={errorId}
           onChange={(event) => {
             setAddress(event.target.value);
             reset();
@@ -554,13 +556,15 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
       <button type="button" className="cta cta--secondary" disabled={busy || address.trim() === ""} onClick={check}>
         {t("screening.check")}
       </button>
-      {error ? <p className="form-error" role="alert">{t(error)}</p> : null}
-      {badge ? (
-        <div className="screening-result" aria-live="polite">
-          <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
-          <span>{t(badge.detail)}</span>
-        </div>
-      ) : null}
+      <p className="form-error" id={errorId} aria-live="polite">{error ? t(error) : ""}</p>
+      <div aria-live="polite" aria-atomic="true">
+        {busy ? <p className="sheet__note">{t("common.loading")}</p> : badge ? (
+          <div className="screening-result">
+            <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
+            <span>{t(badge.detail)}</span>
+          </div>
+        ) : null}
+      </div>
     </Sheet>
   );
 }
