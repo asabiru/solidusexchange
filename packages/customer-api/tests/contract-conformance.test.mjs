@@ -183,6 +183,17 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   });
 });
 
+test("rate limiting shares one bucket across rotated loopback source addresses", async () => {
+  const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => NOW_MS });
+  await withServer({ rateLimiter }, async (port) => {
+    const statuses = [];
+    for (const localAddress of ["127.0.0.1", "127.0.0.2", "127.0.0.3", "127.1.2.3", "127.255.255.254"]) {
+      statuses.push((await observe(port, { path: SESSION, headers: customerHeaders(), localAddress })).status);
+    }
+    assert.deepEqual(statuses, [200, 200, 429, 429, 429]);
+  });
+});
+
 test("verifier and directory failures return a client-safe 500 envelope", async () => {
   const failures = [
     { verifier: { async verify() { throw new Error("idp exploded: secret=abc"); } } },

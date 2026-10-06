@@ -5,6 +5,7 @@
 // CapabilitiesView has no field for denial reasons, so only granted
 // capabilities are returned to clients.
 
+/** @type {readonly string[]} */
 export const KYC_STATUSES = Object.freeze(["unverified", "pending", "verified"]);
 
 export const REASON_CODES = Object.freeze({
@@ -13,10 +14,17 @@ export const REASON_CODES = Object.freeze({
   operationNotImplemented: "OPERATION_NOT_IMPLEMENTED"
 });
 
+/** @param {string} decisionId */
 export function decisionReasonCode(decisionId) {
   return `DECISION_${decisionId.replace("-", "_")}_OPEN`;
 }
 
+/**
+ * @param {string} capability
+ * @param {"read" | "onboarding" | "financial"} kind
+ * @param {boolean} requiresVerifiedKyc
+ * @param {string[]} decisions
+ */
 function entry(capability, kind, requiresVerifiedKyc, decisions) {
   return Object.freeze({
     capability,
@@ -65,13 +73,17 @@ export const CAPABILITY_POLICY = Object.freeze([
   ])
 ]);
 
+/** @param {{ kycStatus: string }} input */
 export function evaluateCapabilities({ kycStatus }) {
   if (!KYC_STATUSES.includes(kycStatus)) {
     throw new Error("Unknown KYC status");
   }
+  /** @type {string[]} */
   const granted = [];
+  /** @type {Readonly<{ capability: string, reasons: readonly string[] }>[]} */
   const denied = [];
   for (const policy of CAPABILITY_POLICY) {
+    /** @type {string[]} */
     const reasons = [];
     if (policy.kind === "financial") {
       reasons.push(REASON_CODES.financialCommandsDisabled);
@@ -103,6 +115,15 @@ export function evaluateCapabilities({ kycStatus }) {
 
 // Synthetic KYC status source. A future KYC core adapter replaces it behind
 // `statusFor(subject) -> Promise<"unverified" | "pending" | "verified">`.
+/**
+ * @typedef {object} KycDirectory
+ * @property {(subject: string) => Promise<string>} statusFor
+ */
+
+/**
+ * @param {Readonly<Record<string, string>>} [statuses]
+ * @returns {KycDirectory}
+ */
 export function createSyntheticKycDirectory(statuses = {}) {
   const known = new Map(Object.entries(statuses));
   for (const status of known.values()) {

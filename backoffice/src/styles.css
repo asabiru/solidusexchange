@@ -35,9 +35,9 @@ button {
   --accent-text: 128, 75, 44;
   --accent-ink: 255, 250, 243;
   --info: 36, 62, 104;
-  --success: 52, 94, 72;
-  --warning: 106, 72, 27;
-  --danger: 138, 59, 53;
+  --success: 38, 76, 56;
+  --warning: 94, 63, 22;
+  --danger: 122, 50, 44;
   --page: 241, 238, 231;
   --page-deep: 228, 220, 206;
   --glass: 250, 248, 243;
@@ -45,7 +45,7 @@ button {
   --sub: 255, 253, 249;
   --sub-a: .58;
   --text: 23, 34, 56;
-  --muted: 84, 90, 106;
+  --muted: 66, 72, 88;
   --line: 23, 34, 56;
   --line-a: .09;
   --edge: 255, 255, 255;
@@ -71,10 +71,10 @@ button {
 .access-shell[data-theme="dark"] {
   --accent: 155, 94, 57;
   --accent-text: 226, 166, 124;
-  --info: 176, 197, 231;
-  --success: 155, 198, 170;
-  --warning: 225, 189, 125;
-  --danger: 232, 170, 162;
+  --info: 186, 205, 236;
+  --success: 170, 210, 183;
+  --warning: 232, 197, 136;
+  --danger: 240, 186, 178;
   --page: 9, 16, 28;
   --page-deep: 23, 42, 73;
   --glass: 23, 42, 73;
@@ -82,7 +82,7 @@ button {
   --sub: 241, 238, 231;
   --sub-a: .055;
   --text: 242, 237, 227;
-  --muted: 170, 179, 194;
+  --muted: 194, 202, 216;
   --line: 241, 238, 231;
   --line-a: .09;
   --edge: 241, 238, 231;
@@ -877,7 +877,7 @@ tbody tr:hover {
 
 tbody tr[data-selected="true"] {
   background: rgba(var(--accent), .12);
-  box-shadow: inset 3px 0 0 rgb(var(--accent));
+  box-shadow: inset 3px 0 0 rgb(var(--accent-text));
 }
 
 .table-link,
@@ -1724,6 +1724,107 @@ tbody tr[data-selected="true"] {
   line-height: 1.55;
 }
 
+.report-draft-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border: 1px solid rgba(var(--warning), .32);
+  border-radius: var(--radius);
+  color: rgb(var(--warning));
+  background: rgba(var(--warning), .12);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+.report-draft-banner strong {
+  font-size: 16px;
+}
+
+.report-draft-banner span {
+  font-size: 12px;
+}
+
+.reports-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.report-list ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 12px 12px;
+  list-style: none;
+}
+
+.report-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(var(--line), var(--line-a));
+  border-radius: 14px;
+  color: inherit;
+  background: rgba(var(--sub), var(--sub-a));
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-list button[aria-current="true"] {
+  border-color: rgba(var(--warning), .4);
+  background: rgba(var(--warning), .1);
+}
+
+.report-list small {
+  color: rgb(var(--muted));
+  font-size: 11px;
+}
+
+.report-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.report-section {
+  padding: 12px;
+  border: 1px solid rgba(var(--line), var(--line-a));
+  border-radius: 14px;
+  background: rgba(var(--sub), var(--sub-a));
+}
+
+.report-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.report-section dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.report-section dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.report-section dt {
+  color: rgb(var(--muted));
+}
+
+.report-section dd {
+  margin: 0;
+}
+
 .empty {
   padding: 24px;
   color: rgb(var(--muted));
@@ -1735,12 +1836,49 @@ tbody tr[data-selected="true"] {
   padding-block: 16px;
 }
 
+a:focus-visible,
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
+[tabindex]:focus-visible,
 .search:focus-within {
   outline: 2px solid rgb(var(--accent-text));
   outline-offset: 2px;
+}
+
+main[tabindex="-1"]:focus {
+  outline: 0;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.skip-link {
+  position: fixed;
+  z-index: 60;
+  top: 12px;
+  left: 12px;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: rgb(var(--rail-active-ink));
+  background: rgb(var(--rail-active));
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  transform: translateY(-160%);
+}
+
+.skip-link:focus {
+  transform: none;
 }
 
 .search input:focus-visible {
@@ -1971,6 +2109,7 @@ select:focus-visible,
 
   .metrics,
   .audit-summary,
+  .reports-layout,
   .bento,
   .grid,
   .approval-grid,

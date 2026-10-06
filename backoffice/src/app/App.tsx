@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { roleProfiles, type Capability, type OperatorRole } from "../auth/access";
 import {
   ApiError,
@@ -15,6 +15,9 @@ import {
   getHealth,
   getInvestigations,
   getKycCases,
+  getReport,
+  getReportExport,
+  getReports,
   getSession,
   logout,
   previewApproval,
@@ -31,6 +34,7 @@ import {
   type SessionPayload,
   type StepUpChallengePayload
 } from "../data/client";
+import type { DraftReport, ReportId, ReportListPayload } from "../data/reports";
 import type {
   AmlCase,
   ApprovalPreview,
@@ -43,6 +47,12 @@ import type {
   Tone,
   WorkflowCheck
 } from "../data/demo";
+import type {
+  KycProviderEvidence,
+  KytProviderEvidence,
+  ProviderCallbackRecord,
+  ProviderEvidenceFeed
+} from "../data/provider-evidence";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation";
 import { runtime } from "./runtime";
 import { ScreenIcon, UiIcon } from "./icons";
@@ -61,7 +71,14 @@ function Status({ children, tone = "neutral" }: { children: React.ReactNode; ton
 }
 
 function TableShell({ children, label }: { children: React.ReactNode; label: string }) {
-  return <section className="table-scroll" aria-label={label}>{children}</section>;
+  return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable table regions must stay keyboard-scrollable (WCAG 2.1.1)
+    <section className="table-scroll" aria-label={label} tabIndex={0}>{children}</section>
+  );
+}
+
+function LiveStatus({ message }: { message: string }) {
+  return <output className="sr-only" aria-live="polite" aria-atomic="true">{message}</output>;
 }
 
 function Backdrop() {
@@ -130,7 +147,7 @@ function DashboardView({ data }: { data: DashboardPayload }) {
           </header>
           <TableShell label="Приоритетные очереди">
             <table>
-              <thead><tr><th>Очередь</th><th>Критично</th><th>Всего</th><th>Старейшая</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Очередь</th><th scope="col">Критично</th><th scope="col">Всего</th><th scope="col">Старейшая</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {data.queues.map((row) => (
                   <tr key={row.queue}>
@@ -200,7 +217,7 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
           </header>
           <TableShell label="Список клиентов">
             <table>
-              <thead><tr><th>Клиент</th><th>KYC / KYB</th><th>Risk</th><th>30d volume</th><th>Next action</th></tr></thead>
+              <thead><tr><th scope="col">Клиент</th><th scope="col">KYC / KYB</th><th scope="col">Risk</th><th scope="col">30d volume</th><th scope="col">Next action</th></tr></thead>
               <tbody>
                 {customers.map((customer) => (
                   <tr key={customer.id} data-selected={customer.id === selected?.id}>
@@ -208,6 +225,7 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
                       <button
                         className="person"
                         type="button"
+                        aria-current={customer.id === selected?.id ? "true" : undefined}
                         onClick={() => setSelectedId(customer.id)}
                       >
                         <span>{customer.initials}</span>
@@ -290,6 +308,122 @@ function WorkflowChecks({ checks }: { checks: readonly WorkflowCheck[] }) {
   );
 }
 
+function linkedEvidence<T extends KycProviderEvidence | KytProviderEvidence>(
+  feed: ProviderEvidenceFeed<T>,
+  caseId: string
+): string {
+  const ids = feed.cases.filter((item) => item.linkedCaseId === caseId).map((item) => item.id);
+  return ids.length ? ids.join(", ") : "Not linked";
+}
+
+function CallbackList({ records }: { records: readonly ProviderCallbackRecord[] }) {
+  if (!records.length) return <div className="empty">Callbacks отсутствуют</div>;
+  return (
+    <div className="check-list">
+      {records.map((record) => (
+        <div key={record.deliveryId}>
+          <span>
+            <strong>
+              {record.deliveryId}
+              {record.sequence !== null ? ` · seq ${record.sequence}` : ""}
+              {record.status ? ` · ${record.status}` : ""}
+            </strong>
+            <small>
+              {record.deliveredAt} · {record.origin}
+              {record.probe ? ` (${record.probe})` : ""}
+              {record.verificationReason ? ` · ${record.verificationReason}` : ""}
+            </small>
+          </span>
+          <Status tone={record.verification === "rejected" ? "danger" : record.accepted ? "success" : "warning"}>
+            {record.verification === "rejected" ? "rejected" : record.inboxAction ?? "verified"}
+          </Status>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEvidence>({
+  title,
+  feed
+}: {
+  title: string;
+  feed: ProviderEvidenceFeed<T>;
+}) {
+  const [selectedId, setSelectedId] = useState(feed.cases[0]?.id ?? "");
+  const selected = feed.cases.find((item) => item.id === selectedId) ?? feed.cases[0];
+
+  return (
+    <section className="grid risk-grid">
+      <article className="panel">
+        <header className="panel-heading">
+          <div><h2>{title}</h2><p>{feed.cases.length} synthetic simulator runs · signed callbacks verified before projection</p></div>
+          <Status tone="info">Evidence only</Status>
+        </header>
+        <TableShell label={title}>
+          <table>
+            <thead><tr><th scope="col">Run</th><th scope="col">Scenario</th><th scope="col">Provider claim</th><th scope="col">Projection</th><th scope="col">Seq</th><th scope="col">Callbacks</th></tr></thead>
+            <tbody>
+              {feed.cases.map((item) => (
+                <tr key={item.id} data-selected={item.id === selected?.id}>
+                  <td>
+                    <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
+                      {item.id}
+                    </button>
+                    <small className="cell-note">{item.linkedCaseId ?? "unlinked"}</small>
+                  </td>
+                  <td>{item.label}<small className="cell-note">{item.scenario}</small></td>
+                  <td>{item.providerStatus}</td>
+                  <td><Status tone={item.tone}>{item.projectedStatus}</Status></td>
+                  <td className="numeric">{item.sequence}</td>
+                  <td>
+                    {item.verification.verified}/{item.verification.delivered} verified
+                    <small className="cell-note">{item.verification.rejected} rejected · {item.verification.heldForReview} held</small>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableShell>
+      </article>
+      {selected && (
+        <aside className="panel case-detail">
+          <header className="panel-heading">
+            <div><h2>{selected.id}</h2><p>{selected.source} · {selected.environment}</p></div>
+            <Status tone={selected.tone}>{selected.projectedStatus}</Status>
+          </header>
+          <dl className="detail-list">
+            <div><dt>Provider reference</dt><dd className="hash-value">{selected.providerReference ?? "—"}</dd></div>
+            {selected.domain === "kyc" ? (
+              <div><dt>Applicant</dt><dd>{selected.applicantRef} · {selected.level}</dd></div>
+            ) : (
+              <>
+                <div><dt>Binding</dt><dd>{selected.asset} · {selected.network} · {selected.direction}</dd></div>
+                <div><dt>Risk</dt><dd>{selected.riskLevel ?? "—"} · {selected.riskScore ?? "—"}{selected.sanctionsHit ? " · sanctions hit" : ""}</dd></div>
+              </>
+            )}
+            <div><dt>Reason codes</dt><dd>{selected.reasonCodes.length ? selected.reasonCodes.join(", ") : "—"}</dd></div>
+            {selected.domain === "kyc" && selected.requestedItems.length > 0 && (
+              <div><dt>Requested items</dt><dd>{selected.requestedItems.join(", ")}</dd></div>
+            )}
+            <div><dt>Verification</dt><dd>{selected.verification.result}</dd></div>
+            <div><dt>Deadline</dt><dd>{selected.deadline ?? "—"}{selected.timedOut ? " · timed out" : ""}</dd></div>
+            {selected.outage && <div><dt>Outage</dt><dd>{selected.outage.code}{selected.outage.retryable ? " · retryable" : ""}</dd></div>}
+          </dl>
+          <h3 className="detail-section-title">Received callbacks</h3>
+          <CallbackList records={selected.receivedCallbacks} />
+          <h3 className="detail-section-title">Rejected callbacks</h3>
+          <CallbackList records={selected.rejectedCallbacks} />
+          <div className="safe-action">
+            <strong>Evidence only · decision via maker-checker</strong>
+            <p>Provider status never decides a case; operator dispositions stay on the approval path with step-up.</p>
+          </div>
+        </aside>
+      )}
+    </section>
+  );
+}
+
 function KycView({ query, data }: { query: string; data: KycPayload }) {
   const cases = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
@@ -318,17 +452,17 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no provider calls</p></div>
+            <div><h2>Identity cases</h2><p>{cases.length} synthetic cases · no live provider calls</p></div>
             <Status tone="info">Read-only</Status>
           </header>
           <TableShell label="KYC и KYB cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Stage</th><th>Risk</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Stage</th><th scope="col">Risk</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.type} · {item.status}</small>
@@ -346,13 +480,14 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
             </table>
           </TableShell>
         </article>
-        {selected && <KycCaseDetail item={selected} />}
+        {selected && <KycCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
+      <ProviderEvidencePanel title="KYC provider evidence" feed={data.providerEvidence} />
     </>
   );
 }
 
-function KycCaseDetail({ item }: { item: KycCase }) {
+function KycCaseDetail({ item, providerEvidence }: { item: KycCase; providerEvidence: string }) {
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -369,6 +504,7 @@ function KycCaseDetail({ item }: { item: KycCase }) {
         <div><dt>SLA</dt><dd>{item.sla}</dd></div>
         {item.uboSummary && <div><dt>UBO</dt><dd>{item.uboSummary}</dd></div>}
         <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
       </dl>
       <h3 className="detail-section-title">Evidence</h3>
       <EvidenceList items={item.evidenceItems} />
@@ -409,17 +545,17 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
       <section className="grid risk-grid">
         <article className="panel">
           <header className="panel-heading">
-            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · provider payloads absent</p></div>
+            <div><h2>AML cases</h2><p>{cases.length} synthetic cases · simulator evidence only</p></div>
             <Status tone="warning">Decision gated</Status>
           </header>
           <TableShell label="AML cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Source</th><th>Severity</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Source</th><th scope="col">Severity</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.state}</small>
@@ -438,13 +574,14 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
             </table>
           </TableShell>
         </article>
-        {selected && <AmlCaseDetail item={selected} />}
+        {selected && <AmlCaseDetail item={selected} providerEvidence={linkedEvidence(data.providerEvidence, selected.id)} />}
       </section>
+      <ProviderEvidencePanel title="KYT provider evidence" feed={data.providerEvidence} />
     </>
   );
 }
 
-function AmlCaseDetail({ item }: { item: AmlCase }) {
+function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; providerEvidence: string }) {
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -456,6 +593,7 @@ function AmlCaseDetail({ item }: { item: AmlCase }) {
         <div><dt>Opened</dt><dd>{item.openedAt}</dd></div>
         <div><dt>Exposure</dt><dd>{item.exposure}</dd></div>
         <div><dt>Audit evidence</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+        <div><dt>Provider evidence</dt><dd>{providerEvidence}</dd></div>
       </dl>
       <h3 className="detail-section-title">Screening</h3>
       <WorkflowChecks checks={item.screenings} />
@@ -522,12 +660,12 @@ function InvestigationsView({
           </header>
           <TableShell label="Investigation cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Category</th><th>Priority</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.state}</small>
@@ -633,12 +771,12 @@ function FraudView({ query, data }: { query: string; data: FraudPayload }) {
           </header>
           <TableShell label="Fraud alerts">
             <table>
-              <thead><tr><th>Alert</th><th>Subject</th><th>Scenario</th><th>Score</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Alert</th><th scope="col">Subject</th><th scope="col">Scenario</th><th scope="col">Score</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {alerts.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.channel} · {item.state}</small>
@@ -704,6 +842,8 @@ function ApprovalsView({
   const [selected, setSelected] = useState<ApprovalSummary>(approvals[0]);
   const [preview, setPreview] = useState<ApprovalPreview>();
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "failed">("idle");
+  const stepUpErrorId = useId();
+  const previewReasonId = useId();
   const [challenge, setChallenge] = useState<StepUpChallengePayload>();
   const [verificationCode, setVerificationCode] = useState("");
   const [stepUpState, setStepUpState] = useState<
@@ -804,7 +944,7 @@ function ApprovalsView({
           </header>
           <TableShell label="Ожидающие approvals">
             <table>
-              <thead><tr><th>ID</th><th>Action</th><th>Exposure</th><th>Evidence</th><th>Age</th><th>State</th></tr></thead>
+              <thead><tr><th scope="col">ID</th><th scope="col">Action</th><th scope="col">Exposure</th><th scope="col">Evidence</th><th scope="col">Age</th><th scope="col">State</th></tr></thead>
               <tbody>
                 {approvals.map((approval) => (
                   <tr key={approval.id} data-selected={approval.id === selected.id}>
@@ -812,6 +952,7 @@ function ApprovalsView({
                       <button
                         className="table-link"
                         type="button"
+                        aria-current={approval.id === selected.id ? "true" : undefined}
                         onClick={() => {
                           operationVersion.current += 1;
                           setSelected(approval);
@@ -888,6 +1029,8 @@ function ApprovalsView({
                     <input
                       autoComplete="one-time-code"
                       inputMode="numeric"
+                      aria-invalid={stepUpState === "retry"}
+                      aria-describedby={stepUpState === "retry" ? stepUpErrorId : undefined}
                       maxLength={6}
                       value={verificationCode}
                       onChange={(event) => {
@@ -896,7 +1039,7 @@ function ApprovalsView({
                     />
                   </label>
                   {stepUpState === "retry" && (
-                    <p className="step-up-result" data-state="failed">
+                    <p className="step-up-result" data-state="failed" id={stepUpErrorId} role="alert">
                       Код отклонён. Challenge остаётся активным до лимита попыток.
                     </p>
                   )}
@@ -918,7 +1061,7 @@ function ApprovalsView({
               ) : (
                 <>
                   {(stepUpState === "failed" || stepUpState === "locked") && (
-                    <p className="step-up-result" data-state="failed">
+                    <p className="step-up-result" data-state="failed" role="alert">
                       {stepUpState === "locked"
                         ? "Challenge заблокирован после исчерпания попыток."
                         : "Challenge отклонён или устарел. Запустите новый."}
@@ -942,19 +1085,33 @@ function ApprovalsView({
             className="button primary"
             type="button"
             disabled={!mayPreview || previewState === "loading"}
+            aria-describedby={previewReasonId}
             onClick={() => void loadPreview()}
           >
             {previewState === "loading" ? "Формируем preview…" : "Сформировать безопасный preview"}
           </button>
-          <small className="disabled-reason">
+          <small className="disabled-reason" id={previewReasonId}>
             {!mayPreview
               ? "Роль не имеет approvals:preview."
               : "Финансовая команда не создаётся и не отправляется."}
           </small>
           {previewState === "failed" && (
-            <div className="preview-error">Preview отклонён BFF или устарел.</div>
+            <div className="preview-error" role="alert">Preview отклонён BFF или устарел.</div>
           )}
           {preview && <ApprovalPreviewPanel preview={preview} />}
+          <LiveStatus
+            message={
+              previewState === "loading"
+                ? "Формируем безопасный preview"
+                : stepUpState === "creating"
+                  ? "Создаём synthetic step-up challenge"
+                  : stepUpState === "verifying"
+                    ? "Проверяем одноразовый код"
+                    : preview
+                      ? "Preview сформирован"
+                      : ""
+            }
+          />
         </aside>
       </section>
     </>
@@ -1060,20 +1217,21 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
           </div>
         </header>
         {exportState === "failed" && (
-          <div className="preview-error">Экспорт отклонён или integrity verification недоступна.</div>
+          <div className="preview-error" role="alert">Экспорт отклонён или integrity verification недоступна.</div>
         )}
+        <LiveStatus message={exportState === "loading" ? "Экспорт evidence…" : ""} />
         <TableShell label="Audit trail">
           <table>
             <thead>
               <tr>
-                <th>Seq</th>
-                <th>Event</th>
-                <th>Actor</th>
-                <th>Resource</th>
-                <th>Outcome</th>
-                <th>Evidence</th>
-                <th>Previous hash</th>
-                <th>Hash</th>
+                <th scope="col">Seq</th>
+                <th scope="col">Event</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Evidence</th>
+                <th scope="col">Previous hash</th>
+                <th scope="col">Hash</th>
               </tr>
             </thead>
             <tbody>
@@ -1093,6 +1251,157 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
           </table>
         </TableShell>
       </article>
+    </>
+  );
+}
+
+const draftLabel = "Черновик — не для подачи регулятору";
+
+function ReportsView({ data }: { data: ReportListPayload }) {
+  const [selected, setSelected] = useState<ReportId | undefined>(data.reports[0]?.id);
+  const [report, setReport] = useState<DraftReport | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    setDetailState("loading");
+    setReport(undefined);
+    getReport(selected)
+      .then((payload) => {
+        if (!active) return;
+        setReport(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected]);
+
+  async function downloadCsv(id: ReportId) {
+    setExportState("loading");
+    try {
+      const payload = await getReportExport(id);
+      const blob = new Blob([payload.csv], { type: payload.mediaType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = payload.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportState("idle");
+    } catch {
+      setExportState("failed");
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        title="Отчёты"
+        description="Draft compliance reports · synthetic dev data · read-only signed evidence"
+      />
+      <section className="report-draft-banner" role="note">
+        <strong>{draftLabel}</strong>
+        <span>
+          status: {data.status} · not_for_submission · {data.environment} · период {data.period.from.slice(0, 10)}
+        </span>
+      </section>
+      <section className="reports-layout">
+        <article className="panel report-list">
+          <header className="panel-heading">
+            <div><h2>Доступные черновики</h2><p>{data.reports.length} deterministic reports</p></div>
+          </header>
+          <ul>
+            {data.reports.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  aria-current={selected === item.id ? "true" : undefined}
+                  onClick={() => setSelected(item.id)}
+                >
+                  <strong>{item.title}</strong>
+                  <small>{item.description}</small>
+                  <Status tone="warning">draft</Status>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </article>
+        <article className="panel report-detail">
+          {detailState === "loading" && <div className="empty">Загрузка черновика…</div>}
+          <LiveStatus
+            message={detailState === "loading" ? "Загрузка черновика…" : exportState === "loading" ? "Экспорт CSV…" : ""}
+          />
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">Отчёт отклонён или integrity verification недоступна.</div>
+          )}
+          {report && (
+            <>
+              <header className="panel-heading">
+                <div>
+                  <h2>{report.title}</h2>
+                  <p>{draftLabel} · digest {report.contentDigest.slice(0, 12)}…</p>
+                </div>
+                <div className="audit-actions">
+                  <Status tone="warning">Черновик</Status>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={exportState === "loading"}
+                    onClick={() => void downloadCsv(report.id)}
+                  >
+                    {exportState === "loading" ? "Экспорт…" : "Скачать CSV"}
+                  </button>
+                </div>
+              </header>
+              {exportState === "failed" && (
+                <div className="preview-error" role="alert">CSV экспорт отклонён или integrity verification недоступна.</div>
+              )}
+              <div className="report-sections">
+                {report.sections.map((item) => (
+                  <section key={item.id} className="report-section">
+                    <h3>{item.title}</h3>
+                    <dl>
+                      {item.rows.map((row) => (
+                        <div key={row.key}>
+                          <dt>{row.key}</dt>
+                          <dd className="numeric">
+                            {row.value}
+                            {row.unit !== "count" && <small> {row.unit}</small>}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+              </div>
+              {report.tables.map((table) => (
+                <TableShell key={table.id} label={table.title}>
+                  <table>
+                    <thead>
+                      <tr>{table.columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row) => (
+                        <tr key={row[0]}>
+                          {row.map((cell, index) => <td key={table.columns[index]}>{cell}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableShell>
+              ))}
+            </>
+          )}
+        </article>
+      </section>
     </>
   );
 }
@@ -1132,6 +1441,7 @@ interface WorkspaceData {
   fraud?: FraudPayload;
   approvals?: ApprovalsPayload;
   audit?: AuditPayload;
+  reports?: ReportListPayload;
 }
 
 type AccessState =
@@ -1168,7 +1478,7 @@ function AccessGate({
   return (
     <div className="access-shell" data-theme={theme}>
       <Backdrop />
-      <section className="access-card">
+      <main className="access-card">
         <div className="brand access-brand">
           <span>SC</span>
           <div>
@@ -1186,7 +1496,7 @@ function AccessGate({
         {state.status === "failed" && (
           <>
             <h1 className="access-title">Backoffice недоступен</h1>
-            <p className="access-copy">{state.message}</p>
+            <p className="access-copy" role="alert">{state.message}</p>
             <Status tone="danger">Fail closed</Status>
           </>
         )}
@@ -1226,7 +1536,7 @@ function AccessGate({
             )}
           </>
         )}
-      </section>
+      </main>
     </div>
   );
 }
@@ -1241,6 +1551,17 @@ export function App() {
   const [density, setDensity] = useState<Density>("compact");
   const [railExpanded, setRailExpanded] = useState(false);
   const [tooltip, setTooltip] = useState<{ label: string; top: number; left: number }>();
+  const mainRef = useRef<HTMLElement>(null);
+  const navigationId = useId();
+
+  useEffect(() => {
+    if (!tooltip) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setTooltip(undefined);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [tooltip]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -1260,7 +1581,7 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit] = await Promise.all([
+      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
@@ -1268,12 +1589,13 @@ export function App() {
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
         hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
         hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined),
-        hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined)
+        hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined),
+        hasCapability(session, "reports:read") ? getReports() : Promise.resolve(undefined)
       ]);
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit }
+        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -1360,6 +1682,9 @@ export function App() {
 
   return (
     <div className="app" data-theme={theme} data-density={density} data-rail={railExpanded ? "expanded" : "collapsed"}>
+      <button className="skip-link" type="button" onClick={() => mainRef.current?.focus()}>
+        Перейти к содержимому
+      </button>
       <Backdrop />
       <aside className="sidebar">
         <div className="brand"><span>SC</span><div><strong>SolidChange</strong><small>Operator backoffice</small></div></div>
@@ -1367,6 +1692,7 @@ export function App() {
           className="rail-toggle"
           type="button"
           aria-expanded={railExpanded}
+          aria-controls={navigationId}
           aria-label={railExpanded ? "Свернуть навигацию" : "Развернуть навигацию"}
           onClick={() => {
             setTooltip(undefined);
@@ -1375,7 +1701,7 @@ export function App() {
         >
           <UiIcon name={railExpanded ? "collapse" : "expand"} />
         </button>
-        <nav aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
+        <nav id={navigationId} aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
           {navigationGroups.map((group) => (
             <div className="nav-group" key={group}>
               <p>{group}</p>
@@ -1434,10 +1760,22 @@ export function App() {
           </label>
           <div className="topbar-spacer" />
           <span className="environment"><i />DEV · dry-run</span>
-          <button className="icon-button density-button" type="button" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")} aria-label="Переключить плотность">
+          <button
+            className="icon-button density-button"
+            type="button"
+            onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+            aria-label={density === "compact" ? "Переключить на просторную плотность" : "Переключить на компактную плотность"}
+            title={density === "compact" ? "Просторная плотность" : "Компактная плотность"}
+          >
             <UiIcon name={density === "compact" ? "density" : "comfortable"} />
           </button>
-          <button className="icon-button" type="button" onClick={() => setTheme(theme === "light" ? "dark" : "light")} aria-label="Переключить тему">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label={theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}
+            title={theme === "light" ? "Тёмная тема" : "Светлая тема"}
+          >
             <UiIcon name={theme === "light" ? "moon" : "sun"} />
           </button>
           <span className="avatar" aria-hidden="true">{profile.initials}</span>
@@ -1460,12 +1798,13 @@ export function App() {
               <small>{profile.label}</small>
             </div>
           )}
-          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию">
+          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию" title="Завершить сессию">
             <UiIcon name="logout" />
           </button>
         </header>
 
-        <main>
+        <main ref={mainRef} tabIndex={-1}>
+          <LiveStatus message={`Раздел: ${activeItem.label}`} />
           <nav className="segmented" aria-label="Группы разделов">
             {navigationGroups.map((group) => {
               const target = navigation.find((item) => item.group === group && !isDenied(item));
@@ -1512,6 +1851,7 @@ export function App() {
               mayExport={hasCapability(access.data.session, "audit:export")}
             />
           )}
+          {screen === "reports" && access.data.reports && <ReportsView data={access.data.reports} />}
           {!activeItem.implemented && <PlaceholderView item={activeItem} />}
         </main>
       </div>

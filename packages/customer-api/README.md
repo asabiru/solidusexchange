@@ -30,7 +30,7 @@ A synthetic HMAC-SHA256 dev verifier is enabled only when all of these hold:
 
 - `CUSTOMER_API_DEV_AUTH=synthetic`;
 - `CUSTOMER_API_DEV_TOKEN_KEY` is 64 lowercase hex characters (local random value, never a real secret);
-- `NODE_ENV` is not `production`;
+- `NODE_ENV` is not `production` (compared case-insensitively after trimming whitespace);
 - the bind host is loopback (`127.0.0.1` or `::1`; anything else refuses to start).
 
 Synthetic tokens carry a `syn_cust_` subject and a short expiry (max 1 hour).
@@ -57,13 +57,30 @@ exists in `Documentation/regulated-core/decision-register.md` and is still `Open
 - Duplicate, missing or malformed headers, request bodies and body headers return
   `400 VALIDATION_FAILED`; malformed HTTP is answered with the same envelope.
 - `X-Request-Id` is echoed only when valid; otherwise a fresh UUIDv7 is generated.
-- A fixed-window rate limit returns `429 RATE_LIMITED` with `Retry-After`.
+- A fixed-window rate limit returns `429 RATE_LIMITED` with `Retry-After`. All
+  IPv4 loopback sources (`127.0.0.0/8`) share one bucket, so rotating the local
+  source address does not reset the limit.
 - Unexpected failures return a generic `500 INTERNAL_ERROR` without internals.
+
+## Dev observability
+
+- `CUSTOMER_API_LOG=json` writes one JSON line per completed request to stdout:
+  `{ ts, service, method, route, status, duration_ms, request_id }`. `route` is
+  a contract path, `/metrics` or `unmatched`; `request_id` is a server-generated
+  random hex value, never the client `X-Request-Id`. No headers, tokens, query
+  strings, subjects or peer addresses are logged.
+- `CUSTOMER_API_METRICS=loopback` serves Prometheus text at `GET /metrics` to
+  loopback peers only (no `Origin`, proxy or cross-site headers); non-GET is
+  `405`. It is outside the customer contract and `404` when the flag is unset.
+- Both default to `off`; any other value fails startup.
 
 ## Run
 
 ```bash
 cd packages/customer-api
+npm ci                                     # dev-only tooling: typescript, @types/node
+npm run lint                               # node --check on every .mjs file + boundary check
+npm run typecheck                          # tsc --noEmit, checkJs + strict over src/ and scripts/
 npm test                                   # boundary check + conformance suite
 npm run dev                                # deny-all auth on 127.0.0.1:8790
 
@@ -79,6 +96,14 @@ curl -s http://127.0.0.1:8790/api/v1/customer/capabilities \
 
 Other settings: `CUSTOMER_API_HOST` (loopback only), `CUSTOMER_API_PORT`,
 `CUSTOMER_API_RATE_LIMIT_PER_MINUTE`.
+
+## No build step
+
+The package is plain Node ESM (`.mjs`) and runs directly from `src/`, so there
+is no `build` script and nothing to compile or bundle. Types are JSDoc
+annotations checked by `npm run typecheck` (`tsconfig.json`, `noEmit`). The
+only devDependencies are the exact `typescript` and `@types/node` versions
+pinned by `scripts/check-boundary.mjs`; runtime dependencies stay forbidden.
 
 ## Conformance tests
 

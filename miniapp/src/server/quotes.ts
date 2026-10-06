@@ -16,10 +16,11 @@ export const midPricesRub: Readonly<Record<AssetCode, bigint>> = Object.freeze({
   TON: 28_510_000_000n
 });
 
-export type QuoteErrorCode = "invalid_pair" | "invalid_amount" | "amount_too_small";
+export type QuoteErrorCode = "invalid_pair" | "invalid_amount" | "amount_too_small" | "quote_unavailable";
+export type QuoteUnavailableReason = "provider_outage" | "stale_price" | "invalid_quote";
 
 export class QuoteError extends Error {
-  constructor(readonly code: QuoteErrorCode) {
+  constructor(readonly code: QuoteErrorCode, readonly reason?: QuoteUnavailableReason) {
     super(code);
     this.name = "QuoteError";
   }

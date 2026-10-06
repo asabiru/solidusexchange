@@ -1,6 +1,10 @@
 import type {
+  ActivityView,
+  AddressScreeningView,
   HealthView,
   KycStatus,
+  KycVerificationView,
+  NotificationsView,
   OperationDetail,
   OperationSummary,
   ProfileView,
@@ -8,6 +12,7 @@ import type {
   SessionView,
   WalletView
 } from "../shared/api";
+import type { ScreeningAsset, ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
 
 export class ApiError extends Error {
@@ -48,6 +53,15 @@ export const api = {
   operations: () => call<{ operations: OperationSummary[] }>("/bff/operations"),
   operation: (id: string) => call<OperationDetail>(`/bff/operations/${encodeURIComponent(id)}`),
   profile: () => call<ProfileView>("/bff/profile"),
+  kycStatus: () => call<KycVerificationView>("/bff/kyc/status"),
+  submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
+  notifications: () => call<NotificationsView>("/bff/notifications"),
+  activity: () => call<ActivityView>("/bff/activity"),
+  markNotificationsRead: (ids: readonly string[]) =>
+    call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
+  screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>
+    call<AddressScreeningView>("/bff/address-screening", { asset, network, address }),
+  addressScreening: (id: string) => call<AddressScreeningView>(`/bff/address-screening/${encodeURIComponent(id)}`),
   quote: (from: AssetCode, to: AssetCode, amount: string) => {
     const query = new URLSearchParams({ from, to, amount });
     return call<QuotePreview>(`/bff/quotes/preview?${query.toString()}`);

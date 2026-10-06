@@ -11,6 +11,13 @@ import type {
   Metric,
   QueueRow
 } from "./demo.js";
+import type {
+  DraftReport,
+  ReportExportPayload,
+  ReportId,
+  ReportListPayload
+} from "./reports.js";
+import type { KycProviderEvidence, KytProviderEvidence, ProviderEvidenceFeed } from "./provider-evidence.js";
 
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
@@ -63,10 +70,12 @@ export interface CustomersPayload {
 
 export interface KycPayload {
   cases: readonly KycCase[];
+  providerEvidence: ProviderEvidenceFeed<KycProviderEvidence>;
 }
 
 export interface AmlPayload {
   cases: readonly AmlCase[];
+  providerEvidence: ProviderEvidenceFeed<KytProviderEvidence>;
 }
 
 export interface InvestigationsPayload {
@@ -429,6 +438,18 @@ export function getApprovals(): Promise<ApprovalsPayload> {
 
 export function getAudit(): Promise<AuditPayload> {
   return getSigned("/bff/api/audit", "audit");
+}
+
+export function getReports(): Promise<ReportListPayload> {
+  return getSigned("/bff/api/reports", "reports");
+}
+
+export function getReport(id: ReportId): Promise<DraftReport> {
+  return getSigned(`/bff/api/reports/${encodeURIComponent(id)}`, `report:${id}`);
+}
+
+export function getReportExport(id: ReportId): Promise<ReportExportPayload> {
+  return getSigned(`/bff/api/reports/${encodeURIComponent(id)}/export`, `report-export:${id}`);
 }
 
 export async function getAuditExport(): Promise<SignedEnvelope<AuditExportPayload>> {

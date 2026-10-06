@@ -1,10 +1,11 @@
 import { useEffect, useId, useState } from "react";
 import type { QuotePreview, WalletView } from "../../shared/api";
 import { type AssetCode, assets } from "../../shared/assets";
-import { formatDecimal, fromUnits, isDecimalString, normalizeAmountInput, toUnits } from "../../shared/decimal";
+import { fromUnits, isDecimalString, normalizeAmountInput, toUnits } from "../../shared/decimal";
 import { formatCountdown, quoteSecondsRemaining, quoteState } from "../../shared/quote";
 import { ApiError, api } from "../api";
-import { amount, money, rate } from "../format";
+import type { MessageKey } from "../i18n";
+import { useI18n } from "../i18n-context";
 import { Icon } from "../Icon";
 import type { SheetRequest } from "../navigation";
 import { DisabledCta, ScreenTitle, Tick } from "../ui";
@@ -17,10 +18,11 @@ interface Props {
   openSheet: (sheet: SheetRequest) => void;
 }
 
-const quoteErrors: Readonly<Record<string, string>> = {
-  invalid_amount: "Введите сумму больше нуля.",
-  amount_too_small: "Сумма слишком мала для обмена.",
-  invalid_pair: "Эта пара недоступна."
+const quoteErrors: Readonly<Record<string, MessageKey>> = {
+  invalid_amount: "exchange.errorInvalidAmount",
+  amount_too_small: "exchange.errorAmountTooSmall",
+  invalid_pair: "exchange.errorInvalidPair",
+  quote_unavailable: "exchange.errorQuoteUnavailable"
 };
 
 function useNow(active: boolean): number {
@@ -39,10 +41,12 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
   const [crypto, setCrypto] = useState<CryptoAsset>("USDT");
   const [input, setInput] = useState("25000");
   const [quote, setQuote] = useState<{ value: QuotePreview; offset: number } | undefined>();
-  const [error, setError] = useState<string | undefined>();
+  const [error, setError] = useState<MessageKey | undefined>();
   const [loading, setLoading] = useState(false);
   const amountId = useId();
   const assetId = useId();
+  const { t, format } = useI18n();
+  const { amount, money, rate } = format;
 
   const from: AssetCode = side === "buy" ? "RUB" : crypto;
   const to: AssetCode = side === "buy" ? crypto : "RUB";
@@ -74,23 +78,23 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       setQuote({ value, offset: value.serverTime - Date.now() });
     } catch (caught) {
       setQuote(undefined);
-      setError(caught instanceof ApiError ? quoteErrors[caught.code] ?? "Не удалось получить котировку." : "Не удалось получить котировку.");
+      setError(caught instanceof ApiError ? quoteErrors[caught.code] ?? "exchange.errorQuoteFailed" : "exchange.errorQuoteFailed");
     } finally {
       setLoading(false);
     }
   }
 
   const statusText = !quote
-    ? "Нет котировки"
+    ? t("exchange.statusNone")
     : state === "expired"
-      ? "Котировка истекла"
-      : `Курс актуален · ${formatCountdown(remaining)}`;
+      ? t("exchange.statusExpired")
+      : t("exchange.statusFresh", { countdown: formatCountdown(remaining) });
 
   return (
-    <section className="screen screen--exchange" aria-label="Обмен">
-      <ScreenTitle>Обмен</ScreenTitle>
+    <section className="screen screen--exchange" aria-label={t("tab.exchange")}>
+      <ScreenTitle>{t("tab.exchange")}</ScreenTitle>
 
-      <div className="segment" role="tablist" aria-label="Направление обмена">
+      <div className="segment" role="tablist" aria-label={t("exchange.directionLabel")}>
         {(["buy", "sell"] as const).map((value) => (
           <button
             type="button"
@@ -102,7 +106,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
               reset();
             }}
           >
-            {value === "buy" ? "Купить" : "Продать"}
+            {t(value === "buy" ? "exchange.buy" : "exchange.sell")}
           </button>
         ))}
       </div>
@@ -110,15 +114,15 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       {wallet.kyc !== "verified" ? (
         <button type="button" className="inline-alert" onClick={() => openSheet({ kind: "kyc-required" })}>
           <Icon name="id-card" size="sm" />
-          <span>Предпросмотр доступен, но для обмена нужна идентификация.</span>
+          <span>{t("exchange.kycAlert")}</span>
           <Icon name="chevron-right" size="sm" />
         </button>
       ) : null}
 
       <div className="exchange-field">
         <div className="exchange-field__head">
-          <label className="field-label" htmlFor={amountId}>Вы отдаёте</label>
-          <span className="exchange-field__balance num">Доступно {money(from, available)}</span>
+          <label className="field-label" htmlFor={amountId}>{t("exchange.youGive")}</label>
+          <span className="exchange-field__balance num">{t("common.availableAmount", { amount: money(from, available) })}</span>
         </div>
         <div className="exchange-field__body">
           <input
@@ -140,16 +144,16 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
           )}
         </div>
         <div className="exchange-field__footer">
-          <span>Сумма к списанию</span>
+          <span>{t("exchange.debitAmount")}</span>
           <button
             type="button"
             className="link"
             onClick={() => {
-              setInput(amount(from, available, true).replace(/\u00a0/g, ""));
+              setInput(format.amountInput(from, available));
               reset();
             }}
           >
-            Использовать всё
+            {t("exchange.useAll")}
           </button>
         </div>
       </div>
@@ -157,7 +161,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       <button
         type="button"
         className="swap-arrow"
-        aria-label="Поменять направление"
+        aria-label={t("exchange.swapDirection")}
         onClick={() => {
           setSide(side === "buy" ? "sell" : "buy");
           reset();
@@ -168,8 +172,8 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
 
       <div className="exchange-field">
         <div className="exchange-field__head">
-          <span className="field-label">Вы получите</span>
-          <span className="exchange-field__balance">Предварительно</span>
+          <span className="field-label">{t("exchange.youGet")}</span>
+          <span className="exchange-field__balance">{t("exchange.preliminary")}</span>
         </div>
         <div className="exchange-field__body">
           <output className="exchange-field__value num" aria-live="polite">
@@ -182,14 +186,14 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
           )}
         </div>
         <div className="exchange-field__footer">
-          <span>По котировке симулятора</span>
+          <span>{t("exchange.bySimulatorQuote")}</span>
           <strong className="num">{quote && state !== "expired" ? money(to, quote.value.amountOut, true) : ""}</strong>
         </div>
       </div>
 
       <div className={`exchange-summary${state === "expired" ? " is-expired" : ""}`}>
         <div className="exchange-summary__head">
-          <strong>Условия обмена</strong>
+          <strong>{t("exchange.terms")}</strong>
           <span
             className={`exchange-summary__status num is-${state ?? "empty"}`}
             role="timer"
@@ -205,64 +209,62 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
         ) : null}
         <dl className="exchange-summary__grid">
           <div>
-            <dt>Курс</dt>
+            <dt>{t("common.rate")}</dt>
             <dd className="num">{quote ? rate(quote.value.rate) : "—"}</dd>
           </div>
           <div>
-            <dt>Комиссия</dt>
-            <dd className="num">{quote ? `${money(quote.value.feeAsset, quote.value.fee)} · включена` : "—"}</dd>
+            <dt>{t("common.fee")}</dt>
+            <dd className="num">{quote ? t("exchange.feeIncluded", { amount: money(quote.value.feeAsset, quote.value.fee) }) : "—"}</dd>
           </div>
           <div>
-            <dt>Спред</dt>
-            <dd className="num">{quote ? `${formatDecimal(fromUnits(BigInt(quote.value.spreadBps), 2), { fractionDigits: 2 })}% · в курсе` : "—"}</dd>
+            <dt>{t("exchange.spread")}</dt>
+            <dd className="num">{quote ? t("exchange.spreadInRate", { value: format.decimal(fromUnits(BigInt(quote.value.spreadBps), 2), { fractionDigits: 2 }) }) : "—"}</dd>
           </div>
           <div>
-            <dt>Итого к списанию</dt>
+            <dt>{t("exchange.totalDebit")}</dt>
             <dd className="num">{quote ? money(quote.value.from, quote.value.total) : "—"}</dd>
           </div>
         </dl>
         {state === "expired" ? (
           <div className="exchange-summary__expired">
             <Icon name="clock" size="sm" />
-            <span>Котировка истекла. Обновите её, чтобы увидеть актуальный курс.</span>
+            <span>{t("exchange.expiredNotice")}</span>
           </div>
         ) : null}
         {quote?.value.insufficientBalance ? (
           <div className="exchange-summary__expired">
             <Icon name="alert" size="sm" />
-            <span>Сумма больше доступного баланса.</span>
+            <span>{t("exchange.insufficientBalance")}</span>
           </div>
         ) : null}
       </div>
 
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {error ? <p className="form-error" role="alert">{t(error)}</p> : null}
 
       <button type="button" className="cta cta--secondary" onClick={requestQuote} disabled={loading}>
-        {loading ? "Запрашиваем котировку…" : quote ? "Обновить котировку" : "Получить котировку"}
+        {t(loading ? "exchange.requesting" : quote ? "exchange.refreshQuote" : "exchange.getQuote")}
       </button>
 
       <DisabledCta
-        label="Подтвердить обмен"
-        hint="Исполнение обмена недоступно в тестовой версии: endpoint исполнения не существует."
+        label={t("exchange.confirm")}
+        hint={t("exchange.confirmHint")}
       />
 
       <p className="note">
         <span className="note__icon"><Icon name="info" size="xs" /></span>
-        <span>
-          До подтверждения деньги не списываются. Котировка действует {quote?.value.ttlSeconds ?? 30} секунд.
-          Курсы синтетические и не являются офертой.
-        </span>
+        <span>{t("exchange.note", { seconds: quote?.value.ttlSeconds ?? 30 })}</span>
       </p>
     </section>
   );
 }
 
 function CryptoSelect({ id, value, onChange }: { id: string; value: CryptoAsset; onChange: (value: CryptoAsset) => void }) {
+  const { t } = useI18n();
   return (
     <select
       id={id}
       className="asset-select"
-      aria-label="Криптоактив"
+      aria-label={t("exchange.cryptoAsset")}
       value={value}
       onChange={(event) => onChange(event.target.value === "TON" ? "TON" : "USDT")}
     >

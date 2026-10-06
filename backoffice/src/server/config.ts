@@ -1,4 +1,5 @@
 import type { OperatorRole } from "../auth/access.js";
+import { type ObservabilityConfig, logModes, metricsModes } from "./observability.js";
 
 export interface OidcConfig {
   issuer: string;
@@ -47,6 +48,7 @@ export interface ServerConfig {
   signing: SigningConfig;
   deviceBinding?: DeviceBindingConfig;
   oidc?: OidcConfig;
+  observability?: ObservabilityConfig;
 }
 
 const roles = new Set<OperatorRole>([
@@ -215,6 +217,14 @@ function integerSetting(name: string, fallback: number, minimum: number, maximum
   return value;
 }
 
+function modeSetting<T extends string>(name: string, modes: readonly T[]): T {
+  const value = process.env[name]?.trim() || "off";
+  if (!modes.includes(value as T)) {
+    throw new Error(`${name} must be one of ${modes.join(", ")}`);
+  }
+  return value as T;
+}
+
 function isLoopbackHostname(hostname: string): boolean {
   return hostname === "localhost"
     || hostname === "127.0.0.1"
@@ -280,6 +290,9 @@ function loadDeviceBindingConfig(): DeviceBindingConfig {
 }
 
 export function loadServerConfig(): ServerConfig {
+  if (process.env.NODE_ENV?.trim().toLowerCase() === "production") {
+    throw new Error("Backoffice BFF is dev-only and refuses NODE_ENV=production");
+  }
   if ((process.env.BACKOFFICE_MODE ?? "dev-dry-run") !== "dev-dry-run") {
     throw new Error("Backoffice BFF refuses to start outside dev-dry-run mode");
   }
@@ -313,6 +326,11 @@ export function loadServerConfig(): ServerConfig {
     throw new Error("BACKOFFICE_ALLOWED_ORIGINS must not mix HTTP and HTTPS origins");
   }
 
+  const host = process.env.BACKOFFICE_BFF_HOST ?? "127.0.0.1";
+  if (!["127.0.0.1", "localhost", "::1"].includes(host)) {
+    throw new Error("BACKOFFICE_BFF_HOST must be a loopback address; the dev BFF is never exposed");
+  }
+
   const port = Number(process.env.BACKOFFICE_BFF_PORT ?? "4174");
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error("BACKOFFICE_BFF_PORT is invalid");
@@ -323,7 +341,7 @@ export function loadServerConfig(): ServerConfig {
   }
 
   return {
-    host: process.env.BACKOFFICE_BFF_HOST ?? "127.0.0.1",
+    host,
     port,
     allowedOrigins,
     allowDevLogin: process.env.BACKOFFICE_ALLOW_DEV_LOGIN === "true",
@@ -332,6 +350,10 @@ export function loadServerConfig(): ServerConfig {
     stepUp: loadStepUpConfig(),
     signing: loadSigningConfig(),
     deviceBinding: loadDeviceBindingConfig(),
-    oidc: loadOidcConfig(allowedOrigins)
+    oidc: loadOidcConfig(allowedOrigins),
+    observability: {
+      log: modeSetting("BACKOFFICE_LOG", logModes),
+      metrics: modeSetting("BACKOFFICE_METRICS", metricsModes)
+    }
   };
 }

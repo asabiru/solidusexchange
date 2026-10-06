@@ -245,3 +245,42 @@ describe("operator device binding configuration", () => {
     }
   });
 });
+
+describe("runtime boundary", () => {
+  function withEnvironment(values: Readonly<Record<string, string>>, check: () => void): void {
+    const saved = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
+    try {
+      Object.assign(process.env, values);
+      check();
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
+  }
+
+  it("refuses NODE_ENV=production in any casing or padding", () => {
+    for (const value of ["production", " Production ", "PRODUCTION"]) {
+      withEnvironment({ NODE_ENV: value }, () => {
+        assert.throws(() => loadServerConfig(), /refuses NODE_ENV=production/);
+      });
+    }
+    withEnvironment({ NODE_ENV: "development" }, () => {
+      assert.equal(loadServerConfig().host, "127.0.0.1");
+    });
+  });
+
+  it("binds only to loopback hosts", () => {
+    for (const host of ["0.0.0.0", "::", "192.0.2.10", "example.test", ""]) {
+      withEnvironment({ BACKOFFICE_BFF_HOST: host }, () => {
+        assert.throws(() => loadServerConfig(), /BACKOFFICE_BFF_HOST must be a loopback address/);
+      });
+    }
+    for (const host of ["127.0.0.1", "localhost", "::1"]) {
+      withEnvironment({ BACKOFFICE_BFF_HOST: host }, () => {
+        assert.equal(loadServerConfig().host, host);
+      });
+    }
+  });
+});

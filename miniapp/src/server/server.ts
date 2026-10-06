@@ -5,11 +5,37 @@ import {
   type Server,
   type ServerResponse
 } from "node:http";
-import type { HealthView, KycStatus, SessionView } from "../shared/api.js";
+import type {
+  ActivityView,
+  HealthView,
+  KycStatus,
+  KycVerificationState,
+  NotificationTemplate,
+  NotificationsView,
+  SessionView
+} from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
+import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
-import { QuoteError, simulateQuote } from "./quotes.js";
+import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
+import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
+import {
+  type AddressScreeningService,
+  ScreeningInputError,
+  ScreeningRateLimitError,
+  ScreeningUnavailableError,
+  createAddressScreeningService
+} from "./address-screening.js";
+import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
+import {
+  type NotificationOutbox,
+  createNotificationOutbox,
+  defaultMaxPerSubject,
+  notificationIdPattern
+} from "./notifications.js";
+import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
+import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { type CustomerSession, ExpiringStore } from "./session.js";
 import { syntheticData } from "./synthetic.js";
@@ -17,6 +43,7 @@ import { syntheticData } from "./synthetic.js";
 export const sessionCookie = "solidchange_ma_session";
 const displayName = "Тестовый клиент";
 const devTelegramUserId = 900_000_001;
+const maxSessionsPerSubject = 5;
 
 export interface Route {
   method: "GET" | "POST";
@@ -33,12 +60,55 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/operations" },
   { method: "GET", path: "/bff/operations/:id" },
   { method: "GET", path: "/bff/profile" },
-  { method: "GET", path: "/bff/quotes/preview" }
+  { method: "GET", path: "/bff/quotes/preview" },
+  { method: "POST", path: "/bff/kyc/applications" },
+  { method: "POST", path: "/bff/address-screening" },
+  { method: "GET", path: "/bff/address-screening/:id" },
+  { method: "GET", path: "/bff/kyc/status" },
+  { method: "GET", path: "/bff/notifications" },
+  { method: "GET", path: "/bff/activity" },
+  { method: "POST", path: "/bff/notifications/read" },
+  { method: "GET", path: "/bff/metrics" }
 ] satisfies Route[]);
 
 export interface MiniappServerOptions {
   clock?: () => number;
   devBotToken?: string;
+  quoteProvider?: QuoteProvider;
+  customerApi?: CustomerApiClient;
+  kyc?: KycService;
+  addressScreening?: AddressScreeningService;
+  notifications?: NotificationOutbox;
+  activity?: ActivityLog;
+  /** Receives one JSON log line per completed request when MINIAPP_LOG=json. */
+  logSink?: (line: string) => void;
+  /** Monotonic milliseconds for request durations. */
+  timer?: () => number;
+}
+
+const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTemplate>>> = Object.freeze({
+  submitted: "kyc_submitted",
+  in_review: "kyc_in_review",
+  approved: "kyc_approved",
+  rejected: "kyc_rejected",
+  needs_more_data: "kyc_needs_more_data",
+  timed_out: "kyc_timed_out",
+  unavailable: "kyc_unavailable"
+});
+
+const maxReadIds = defaultMaxPerSubject;
+const activityQueryPattern = /^\?limit=([1-9][0-9]?)$/;
+
+function parseActivityLimit(search: string): number | undefined {
+  if (search === "") return maxActivityPerSubject;
+  const limit = Number(activityQueryPattern.exec(search)?.[1]);
+  return Number.isSafeInteger(limit) && limit >= 1 && limit <= maxActivityPerSubject ? limit : undefined;
+}
+
+function parseNotificationIds(value: string): readonly string[] | undefined {
+  const ids = value.split(",");
+  if (ids.length > maxReadIds || new Set(ids).size !== ids.length) return undefined;
+  return ids.every((id) => notificationIdPattern.test(id)) ? ids : undefined;
 }
 
 function securityHeaders(response: ServerResponse): void {
@@ -114,7 +184,10 @@ function sessionView(session: CustomerSession): SessionView {
   };
 }
 
-function pseudonymousSubject(telegramUserId: number): string {
+function pseudonymousSubject(source: CustomerSession["source"], telegramUserId: number): string {
+  if (source === "dev-synthetic") {
+    return `dev-${createHash("sha256").update(`solidchange-miniapp-dev-synthetic|${telegramUserId}`).digest("hex").slice(0, 16)}`;
+  }
   return `tg-${createHash("sha256").update(`solidchange-miniapp-dev|${telegramUserId}`).digest("hex").slice(0, 16)}`;
 }
 
@@ -125,10 +198,88 @@ export function createMiniappServer(
   const clock = options.clock ?? Date.now;
   const devBotToken = options.devBotToken ?? `0:${randomBytes(32).toString("base64url")}`;
   const sessions = new ExpiringStore<CustomerSession>(clock);
+  const quoteProvider = options.quoteProvider ?? (config.quoteSource === "provider-simulator"
+    ? createSimulatorQuoteProvider({
+      seed: config.quoteSeed,
+      ttlSeconds: config.quoteTtlSeconds,
+      scenario: config.quoteScenario,
+      clock
+    })
+    : createLocalQuoteProvider());
+  const customerApi = options.customerApi ?? createCustomerApiClient({
+    baseUrl: config.customerApiUrl,
+    devTokenKey: config.customerApiDevTokenKey
+  });
+
+  const kycOnboarding = options.kyc ?? createKycService({
+    seed: config.kycSeed,
+    scenario: config.kycScenario,
+    reviewTimeoutSeconds: config.kycReviewTimeoutSeconds,
+    clock
+  });
+
+  const addressScreening = options.addressScreening ?? createAddressScreeningService({
+    seed: config.kytSeed,
+    scenario: config.kytScenario,
+    screeningTimeoutSeconds: config.kytScreeningTimeoutSeconds,
+    clock
+  });
+
+  const outbox = options.notifications ?? createNotificationOutbox({ clock });
+  const activity = options.activity ?? createActivityLog({ clock });
+  const unsubscribeKyc = kycOnboarding.subscribe((subject, state) => {
+    const template = kycTemplates[state];
+    if (template) outbox.record(subject, template);
+    activity.recordKyc(subject, state);
+  });
+
+  const observer = createRequestObserver({
+    service: "miniapp-bff",
+    routes: routeTable.map((route) => route.path),
+    config: config.observability,
+    sink: options.logSink,
+    timer: options.timer,
+    wallClock: clock
+  });
+  const gauges: readonly Gauge[] = Object.freeze([
+    { name: "solidchange_miniapp_sessions_active", help: "Unexpired Mini App BFF sessions.", value: () => sessions.size() },
+    { name: "solidchange_miniapp_notification_drafts", help: "Draft notifications held in the test-mode outbox.", value: () => outbox.size() },
+    { name: "solidchange_miniapp_address_screenings", help: "Address screenings tracked in memory.", value: () => addressScreening.trackedCount() }
+  ]);
+
+  async function metrics(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    // Only the exact request target: dot-segment or backslash spellings that
+    // normalize to this path arrive via the Vite proxy on the app origin.
+    if (!observer.metricsEnabled || request.url !== "/bff/metrics" || !metricsRequestAllowed(request)) {
+      json(response, 404, { error: "not_found" });
+      return;
+    }
+    if (request.method !== "GET") {
+      response.setHeader("allow", "GET");
+      json(response, 405, { error: "method_not_allowed" });
+      return;
+    }
+    const body = await observer.renderMetrics(gauges);
+    securityHeaders(response);
+    response.statusCode = 200;
+    response.setHeader("content-type", metricsContentType);
+    response.end(body);
+  }
+
+  function notificationsView(subject: string): NotificationsView {
+    return {
+      mode: "test",
+      delivery: "disabled",
+      unread: outbox.unread(subject),
+      notifications: outbox.list(subject, defaultMaxPerSubject)
+    };
+  }
 
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
     const id = parseCookies(request)[sessionCookie];
-    return id ? sessions.get(id) : undefined;
+    const session = id ? sessions.get(id) : undefined;
+    if (session?.kyc === "kyc-gated" && kycOnboarding.isVerified(session.subject)) session.kyc = "verified";
+    return session;
   }
 
   function startSession(
@@ -145,6 +296,9 @@ export function createMiniappServer(
       expiresAt: clock() + config.sessionTtlSeconds * 1_000
     };
     sessions.set(created.id, created);
+    sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
+    outbox.record(created.subject, "session_login");
+    activity.recordLogin(created.subject, created.source);
     response.setHeader("set-cookie", sessionCookieValue(created.id, config.sessionTtlSeconds, origin));
     json(response, 201, sessionView(created));
   }
@@ -156,6 +310,11 @@ export function createMiniappServer(
     }
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const path = url.pathname;
+
+    if (path === "/bff/metrics") {
+      await metrics(request, response);
+      return;
+    }
 
     if (request.method === "POST") {
       const origin = exactOrigin(request, config);
@@ -190,8 +349,10 @@ export function createMiniappServer(
           json(response, 500, { error: "dev_session_unavailable" });
           return;
         }
+        const subject = pseudonymousSubject("dev-synthetic", verified.value.user.id);
+        kycOnboarding.reset(subject);
         startSession(request, response, origin, {
-          subject: pseudonymousSubject(verified.value.user.id),
+          subject,
           source: "dev-synthetic",
           kyc: kyc as KycStatus
         });
@@ -217,7 +378,7 @@ export function createMiniappServer(
           return;
         }
         startSession(request, response, origin, {
-          subject: pseudonymousSubject(verified.value.user.id),
+          subject: pseudonymousSubject("telegram", verified.value.user.id),
           source: "telegram",
           kyc: "kyc-gated"
         });
@@ -233,6 +394,102 @@ export function createMiniappServer(
         if (id) sessions.delete(id);
         response.setHeader("set-cookie", sessionCookieValue("", 0, origin));
         json(response, 200, { ok: true });
+        return;
+      }
+
+      if (path === "/bff/kyc/applications") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        await readJsonBody(request, []);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        if (session.kyc === "verified") {
+          json(response, 409, { error: "kyc_already_verified" });
+          return;
+        }
+        try {
+          const { created } = await kycOnboarding.submit(session.subject);
+          json(response, created ? 202 : 200, kycOnboarding.view(session.subject, session.kyc));
+        } catch (error) {
+          if (error instanceof KycUnavailableError) {
+            json(response, 503, { error: "kyc_unavailable" });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
+      if (path === "/bff/address-screening") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const body = await readJsonBody(request, ["asset", "network", "address"]);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        if (session.kyc !== "verified") {
+          json(response, 403, { error: "kyc_required" });
+          return;
+        }
+        try {
+          const { created, view } = await addressScreening.submit(session.subject, body);
+          const subject = session.subject;
+          if (created) activity.recordScreening(subject, view, () => addressScreening.view(subject, view.id)?.status);
+          json(response, created ? 202 : 200, view);
+        } catch (error) {
+          if (error instanceof ScreeningInputError) {
+            json(response, 400, { error: error.code });
+            return;
+          }
+          if (error instanceof ScreeningRateLimitError) {
+            json(response, 429, { error: "screening_rate_limited" });
+            return;
+          }
+          if (error instanceof ScreeningUnavailableError) {
+            activity.recordScreening(session.subject, error.view);
+            json(response, 503, { error: "screening_unavailable", screening: error.view });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+
+      if (path === "/bff/notifications/read") {
+        if (!origin) {
+          json(response, 403, { error: "origin_rejected" });
+          return;
+        }
+        if (request.headers["x-device-id"] !== undefined) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const body = await readJsonBody(request, ["ids"]);
+        const session = currentSession(request);
+        if (!session) {
+          json(response, 401, { error: "unauthenticated" });
+          return;
+        }
+        const ids = parseNotificationIds(body.ids);
+        if (!ids) {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        const marked = outbox.markRead(session.subject, ids);
+        json(response, 200, { marked, unread: outbox.unread(session.subject) });
         return;
       }
 
@@ -293,7 +550,47 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/profile") {
-      json(response, 200, syntheticData.profile(session.kyc, displayName, customerRef(session.subject)));
+      const apiAccess = await customerApi.access(session.subject, clock());
+      json(response, 200, { ...syntheticData.profile(session.kyc, displayName, customerRef(session.subject)), apiAccess });
+      return;
+    }
+    if (path === "/bff/kyc/status") {
+      json(response, 200, kycOnboarding.view(session.subject, session.kyc));
+      return;
+    }
+    if (path === "/bff/notifications") {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      json(response, 200, notificationsView(session.subject));
+      return;
+    }
+    if (path === "/bff/activity") {
+      const limit = parseActivityLimit(url.search);
+      if (limit === undefined || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      const view: ActivityView = { mode: "test", items: activity.list(session.subject, limit), executable: false };
+      json(response, 200, view);
+      return;
+    }
+    if (path.startsWith("/bff/address-screening/")) {
+      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      if (session.kyc !== "verified") {
+        json(response, 403, { error: "kyc_required" });
+        return;
+      }
+      const screening = addressScreening.view(session.subject, path.slice("/bff/address-screening/".length));
+      if (!screening) {
+        json(response, 404, { error: "not_found" });
+        return;
+      }
+      json(response, 200, screening);
       return;
     }
     if (path === "/bff/quotes/preview") {
@@ -301,16 +598,20 @@ export function createMiniappServer(
       const to = url.searchParams.get("to") ?? "";
       const amount = url.searchParams.get("amount") ?? "";
       try {
-        const quote = simulateQuote({ from, to, amount }, {
+        const quote = await quoteProvider.preview({ from, to, amount }, {
+          subject: session.subject,
           nowMs: clock(),
           ttlSeconds: config.quoteTtlSeconds,
           available: isAssetCode(from) ? syntheticData.available(session.kyc, from) : undefined,
           kycRequired: session.kyc !== "verified"
         });
+        activity.recordQuote(session.subject, quote);
         json(response, 200, quote);
       } catch (error) {
         if (error instanceof QuoteError) {
-          json(response, 400, { error: error.code });
+          json(response, error.code === "quote_unavailable" ? 503 : 400, error.reason
+            ? { error: error.code, reason: error.reason }
+            : { error: error.code });
           return;
         }
         throw error;
@@ -321,7 +622,8 @@ export function createMiniappServer(
     json(response, 404, { error: "not_found" });
   }
 
-  return createServer((request, response) => {
+  const server = createServer((request, response) => {
+    observer.observe(request, response);
     handle(request, response).catch((error: unknown) => {
       if (error instanceof RequestBodyError) {
         json(response, error.status, { error: error.status === 415 ? "unsupported_media_type" : "invalid_request" });
@@ -330,4 +632,6 @@ export function createMiniappServer(
       json(response, 500, { error: "internal_error" });
     });
   });
+  server.once("close", unsubscribeKyc);
+  return server;
 }

@@ -9,7 +9,39 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import {
+  createRequestObserver,
+  METRICS_CONTENT_TYPE,
+  METRICS_PATH,
+  metricsRequestAllowed
+} from "./observability.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
+
+/** @typedef {import("node:http").IncomingMessage} IncomingMessage */
+/** @typedef {import("node:http").ServerResponse} ServerResponse */
+/** @typedef {Map<string, string[]>} Headers */
+/** @typedef {keyof typeof ERROR_MESSAGES} ErrorCode */
+/** @typedef {(typeof OPERATIONS)[number]} Operation */
+/** @typedef {import("./observability.mjs").RequestObserver} RequestObserver */
+
+/**
+ * @typedef {object} HandlerOptions
+ * @property {Readonly<Record<string, unknown>>} [metadata]
+ * @property {import("./auth.mjs").TokenVerifier} verifier
+ * @property {import("./capabilities.mjs").KycDirectory} kycDirectory
+ * @property {import("./rate-limit.mjs").RateLimiter} rateLimiter
+ * @property {() => number} [clock]
+ * @property {() => string} [generateRequestId]
+ * @property {RequestObserver} [observer]
+ */
+
+/**
+ * @typedef {Omit<HandlerOptions, "observer"> & {
+ *   observability?: import("./observability.mjs").ObservabilityConfig,
+ *   logSink?: (line: string) => void,
+ *   timer?: () => number
+ * }} ServerOptions
+ */
 
 const BASE_HEADERS = Object.freeze({
   "cache-control": "no-store",
@@ -17,8 +49,24 @@ const BASE_HEADERS = Object.freeze({
   "x-content-type-options": "nosniff"
 });
 const SCOPE_PATTERN = /^[a-z][a-z0-9.:-]{0,127}$/u;
+// Every peer of this loopback-only server is local, and a local client can pick
+// any 127.0.0.0/8 source address, so the whole range shares one bucket.
+const IPV4_LOOPBACK_PATTERN = /^(?:::ffff:)?127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/iu;
 
+/** @param {string | undefined} address */
+function rateLimitKey(address) {
+  if (typeof address !== "string") {
+    return "unknown";
+  }
+  return IPV4_LOOPBACK_PATTERN.test(address) ? "127.0.0.0/8" : address;
+}
+
+/**
+ * @param {readonly string[]} rawHeaders
+ * @returns {Headers}
+ */
 function collectHeaders(rawHeaders) {
+  /** @type {Headers} */
   const headers = new Map();
   for (let index = 0; index < rawHeaders.length; index += 2) {
     const name = rawHeaders[index].toLowerCase();
@@ -29,15 +77,28 @@ function collectHeaders(rawHeaders) {
   return headers;
 }
 
+/**
+ * @param {Headers} headers
+ * @param {string} name
+ */
 function singleHeader(headers, name) {
   const values = headers.get(name);
   return values?.length === 1 ? values[0] : null;
 }
 
+/**
+ * @param {ErrorCode} code
+ * @param {string} requestId
+ * @param {string} [message]
+ */
 function errorBody(code, requestId, message = ERROR_MESSAGES[code]) {
   return { code, message, request_id: requestId, details: {} };
 }
 
+/**
+ * @param {number} status
+ * @param {Record<string, string | number>} headers
+ */
 function renderHead(status, headers) {
   const lines = [`HTTP/1.1 ${status} ${STATUS_CODES[status]}`];
   for (const [name, value] of Object.entries(headers)) {
@@ -48,6 +109,13 @@ function renderHead(status, headers) {
 
 const closingSockets = new WeakSet();
 
+/**
+ * @param {ServerResponse} response
+ * @param {number} status
+ * @param {unknown} payload
+ * @param {string} requestId
+ * @param {Record<string, string>} [extraHeaders]
+ */
 function send(response, status, payload, requestId, extraHeaders = {}) {
   if (extraHeaders.connection === "close" && response.socket) {
     closingSockets.add(response.socket);
@@ -62,6 +130,10 @@ function send(response, status, payload, requestId, extraHeaders = {}) {
   response.end(body);
 }
 
+/**
+ * @param {import("./auth.mjs").Principal} principal
+ * @param {number} now
+ */
 function validPrincipal(principal, now) {
   if (principal === null || typeof principal !== "object") {
     return false;
@@ -82,8 +154,9 @@ function validPrincipal(principal, now) {
   );
 }
 
+/** @param {Readonly<Record<string, unknown>>} metadata */
 function sameMetadata(metadata) {
-  const keys = Object.keys(API_METADATA);
+  const keys = /** @type {(keyof typeof API_METADATA)[]} */ (Object.keys(API_METADATA));
   return (
     metadata !== null &&
     typeof metadata === "object" &&
@@ -92,13 +165,15 @@ function sameMetadata(metadata) {
   );
 }
 
+/** @param {HandlerOptions} options */
 export function createCustomerApiHandler({
   metadata = API_METADATA,
   verifier,
   kycDirectory,
   rateLimiter,
   clock = () => Date.now(),
-  generateRequestId = () => generateUuidV7(clock())
+  generateRequestId = () => generateUuidV7(clock()),
+  observer
 }) {
   if (typeof verifier?.verify !== "function") {
     throw new Error("A token verifier is required");
@@ -110,7 +185,20 @@ export function createCustomerApiHandler({
     throw new Error("A rate limiter is required");
   }
 
+  /**
+   * @param {IncomingMessage} request
+   * @param {ServerResponse} response
+   * @param {Headers} headers
+   * @param {string} requestId
+   * @param {Operation} operation
+   */
   async function handleOperation(request, response, headers, requestId, operation) {
+    /**
+     * @param {number} status
+     * @param {ErrorCode} code
+     * @param {string} [message]
+     * @param {Record<string, string>} [extraHeaders]
+     */
     const fail = (status, code, message, extraHeaders) =>
       send(response, status, errorBody(code, requestId, message), requestId, extraHeaders);
 
@@ -150,12 +238,12 @@ export function createCustomerApiHandler({
       fail(400, "VALIDATION_FAILED", "X-Client-Version must be exactly one value of 1-64 characters.");
       return;
     }
-    if (!PLATFORMS.includes(singleHeader(headers, "x-platform"))) {
+    if (!/** @type {readonly unknown[]} */ (PLATFORMS).includes(singleHeader(headers, "x-platform"))) {
       fail(400, "VALIDATION_FAILED", "X-Platform must be exactly one supported platform value.");
       return;
     }
 
-    const limit = rateLimiter.consume(request.socket.remoteAddress ?? "unknown");
+    const limit = rateLimiter.consume(rateLimitKey(request.socket.remoteAddress));
     if (!limit.allowed) {
       fail(429, "RATE_LIMITED", undefined, { "retry-after": String(limit.retryAfterSeconds) });
       return;
@@ -206,6 +294,36 @@ export function createCustomerApiHandler({
     );
   }
 
+  /**
+   * @param {IncomingMessage} request
+   * @param {ServerResponse} response
+   * @param {Headers} headers
+   * @param {string} requestId
+   */
+  function handleMetrics(request, response, headers, requestId) {
+    if (!metricsRequestAllowed(request, headers)) {
+      send(response, 404, errorBody("CAPABILITY_DENIED", requestId), requestId);
+      return;
+    }
+    if (request.method !== "GET") {
+      send(response, 405, errorBody("CAPABILITY_DENIED", requestId), requestId, { allow: "GET" });
+      return;
+    }
+    // Only reached when observer?.metricsEnabled is true.
+    const body = /** @type {RequestObserver} */ (observer).renderMetrics();
+    response.writeHead(200, {
+      ...BASE_HEADERS,
+      "content-type": METRICS_CONTENT_TYPE,
+      "content-length": Buffer.byteLength(body),
+      "x-request-id": requestId
+    });
+    response.end(body);
+  }
+
+  /**
+   * @param {IncomingMessage} request
+   * @param {ServerResponse} response
+   */
   return async function handle(request, response) {
     const headers = collectHeaders(request.rawHeaders);
     const requestIdHeader = singleHeader(headers, "x-request-id");
@@ -219,6 +337,10 @@ export function createCustomerApiHandler({
           requestId,
           { connection: "close" }
         );
+        return;
+      }
+      if (observer?.metricsEnabled && request.url === METRICS_PATH) {
+        handleMetrics(request, response, headers, requestId);
         return;
       }
       const operation = OPERATIONS.find(
@@ -241,8 +363,25 @@ export function createCustomerApiHandler({
   };
 }
 
+/** @param {ServerOptions} options */
 export function createCustomerApiServer(options) {
-  const handler = createCustomerApiHandler(options);
+  const observer = createRequestObserver({
+    service: "customer-api",
+    routes: [...OPERATIONS.map((operation) => operation.path), METRICS_PATH],
+    config: options.observability,
+    sink: options.logSink,
+    timer: options.timer,
+    wallClock: options.clock
+  });
+  const handle = createCustomerApiHandler({ ...options, observer });
+  /**
+   * @param {IncomingMessage} request
+   * @param {ServerResponse} response
+   */
+  const handler = (request, response) => {
+    observer.observe(request, response);
+    return handle(request, response);
+  };
   const generateRequestId =
     options.generateRequestId ?? (() => generateUuidV7((options.clock ?? Date.now)()));
   const server = createServer(
@@ -254,7 +393,13 @@ export function createCustomerApiServer(options) {
     },
     handler
   );
+  /**
+   * @param {import("node:stream").Duplex} socket
+   * @param {number} status
+   * @param {ErrorCode} code
+   */
   const rejectRaw = (socket, status, code) => {
+    observer.recordRejected(status);
     const requestId = generateRequestId();
     const body = JSON.stringify(errorBody(code, requestId));
     socket.end(
@@ -267,7 +412,7 @@ export function createCustomerApiServer(options) {
     );
   };
   server.on("clientError", (error, socket) => {
-    if (error.code === "ECONNRESET" || !socket.writable || closingSockets.has(socket)) {
+    if (/** @type {NodeJS.ErrnoException} */ (error).code === "ECONNRESET" || !socket.writable || closingSockets.has(socket)) {
       socket.destroy();
       return;
     }

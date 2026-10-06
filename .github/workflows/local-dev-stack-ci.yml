@@ -1,0 +1,37 @@
+name: Local Dev Stack CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  dev-stack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.19.0
+
+      - name: Test dev-stack policy
+        run: node --test .github/scripts/check-dev-stack.test.mjs
+
+      - name: Enforce dev-stack policy
+        run: node .github/scripts/check-dev-stack.mjs
+
+      - name: Test local dev-stack helper scripts
+        run: node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs
+
+      - name: Validate compose file
+        run: docker compose -f infra/local/compose.yaml config --quiet

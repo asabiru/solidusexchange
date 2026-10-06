@@ -7,7 +7,16 @@ import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
-export async function startCustomerApi(config, { kycDirectory, clock } = {}) {
+/**
+ * @param {import("./config.mjs").CustomerApiConfig} config
+ * @param {{
+ *   kycDirectory?: import("./capabilities.mjs").KycDirectory,
+ *   clock?: () => number,
+ *   logSink?: (line: string) => void,
+ *   timer?: () => number
+ * }} [dependencies]
+ */
+export async function startCustomerApi(config, { kycDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -16,16 +25,21 @@ export async function startCustomerApi(config, { kycDirectory, clock } = {}) {
     verifier,
     kycDirectory: kycDirectory ?? createSyntheticKycDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
-    clock
+    clock,
+    observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
+    logSink,
+    timer
   });
 
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(config.port, config.host, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
+  await /** @type {Promise<void>} */ (
+    new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(config.port, config.host, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    })
+  );
 
   const address = server.address();
   if (typeof address !== "object" || address === null || !isLoopbackAddress(address.address)) {

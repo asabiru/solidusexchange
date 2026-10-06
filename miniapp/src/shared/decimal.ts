@@ -62,20 +62,26 @@ export function rescaleUnits(
   return negative ? -rounded : rounded;
 }
 
-function groupInteger(integer: string): string {
+function groupInteger(integer: string, separator: string): string {
   let grouped = "";
   for (let index = 0; index < integer.length; index += 1) {
     const fromEnd = integer.length - index;
-    if (index > 0 && fromEnd % 3 === 0) grouped += groupSeparator;
+    if (index > 0 && fromEnd % 3 === 0) grouped += separator;
     grouped += integer[index];
   }
   return grouped;
+}
+
+export interface DecimalSeparators {
+  group: string;
+  decimal: string;
 }
 
 export interface FormatOptions {
   fractionDigits: number;
   minFractionDigits?: number;
   signDisplay?: "auto" | "always";
+  separators?: DecimalSeparators;
 }
 
 export function formatDecimal(value: string, options: FormatOptions): string {
@@ -91,7 +97,9 @@ export function formatDecimal(value: string, options: FormatOptions): string {
   while (fraction.length > minFraction && fraction.endsWith("0")) {
     fraction = fraction.slice(0, -1);
   }
-  const body = `${groupInteger(integer)}${fraction ? `${decimalSeparator}${fraction}` : ""}`;
+  const group = options.separators?.group ?? groupSeparator;
+  const decimal = options.separators?.decimal ?? decimalSeparator;
+  const body = `${groupInteger(integer, group)}${fraction ? `${decimal}${fraction}` : ""}`;
   if (rounded === 0n) return body;
   if (match[1] === "-") return `${minusSign}${body}`;
   return options.signDisplay === "always" ? `+${body}` : body;

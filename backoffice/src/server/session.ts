@@ -53,6 +53,16 @@ export class ExpiringStore<T extends { expiresAt: number }> {
     this.#entries.delete(key);
   }
 
+  /** Number of unexpired entries. */
+  size(): number {
+    const now = this.#clock();
+    let count = 0;
+    for (const entry of this.#entries.values()) {
+      if (entry.expiresAt > now) count += 1;
+    }
+    return count;
+  }
+
   deleteWhere(predicate: (value: T) => boolean): void {
     for (const [key, value] of this.#entries) {
       if (predicate(value)) this.#entries.delete(key);

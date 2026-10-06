@@ -1,15 +1,21 @@
 import { DEV_TOKEN_KEY_PATTERN } from "./auth.mjs";
+import { LOG_MODES, METRICS_MODES } from "./observability.mjs";
 
+/** @type {readonly string[]} */
 export const LOOPBACK_HOSTS = Object.freeze(["127.0.0.1", "::1"]);
 const PORT_PATTERN = /^(?:0|[1-9][0-9]{0,4})$/u;
 const RATE_LIMIT_PATTERN = /^[1-9][0-9]{0,4}$/u;
 
+/** @param {string} address */
 export function isLoopbackAddress(address) {
   return LOOPBACK_HOSTS.includes(address);
 }
 
+/** @typedef {ReturnType<typeof loadConfig>} CustomerApiConfig */
+
+/** @param {Readonly<Record<string, string | undefined>>} env */
 export function loadConfig(env) {
-  if (env.NODE_ENV === "production") {
+  if (String(env.NODE_ENV ?? "").trim().toLowerCase() === "production") {
     throw new Error("customer-api is dev-only and refuses NODE_ENV=production");
   }
 
@@ -40,11 +46,22 @@ export function loadConfig(env) {
     throw new Error("CUSTOMER_API_DEV_TOKEN_KEY requires CUSTOMER_API_DEV_AUTH=synthetic");
   }
 
+  const log = env.CUSTOMER_API_LOG ?? "off";
+  if (!LOG_MODES.includes(log)) {
+    throw new Error('CUSTOMER_API_LOG must be unset, "off" or "json"');
+  }
+  const metrics = env.CUSTOMER_API_METRICS ?? "off";
+  if (!METRICS_MODES.includes(metrics)) {
+    throw new Error('CUSTOMER_API_METRICS must be unset, "off" or "loopback"');
+  }
+
   return Object.freeze({
     host,
     port: Number(portText),
     rateLimitPerMinute: Number(rateText),
     authMode: authMode === "synthetic" ? "synthetic-dev" : "deny-all",
-    devTokenKey: authMode === "synthetic" ? key : null
+    devTokenKey: authMode === "synthetic" ? key : null,
+    log,
+    metrics
   });
 }

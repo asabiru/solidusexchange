@@ -14,8 +14,11 @@
   "include": [
     "src/auth/access.ts",
     "src/auth/access.test.ts",
+    "src/app/a11y.test.ts",
     "src/data/demo.ts",
     "src/data/demo.test.ts",
+    "src/data/provider-evidence.ts",
+    "src/data/reports.ts",
     "src/data/client.ts",
     "src/data/client.test.ts",
     "src/server/**/*.ts"

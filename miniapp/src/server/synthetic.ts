@@ -177,7 +177,7 @@ function summary(operation: OperationDetail): OperationSummary {
   return { id, reference, kind, status, title, channel, createdAt, legs };
 }
 
-const profiles: Readonly<Record<KycStatus, Omit<ProfileView, "displayName" | "customerRef">>> = {
+const profiles: Readonly<Record<KycStatus, Omit<ProfileView, "displayName" | "customerRef" | "apiAccess">>> = {
   verified: {
     kyc: {
       state: "verified",
@@ -254,7 +254,7 @@ export const syntheticData = Object.freeze({
   operation(kyc: KycStatus, id: string): OperationDetail | undefined {
     return kyc === "verified" ? operations.find((operation) => operation.id === id) : undefined;
   },
-  profile(kyc: KycStatus, displayName: string, customerRef: string): ProfileView {
+  profile(kyc: KycStatus, displayName: string, customerRef: string): Omit<ProfileView, "apiAccess"> {
     return { displayName, customerRef, ...profiles[kyc] };
   }
 });

@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -33,8 +33,16 @@
     "packages/customer-api/package.json": {
       "check": "node scripts/check-boundary.mjs",
       "dev": "node src/server.mjs",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/observability.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/observability.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && npm run check",
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
-      "test": "npm run check && node --test tests/*.test.mjs"
+      "test": "npm run check && node --test tests/*.test.mjs",
+      "typecheck": "tsc -p tsconfig.json --pretty false"
+    },
+    "packages/e2e-dev/package.json": {
+      "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
+      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs",
+      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs",
+      "typecheck": "npm run lint"
     },
     "packages/financial-core/package.json": {
       "check": "node scripts/check-foundation.mjs",
@@ -144,10 +152,39 @@
         "run": "npm audit --audit-level=moderate"
       },
       {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
         "run": "npm test"
       }
     ],
     ".github/workflows/deploy.yml": [],
+    ".github/workflows/e2e-dev-ci.yml": [
+      {
+        "run": "working-directory: packages/e2e-dev"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm ci --prefix ../../miniapp"
+      },
+      {
+        "run": "npm ci --prefix ../../backoffice"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
     ".github/workflows/financial-core-ci.yml": [
       {
         "run": "working-directory: packages/financial-core"
@@ -256,6 +293,20 @@
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       }
     ],
+    ".github/workflows/local-dev-stack-ci.yml": [
+      {
+        "run": "node --test .github/scripts/check-dev-stack.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-dev-stack.mjs"
+      },
+      {
+        "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs"
+      },
+      {
+        "run": "docker compose -f infra/local/compose.yaml config --quiet"
+      }
+    ],
     ".github/workflows/miniapp-ci.yml": [
       {
         "run": "working-directory: miniapp"
@@ -327,6 +378,10 @@
     ]
   },
   "testFiles": {
+    ".github/scripts/check-dev-stack.test.mjs": {
+      "minLines": 310,
+      "minCases": 28
+    },
     ".github/scripts/check-regulated-core-status.test.mjs": {
       "minLines": 215,
       "minCases": 13
@@ -339,9 +394,13 @@
       "minLines": 714,
       "minCases": 44
     },
+    "backoffice/src/app/a11y.test.ts": {
+      "minLines": 489,
+      "minCases": 21
+    },
     "backoffice/src/auth/access.test.ts": {
-      "minLines": 59,
-      "minCases": 6
+      "minLines": 67,
+      "minCases": 7
     },
     "backoffice/src/data/client.test.ts": {
       "minLines": 226,
@@ -356,8 +415,8 @@
       "minCases": 3
     },
     "backoffice/src/server/config.test.ts": {
-      "minLines": 221,
-      "minCases": 14
+      "minLines": 257,
+      "minCases": 16
     },
     "backoffice/src/server/controls.test.ts": {
       "minLines": 65,
@@ -366,6 +425,10 @@
     "backoffice/src/server/dev-server.test.ts": {
       "minLines": 49,
       "minCases": 1
+    },
+    "backoffice/src/server/observability.test.ts": {
+      "minLines": 331,
+      "minCases": 12
     },
     "backoffice/src/server/oidc-session.test.ts": {
       "minLines": 289,
@@ -378,6 +441,14 @@
     "backoffice/src/server/postgres-audit-store.test.ts": {
       "minLines": 30,
       "minCases": 2
+    },
+    "backoffice/src/server/provider-evidence.test.ts": {
+      "minLines": 318,
+      "minCases": 11
+    },
+    "backoffice/src/server/reports.test.ts": {
+      "minLines": 338,
+      "minCases": 14
     },
     "backoffice/src/server/server.test.ts": {
       "minLines": 1211,
@@ -392,23 +463,91 @@
       "minCases": 5
     },
     "backoffice/tsconfig.test.json": {
-      "minLines": 23
+      "minLines": 26
+    },
+    "infra/local/tests/dev-material.test.mjs": {
+      "minLines": 93,
+      "minCases": 5
+    },
+    "infra/local/tests/healthcheck.test.mjs": {
+      "minLines": 60,
+      "minCases": 5
+    },
+    "infra/local/tests/loopback-edge.test.mjs": {
+      "minLines": 72,
+      "minCases": 6
+    },
+    "infra/local/tests/x509.test.mjs": {
+      "minLines": 67,
+      "minCases": 5
+    },
+    "miniapp/src/app/i18n.test.ts": {
+      "minLines": 223,
+      "minCases": 19
+    },
+    "miniapp/src/server/activity-routes.test.ts": {
+      "minLines": 373,
+      "minCases": 15
+    },
+    "miniapp/src/server/activity.test.ts": {
+      "minLines": 242,
+      "minCases": 15
+    },
+    "miniapp/src/server/address-screening-routes.test.ts": {
+      "minLines": 363,
+      "minCases": 14
+    },
+    "miniapp/src/server/address-screening.test.ts": {
+      "minLines": 352,
+      "minCases": 18
+    },
+    "miniapp/src/server/bff-security.test.ts": {
+      "minLines": 137,
+      "minCases": 5
+    },
+    "miniapp/src/server/customer-api-client.test.ts": {
+      "minLines": 261,
+      "minCases": 8
     },
     "miniapp/src/server/dev-server.test.ts": {
-      "minLines": 50,
+      "minLines": 51,
       "minCases": 1
     },
     "miniapp/src/server/init-data.test.ts": {
       "minLines": 150,
       "minCases": 18
     },
+    "miniapp/src/server/integration.test.ts": {
+      "minLines": 76,
+      "minCases": 3
+    },
+    "miniapp/src/server/kyc-routes.test.ts": {
+      "minLines": 230,
+      "minCases": 10
+    },
+    "miniapp/src/server/kyc.test.ts": {
+      "minLines": 177,
+      "minCases": 13
+    },
+    "miniapp/src/server/notifications.test.ts": {
+      "minLines": 383,
+      "minCases": 15
+    },
+    "miniapp/src/server/observability.test.ts": {
+      "minLines": 367,
+      "minCases": 13
+    },
+    "miniapp/src/server/provider-quotes.test.ts": {
+      "minLines": 114,
+      "minCases": 8
+    },
     "miniapp/src/server/quotes.test.ts": {
       "minLines": 83,
       "minCases": 8
     },
     "miniapp/src/server/server.test.ts": {
-      "minLines": 331,
-      "minCases": 21
+      "minLines": 337,
+      "minCases": 22
     },
     "miniapp/src/shared/decimal.test.ts": {
       "minLines": 98,
@@ -419,7 +558,7 @@
       "minCases": 4
     },
     "miniapp/tsconfig.test.json": {
-      "minLines": 18
+      "minLines": 24
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
       "minLines": 959,
@@ -485,7 +624,7 @@
       "minCases": 13
     },
     "packages/customer-api/tests/auth-config.test.mjs": {
-      "minLines": 132,
+      "minLines": 137,
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
@@ -493,8 +632,8 @@
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 225,
-      "minCases": 13
+      "minLines": 235,
+      "minCases": 14
     },
     "packages/customer-api/tests/contract-validator.mjs": {
       "minLines": 256
@@ -506,6 +645,10 @@
     "packages/customer-api/tests/http-client.mjs": {
       "minLines": 125
     },
+    "packages/customer-api/tests/observability.test.mjs": {
+      "minLines": 248,
+      "minCases": 11
+    },
     "packages/customer-api/tests/request-headers.test.mjs": {
       "minLines": 191,
       "minCases": 12
@@ -513,6 +656,25 @@
     "packages/customer-api/tests/routing.test.mjs": {
       "minLines": 179,
       "minCases": 10
+    },
+    "packages/e2e-dev/tests/boundaries.test.mjs": {
+      "minLines": 111,
+      "minCases": 4
+    },
+    "packages/e2e-dev/tests/dev-stack.test.mjs": {
+      "minLines": 538,
+      "minCases": 17
+    },
+    "packages/e2e-dev/tests/load.test.mjs": {
+      "minLines": 349,
+      "minCases": 5
+    },
+    "packages/e2e-dev/tests/resilience.test.mjs": {
+      "minLines": 533,
+      "minCases": 17
+    },
+    "packages/e2e-dev/tests/stack.mjs": {
+      "minLines": 141
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44

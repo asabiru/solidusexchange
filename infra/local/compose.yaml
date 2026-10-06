@@ -1,0 +1,332 @@
+# SolidChange local dev stack (dev-only, synthetic data, loopback-only).
+# Not a production deployment. Run from the repository root:
+#   docker compose -f infra/local/compose.yaml up --build --wait
+#
+# Every app keeps its own loopback-only bind (127.0.0.1). Each group of apps
+# shares the network namespace of a small "edge" container
+# (network_mode: service:<edge>); the edge is the only listener on the
+# container interface and forwards to 127.0.0.1. Host ports are published on
+# 127.0.0.1 only. See infra/local/README.md.
+name: solidchange-local
+
+services:
+  dev-material:
+    build:
+      context: ../..
+      dockerfile: infra/local/tools.Dockerfile
+    user: "70:70"
+    network_mode: none
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+    command: ["node", "/opt/solidchange-local/dev-material.mjs"]
+    environment:
+      NODE_ENV: development
+      SOLIDCHANGE_DEV_CUSTOMER_API_TOKEN_KEY: ${SOLIDCHANGE_DEV_CUSTOMER_API_TOKEN_KEY:-}
+      SOLIDCHANGE_DEV_AUDIT_DB_SUPERUSER_PASSWORD: ${SOLIDCHANGE_DEV_AUDIT_DB_SUPERUSER_PASSWORD:-}
+      SOLIDCHANGE_DEV_AUDIT_DB_RUNTIME_PASSWORD: ${SOLIDCHANGE_DEV_AUDIT_DB_RUNTIME_PASSWORD:-}
+    volumes:
+      - dev-material:/run/solidchange-dev
+
+  miniapp-edge:
+    build:
+      context: ../..
+      dockerfile: infra/local/tools.Dockerfile
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["node", "/opt/solidchange-local/loopback-edge.mjs"]
+    environment:
+      NODE_ENV: development
+      EDGE_ROUTES: "8183:4183,8185:4185"
+    ports:
+      - "127.0.0.1:4183:8183"
+      - "127.0.0.1:4185:8185"
+    networks:
+      - miniapp
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "tcp://127.0.0.1:8183"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  customer-api:
+    build:
+      context: ../..
+      dockerfile: infra/local/customer-api.Dockerfile
+    user: "1000:1000"
+    network_mode: service:miniapp-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      dev-material:
+        condition: service_completed_successfully
+      miniapp-edge:
+        condition: service_started
+    command:
+      - /opt/solidchange-local/with-dev-material.sh
+      - CUSTOMER_API_DEV_TOKEN_KEY=@customer-api-dev-token.key
+      - --
+      - node
+      - src/server.mjs
+    environment:
+      NODE_ENV: development
+      CUSTOMER_API_LOG: json
+      CUSTOMER_API_METRICS: loopback
+      CUSTOMER_API_HOST: 127.0.0.1
+      CUSTOMER_API_PORT: "4185"
+      CUSTOMER_API_DEV_AUTH: synthetic
+    volumes:
+      - dev-material:/run/solidchange-dev:ro
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "http://127.0.0.1:4185/api/v1/meta"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  miniapp-bff:
+    build:
+      context: ../..
+      dockerfile: infra/local/miniapp.Dockerfile
+    user: "1000:1000"
+    network_mode: service:miniapp-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      customer-api:
+        condition: service_healthy
+    command:
+      - /opt/solidchange-local/with-dev-material.sh
+      - MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY=@customer-api-dev-token.key
+      - --
+      - node
+      - .server-dist/server/index.js
+    environment:
+      NODE_ENV: development
+      MINIAPP_LOG: json
+      MINIAPP_METRICS: loopback
+      MINIAPP_BFF_HOST: 127.0.0.1
+      MINIAPP_BFF_PORT: "4184"
+      MINIAPP_ALLOW_DEV_LOGIN: "true"
+      MINIAPP_QUOTE_SOURCE: provider-simulator
+      MINIAPP_QUOTE_SCENARIO: ${MINIAPP_QUOTE_SCENARIO:-fresh_quote}
+      MINIAPP_KYC_SCENARIO: ${MINIAPP_KYC_SCENARIO:-approve}
+      MINIAPP_KYT_SCENARIO: ${MINIAPP_KYT_SCENARIO:-low}
+      MINIAPP_CUSTOMER_API_URL: http://127.0.0.1:4185
+    volumes:
+      - dev-material:/run/solidchange-dev:ro
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "http://127.0.0.1:4184/bff/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  miniapp-web:
+    build:
+      context: ../..
+      dockerfile: infra/local/miniapp.Dockerfile
+    user: "1000:1000"
+    network_mode: service:miniapp-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      miniapp-bff:
+        condition: service_healthy
+    command:
+      - node_modules/.bin/vite
+      - preview
+      - --host
+      - 127.0.0.1
+      - --port
+      - "4183"
+      - --strictPort
+      - --configLoader
+      - runner
+    environment:
+      NODE_ENV: development
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "http://127.0.0.1:4183/bff/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backoffice-edge:
+    build:
+      context: ../..
+      dockerfile: infra/local/tools.Dockerfile
+    user: "1000:1000"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["node", "/opt/solidchange-local/loopback-edge.mjs"]
+    environment:
+      NODE_ENV: development
+      EDGE_ROUTES: "8173:4173"
+    ports:
+      - "127.0.0.1:4173:8173"
+    networks:
+      - backoffice
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "tcp://127.0.0.1:8173"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backoffice-audit-db:
+    image: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297
+    user: "70:70"
+    network_mode: service:backoffice-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:uid=70,gid=70,mode=0700
+      - /var/run/postgresql:uid=70,gid=70,mode=0775
+    depends_on:
+      dev-material:
+        condition: service_completed_successfully
+      backoffice-edge:
+        condition: service_started
+    command:
+      - postgres
+      - -c
+      - listen_addresses=127.0.0.1
+      - -c
+      - hba_file=/etc/solidchange/pg_hba.conf
+      - -c
+      - ssl=on
+      - -c
+      - ssl_min_protocol_version=TLSv1.3
+      - -c
+      - ssl_cert_file=/run/solidchange-dev/audit-db-server.crt
+      - -c
+      - ssl_key_file=/run/solidchange-dev/audit-db-server.key
+    environment:
+      POSTGRES_DB: solidchange_audit
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/solidchange-dev/audit-db-superuser.password
+      POSTGRES_INITDB_ARGS: --auth-local=peer --auth-host=reject
+    volumes:
+      - dev-material:/run/solidchange-dev:ro
+      - audit-db-data:/var/lib/postgresql/data
+      - ./postgres/pg_hba.conf:/etc/solidchange/pg_hba.conf:ro
+      - ../../backoffice/migrations/0001_append_only_audit.sql:/docker-entrypoint-initdb.d/0001_append_only_audit.sql:ro
+      - ./postgres/10-backoffice-runtime.sh:/docker-entrypoint-initdb.d/10-backoffice-runtime.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "--host=/var/run/postgresql", "--dbname=solidchange_audit"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backoffice-bff:
+    build:
+      context: ../..
+      dockerfile: infra/local/backoffice.Dockerfile
+    user: "1000:1000"
+    network_mode: service:backoffice-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      backoffice-audit-db:
+        condition: service_healthy
+    command:
+      - /opt/solidchange-local/with-dev-material.sh
+      - BACKOFFICE_AUDIT_DATABASE_URL=@backoffice-audit-database.url
+      - --
+      - node
+      - .server-dist/server/index.js
+    environment:
+      NODE_ENV: development
+      BACKOFFICE_LOG: json
+      BACKOFFICE_METRICS: loopback
+      NODE_EXTRA_CA_CERTS: /run/solidchange-dev/dev-ca.crt
+      BACKOFFICE_MODE: dev-dry-run
+      BACKOFFICE_BFF_HOST: 127.0.0.1
+      BACKOFFICE_BFF_PORT: "4174"
+      BACKOFFICE_ALLOW_DEV_LOGIN: "true"
+      BACKOFFICE_AUDIT_STORAGE: postgresql
+    volumes:
+      - dev-material:/run/solidchange-dev:ro
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "http://127.0.0.1:4174/bff/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  backoffice-web:
+    build:
+      context: ../..
+      dockerfile: infra/local/backoffice.Dockerfile
+    user: "1000:1000"
+    network_mode: service:backoffice-edge
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    depends_on:
+      backoffice-bff:
+        condition: service_healthy
+    command:
+      - node_modules/.bin/vite
+      - preview
+      - --host
+      - 127.0.0.1
+      - --port
+      - "4173"
+      - --strictPort
+      - --configLoader
+      - runner
+    environment:
+      NODE_ENV: development
+    healthcheck:
+      test: ["CMD", "node", "/opt/solidchange-local/healthcheck.mjs", "http://127.0.0.1:4173/bff/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+networks:
+  miniapp:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+  backoffice:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.host_binding_ipv4: "127.0.0.1"
+
+volumes:
+  dev-material:
+  audit-db-data:

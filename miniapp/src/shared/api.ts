@@ -1,3 +1,4 @@
+import type { ScreeningAsset, ScreeningNetwork } from "./address-screening.js";
 import type { AssetCode } from "./assets.js";
 
 export type KycStatus = "verified" | "kyc-gated";
@@ -80,6 +81,11 @@ export interface ProfileStep {
   state: "done" | "required";
 }
 
+export type CustomerApiAccess =
+  | { status: "connected"; granted: readonly string[]; commandsEnabled: false }
+  | { status: "not-configured" }
+  | { status: "unavailable" };
+
 export interface ProfileView {
   displayName: string;
   customerRef: string;
@@ -96,6 +102,27 @@ export interface ProfileView {
   };
   fees: readonly { title: string; value: string }[];
   security: readonly { title: string; detail: string; status: "placeholder" }[];
+  apiAccess: CustomerApiAccess;
+}
+
+export type KycVerificationState =
+  | "not_started"
+  | "submitted"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "needs_more_data"
+  | "timed_out"
+  | "unavailable";
+
+export interface KycVerificationView {
+  mode: "test";
+  provider: "simulator";
+  state: KycVerificationState;
+  sessionKyc: KycStatus;
+  canSubmit: boolean;
+  submittedAt?: number;
+  reviewDeadline?: number;
 }
 
 export interface QuotePreview {
@@ -119,4 +146,102 @@ export interface QuotePreview {
   kycRequired: boolean;
   executable: false;
   executionUnavailableReason: "dev_test_version";
+}
+
+export type NotificationTemplate =
+  | "session_login"
+  | "kyc_submitted"
+  | "kyc_in_review"
+  | "kyc_approved"
+  | "kyc_rejected"
+  | "kyc_needs_more_data"
+  | "kyc_timed_out"
+  | "kyc_unavailable";
+
+export interface NotificationDraft {
+  id: string;
+  createdAt: number;
+  channel: "telegram-draft";
+  template: NotificationTemplate;
+  locale: "ru";
+  text: string;
+  mode: "test";
+  delivered: false;
+  read: boolean;
+}
+
+export interface NotificationsView {
+  mode: "test";
+  delivery: "disabled";
+  unread: number;
+  notifications: readonly NotificationDraft[];
+}
+
+export type AddressScreeningStatus =
+  | "pending"
+  | "low"
+  | "medium"
+  | "high"
+  | "severe"
+  | "unavailable"
+  | "timed_out";
+
+export interface AddressScreeningView {
+  id: string;
+  mode: "test";
+  asset: ScreeningAsset;
+  network: ScreeningNetwork;
+  status: AddressScreeningStatus;
+  advisory: true;
+  executable: false;
+  submittedAt: number;
+  deadline: number;
+}
+
+export type ActivityKycState = Exclude<KycVerificationState, "not_started">;
+export type ActivityKind = "session_login" | `kyc_${ActivityKycState}` | "quote_previewed" | "address_screened";
+
+interface ActivityBase {
+  id: string;
+  at: number;
+}
+
+export interface SessionLoginActivity extends ActivityBase {
+  kind: "session_login";
+  source: SessionSource;
+}
+
+export interface KycActivity extends ActivityBase {
+  kind: `kyc_${ActivityKycState}`;
+}
+
+export interface QuotePreviewedActivity extends ActivityBase {
+  kind: "quote_previewed";
+  pair: `${AssetCode}/${AssetCode}`;
+  side: "buy" | "sell";
+  from: AssetCode;
+  to: AssetCode;
+  amountIn: string;
+  amountOut: string;
+  fee: string;
+  feeAsset: AssetCode;
+  rate: ExchangeRate;
+  executable: false;
+}
+
+export interface AddressScreenedActivity extends ActivityBase {
+  kind: "address_screened";
+  asset: ScreeningAsset;
+  network: ScreeningNetwork;
+  status: AddressScreeningStatus;
+  advisory: true;
+  executable: false;
+}
+
+export type ActivityItem = SessionLoginActivity | KycActivity | QuotePreviewedActivity | AddressScreenedActivity;
+
+export interface ActivityView {
+  mode: "test";
+  items: readonly ActivityItem[];
+  executable: false;
 }

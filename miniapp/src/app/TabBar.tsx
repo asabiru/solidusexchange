@@ -25,10 +25,12 @@ function tabAt(x: number, y: number): Tab | undefined {
 export function TabBar({
   items,
   active,
-  open
+  open,
+  ariaLabel
 }: {
   items: readonly TabItem[];
   active: Tab;
+  ariaLabel: string;
   open: (tab: Tab) => void;
 }) {
   const drag = useRef<Drag | undefined>(undefined);
@@ -75,7 +77,7 @@ export function TabBar({
   };
 
   return (
-    <nav className="bottom-nav" aria-label="Основная навигация">
+    <nav className="bottom-nav" aria-label={ariaLabel}>
       <div
         className="tabbar"
         data-dragging={hovered ? "true" : undefined}
@@ -91,7 +93,7 @@ export function TabBar({
             type="button"
             key={item.id}
             data-tab={item.id}
-            className="nav"
+            className={`nav${item.id === "qr" ? " nav--qr" : ""}`}
             data-hovered={hovered === item.id ? "true" : undefined}
             aria-current={active === item.id ? "page" : undefined}
             onClick={() => {

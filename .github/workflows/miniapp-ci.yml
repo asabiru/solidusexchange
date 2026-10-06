@@ -4,12 +4,16 @@ on:
   pull_request:
     paths:
       - "miniapp/**"
+      - "packages/customer-api/**"
+      - "packages/provider-simulators/**"
       - ".github/workflows/miniapp-ci.yml"
   push:
     branches:
       - main
     paths:
       - "miniapp/**"
+      - "packages/customer-api/**"
+      - "packages/provider-simulators/**"
       - ".github/workflows/miniapp-ci.yml"
 
 permissions:

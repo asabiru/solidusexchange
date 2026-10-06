@@ -10,6 +10,8 @@ import {
   createSimulatedClock,
   DEFAULT_EPOCH_SECONDS,
   formatAmount,
+  maxBaseForQuoteBudget,
+  parseAmount,
   parseDecimal,
   QUOTE_SCENARIOS,
   validateSignedQuote,
@@ -103,6 +105,76 @@ describe("quote simulator", () => {
       assert.equal(verify({ headers: forged.headers, body: forged.body, now }).reason, "invalid_payload", JSON.stringify(change));
     }
     assert.equal(assessQuote({ ...quote, price: "1.00000000" }, { now }).reason, "invalid_quote");
+  });
+
+  test("base mode records the fixed base amount and no spend budget", async () => {
+    const simulator = createQuoteSimulator({ seed: "seed-1", key: freshKey() });
+    const quote = await simulator.requestQuote(request);
+    assert.equal(quote.schema, "solidchange.sim.quote.v2");
+    assert.equal(quote.amount_mode, "base");
+    assert.equal(quote.requested_quote_amount, null);
+    assert.equal(validateSignedQuote({ ...quote, requested_quote_amount: "100.00" }), "requested_quote_amount must be null in base mode");
+    assert.equal(validateSignedQuote({ ...quote, amount_mode: "fixed" }), "quote amount mode is buy only");
+  });
+
+  test("buy with quote_amount quotes the largest base amount within the spend budget", async () => {
+    const simulator = createQuoteSimulator({ seed: "seed-1", key: freshKey(), spreadBps: 50, feeBps: 30 });
+    for (const [pair, budget] of [["USDT/RUB", "10000.00"], ["TON/RUB", "2500.55"], ["TON/USDT", "7.000001"], ["USDT/RUB", "0.92"]]) {
+      const quote = await simulator.requestQuote({ pair, side: "buy", quote_amount: budget, idempotency_key: `idem-spend-${pair.replace("/", "-")}-${budget}` });
+      const [base, quoteAsset] = pair.split("/");
+      assert.equal(quote.amount_mode, "quote");
+      assert.equal(quote.requested_quote_amount, budget);
+      assert.equal(quote.rounding, "up");
+      assert.equal(validateSignedQuote(quote), null);
+      const budgetUnits = parseAmount(quoteAsset, budget);
+      const baseUnits = parseAmount(base, quote.base_amount);
+      const mid = parseDecimal(quote.mid_price, 8);
+      assert.ok(parseAmount(quoteAsset, quote.total_quote_amount) <= budgetUnits, `${pair} total fits budget`);
+      const next = computeQuoteAmounts({ pair, side: "buy", baseAmount: baseUnits + 1n, mid, spreadBps: 50, feeBps: 30 });
+      assert.ok(next.total > budgetUnits, `${pair} one more base unit exceeds budget`);
+      assert.equal(maxBaseForQuoteBudget({ pair, mid, spreadBps: 50, feeBps: 30, budget: budgetUnits }), baseUnits);
+      assert.deepEqual(assessQuote(quote, { now }), { displayable: true, reason: null, executable: false });
+    }
+  });
+
+  test("quote mode is buy only, exclusive with base_amount and rejects dust budgets", async () => {
+    const simulator = createQuoteSimulator({ seed: "seed-1", key: freshKey() });
+    const spend = { pair: "USDT/RUB", side: "buy", quote_amount: "1000.00", idempotency_key: "idem-spend-0001" };
+    for (const candidate of [
+      { ...spend, side: "sell" },
+      { ...spend, base_amount: "10.000000" },
+      { pair: "USDT/RUB", side: "buy", idempotency_key: "idem-spend-0001" },
+      { ...spend, quote_amount: "1000.0" },
+      { ...spend, quote_amount: 1000 },
+      { ...spend, quote_amount: "0.00" },
+      { ...spend, pair: "TON/RUB", quote_amount: "0.01", idempotency_key: "idem-spend-dust" },
+    ]) {
+      await assert.rejects(simulator.requestQuote(candidate), (error) => error.code === "invalid_request", JSON.stringify(candidate));
+    }
+    const quote = await simulator.requestQuote(spend);
+    assert.deepEqual(await simulator.requestQuote({ ...spend }), quote);
+    await assert.rejects(simulator.requestQuote({ ...spend, quote_amount: "1000.01" }), (error) => error.code === "idempotency_conflict");
+  });
+
+  test("signed quote-mode quote rejects a forged budget or a base amount that is not maximal", async () => {
+    const key = freshKey();
+    const simulator = createQuoteSimulator({ seed: "seed-1", key });
+    const quote = await simulator.requestQuote({ pair: "USDT/RUB", side: "buy", quote_amount: "5000.00", idempotency_key: "idem-spend-sign" });
+    const signed = simulator.exportSignedQuote(quote.quote_id);
+    const verify = createQuoteVerifier({ keyring: keyringOf(key), nonceStore: createNonceStore() });
+    assert.equal(verify({ headers: signed.headers, body: signed.body, now }).ok, true);
+    const budget = parseAmount("RUB", quote.requested_quote_amount);
+    for (const change of [
+      { requested_quote_amount: formatAmount("RUB", budget * 2n) },
+      { requested_quote_amount: formatAmount("RUB", parseAmount("RUB", quote.total_quote_amount) - 1n) },
+      { requested_quote_amount: null },
+      { side: "sell", rounding: "down" },
+      { amount_mode: "base" },
+    ]) {
+      const body = canonicalStringify({ ...quote, ...change });
+      const forged = signRaw({ key, domain: "quote", body, timestamp: now, nonce: nextNonce() });
+      assert.equal(verify({ headers: forged.headers, body: forged.body, now }).reason, "invalid_payload", JSON.stringify(change));
+    }
   });
 
   test("requests are validated and idempotent", async () => {
