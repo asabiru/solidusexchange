@@ -164,6 +164,94 @@ test("requires secret-named settings in .env.example and compose to stay empty",
   assert.match(checkSecrets("      - API_TOKEN=literal", "compose.yaml")[0], /must not have a committed literal/);
 });
 
+test("rejects YAML anchors, aliases and merge keys that hide service settings", () => {
+  const merge = `name: example
+x-base: &base
+  privileged: true
+  network_mode: host
+services:
+  web:
+    build: .
+    user: "1000"
+    <<: *base
+`;
+  const errors = checkCompose(merge, "compose.yaml").join("\n");
+  assert.match(errors, /compose\.yaml:2: YAML anchors, aliases and merge keys are not allowed/);
+  assert.match(errors, /compose\.yaml:9: YAML anchors, aliases and merge keys are not allowed/);
+  assert.match(errors, /compose\.yaml:2: top-level key x-base is not allowed/);
+  const ports = compose('  web:\n    build: .\n    user: "1000"\n    ports: &published\n      - "127.0.0.1:1:2"\n');
+  assert.match(checkCompose(ports, "compose.yaml").join("\n"), /anchors, aliases and merge keys/);
+  const quotedStar = compose('  web:\n    build: .\n    user: "1000"\n    command: ["sh", "-c", "echo * && true"]\n');
+  assert.deepEqual(checkCompose(quotedStar, "compose.yaml"), []);
+});
+
+test("rejects quoted service keys and sequences that YAML attaches to the service", () => {
+  const quoted = compose('  web:\n    build: .\n    user: "1000"\n    "privileged": true\n');
+  assert.match(checkCompose(quoted, "compose.yaml")[0], /service web keys must be plain block-mapping keys/);
+  const compact = compose('  web:\n    build: .\n    user: "1000"\n    ports:\n    - "0.0.0.0:4183:8183"\n');
+  const errors = checkCompose(compact, "compose.yaml").join("\n");
+  assert.match(errors, /service web keys must be plain block-mapping keys/);
+  assert.match(errors, /service web must publish ports only on 127\.0\.0\.1/);
+});
+
+test("rejects port items indented deeper than one level below ports", () => {
+  const deep = compose('  web:\n    build: .\n    user: "1000"\n    ports:\n        - "0.0.0.0:4183:8183"\n');
+  const errors = checkCompose(deep, "compose.yaml");
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /service web must publish ports only on 127\.0\.0\.1/);
+});
+
+test("rejects root uids with leading zeros and interpolated user or network_mode", () => {
+  for (const user of ['"00"', '"0000:1000"']) {
+    const errors = checkCompose(compose(`  web:\n    build: .\n    user: ${user}\n`), "compose.yaml");
+    assert.match(errors[0], /service web must not run as root/, user);
+  }
+  const interpolatedUser = compose("  web:\n    build: .\n    user: ${DEV_UID:-0}\n");
+  assert.match(checkCompose(interpolatedUser, "compose.yaml")[0], /service web user must be a literal non-root user/);
+  const interpolatedNetwork = compose('  web:\n    build: .\n    user: "1000"\n    network_mode: ${DEV_NET:-host}\n');
+  assert.match(checkCompose(interpolatedNetwork, "compose.yaml")[0], /must not use network_mode \$\{DEV_NET:-host\}/);
+  const none = compose('  web:\n    build: .\n    user: "1000"\n    network_mode: none\n');
+  assert.deepEqual(checkCompose(none, "compose.yaml"), []);
+});
+
+test("rejects compose features that pull in configuration the checker cannot see", () => {
+  const extendsFile = compose(
+    '  web:\n    build: .\n    user: "1000"\n    extends:\n      file: base.yml\n      service: base\n',
+  );
+  assert.match(checkCompose(extendsFile, "compose.yaml")[0], /service web must not use extends/);
+  const envFile = compose('  web:\n    build: .\n    user: "1000"\n    env_file: app.env\n');
+  assert.match(checkCompose(envFile, "compose.yaml")[0], /service web must not use env_file/);
+  const include = `include:\n  - extra.yml\n${compose()}`;
+  assert.match(checkCompose(include, "compose.yaml")[0], /top-level key include is not allowed/);
+  const inline = compose(
+    '  web:\n    build:\n      context: .\n      dockerfile_inline: |\n        FROM node:24\n    user: "1000"\n',
+  );
+  assert.match(checkCompose(inline, "compose.yaml").join("\n"), /service web must not use dockerfile_inline/);
+  const remote = compose('  web:\n    build: https://example.invalid/repo.git\n    user: "1000"\n');
+  assert.match(checkCompose(remote, "compose.yaml")[0], /service web must build from a local context/);
+});
+
+test("requires a literal development or test NODE_ENV in compose and Dockerfiles", () => {
+  const interpolated = compose('  web:\n    build: .\n    user: "1000"\n    environment:\n      NODE_ENV: ${DEV_NODE_ENV:-production}\n');
+  assert.match(checkCompose(interpolated, "compose.yaml")[0], /NODE_ENV must be the literal development or test/);
+  const listForm = compose('  web:\n    build: .\n    user: "1000"\n    environment:\n      - NODE_ENV=$MODE\n');
+  assert.match(checkCompose(listForm, "compose.yaml")[0], /NODE_ENV must be the literal development or test/);
+  const literal = compose('  web:\n    build: .\n    user: "1000"\n    environment:\n      NODE_ENV: development\n');
+  assert.deepEqual(checkCompose(literal, "compose.yaml"), []);
+  const argDockerfile = `FROM ${NODE_IMAGE}\nARG MODE=production\nENV NODE_ENV=$MODE\nUSER node\n`;
+  assert.match(checkDockerfile(argDockerfile, "app.Dockerfile")[0], /app\.Dockerfile:3: NODE_ENV must be the literal development or test/);
+  const legacy = `FROM ${NODE_IMAGE}\nENV NODE_ENV \${MODE}\nUSER node\n`;
+  assert.match(checkDockerfile(legacy, "app.Dockerfile")[0], /NODE_ENV must be the literal development or test/);
+  assert.deepEqual(checkDockerfile(`FROM ${NODE_IMAGE}\nENV NODE_ENV=development\nUSER node\n`, "app.Dockerfile"), []);
+});
+
+test("rejects Dockerfile USER values that resolve to root or are interpolated", () => {
+  const zeros = `FROM ${NODE_IMAGE}\nUSER 00\n`;
+  assert.match(checkDockerfile(zeros, "app.Dockerfile")[0], /must not switch to root/);
+  const interpolated = `FROM ${NODE_IMAGE}\nARG UID=0\nUSER \${UID}\n`;
+  assert.match(checkDockerfile(interpolated, "app.Dockerfile")[0], /USER must be a literal non-root user/);
+});
+
 async function withStack(files, run) {
   const root = await mkdtemp(path.join(tmpdir(), "dev-stack-"));
   try {
@@ -209,6 +297,36 @@ test("reports every violation found in a stack directory", async () => {
       assert.match(errors, /must set a non-root USER/);
       assert.match(errors, /API_TOKEN must not have a committed literal/);
       assert.match(errors, /NODE_ENV must never be production/);
+    },
+  );
+});
+
+test("rejects override, extends and include YAML files next to compose.yaml", async () => {
+  await withStack(
+    {
+      "compose.yaml": compose(),
+      "compose.override.yaml": 'services:\n  edge:\n    privileged: true\n    user: "0"\n',
+      "base.yml": "services:\n  base:\n    privileged: true\n",
+      "app.Dockerfile": DOCKERFILE,
+    },
+    async (root) => {
+      const errors = (await checkDevStack(root)).join("\n");
+      assert.match(errors, /compose\.override\.yaml: unexpected YAML file/);
+      assert.match(errors, /base\.yml: unexpected YAML file/);
+    },
+  );
+});
+
+test("checks Dockerfiles that compose builds from outside the stack directory", async () => {
+  await withStack(
+    {
+      "stack/compose.yaml": compose('  web:\n    build:\n      context: ..\n      dockerfile: elsewhere/app.Dockerfile\n    user: "1000"\n'),
+      "stack/app.Dockerfile": DOCKERFILE,
+      "elsewhere/app.Dockerfile": "FROM node:24\nUSER node\n",
+    },
+    async (root) => {
+      const errors = (await checkDevStack(path.join(root, "stack"))).join("\n");
+      assert.match(errors, /elsewhere\/app\.Dockerfile:1: base image node:24 must be pinned by @sha256 digest/);
     },
   );
 });

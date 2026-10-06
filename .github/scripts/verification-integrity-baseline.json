@@ -371,8 +371,8 @@
   },
   "testFiles": {
     ".github/scripts/check-dev-stack.test.mjs": {
-      "minLines": 201,
-      "minCases": 21
+      "minLines": 310,
+      "minCases": 28
     },
     ".github/scripts/check-regulated-core-status.test.mjs": {
       "minLines": 215,
