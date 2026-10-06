@@ -117,6 +117,9 @@ function seedSetting(env: Environment, name: string, fallback: string): string {
 }
 
 export function loadServerConfig(env: Environment = process.env): ServerConfig {
+  if (env.NODE_ENV?.trim().toLowerCase() === "production") {
+    throw new Error("The Mini App dev BFF is dev-only and refuses NODE_ENV=production");
+  }
   const host = env.MINIAPP_BFF_HOST?.trim() || "127.0.0.1";
   if (!isLoopbackHostname(host)) {
     throw new Error("MINIAPP_BFF_HOST must be a loopback address; the dev BFF is never exposed");

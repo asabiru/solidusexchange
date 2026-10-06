@@ -1,0 +1,58 @@
+name: E2E Dev Stack CI
+
+on:
+  pull_request:
+    paths:
+      - "miniapp/**"
+      - "backoffice/**"
+      - "packages/**"
+      - ".github/workflows/e2e-dev-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "miniapp/**"
+      - "backoffice/**"
+      - "packages/**"
+      - ".github/workflows/e2e-dev-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/e2e-dev
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: packages/e2e-dev/package-lock.json
+
+      - name: Install locked smoke-test package
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Install locked Mini App BFF dependencies
+        run: npm ci --prefix ../../miniapp
+
+      - name: Install locked backoffice BFF dependencies
+        run: npm ci --prefix ../../backoffice
+
+      - name: Check smoke-test sources
+        run: npm run lint
+
+      - name: Build BFFs and run the cross-service smoke test
+        run: npm test
