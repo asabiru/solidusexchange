@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import ts from "typescript";
 import { hasMessage, type Messages } from "./i18n.js";
 import { en } from "./locales/en.js";
+import { ky } from "./locales/ky.js";
 import { ru } from "./locales/ru.js";
 
 type Rgb = readonly [number, number, number];
@@ -333,7 +334,7 @@ function staticAttribute(entry: JsxNode, name: string): string | undefined {
   return initializer && ts.isStringLiteral(initializer) ? initializer.text : undefined;
 }
 
-const catalogs: readonly Messages[] = [ru, en];
+const catalogs: readonly Messages[] = [ru, ky, en];
 
 function catalogKey(node: ts.Node | undefined): string | undefined {
   const expression = node && ts.isJsxExpression(node) ? node.expression : node;
