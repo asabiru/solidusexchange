@@ -1,6 +1,6 @@
-# SolidChange API Contracts
+# SOLID API Contracts
 
-This package is the canonical, runtime-independent contract boundary for future SolidChange customer and operator APIs.
+This package is the canonical, runtime-independent contract boundary for future SOLID customer and operator APIs.
 
 ## Current status
 

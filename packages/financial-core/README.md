@@ -1,4 +1,4 @@
-# SolidChange Financial Core — Ledger Foundation
+# SOLID Financial Core — Ledger Foundation
 
 This package implements Session C of the regulated-core roadmap: a dev-only, dependency-free reference posting boundary plus an initial PostgreSQL schema for append-only double-entry journals.
 

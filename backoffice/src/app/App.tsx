@@ -1480,9 +1480,9 @@ function AccessGate({
       <Backdrop />
       <main className="access-card">
         <div className="brand access-brand">
-          <span>SC</span>
+          <span>S</span>
           <div>
-            <strong>SolidChange</strong>
+            <strong>SOLID</strong>
             <small className="access-subtitle">Operator backoffice</small>
           </div>
         </div>
@@ -1687,7 +1687,7 @@ export function App() {
       </button>
       <Backdrop />
       <aside className="sidebar">
-        <div className="brand"><span>SC</span><div><strong>SolidChange</strong><small>Operator backoffice</small></div></div>
+        <div className="brand"><span>S</span><div><strong>SOLID</strong><small>Operator backoffice</small></div></div>
         <button
           className="rail-toggle"
           type="button"

@@ -1,4 +1,4 @@
-# SolidChange provider simulators (dev-only)
+# SOLID provider simulators (dev-only)
 
 Deterministic, synthetic stand-ins for external partners that are not chosen
 yet. Each domain has a provider-neutral adapter contract, a seeded
