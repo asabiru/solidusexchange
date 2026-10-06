@@ -10,7 +10,7 @@ export function QrScreen({ wallet, openSheet }: { wallet: WalletView; openSheet:
   const [source, setSource] = useState<AssetCode>("RUB");
   const { t, format } = useI18n();
   return (
-    <section className="screen" aria-label="QR">
+    <section className="screen" aria-label={t("tab.qr")}>
       <ScreenTitle>{t("qr.title")}</ScreenTitle>
       <div className="qr-panel">
         <div className="qr-frame"><Icon name="qr" size="lg" /></div>
@@ -29,7 +29,7 @@ export function QrScreen({ wallet, openSheet }: { wallet: WalletView; openSheet:
       </div>
 
       <div className="heading">
-        <h3>{t("qr.debitFrom")}</h3>
+        <h2>{t("qr.debitFrom")}</h2>
         <button type="button" className="link" onClick={() => openSheet({ kind: "deposit" })}>{t("common.deposit")}</button>
       </div>
       <div className="qr-sources">

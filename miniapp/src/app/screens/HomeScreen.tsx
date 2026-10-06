@@ -116,7 +116,7 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
       </div>
 
       <div className="heading">
-        <h3>{t("home.assets")}</h3>
+        <h2>{t("home.assets")}</h2>
       </div>
       <div className="list">
         {wallet.assets.map((balance) => (
@@ -143,7 +143,7 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
       </div>
 
       <div className="heading">
-        <h3>{t("home.recent")}</h3>
+        <h2>{t("home.recent")}</h2>
         <button type="button" className="link" onClick={() => openTab("activity")}>{t("home.allHistory")}</button>
       </div>
       {operations.length === 0 ? (

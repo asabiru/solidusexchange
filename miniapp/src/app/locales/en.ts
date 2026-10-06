@@ -1,6 +1,7 @@
 import type { Messages } from "./ru.js";
 
 export const en: Messages = {
+  "a11y.quoteReady": "Quote preview is ready. Confirmation is unavailable in the test version.",
   "app.devBadge": "Test version",
   "app.navLabel": "Main navigation",
   "app.themeLight": "Light theme",

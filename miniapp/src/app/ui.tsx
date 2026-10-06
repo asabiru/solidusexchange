@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef } from "react";
+import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import type { OperationStatus, OperationSummary } from "../shared/api";
 import { type AssetCode, assets } from "../shared/assets";
 import { statusLabelKeys } from "./format";
@@ -36,18 +36,44 @@ export function DisabledCta({ label, hint }: { label: string; hint?: string }) {
 
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
   const { t } = useI18n();
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dialog = ref.current;
+    const opener = document.activeElement;
     if (dialog && !dialog.open) dialog.showModal();
-    return () => dialog?.close();
+    heading.current?.focus();
+    return () => {
+      dialog?.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+    };
   }, []);
   return (
     <dialog
       ref={ref}
       className="sheet"
+      aria-modal="true"
       aria-labelledby={titleId}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const dialog = ref.current;
+        if (!dialog) return;
+        const controls = [...dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']")]
+          .filter((element) => element.getClientRects().length > 0);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (!first || !last) {
+          event.preventDefault();
+          heading.current?.focus();
+        } else if (event.shiftKey && (document.activeElement === first || document.activeElement === heading.current)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }}
       onCancel={(event) => {
         event.preventDefault();
         onClose();
@@ -56,7 +82,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       <div className="sheet__panel">
         <div className="sheet__grabber" />
         <header className="sheet__head">
-          <h3 id={titleId}>{title}</h3>
+          <h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2>
           <button type="button" className="icon-btn icon-btn--outlined" aria-label={t("common.close")} onClick={onClose}>
             <Icon name="close" />
           </button>
@@ -123,9 +149,13 @@ export function EmptyState({ title, children, action }: { title: string; childre
 }
 
 export function ScreenTitle({ children, detail }: { children: ReactNode; detail?: ReactNode }) {
+  const heading = useRef<HTMLHeadingElement>(null);
+  useLayoutEffect(() => {
+    heading.current?.focus({ preventScroll: true });
+  }, []);
   return (
     <div className="large-title">
-      <h1>{children}</h1>
+      <h1 ref={heading} tabIndex={-1}>{children}</h1>
       {detail ? <span>{detail}</span> : null}
     </div>
   );
