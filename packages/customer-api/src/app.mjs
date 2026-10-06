@@ -444,6 +444,11 @@ export function createCustomerApiServer(options) {
     }
     rejectRaw(socket, 400, "VALIDATION_FAILED");
   });
+  server.on("checkExpectation", (request, response) => {
+    observer.observe(request, response);
+    const requestId = generateRequestId();
+    send(response, 417, errorBody("VALIDATION_FAILED", requestId), requestId, { connection: "close" });
+  });
   server.on("connect", (_request, socket) => {
     rejectRaw(socket, 404, "CAPABILITY_DENIED");
   });

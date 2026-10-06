@@ -1,6 +1,12 @@
-import { defineConfig } from "vite";
+import { Server } from "node:http";
+import { type Plugin, defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { devDocumentSecurityHeaders, devServerPort, documentSecurityHeaders } from "./src/server/security-headers";
+import {
+  devDocumentSecurityHeaders,
+  devServerPort,
+  documentSecurityHeaders,
+  guardRawResponses
+} from "./src/server/security-headers";
 
 // Dev metrics stay on the BFF's own loopback port, never via the app origin,
 // including dot-segment, %2e or backslash spellings that normalize to the path.
@@ -13,8 +19,25 @@ function isMetricsPath(url: string | undefined): boolean {
   }
 }
 
+// server.headers and preview.headers miss Vite's own 403, 404, 500 and CORS
+// preflight replies, so the header set is applied before Vite handles anything.
+function securityHeaders(): Plugin {
+  const install = (headers: Readonly<Record<string, string>>) => ({ httpServer }: { httpServer: unknown }) => {
+    if (!(httpServer instanceof Server)) return;
+    httpServer.prependListener("request", (_request, response) => {
+      for (const [name, value] of Object.entries(headers)) response.setHeader(name, value);
+    });
+    guardRawResponses(httpServer, headers);
+  };
+  return {
+    name: "solid-security-headers",
+    configureServer: install(devDocumentSecurityHeaders),
+    configurePreviewServer: install(documentSecurityHeaders)
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), securityHeaders()],
   build: {
     sourcemap: false
   },
