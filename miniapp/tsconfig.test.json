@@ -20,6 +20,7 @@
     "src/app/a11y.test.ts",
     "src/server/**/*.ts",
     "src/server/activity.test.ts",
-    "src/server/activity-routes.test.ts"
+    "src/server/activity-routes.test.ts",
+    "src/server/sessions-routes.test.ts"
   ]
 }

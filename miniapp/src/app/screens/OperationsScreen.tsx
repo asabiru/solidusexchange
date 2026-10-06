@@ -34,7 +34,7 @@ const kycTexts: Readonly<Record<KycActivity["kind"], { title: MessageKey; tone: 
 };
 
 function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
-  if (kind === "session_login") return "login";
+  if (kind === "session_login" || kind === "session_revoked") return "login";
   if (kind === "quote_previewed") return "quote";
   if (kind === "address_screened") return "screening";
   return "kyc";
@@ -80,6 +80,17 @@ function ActivityRow({ item }: { item: ActivityItem }) {
           <strong>{t("activity.screeningTitle", { target: target?.label ?? item.asset })}</strong>
           <span className="num">{when(item.at)} · {t(screeningNetworkKeys[item.network])}</span>
           <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
+        </span>
+      </li>
+    );
+  }
+  if (item.kind === "session_revoked") {
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="device" size="sm" /></span>
+        <span className="row__main">
+          <strong>{item.scope === "single" ? t("activity.sessionRevokedOne") : t("activity.sessionRevokedOthers", { count: String(item.count) })}</strong>
+          <span className="num">{when(item.at)}</span>
         </span>
       </li>
     );

@@ -261,6 +261,16 @@ describe("Mini App BFF security headers on every route", () => {
       "GET /bff/kyc/status": () => get("/bff/kyc/status"),
       "GET /bff/notifications": () => get("/bff/notifications"),
       "GET /bff/activity": () => get("/bff/activity"),
+      "GET /bff/sessions": () => get("/bff/sessions"),
+      "POST /bff/sessions/revoke": async () => {
+        await postJson(port, "/bff/session/telegram", { initData: telegramInitData() });
+        const current = cookieOf(await postJson(port, "/bff/session/telegram", { initData: telegramInitData() }));
+        const list = JSON.parse((await get("/bff/sessions", current)).body) as { sessions: { handle: string; current: boolean }[] };
+        const other = list.sessions.find((session) => !session.current);
+        assert.ok(other);
+        return postJson(port, "/bff/sessions/revoke", { handle: other.handle }, { cookie: current });
+      },
+      "POST /bff/sessions/revoke-others": () => postJson(port, "/bff/sessions/revoke-others", {}, { cookie: verified }),
       "POST /bff/notifications/read": async () => {
         const inbox = JSON.parse((await get("/bff/notifications")).body) as { notifications: { id: string }[] };
         return postJson(port, "/bff/notifications/read", { ids: inbox.notifications[0].id }, { cookie: verified });

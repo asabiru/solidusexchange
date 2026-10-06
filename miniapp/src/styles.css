@@ -1581,6 +1581,39 @@ button.row:active:not(:disabled) {
   grid-template-columns: 1fr 1fr;
 }
 
+.row-action {
+  flex: none;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--red-soft);
+  color: var(--red);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.row-action:disabled {
+  opacity: 0.6;
+}
+
+.cta--danger {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.confirm-panel {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+}
+
+.confirm-panel > p {
+  margin: 0;
+}
+
 .meta-list {
   margin: 12px 0;
   overflow: hidden;
