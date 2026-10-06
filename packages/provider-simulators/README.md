@@ -58,6 +58,12 @@ with `defaultScenario`; an unmapped subject fails with
   `provider_outage`, with configurable TTL (`ttlSeconds`), spread
   (`spreadBps`, half applied per side) and fee (`feeBps`, in the quote asset,
   rounded up). Buy amounts round up, sell amounts round down.
+  A request fixes exactly one amount: `base_amount`, or for `side: "buy"`
+  only a `quote_amount` spend budget. With a budget the quote is for the
+  largest base amount whose `total_quote_amount` (fee included) fits it;
+  the record carries `amount_mode` (`base` | `quote`) and
+  `requested_quote_amount` (`null` in base mode), and the verifier rechecks
+  that the base amount is maximal (schema `solidchange.sim.quote.v2`).
 
 Every create call is idempotent: the same `idempotency_key` with the same
 request returns the stored response, a different request fails with

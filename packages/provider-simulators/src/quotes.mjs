@@ -47,10 +47,15 @@ import {
  */
 
 /**
+ * Exactly one of `base_amount` or `quote_amount` is required. `quote_amount`
+ * is a buy-side spend budget: the quote is for the largest base amount whose
+ * `total_quote_amount` (fee included) does not exceed it.
+ *
  * @typedef {object} QuoteRequest
  * @property {QuotePair} pair
  * @property {"buy" | "sell"} side Customer buys or sells the base asset.
- * @property {string} base_amount Decimal string in the base asset scale.
+ * @property {string} [base_amount] Decimal string in the base asset scale.
+ * @property {string} [quote_amount] Buy only. Decimal string in the quote asset scale.
  * @property {string} idempotency_key
  */
 
@@ -66,6 +71,8 @@ import {
  * @property {string} base_asset
  * @property {string} quote_asset
  * @property {"buy" | "sell"} side
+ * @property {"base" | "quote"} amount_mode Which request amount was fixed.
+ * @property {string | null} requested_quote_amount Spend budget in quote mode, otherwise null.
  * @property {string} base_amount
  * @property {string} mid_price
  * @property {string} price Side-adjusted price including the spread.
@@ -104,8 +111,9 @@ export const SYNTHETIC_MID_PRICES = Object.freeze({
 const PAIRS = /** @type {QuotePair[]} */ (Object.keys(SYNTHETIC_MID_PRICES));
 const SIDES = /** @type {const} */ (["buy", "sell"]);
 
-export const QUOTE_SCHEMA = "solidchange.sim.quote.v1";
+export const QUOTE_SCHEMA = "solidchange.sim.quote.v2";
 const QUOTE_KEYS = [
+  "amount_mode",
   "base_amount",
   "base_asset",
   "domain",
@@ -123,6 +131,7 @@ const QUOTE_KEYS = [
   "quote_amount",
   "quote_asset",
   "quote_id",
+  "requested_quote_amount",
   "rounding",
   "schema",
   "side",
@@ -153,6 +162,30 @@ export function computeQuoteAmounts({ pair, side, baseAmount, mid, spreadBps, fe
   const fee = divideRounded(quoteUnits * BigInt(feeBps), 10_000n, "up");
   const total = buy ? quoteUnits + fee : quoteUnits - fee;
   return { base, quote, price, quoteUnits, fee, total };
+}
+
+/**
+ * Largest base amount (in base units) whose buy total, fee included, fits
+ * within `budget` quote units. Returns 0n when not even one base unit fits.
+ *
+ * @param {{ pair: QuotePair, mid: bigint, spreadBps: number, feeBps: number, budget: bigint }} input
+ */
+export function maxBaseForQuoteBudget({ pair, mid, spreadBps, feeBps, budget }) {
+  const [base, quote] = /** @type {[string, string]} */ (pair.split("/"));
+  const price = computeQuoteAmounts({ pair, side: "buy", baseAmount: 0n, mid, spreadBps, feeBps }).price;
+  let low = 0n;
+  let high =
+    (budget * 10n ** BigInt(assetScale(base) + PRICE_SCALE)) / (price * 10n ** BigInt(assetScale(quote))) + 1n;
+  while (high - low > 1n) {
+    const middle = (low + high) / 2n;
+    const { total } = computeQuoteAmounts({ pair, side: "buy", baseAmount: middle, mid, spreadBps, feeBps });
+    if (total <= budget) {
+      low = middle;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
 }
 
 /**
@@ -187,6 +220,13 @@ export function validateSignedQuote(payload) {
   if (payload.rounding !== (side === "buy" ? "up" : "down")) {
     return "rounding does not match side";
   }
+  if (payload.amount_mode === "base") {
+    if (payload.requested_quote_amount !== null) {
+      return "requested_quote_amount must be null in base mode";
+    }
+  } else if (payload.amount_mode !== "quote" || side !== "buy") {
+    return "quote amount mode is buy only";
+  }
   for (const field of ["price_observed_at", "issued_at", "expires_at"]) {
     if (!isIsoSeconds(payload[field])) {
       return `invalid ${field}`;
@@ -208,14 +248,20 @@ export function validateSignedQuote(payload) {
     return "invalid spread or fee";
   }
   try {
-    const amounts = computeQuoteAmounts({
-      pair,
-      side,
-      baseAmount: parsePositiveAmount(base, payload.base_amount),
-      mid: parseDecimal(payload.mid_price, PRICE_SCALE),
-      spreadBps: /** @type {number} */ (spread),
-      feeBps: /** @type {number} */ (fee),
-    });
+    const baseAmount = parsePositiveAmount(base, payload.base_amount);
+    const mid = parseDecimal(payload.mid_price, PRICE_SCALE);
+    const amounts = {
+      baseAmount,
+      mid,
+      ...computeQuoteAmounts({
+        pair,
+        side,
+        baseAmount,
+        mid,
+        spreadBps: /** @type {number} */ (spread),
+        feeBps: /** @type {number} */ (fee),
+      }),
+    };
     if (
       payload.price !== formatDecimal(amounts.price, PRICE_SCALE) ||
       payload.quote_amount !== formatAmount(quote, amounts.quoteUnits) ||
@@ -224,6 +270,20 @@ export function validateSignedQuote(payload) {
       parseAmount(quote, payload.total_quote_amount) === 0n
     ) {
       return "derived amounts do not match";
+    }
+    if (payload.amount_mode === "quote") {
+      const budget = parsePositiveAmount(quote, payload.requested_quote_amount);
+      const next = computeQuoteAmounts({
+        pair,
+        side,
+        baseAmount: amounts.baseAmount + 1n,
+        mid: amounts.mid,
+        spreadBps: /** @type {number} */ (spread),
+        feeBps: /** @type {number} */ (fee),
+      });
+      if (amounts.total > budget || next.total <= budget) {
+        return "base amount is not the largest that fits the requested quote amount";
+      }
     }
   } catch {
     return "invalid amounts";
@@ -326,15 +386,23 @@ export function createQuoteSimulator(options) {
     providerId: "simulator",
 
     async requestQuote(request) {
-      const input = snapshotRequest(request, ["pair", "side", "base_amount", "idempotency_key"]);
+      const input = snapshotRequest(request, ["pair", "side", "idempotency_key"], ["base_amount", "quote_amount"]);
       const pair = oneOf(input.pair, PAIRS, "pair");
       const side = oneOf(input.side, SIDES, "side");
       const [base, quote] = /** @type {[string, string]} */ (pair.split("/"));
-      let baseAmount;
+      const quoteMode = Object.hasOwn(input, "quote_amount");
+      if (quoteMode === Object.hasOwn(input, "base_amount")) {
+        invalidRequest("exactly one of base_amount or quote_amount is required");
+      }
+      if (quoteMode && side !== "buy") {
+        invalidRequest("quote_amount is supported for buy quotes only");
+      }
+      const amountField = quoteMode ? "quote_amount" : "base_amount";
+      let requestedAmount;
       try {
-        baseAmount = parsePositiveAmount(base, input.base_amount);
+        requestedAmount = parsePositiveAmount(quoteMode ? quote : base, input[amountField]);
       } catch (error) {
-        throw new ProviderError("invalid_request", `base_amount: ${/** @type {Error} */ (error).message}`);
+        throw new ProviderError("invalid_request", `${amountField}: ${/** @type {Error} */ (error).message}`);
       }
       const key = idempotencyKey(input.idempotency_key);
       const scenario = Object.hasOwn(scenarios, pair) ? scenarios[pair] : fallback;
@@ -348,6 +416,12 @@ export function createQuoteSimulator(options) {
         const reference = parseDecimal(SYNTHETIC_MID_PRICES[pair], PRICE_SCALE);
         const jitterBps = random.int("quote-mid-jitter", -25, 25);
         const mid = divideRounded(reference * BigInt(10_000 + jitterBps), 10_000n, "half_even");
+        const baseAmount = quoteMode
+          ? maxBaseForQuoteBudget({ pair, mid, spreadBps, feeBps, budget: requestedAmount })
+          : requestedAmount;
+        if (baseAmount === 0n) {
+          invalidRequest("quote_amount is too small to quote");
+        }
         const amounts = computeQuoteAmounts({ pair, side, baseAmount, mid, spreadBps, feeBps });
         if (amounts.quoteUnits === 0n || amounts.total === 0n) {
           invalidRequest("base_amount is too small to quote");
@@ -362,6 +436,8 @@ export function createQuoteSimulator(options) {
           base_asset: base,
           quote_asset: quote,
           side,
+          amount_mode: quoteMode ? "quote" : "base",
+          requested_quote_amount: quoteMode ? formatAmount(quote, requestedAmount) : null,
           base_amount: formatAmount(base, baseAmount),
           mid_price: formatDecimal(mid, PRICE_SCALE),
           price: formatDecimal(amounts.price, PRICE_SCALE),
