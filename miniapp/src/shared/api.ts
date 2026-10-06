@@ -1,3 +1,4 @@
+import type { ScreeningAsset, ScreeningNetwork } from "./address-screening.js";
 import type { AssetCode } from "./assets.js";
 
 export type KycStatus = "verified" | "kyc-gated";
@@ -174,4 +175,25 @@ export interface NotificationsView {
   delivery: "disabled";
   unread: number;
   notifications: readonly NotificationDraft[];
+}
+
+export type AddressScreeningStatus =
+  | "pending"
+  | "low"
+  | "medium"
+  | "high"
+  | "severe"
+  | "unavailable"
+  | "timed_out";
+
+export interface AddressScreeningView {
+  id: string;
+  mode: "test";
+  asset: ScreeningAsset;
+  network: ScreeningNetwork;
+  status: AddressScreeningStatus;
+  advisory: true;
+  executable: false;
+  submittedAt: number;
+  deadline: number;
 }

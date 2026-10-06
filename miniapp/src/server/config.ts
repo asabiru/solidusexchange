@@ -1,4 +1,4 @@
-import type { KycScenario, QuoteScenario } from "@solidchange/provider-simulators";
+import type { KycScenario, KytScenario, QuoteScenario } from "@solidchange/provider-simulators";
 import type { QuoteSource } from "./provider-quotes.js";
 
 export interface ServerConfig {
@@ -16,6 +16,9 @@ export interface ServerConfig {
   kycScenario: KycScenario;
   kycSeed: string;
   kycReviewTimeoutSeconds: number;
+  kytScenario: KytScenario;
+  kytSeed: string;
+  kytScreeningTimeoutSeconds: number;
   customerApiUrl?: string;
   customerApiDevTokenKey?: string;
 }
@@ -28,6 +31,18 @@ const kycScenarios: readonly KycScenario[] = [
   "approve",
   "reject",
   "needs_more_data",
+  "pending_timeout",
+  "provider_outage",
+  "duplicate_callback",
+  "out_of_order_callback",
+  "late_callback"
+];
+const kytScenarios: readonly KytScenario[] = [
+  "low",
+  "medium",
+  "high",
+  "severe",
+  "sanctions_hit",
   "pending_timeout",
   "provider_outage",
   "duplicate_callback",
@@ -143,6 +158,9 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     kycScenario: oneOf(env, "MINIAPP_KYC_SCENARIO", kycScenarios, "approve"),
     kycSeed: seedSetting(env, "MINIAPP_KYC_SEED", "miniapp-dev-kyc"),
     kycReviewTimeoutSeconds: integerSetting(env, "MINIAPP_KYC_REVIEW_TIMEOUT_SECONDS", 3_600, 600, 3_600),
+    kytScenario: oneOf(env, "MINIAPP_KYT_SCENARIO", kytScenarios, "low"),
+    kytSeed: seedSetting(env, "MINIAPP_KYT_SEED", "miniapp-dev-kyt"),
+    kytScreeningTimeoutSeconds: integerSetting(env, "MINIAPP_KYT_TIMEOUT_SECONDS", 900, 60, 3_600),
     ...parseCustomerApi(env)
   };
 }

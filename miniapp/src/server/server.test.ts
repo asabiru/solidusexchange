@@ -329,7 +329,7 @@ describe("money movement is absent", () => {
 
   it("declares no money-moving route", () => {
     const postPaths = routeTable.filter((route) => route.method === "POST").map((route) => route.path);
-    assert.deepEqual(postPaths.sort(), ["/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram"]);
+    assert.deepEqual(postPaths.sort(), ["/bff/address-screening", "/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram"]);
     for (const route of routeTable) {
       assert.doesNotMatch(route.path, moneyWords, route.path);
     }
