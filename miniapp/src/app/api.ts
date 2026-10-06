@@ -2,6 +2,7 @@ import type {
   HealthView,
   KycStatus,
   KycVerificationView,
+  NotificationsView,
   OperationDetail,
   OperationSummary,
   ProfileView,
@@ -51,6 +52,9 @@ export const api = {
   profile: () => call<ProfileView>("/bff/profile"),
   kycStatus: () => call<KycVerificationView>("/bff/kyc/status"),
   submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
+  notifications: () => call<NotificationsView>("/bff/notifications"),
+  markNotificationsRead: (ids: readonly string[]) =>
+    call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
   quote: (from: AssetCode, to: AssetCode, amount: string) => {
     const query = new URLSearchParams({ from, to, amount });
     return call<QuotePreview>(`/bff/quotes/preview?${query.toString()}`);

@@ -335,6 +335,75 @@ fieldset {
   font-size: 26px;
 }
 
+.bell {
+  position: relative;
+  margin: 0 -8px 0 auto;
+}
+
+.bell__badge {
+  position: absolute;
+  top: 6px;
+  right: 5px;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 99px;
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--bg);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.notice-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--tint-soft);
+  color: var(--tint-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.notifications {
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.notifications .row__main > strong {
+  font-size: 15px;
+  font-weight: 500;
+  white-space: normal;
+}
+
+.notifications .is-unread .row__main > strong {
+  font-weight: 600;
+}
+
+.unread-dot {
+  width: 10px;
+  height: 10px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--tint);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .kyc {
   display: flex;
   align-items: center;
