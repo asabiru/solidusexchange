@@ -137,11 +137,10 @@ export function OperationsScreen() {
       </fieldset>
       <div className="filter-tools">
         <span className="filter-tools__count num" aria-live="polite">
-          {items === undefined ? t("common.loading") : t("activity.found", { count: filtered.length })}
+          {failed ? t("activity.loadFailed") : items === undefined ? t("common.loading") : t("activity.found", { count: filtered.length })}
         </span>
       </div>
 
-      {failed ? <p className="form-error" role="alert">{t("activity.loadFailed")}</p> : null}
       {items?.length === 0 ? (
         <EmptyState title={t("activity.emptyTitle")}>{t("activity.emptyDetail")}</EmptyState>
       ) : items && filtered.length === 0 ? (

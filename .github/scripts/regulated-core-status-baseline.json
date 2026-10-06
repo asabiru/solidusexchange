@@ -655,6 +655,11 @@
               "D-018",
               "SRE + Security",
               "Proposed"
+            ],
+            [
+              "D-019",
+              "Legal + MLRO + Product",
+              "Open"
             ]
           ]
         }
@@ -677,7 +682,8 @@
         "D-015",
         "D-016",
         "D-017",
-        "D-018"
+        "D-018",
+        "D-019"
       ],
       "datedApprovalClaims": [],
       "approvalClaims": [
@@ -989,6 +995,10 @@
             [
               "Own HSM custody program",
               "Proposed; D-002/D-003, legal key-location review, vendor proof of concept and independent design review pending"
+            ],
+            [
+              "In-chat crypto checks",
+              "Proposed; D-019, D-014 limits, posting-rule review and legal memo pending"
             ],
             [
               "Finance model",

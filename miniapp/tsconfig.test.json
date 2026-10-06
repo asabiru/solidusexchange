@@ -17,6 +17,7 @@
     "src/app/format.ts",
     "src/app/locales/*.ts",
     "src/app/i18n.test.ts",
+    "src/app/a11y.test.ts",
     "src/server/**/*.ts",
     "src/server/activity.test.ts",
     "src/server/activity-routes.test.ts"
