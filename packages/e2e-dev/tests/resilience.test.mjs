@@ -101,6 +101,7 @@ async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
 describe("Mini App BFF with a failing customer-api", () => {
   const key = randomBytes(32).toString("hex");
   const timers = new Set();
+  const upstream = [];
   let mode = "valid";
   let stub;
   let app;
@@ -156,10 +157,21 @@ describe("Mini App BFF with a failing customer-api", () => {
     stalled_body: (_, response) => {
       response.writeHead(200, { "content-type": "application/json" });
       response.write(`{"subject":"${marker}"`);
-    }
+    },
+    invalid_utf8: (request, response) =>
+      send(response, 200, "application/json", Buffer.from(JSON.stringify(validBody(request)).replace("2026", "\u00ff026"), "latin1"))
   };
 
+  async function upstreamReleased(label) {
+    const last = upstream.at(-1);
+    for (let attempt = 0; attempt < 100 && !last.closed; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    assert.equal(last.closed, true, `${label}: upstream response still open`);
+  }
+
   async function profileFailsClosed(label) {
+    const hits = upstream.length;
     const startedAt = Date.now();
     const response = await call(app.base, "/bff/profile", { cookie });
     assert.equal(response.status, 200, label);
@@ -170,11 +182,20 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.deepEqual(JSON.parse(text).apiAccess, { status: "unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    assert.ok(upstream.slice(hits).every((entry) => entry.mode === label), label);
     return elapsed;
   }
 
   before(async () => {
-    stub = createServer((request, response) => modes[mode](request, response));
+    stub = createServer((request, response) => {
+      const entry = { mode, closed: false };
+      response.once("close", () => {
+        entry.closed = true;
+      });
+      upstream.push(entry);
+      modes[mode](request, response);
+    });
     const stubBase = await listen(stub);
     app = await startMiniapp({ MINIAPP_CUSTOMER_API_URL: stubBase, MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key });
     cookie = await devLogin(app, "kyc-gated");
@@ -210,7 +231,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       "extra_fields",
       "subject_mismatch",
       "commands_enabled",
-      "connection_reset"
+      "connection_reset",
+      "invalid_utf8"
     ];
     for (const name of malformed) {
       mode = name;
@@ -224,6 +246,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       mode = name;
       const elapsed = await profileFailsClosed(name);
       assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
+      await upstreamReleased(name);
       await assertGated(app, cookie, name);
     }
   });

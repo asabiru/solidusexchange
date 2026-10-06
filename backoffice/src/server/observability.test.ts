@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
-import { type IncomingMessage, request as httpRequest, type Server } from "node:http";
+import { EventEmitter } from "node:events";
+import { type IncomingMessage, request as httpRequest, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createServer as createViteServer } from "vite";
 import { loadServerConfig, type ServerConfig } from "./config.js";
-import { durationBucketsSeconds } from "./observability.js";
+import { createRequestObserver, durationBucketsSeconds } from "./observability.js";
 import { createBackofficeServer, routeTemplates } from "./server.js";
 
 const origin = "http://127.0.0.1:4173";
@@ -262,6 +263,7 @@ describe("backoffice BFF observability enabled", () => {
       { origin },
       { "x-forwarded-for": "203.0.113.7" },
       { forwarded: "for=203.0.113.7" },
+      { "x-real-ip": "203.0.113.7" },
       { via: "1.1 vite" },
       { "sec-fetch-site": "same-origin" },
       { "sec-fetch-site": "cross-site" }
@@ -271,6 +273,36 @@ describe("backoffice BFF observability enabled", () => {
     }
     assert.equal(await rawGet(running.port, "/bff/metrics", { host: "metrics.example" }), 404);
     assert.equal((await fetch(`${running.base}/bff/metrics`, { headers: { "sec-fetch-site": "none" } })).status, 200);
+  });
+
+  it("serves metrics only for the exact request target, not normalized aliases", async () => {
+    for (const alias of ["/bff/./metrics", "/bff/%2e/metrics", "/bff/x/../metrics", "/bff\\metrics", "/bff/metrics?format=text"]) {
+      assert.equal(await rawGet(running.port, alias, {}), 404, alias);
+    }
+    assert.equal(await rawGet(running.port, "/bff/metrics", {}), 200);
+  });
+});
+
+describe("request observer aborted responses", () => {
+  it("records a response closed before finish with status 0, not its 200 default", async () => {
+    const lines: string[] = [];
+    const observer = createRequestObserver({
+      service: "test",
+      routes: ["/a"],
+      config: { log: "json", metrics: "loopback" },
+      sink: (line) => lines.push(line),
+      timer: () => 0,
+      wallClock: () => 0
+    });
+    const response = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: () => undefined });
+    observer.observe({ method: "GET", url: "/a" } as unknown as IncomingMessage, response as unknown as ServerResponse);
+    response.emit("close");
+    response.emit("finish");
+    const metrics = await observer.renderMetrics([]);
+    assert.ok(metrics.includes('solidchange_http_requests_total{service="test",route="/a",method="GET",status_class="other"} 1\n'));
+    assert.equal(metrics.includes('status_class="2xx"'), false);
+    assert.equal(lines.length, 1);
+    assert.equal(JSON.parse(lines[0]).status, 0);
   });
 });
 
@@ -291,6 +323,32 @@ describe("Vite dev proxy keeps metrics off the browser origin", () => {
       }
     } finally {
       await vite.close();
+    }
+  });
+
+  it("never forwards dot-segment, encoded or backslash spellings of /bff/metrics", async () => {
+    const running = await start(config({ log: "json", metrics: "loopback" }));
+    const root = fileURLToPath(new URL("../../", import.meta.url));
+    const vite = await createViteServer({
+      root,
+      configFile: `${root}vite.config.ts`,
+      logLevel: "silent",
+      server: { port: 0, strictPort: false, proxy: { "/bff": { target: running.base } } }
+    });
+    try {
+      await vite.listen();
+      const { port } = vite.httpServer?.address() as AddressInfo;
+      for (const alias of ["/bff/./metrics", "/bff/%2e/metrics", "/bff/%2E/metrics", "/bff/x/../metrics", "/bff/x/%2e%2e/metrics", "/bff\\metrics"]) {
+        assert.notEqual(await rawGet(port, alias, {}), 200, alias);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      assert.deepEqual(running.lines, []);
+      assert.equal(await rawGet(port, "/bff/healthz", {}), 200);
+      await logged(running, 1);
+      assert.equal(JSON.parse(running.lines[0]).route, "/bff/healthz");
+    } finally {
+      await vite.close();
+      await running.close();
     }
   });
 });

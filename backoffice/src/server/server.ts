@@ -348,7 +348,9 @@ export function createBackofficeServer(
       const path = url.pathname;
 
       if (path === "/bff/metrics") {
-        if (!observer.metricsEnabled || !metricsRequestAllowed(request)) {
+        // Only the exact request target: dot-segment or backslash spellings that
+        // normalize to this path arrive via the Vite proxy on the app origin.
+        if (!observer.metricsEnabled || request.url !== "/bff/metrics" || !metricsRequestAllowed(request)) {
           json(response, 404, { error: "not_found" });
           return;
         }
