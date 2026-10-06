@@ -59,7 +59,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
         if (event.key !== "Tab") return;
         const dialog = ref.current;
         if (!dialog) return;
-        const controls = [...dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex='0']")]
+        const controls = [...dialog.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']")]
           .filter((element) => element.getClientRects().length > 0);
         const first = controls[0];
         const last = controls.at(-1);

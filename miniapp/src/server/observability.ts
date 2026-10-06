@@ -31,6 +31,8 @@ export interface RequestObserver {
   routeOf(path: string): string;
   observe(request: IncomingMessage, response: ServerResponse): string;
   renderMetrics(gauges?: readonly Gauge[]): Promise<string>;
+  /** Callers pass only fixed codes and server-generated ids, never user text. */
+  event(name: string, fields: Readonly<Record<string, string>>): void;
 }
 
 interface Histogram {
@@ -221,10 +223,16 @@ export function createRequestObserver(options: RequestObserverOptions): RequestO
     return `${lines.join("\n")}\n`;
   }
 
+  function event(name: string, fields: Readonly<Record<string, string>>): void {
+    if (config.log !== "json") return;
+    sink(JSON.stringify({ ...fields, ts: new Date(wallClock()).toISOString(), service: options.service, event: name }));
+  }
+
   return Object.freeze({
     metricsEnabled: config.metrics === "loopback",
     routeOf,
     observe,
-    renderMetrics
+    renderMetrics,
+    event
   });
 }

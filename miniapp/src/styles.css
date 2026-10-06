@@ -90,7 +90,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
   letter-spacing: inherit;
@@ -1816,7 +1817,9 @@ button.row:active:not(:disabled) {
   font-size: 13px;
 }
 
-.form-control input {
+.form-control input,
+.form-control select,
+.form-control textarea {
   min-height: 50px;
   padding: 12px 14px;
   border: 0;
@@ -1825,6 +1828,44 @@ button.row:active:not(:disabled) {
   color: var(--ink);
   box-shadow: var(--shadow-card);
   font-size: 17px;
+}
+
+.form-control textarea {
+  min-height: 132px;
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.form-control__hint {
+  justify-self: end;
+  font-size: 12px;
+}
+
+.support-message {
+  margin: 0 0 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+  font-size: 15px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.support-ack {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--orange-soft);
+  color: var(--orange);
+  font-size: 14px;
+}
+
+.support-ack p {
+  margin: 0;
 }
 
 .tick {
@@ -1861,6 +1902,8 @@ button.row:active:not(:disabled) {
 .exchange-field,
 .asset-select,
 .form-control input,
+.form-control select,
+.form-control textarea,
 .switch {
   border: 1px solid var(--control-border);
 }

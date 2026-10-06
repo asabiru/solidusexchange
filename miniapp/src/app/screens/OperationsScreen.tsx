@@ -6,16 +6,18 @@ import type { MessageKey } from "../i18n";
 import { useI18n } from "../i18n-context";
 import { Icon, type IconName } from "../Icon";
 import { screeningBadges, screeningNetworkKeys } from "../sheets";
+import { supportCategoryKeys } from "../SupportSheet";
 import { EmptyState, ScreenTitle } from "../ui";
 
-type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening";
+type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening" | "support";
 
 const groupFilters: readonly { value: ActivityGroup; label: MessageKey }[] = [
   { value: "all", label: "activity.filterAll" },
   { value: "login", label: "activity.filterLogin" },
   { value: "kyc", label: "activity.filterKyc" },
   { value: "quote", label: "activity.filterQuote" },
-  { value: "screening", label: "activity.filterScreening" }
+  { value: "screening", label: "activity.filterScreening" },
+  { value: "support", label: "activity.filterSupport" }
 ];
 
 const sourceLabels: Readonly<Record<SessionSource, MessageKey>> = {
@@ -37,6 +39,7 @@ function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
   if (kind === "session_login" || kind === "session_revoked") return "login";
   if (kind === "quote_previewed") return "quote";
   if (kind === "address_screened") return "screening";
+  if (kind === "support_requested") return "support";
   return "kyc";
 }
 
@@ -91,6 +94,18 @@ function ActivityRow({ item }: { item: ActivityItem }) {
         <span className="row__main">
           <strong>{item.scope === "single" ? t("activity.sessionRevokedOne") : t("activity.sessionRevokedOthers", { count: String(item.count) })}</strong>
           <span className="num">{when(item.at)}</span>
+        </span>
+      </li>
+    );
+  }
+  if (item.kind === "support_requested") {
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="help" size="sm" /></span>
+        <span className="row__main">
+          <strong>{t("activity.supportTitle", { category: t(supportCategoryKeys[item.category]) })}</strong>
+          <span className="num">{when(item.at)}</span>
+          <span className="pill pill--muted">{t("activity.supportOnly")}</span>
         </span>
       </li>
     );

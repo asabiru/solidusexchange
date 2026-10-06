@@ -21,6 +21,7 @@ import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
 import type { SheetRequest } from "./navigation";
+import { SupportSheet } from "./SupportSheet";
 import { Coin, DisabledCta, Sheet, StatusPill, Unavailable } from "./ui";
 
 interface Props {
@@ -53,12 +54,7 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
     case "sessions":
       return <SessionsSheet close={close} />;
     case "support":
-      return (
-        <Sheet title={t("common.support")} onClose={close}>
-          <p className="sheet__note">{t("support.note")}</p>
-          <Unavailable>{t("support.unavailable")}</Unavailable>
-        </Sheet>
-      );
+      return <SupportSheet close={close} />;
     case "operation":
       return <OperationSheet id={sheet.id} close={close} />;
     case "qr-manual":

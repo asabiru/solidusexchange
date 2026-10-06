@@ -11,8 +11,9 @@ const ui = read("app/ui.tsx");
 const sheets = read("app/sheets.tsx");
 const exchange = read("app/screens/ExchangeScreen.tsx");
 const activity = read("app/screens/OperationsScreen.tsx");
+const support = read("app/SupportSheet.tsx");
 const screenNames = ["Home", "Exchange", "Qr", "Operations", "Profile"];
-const sources = [app, ui, sheets, ...screenNames.map((name) => read(`app/screens/${name}Screen.tsx`))];
+const sources = [app, ui, sheets, support, ...screenNames.map((name) => read(`app/screens/${name}Screen.tsx`))];
 const css = read("styles.css");
 
 interface CssRule {
@@ -203,7 +204,7 @@ describe("Mini App accessibility semantics", () => {
 
   it("traps Tab and Shift+Tab in visible enabled sheet controls", () => {
     assert.match(ui, /event.key !== "Tab"/);
-    assert.match(ui, /button:not\(:disabled\), input:not\(:disabled\), select:not\(:disabled\)/);
+    assert.match(ui, /button:not\(:disabled\), input:not\(:disabled\), select:not\(:disabled\), textarea:not\(:disabled\)/);
     assert.match(ui, /getClientRects\(\).length > 0/);
     assert.match(ui, /event.shiftKey/);
     assert.match(ui, /last.focus\(\)/);
@@ -221,7 +222,7 @@ describe("Mini App accessibility semantics", () => {
   it("labels every input and select and associates validation errors", () => {
     for (const source of sources) {
       const entries = elements(source);
-      for (const input of entries.filter((entry) => ["input", "select"].includes(entry.tag))) {
+      for (const input of entries.filter((entry) => ["input", "select", "textarea"].includes(entry.tag))) {
         assert.ok(input.attributes.has("aria-label") || entries.some((entry) => entry.tag === "label" && entry.attributes.get("htmlFor") === input.attributes.get("id")), input.node.getText(input.source));
       }
     }
@@ -230,6 +231,42 @@ describe("Mini App accessibility semantics", () => {
       assert.match(source, /aria-invalid=/);
       assert.match(source, /id=\{errorId\}/);
     }
+  });
+
+  it("labels the support form, ties each field to its error and focuses the first invalid field", () => {
+    const entries = elements(support);
+    const controls = entries.filter((entry) => ["input", "select", "textarea"].includes(entry.tag));
+    assert.deepEqual(controls.map((entry) => entry.tag), ["select", "input", "textarea", "select"]);
+    for (const control of controls) {
+      assert.ok(entries.some((entry) => entry.tag === "label" && entry.attributes.get("htmlFor") === control.attributes.get("id")), control.node.getText(control.source));
+    }
+    for (const [tag, field] of [["input", "topic"], ["textarea", "message"]]) {
+      const control = controls.find((entry) => entry.tag === tag);
+      assert.equal(control?.attributes.get("aria-invalid"), `{errors.${field} !== undefined}`);
+      assert.equal(control?.attributes.get("aria-describedby"), `{\`\${ids.${field}Error} \${ids.${field}Count}\`}`);
+      assert.match(support, new RegExp(`id=\\{ids.${field}Error\\} aria-live="polite"`));
+    }
+    assert.equal(controls[3].attributes.get("aria-describedby"), "{ids.activityError}");
+    assert.equal(controls[1].attributes.get("maxLength"), "{maxSupportTopicLength}");
+    assert.equal(controls[2].attributes.get("maxLength"), "{maxSupportMessageLength}");
+    assert.match(support, /<form noValidate onSubmit=\{submit\} aria-describedby=\{ids.formError\}>/);
+    assert.match(support, /id=\{ids.formError\} aria-live="polite"/);
+    assert.match(support, /fields\[field\]\.current\?\.focus\(\)/);
+    assert.match(support, /if \(switches > 0\) heading.current\?\.focus\(\)/);
+    assert.match(support, /className="visually-hidden" aria-live="polite" aria-atomic="true">\{announcement\}/);
+    assert.match(support, /setAnnouncement\(t\("support.created"\)\)/);
+  });
+
+  it("shows the test banner on every support view and renders request text only as text", () => {
+    assert.match(support, /<Sheet title=\{t\("common.support"\)\} onClose=\{close\}>\s*<TestBanner \/>/);
+    assert.match(support, /t\("support.banner"\)/);
+    assert.match(support, /request.complaintAcknowledged \? \(\s*<div className="support-ack">/);
+    assert.match(support, /<p className="support-message">\{request.message\}<\/p>/);
+    assert.match(support, /<strong>\{request.topic\}<\/strong>/);
+    assert.match(support, /tabIndex=\{-1\}>\{request.topic\}<\/h3>/);
+    assert.doesNotMatch(support, /dangerouslySetInnerHTML|innerHTML|outerHTML|insertAdjacentHTML/);
+    assert.equal(declaration(".support-message", "white-space"), "pre-wrap");
+    assert.match(sheets, /case "support":\s*return <SupportSheet close=\{close\} \/>;/);
   });
 
   it("announces asynchronous outcomes politely without reading every countdown tick", () => {
@@ -349,13 +386,13 @@ describe("Mini App WCAG 2.2 AA CSS", () => {
       checkContrast(resolve("var(--focus)", theme.values), backgrounds, 3, `${theme.name} focus`);
       checkContrast(resolve("var(--control-border)", theme.values), backgrounds, 3, `${theme.name} boundary`);
     }
-    for (const selector of [".exchange-field", ".asset-select", ".form-control input", ".switch"]) assert.equal(declaration(selector, "border"), "1px solid var(--control-border)");
+    for (const selector of [".exchange-field", ".asset-select", ".form-control input", ".form-control select", ".form-control textarea", ".switch"]) assert.equal(declaration(selector, "border"), "1px solid var(--control-border)");
     assert.equal(declaration(".exchange-field__value:focus-visible", "outline-offset"), "-3px");
     assert.equal(declaration(".sheet :focus-visible", "outline-offset"), "-3px");
   });
 
   it("gives native controls at least 24 by 24 CSS pixels", () => {
-    for (const selector of ["button", "input", "select"]) {
+    for (const selector of ["button", "input", "select", "textarea"]) {
       assert.equal(declaration(selector, "min-width"), "24px");
       assert.equal(declaration(selector, "min-height"), "24px");
     }

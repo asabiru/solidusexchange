@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import type {
   ActivityItem,
+  ActivityKind,
   AddressScreeningStatus,
   AddressScreeningView,
   KycVerificationState,
   QuotePreview,
   SessionSource
 } from "../shared/api.js";
+import type { SupportCategory } from "../shared/support.js";
 
 export const activityIdPattern = /^act_[0-9a-f]{24}$/;
 export const maxActivityPerSubject = 50;
@@ -26,6 +28,8 @@ export interface ActivityLog {
   recordKyc(subject: string, state: KycVerificationState): void;
   recordQuote(subject: string, quote: QuotePreview): void;
   recordScreening(subject: string, view: AddressScreeningView, current?: ScreeningStatusLookup): void;
+  recordSupport(subject: string, category: SupportCategory, requestId: string): void;
+  kindOf(subject: string, id: string): ActivityKind | undefined;
   list(subject: string, limit?: number): readonly ActivityItem[];
   size(subject: string): number;
   subjects(): number;
@@ -44,9 +48,9 @@ function bound(value: number | undefined, fallback: number): number {
 
 /**
  * Test-mode customer activity history. Entries come only from server-side
- * events (session start and revocation, trusted KYC transitions, quote previews and address
- * screenings); clients cannot create them. Only display-safe fields are kept:
- * no addresses, provider references or personal data. Bounded per subject and
+ * events (session start and revocation, trusted KYC transitions, quote previews, address
+ * screenings and support drafts); clients cannot create them. Only display-safe fields are kept:
+ * no addresses, provider references, support message text or personal data. Bounded per subject and
  * by subject count (least recently active subject first out).
  */
 export function createActivityLog(options: ActivityLogOptions): ActivityLog {
@@ -135,6 +139,15 @@ export function createActivityLog(options: ActivityLogOptions): ActivityLog {
         }),
         current: view.status === "pending" ? current : undefined
       });
+    },
+
+    recordSupport(subject: string, category: SupportCategory, requestId: string): void {
+      append(subject, { item: Object.freeze({ id: nextId(subject), at: options.clock(), kind: "support_requested", category, requestId }) });
+    },
+
+    kindOf(subject: string, id: string): ActivityKind | undefined {
+      if (!activityIdPattern.test(id)) return undefined;
+      return logs.get(subject)?.find((entry) => entry.item.id === id)?.item.kind;
     },
 
     list(subject: string, limit = maxPerSubject): readonly ActivityItem[] {

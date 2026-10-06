@@ -1,5 +1,6 @@
 import type { ScreeningAsset, ScreeningNetwork } from "./address-screening.js";
 import type { AssetCode } from "./assets.js";
+import type { SupportCategory, SupportStatus } from "./support.js";
 
 export type KycStatus = "verified" | "kyc-gated";
 export type SessionSource = "telegram" | "dev-synthetic";
@@ -171,7 +172,9 @@ export type NotificationTemplate =
   | "kyc_rejected"
   | "kyc_needs_more_data"
   | "kyc_timed_out"
-  | "kyc_unavailable";
+  | "kyc_unavailable"
+  | "support_received"
+  | "complaint_received";
 
 export interface NotificationDraft {
   id: string;
@@ -214,7 +217,13 @@ export interface AddressScreeningView {
 }
 
 export type ActivityKycState = Exclude<KycVerificationState, "not_started">;
-export type ActivityKind = "session_login" | "session_revoked" | `kyc_${ActivityKycState}` | "quote_previewed" | "address_screened";
+export type ActivityKind =
+  | "session_login"
+  | "session_revoked"
+  | `kyc_${ActivityKycState}`
+  | "quote_previewed"
+  | "address_screened"
+  | "support_requested";
 
 interface ActivityBase {
   id: string;
@@ -259,10 +268,48 @@ export interface AddressScreenedActivity extends ActivityBase {
   executable: false;
 }
 
-export type ActivityItem = SessionLoginActivity | SessionRevokedActivity | KycActivity | QuotePreviewedActivity | AddressScreenedActivity;
+export interface SupportRequestedActivity extends ActivityBase {
+  kind: "support_requested";
+  category: SupportCategory;
+  requestId: string;
+}
+
+export type ActivityItem =
+  | SessionLoginActivity
+  | SessionRevokedActivity
+  | KycActivity
+  | QuotePreviewedActivity
+  | AddressScreenedActivity
+  | SupportRequestedActivity;
 
 export interface ActivityView {
   mode: "test";
   items: readonly ActivityItem[];
   executable: false;
+}
+
+export interface SupportTimelineEntry {
+  status: SupportStatus;
+  at: number;
+}
+
+export interface SupportRequestView {
+  id: string;
+  mode: "test";
+  delivery: "disabled";
+  category: SupportCategory;
+  topic: string;
+  message: string;
+  activityRef?: { id: string; kind: ActivityKind };
+  status: SupportStatus;
+  timeline: readonly SupportTimelineEntry[];
+  complaintAcknowledged: boolean;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface SupportRequestsView {
+  mode: "test";
+  delivery: "disabled";
+  requests: readonly SupportRequestView[];
 }
