@@ -324,6 +324,27 @@ describe("draft compliance report routes", () => {
     assert.equal((await auditActions(cookie)).length, before + 2);
   });
 
+  it("rejects same-site and cross-site report requests before they write audit events", async () => {
+    const cookie = await devSession("auditor");
+    const before = (await auditActions(cookie)).length;
+    for (const path of ["/bff/api/reports", "/bff/api/reports/kyc-queue-daily", "/bff/api/reports/kyc-queue-daily/export"]) {
+      for (const site of ["same-site", "cross-site", "Same-Site", ""]) {
+        const response = await fetch(`${baseUrl}${path}`, { headers: { cookie, "sec-fetch-site": site } });
+        assert.equal(response.status, 403, `${site} ${path}`);
+        assert.deepEqual(await response.json(), { error: "fetch_site_rejected" });
+      }
+    }
+    assert.equal((await auditActions(cookie)).length, before);
+
+    for (const site of ["same-origin", "none"]) {
+      const response = await fetch(`${baseUrl}/bff/api/reports/kyc-queue-daily`, { headers: { cookie, "sec-fetch-site": site } });
+      assert.equal(response.status, 200, site);
+    }
+    const events = await auditActions(cookie);
+    assert.equal(events.length, before + 2);
+    assert.deepEqual(events.slice(-2).map((item) => item.action), ["report.viewed", "report.viewed"]);
+  });
+
   it("exposes no write routes and rejects unknown reports", async () => {
     const cookie = await devSession("compliance-lead");
     const before = (await auditActions(cookie)).length;

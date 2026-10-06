@@ -565,6 +565,13 @@ export function createBackofficeServer(
           json(response, 405, { error: "method_not_allowed" });
           return;
         }
+        // Report reads append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
         const session = authorized(request, response, "reports:read");
         if (!session) return;
         if (!reportMatch && !reportExportMatch) {

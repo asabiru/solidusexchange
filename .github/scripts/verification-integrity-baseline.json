@@ -384,8 +384,8 @@
       "minCases": 11
     },
     "backoffice/src/server/reports.test.ts": {
-      "minLines": 319,
-      "minCases": 13
+      "minLines": 338,
+      "minCases": 14
     },
     "backoffice/src/server/server.test.ts": {
       "minLines": 1211,
