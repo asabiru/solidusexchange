@@ -1,6 +1,7 @@
 import type {
   HealthView,
   KycStatus,
+  KycVerificationView,
   OperationDetail,
   OperationSummary,
   ProfileView,
@@ -48,6 +49,8 @@ export const api = {
   operations: () => call<{ operations: OperationSummary[] }>("/bff/operations"),
   operation: (id: string) => call<OperationDetail>(`/bff/operations/${encodeURIComponent(id)}`),
   profile: () => call<ProfileView>("/bff/profile"),
+  kycStatus: () => call<KycVerificationView>("/bff/kyc/status"),
+  submitKyc: () => call<KycVerificationView>("/bff/kyc/applications", {}),
   quote: (from: AssetCode, to: AssetCode, amount: string) => {
     const query = new URLSearchParams({ from, to, amount });
     return call<QuotePreview>(`/bff/quotes/preview?${query.toString()}`);

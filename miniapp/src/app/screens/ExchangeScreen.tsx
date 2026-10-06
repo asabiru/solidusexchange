@@ -111,7 +111,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
       {wallet.kyc !== "verified" ? (
         <button type="button" className="inline-alert" onClick={() => openSheet({ kind: "kyc-required" })}>
           <Icon name="id-card" size="sm" />
-          <span>Предпросмотр доступен, но для обмена нужна идентификация.</span>
+          <span>Предпросмотр доступен, для обмена нужна идентификация. Пройти проверку (тест)</span>
           <Icon name="chevron-right" size="sm" />
         </button>
       ) : null}

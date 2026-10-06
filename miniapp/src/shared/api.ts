@@ -104,6 +104,26 @@ export interface ProfileView {
   apiAccess: CustomerApiAccess;
 }
 
+export type KycVerificationState =
+  | "not_started"
+  | "submitted"
+  | "in_review"
+  | "approved"
+  | "rejected"
+  | "needs_more_data"
+  | "timed_out"
+  | "unavailable";
+
+export interface KycVerificationView {
+  mode: "test";
+  provider: "simulator";
+  state: KycVerificationState;
+  sessionKyc: KycStatus;
+  canSubmit: boolean;
+  submittedAt?: number;
+  reviewDeadline?: number;
+}
+
 export interface QuotePreview {
   id: string;
   from: AssetCode;
