@@ -1,0 +1,6 @@
+*
+!packages/customer-api/package.json
+!packages/customer-api/package-lock.json
+!packages/customer-api/src/**
+!infra/local/scripts/healthcheck.mjs
+!infra/local/scripts/with-dev-material.sh

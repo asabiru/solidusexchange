@@ -1,0 +1,15 @@
+*
+!packages/provider-simulators/package.json
+!packages/provider-simulators/package-lock.json
+!packages/provider-simulators/src/**
+!backoffice/**
+backoffice/node_modules
+backoffice/dist
+backoffice/.server-dist
+backoffice/.test-dist
+backoffice/.vite
+backoffice/**/*.tsbuildinfo
+backoffice/.env
+backoffice/.env.*
+!infra/local/scripts/healthcheck.mjs
+!infra/local/scripts/with-dev-material.sh
