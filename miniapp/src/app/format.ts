@@ -1,7 +1,7 @@
 import type { ExchangeRate, OperationLeg, OperationStatus } from "../shared/api.js";
 import { type AssetCode, assets } from "../shared/assets.js";
 import { type FormatOptions, formatDecimal } from "../shared/decimal.js";
-import { decimalSeparators, intlLocale, type Locale, type MessageKey } from "./i18n.js";
+import { decimalSeparators, type IntlSupport, intlLocale, intlSupported, type Locale, type MessageKey } from "./i18n.js";
 
 export const statusLabelKeys: Readonly<Record<OperationStatus, MessageKey>> = {
   completed: "status.completed",
@@ -37,11 +37,14 @@ function withUnit(asset: AssetCode, formatted: string): string {
 }
 
 /** Locale-aware formatting. Amounts stay exact decimal strings; only separators come from Intl. */
-export function createFormatter(locale: Locale): Formatter {
-  const separators = decimalSeparators(locale);
-  const dateFormat = new Intl.DateTimeFormat(intlLocale(locale), {
-    day: "numeric",
-    month: "long",
+export function createFormatter(locale: Locale, supported: IntlSupport = intlSupported): Formatter {
+  const separators = decimalSeparators(locale, supported);
+  const tag = intlLocale(locale, supported);
+  // Without native Kyrgyz data use numeric dates so no Russian month names leak into the Kyrgyz UI.
+  const numericDates = locale === "ky" && tag !== "ky-KG";
+  const dateFormat = new Intl.DateTimeFormat(tag, {
+    day: numericDates ? "2-digit" : "numeric",
+    month: numericDates ? "2-digit" : "long",
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Asia/Bishkek"

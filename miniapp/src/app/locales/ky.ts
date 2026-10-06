@@ -8,7 +8,7 @@ export const ky: Messages = {
   "tab.home": "Башкы бет",
   "tab.exchange": "Алмашуу",
   "tab.qr": "QR",
-  "tab.activity": "Операциялар",
+  "tab.activity": "Тарых",
   "tab.profile": "Профиль",
   "launch.checking": "Сессия текшерилүүдө…",
   "launch.welcome": "Кош келиңиз",

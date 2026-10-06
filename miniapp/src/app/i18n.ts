@@ -81,8 +81,15 @@ export function applyDocumentLocale(document: { documentElement: { lang: string 
   document.documentElement.lang = locale;
 }
 
-export function intlLocale(locale: Locale): string {
-  return intlTags[locale] ?? intlTags[defaultLocale];
+export type IntlSupport = (tag: string) => boolean;
+
+export const intlSupported: IntlSupport = (tag) =>
+  Intl.NumberFormat.supportedLocalesOf(tag).length > 0 && Intl.DateTimeFormat.supportedLocalesOf(tag).length > 0;
+
+/** Browsers without Kyrgyz ICU data (e.g. Chrome) fall back to ru-RU, which shares Kyrgyz number conventions. */
+export function intlLocale(locale: Locale, supported: IntlSupport = intlSupported): string {
+  const tag = intlTags[locale] ?? intlTags[defaultLocale];
+  return supported(tag) ? tag : intlTags[defaultLocale];
 }
 
 export function placeholdersOf(text: string): string[] {
@@ -98,8 +105,8 @@ export function translate(locale: Locale, key: MessageKey, params?: TranslationP
 }
 
 /** Group/decimal symbols from Intl so exact decimal strings can be formatted without floats. */
-export function decimalSeparators(locale: Locale): DecimalSeparators {
-  const parts = new Intl.NumberFormat(intlLocale(locale)).formatToParts(1234567.5);
+export function decimalSeparators(locale: Locale, supported: IntlSupport = intlSupported): DecimalSeparators {
+  const parts = new Intl.NumberFormat(intlLocale(locale, supported)).formatToParts(1234567.5);
   return {
     group: parts.find((part) => part.type === "group")?.value ?? "\u00a0",
     decimal: parts.find((part) => part.type === "decimal")?.value ?? ","

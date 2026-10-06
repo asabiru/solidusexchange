@@ -7,6 +7,7 @@ import {
   catalogs,
   defaultLocale,
   initialLocale,
+  intlLocale,
   type LocaleStorage,
   languageCodeFromInitData,
   localeFromLanguageCode,
@@ -226,5 +227,18 @@ describe("i18n: locale formatting", () => {
     assert.notEqual(kyDate, ruDate);
     assert.match(enDate, /October/);
     assert.match(enDate, /12:42/);
+  });
+
+  it("falls back to Russian conventions when the runtime has no Kyrgyz Intl data", () => {
+    const noKyrgyz = (tag: string) => !tag.startsWith("ky");
+    assert.equal(intlLocale("ky", () => true), "ky-KG");
+    assert.equal(intlLocale("ky", noKyrgyz), "ru-RU");
+    assert.equal(intlLocale("en", noKyrgyz), "en-US");
+    const ky = createFormatter("ky", noKyrgyz);
+    assert.equal(ky.money("RUB", "84200"), "84\u00a0200,00\u00a0₽");
+    const date = ky.dateTime("2026-10-05T06:42:00.000Z");
+    assert.match(date, /05\.10/);
+    assert.match(date, /12:42/);
+    assert.doesNotMatch(date, /[\u0400-\u04ff]/);
   });
 });
