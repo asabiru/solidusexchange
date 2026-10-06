@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -340,8 +340,8 @@
       "minCases": 44
     },
     "backoffice/src/auth/access.test.ts": {
-      "minLines": 59,
-      "minCases": 6
+      "minLines": 67,
+      "minCases": 7
     },
     "backoffice/src/data/client.test.ts": {
       "minLines": 226,
@@ -383,6 +383,10 @@
       "minLines": 318,
       "minCases": 11
     },
+    "backoffice/src/server/reports.test.ts": {
+      "minLines": 319,
+      "minCases": 13
+    },
     "backoffice/src/server/server.test.ts": {
       "minLines": 1211,
       "minCases": 26
@@ -396,7 +400,7 @@
       "minCases": 5
     },
     "backoffice/tsconfig.test.json": {
-      "minLines": 23
+      "minLines": 25
     },
     "miniapp/src/server/bff-security.test.ts": {
       "minLines": 137,

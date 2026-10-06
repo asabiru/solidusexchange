@@ -1724,6 +1724,107 @@ tbody tr[data-selected="true"] {
   line-height: 1.55;
 }
 
+.report-draft-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border: 1px solid rgba(var(--warning), .32);
+  border-radius: var(--radius);
+  color: rgb(var(--warning));
+  background: rgba(var(--warning), .12);
+  -webkit-backdrop-filter: var(--blur);
+  backdrop-filter: var(--blur);
+}
+
+.report-draft-banner strong {
+  font-size: 16px;
+}
+
+.report-draft-banner span {
+  font-size: 12px;
+}
+
+.reports-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.report-list ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0 12px 12px;
+  list-style: none;
+}
+
+.report-list button {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(var(--line), var(--line-a));
+  border-radius: 14px;
+  color: inherit;
+  background: rgba(var(--sub), var(--sub-a));
+  text-align: left;
+  cursor: pointer;
+}
+
+.report-list button[aria-current="true"] {
+  border-color: rgba(var(--warning), .4);
+  background: rgba(var(--warning), .1);
+}
+
+.report-list small {
+  color: rgb(var(--muted));
+  font-size: 11px;
+}
+
+.report-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 0 12px 12px;
+}
+
+.report-section {
+  padding: 12px;
+  border: 1px solid rgba(var(--line), var(--line-a));
+  border-radius: 14px;
+  background: rgba(var(--sub), var(--sub-a));
+}
+
+.report-section h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.report-section dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.report-section dl div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.report-section dt {
+  color: rgb(var(--muted));
+}
+
+.report-section dd {
+  margin: 0;
+}
+
 .empty {
   padding: 24px;
   color: rgb(var(--muted));
@@ -1971,6 +2072,7 @@ select:focus-visible,
 
   .metrics,
   .audit-summary,
+  .reports-layout,
   .bento,
   .grid,
   .approval-grid,

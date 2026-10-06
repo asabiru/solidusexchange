@@ -291,6 +291,16 @@ authority. It does not infer a reporting duty, deadline, form, threshold,
 agency or tipping-off restriction without Legal/MLRO approval for the exact
 scope.
 
+### Dev-synthetic draft reports
+
+The backoffice offers read-only draft summaries (KYC queue, AML/KYT alerts and
+the maker-checker queue) over synthetic data for operator review. Each report
+is marked `status: draft`, `not_for_submission: true` and
+`environment: dev-synthetic`, carries no PII and no decision authority, and
+every view or CSV export is written to the audit trail. These drafts are not
+a reporting assessment, filing or non-filing decision and must never be
+submitted to a regulator.
+
 ## Customer restrictions and notices
 
 Restrictions must be scoped, evidenced and reviewable:

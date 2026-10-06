@@ -57,7 +57,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "analytics", label: "Analytics", group: "Control", implemented: false },
   { id: "regulatory", label: "Regulatory", group: "Control", implemented: false },
   { id: "vendor-risk", label: "Vendor risk", group: "Control", implemented: false },
-  { id: "reports", label: "Reports & evidence", group: "Control", implemented: false },
+  { id: "reports", label: "Отчёты", group: "Control", capability: "reports:read", implemented: true },
   { id: "privacy", label: "Privacy", group: "Control", implemented: false },
   { id: "incidents", label: "Incidents", group: "System", implemented: false },
   { id: "resilience", label: "Resilience", group: "System", implemented: false },

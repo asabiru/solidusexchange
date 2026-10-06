@@ -62,4 +62,13 @@ describe("operator access", () => {
     assert.equal(can("compliance-lead", "audit:read"), true);
     assert.equal(can("compliance-lead", "audit:export"), true);
   });
+
+  it("grants draft reports only to compliance and auditor read roles", () => {
+    assert.equal(can("compliance-lead", "reports:read"), true);
+    assert.equal(can("auditor", "reports:read"), true);
+    assert.equal(can("support-l1", "reports:read"), false);
+    assert.equal(can("aml-investigator", "reports:read"), false);
+    assert.equal(can("fraud-investigator", "reports:read"), false);
+    assert.equal(can("unknown", "reports:read"), false);
+  });
 });
