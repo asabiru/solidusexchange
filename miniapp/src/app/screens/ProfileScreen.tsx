@@ -1,5 +1,5 @@
 import type { CustomerApiAccess, KycStatus, ProfileView, SessionView } from "../../shared/api";
-import { type Locale, localeNames, locales, type MessageKey } from "../i18n";
+import { type Locale, localeNames, locales, type MessageKey, messageKeyFor } from "../i18n";
 import { useI18n } from "../i18n-context";
 import { Icon, type IconName } from "../Icon";
 import type { SheetRequest } from "../navigation";
@@ -38,7 +38,7 @@ function apiAccessDetail(access: CustomerApiAccess, t: (key: MessageKey, params?
   if (access.status === "not-configured") return t("profile.apiNotConfigured");
   if (access.status === "unavailable") return t("profile.apiUnavailable");
   const granted = access.granted.map((capability) => {
-    const key = capabilityLabels[capability];
+    const key = messageKeyFor(capabilityLabels, capability);
     return key ? t(key) : capability;
   }).join(", ");
   return t("profile.apiConnected", { granted: granted || t("profile.apiNoRights") });

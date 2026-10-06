@@ -1,20 +1,25 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { isDecimalString, normalizeAmountInput } from "../shared/decimal.js";
+import { formatDecimal, isDecimalString, normalizeAmountInput } from "../shared/decimal.js";
 import { createFormatter } from "./format.js";
 import {
   applyDocumentLocale,
   catalogs,
   defaultLocale,
   initialLocale,
+  decimalSeparators,
   intlLocale,
+  type Locale,
   type LocaleStorage,
   languageCodeFromInitData,
   localeFromLanguageCode,
   localeNames,
   locales,
   localeStorageKey,
+  type MessageKey,
   type Messages,
+  messageKeyFor,
   placeholdersOf,
   readStoredLocale,
   storeLocale,
@@ -240,5 +245,146 @@ describe("i18n: locale formatting", () => {
     assert.match(date, /05\.10/);
     assert.match(date, /12:42/);
     assert.doesNotMatch(date, /[\u0400-\u04ff]/);
+  });
+});
+
+describe("i18n: untrusted keys, params and dates", () => {
+  const prototypeKeys = ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf"];
+
+  it("never resolves prototype properties as messages", () => {
+    for (const locale of locales) {
+      for (const name of prototypeKeys) {
+        const text = translate(locale, name as MessageKey);
+        assert.equal(typeof text, "string", `${locale}:${name}`);
+        assert.equal(text, name, `${locale}:${name}`);
+      }
+    }
+    assert.equal(translate("__proto__" as Locale, "common.unavailable"), ru["common.unavailable"]);
+    assert.equal(translate("constructor" as Locale, "common.unavailable"), ru["common.unavailable"]);
+  });
+
+  it("maps untrusted server codes to message keys through own properties only", () => {
+    const messages: Readonly<Record<string, MessageKey>> = { invalid_amount: "exchange.errorInvalidAmount" };
+    assert.equal(messageKeyFor(messages, "invalid_amount"), "exchange.errorInvalidAmount");
+    for (const code of [...prototypeKeys, "missing", "", undefined]) {
+      assert.equal(messageKeyFor(messages, code), undefined, String(code));
+    }
+    const withPrototype = Object.create({ inherited: "exchange.errorInvalidAmount" }) as Record<string, MessageKey>;
+    assert.equal(messageKeyFor(withPrototype, "inherited"), undefined);
+    assert.equal(messageKeyFor({ bogus: "not.a.key" as MessageKey }, "bogus"), undefined);
+  });
+
+  it("inserts parameters literally without recursive substitution or replacement patterns", () => {
+    for (const value of ["{name}", "$&", "$1$$", "<img src=x onerror=alert(1)>", "\u0000"]) {
+      assert.equal(translate("en", "home.greeting", { name: value }), `Good afternoon, ${value}`);
+    }
+    assert.equal(translate("en", "home.greeting", { name: "{other}", other: "x" }), "Good afternoon, {other}");
+    const inherited = Object.create({ name: "inherited" }) as Record<string, string>;
+    assert.equal(translate("en", "home.greeting", inherited), "Good afternoon, {name}");
+  });
+
+  it("renders a dash instead of throwing for invalid dates", () => {
+    for (const locale of locales) {
+      const format = createFormatter(locale);
+      for (const value of ["", "not-a-date", "2026-13-45T99:99:99Z"]) {
+        assert.equal(format.dateTime(value), "\u2014", `${locale}:${value}`);
+      }
+      assert.notEqual(format.dateTime("2026-10-05T06:42:00.000Z"), "\u2014");
+    }
+  });
+});
+
+describe("i18n: locale-aware amount input", () => {
+  it("treats a comma as a thousands separator in English instead of a decimal point", () => {
+    const en = createFormatter("en");
+    assert.equal(en.parseAmountInput("1,000"), "1000");
+    assert.equal(en.parseAmountInput("25,000.50"), "25000.50");
+    assert.equal(en.parseAmountInput("1,234,567.000001"), "1234567.000001");
+    assert.equal(en.parseAmountInput(" 1\u202f000.5 "), "1000.5");
+    assert.equal(en.parseAmountInput("12.5"), "12.5");
+    for (const ambiguous of ["1,5", "1,00", "12,34,567", "1,000,5", "1,000.5.5", "0,001", ",500", "1,000,"]) {
+      assert.equal(isDecimalString(en.parseAmountInput(ambiguous), 6), false, ambiguous);
+    }
+  });
+
+  it("keeps the comma as the decimal separator in Russian and Kyrgyz", () => {
+    for (const locale of ["ru", "ky"] as const) {
+      for (const supported of [() => true, (tag: string) => !tag.startsWith("ky")]) {
+        const format = createFormatter(locale, supported);
+        assert.equal(format.parseAmountInput("1,5"), "1.5", locale);
+        assert.equal(format.parseAmountInput("25\u00a0000,50"), "25000.50", locale);
+        assert.equal(format.parseAmountInput("25\u202f000,50"), "25000.50", locale);
+        assert.equal(format.parseAmountInput("12.5"), "12.5", locale);
+        assert.equal(isDecimalString(format.parseAmountInput("1,000,5"), 6), false, locale);
+      }
+    }
+  });
+
+  it("round-trips formatted inputs exactly in every locale", () => {
+    const values = ["0.000001", "1000", "12345.678901", "987654321098765432109876543210.5"];
+    for (const locale of locales) {
+      const format = createFormatter(locale);
+      for (const value of values) {
+        assert.equal(format.parseAmountInput(format.amountInput("USDT", value)), value, `${locale}:${value}`);
+      }
+      const separators = decimalSeparators(locale);
+      assert.notEqual(separators.group, separators.decimal, locale);
+      assert.match(separators.decimal, /^[.,]$/, locale);
+    }
+  });
+
+  it("rounds and signs identically in every locale, only separators differ", () => {
+    const cases = ["-0.004", "-0.005", "0.005", "-0", "-1234567.995", "999999999999999999999999999999.999"];
+    const digitsOnly = (text: string) => text.replace(/[^0-9+\u2212]/g, "");
+    for (const value of cases) {
+      const reference = formatDecimal(value, { fractionDigits: 2, signDisplay: "always" });
+      for (const locale of locales) {
+        const formatted = createFormatter(locale).decimal(value, { fractionDigits: 2, signDisplay: "always" });
+        assert.equal(digitsOnly(formatted), digitsOnly(reference), `${locale}:${value}`);
+      }
+    }
+    assert.equal(createFormatter("en").decimal("-0.004", { fractionDigits: 2 }), "0.00");
+    assert.equal(createFormatter("en").decimal("-0.005", { fractionDigits: 2 }), "\u22120.01");
+    assert.equal(createFormatter("ru").decimal("-1234567.995", { fractionDigits: 2 }), "\u22121\u00a0234\u00a0568,00");
+  });
+});
+
+describe("i18n: browser boundary", () => {
+  const sourceRoot = new URL("../../src/", import.meta.url);
+  const browserFiles = ["main.tsx", ...["app", "shared"].flatMap((directory) =>
+    (readdirSync(new URL(directory, sourceRoot), { recursive: true }) as string[])
+      .filter((name) => /\.tsx?$/.test(name) && !name.endsWith(".test.ts"))
+      .map((name) => `${directory}/${name}`)
+  )];
+  const sources = new Map(browserFiles.map((name) => [name, readFileSync(new URL(name, sourceRoot), "utf8")]));
+
+  it("browser sources import no Node built-ins, provider simulators or server code", () => {
+    assert.ok(sources.size >= 20);
+    let imports = 0;
+    for (const [name, source] of sources) {
+      for (const match of source.matchAll(/^(?:import|export)\b[^"]*?\bfrom\s+"([^"]+)"|^import\s+"([^"]+)"|\bimport\(\s*"([^"]+)"/gm)) {
+        imports += 1;
+        const specifier = match[1] ?? match[2] ?? match[3] ?? "";
+        assert.doesNotMatch(specifier, /^node:|provider-simulators|customer-api|\/server\//, `${name} imports ${specifier}`);
+        assert.ok(specifier.startsWith(".") || /^react(?:-dom)?(?:\/|$)/.test(specifier), `${name} imports ${specifier}`);
+      }
+    }
+    assert.ok(imports >= 80);
+  });
+
+  it("never renders raw HTML", () => {
+    for (const [name, source] of sources) {
+      assert.doesNotMatch(source, /dangerouslySetInnerHTML|\.innerHTML\b|\.outerHTML\b|insertAdjacentHTML|document\.write/, name);
+    }
+  });
+
+  it("uses the Telegram language and stored locale only to pick the UI language", () => {
+    const usesOf = (pattern: RegExp) => [...sources].filter(([, source]) => pattern.test(source)).map(([name]) => name).sort();
+    assert.deepEqual(usesOf(/telegramLanguageCode\(/), ["app/App.tsx", "app/telegram.ts"]);
+    assert.match(sources.get("app/App.tsx") ?? "", /initialLocale\(\{ storage: localeStorage\(\), languageCode: telegramLanguageCode\(\) \}\)/);
+    assert.equal((sources.get("app/App.tsx") ?? "").match(/telegramLanguageCode\(\)/g)?.length, 1);
+    assert.deepEqual(usesOf(/localeStorageKey|localStorage/), ["app/App.tsx", "app/i18n.ts"]);
+    assert.deepEqual(usesOf(/initDataUnsafe/), ["app/telegram.ts"]);
+    assert.doesNotMatch(sources.get("app/api.ts") ?? "", /locale|language|Accept-Language|initDataUnsafe/i);
   });
 });

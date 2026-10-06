@@ -111,6 +111,15 @@ export function compareDecimal(left: string, right: string, scale: number): -1 |
   return a === b ? 0 : a < b ? -1 : 1;
 }
 
-export function normalizeAmountInput(input: string): string {
-  return input.replace(/[\s\u00a0\u202f]/g, "").replace(",", ".");
+/**
+ * Converts typed input into a plain decimal string. With a "." decimal separator a comma can only be a
+ * correctly placed thousands separator; anything else is returned unchanged so validation rejects it.
+ */
+export function normalizeAmountInput(input: string, separators?: DecimalSeparators): string {
+  const compact = input.replace(/[\s\u00a0\u202f]/g, "");
+  if (separators?.decimal !== ".") return compact.replace(",", ".");
+  if (!compact.includes(",")) return compact;
+  const [integer = "", ...fraction] = compact.split(".");
+  if (fraction.length > 1 || !/^[0-9]{1,3}(?:,[0-9]{3})+$/.test(integer)) return compact;
+  return [integer.replace(/,/g, ""), ...fraction].join(".");
 }

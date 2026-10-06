@@ -9,7 +9,7 @@ import type {
   WalletView
 } from "../shared/api";
 import { ApiError, api } from "./api";
-import { applyDocumentLocale, initialLocale, type Locale, type LocaleStorage, type MessageKey, storeLocale, translate } from "./i18n";
+import { applyDocumentLocale, initialLocale, type Locale, type LocaleStorage, type MessageKey, messageKeyFor, storeLocale, translate } from "./i18n";
 import { I18nProvider } from "./i18n-context";
 import { Icon, type IconName } from "./Icon";
 import type { SheetRequest, Tab } from "./navigation";
@@ -156,7 +156,7 @@ export function App() {
           return;
         } catch (error) {
           const code = error instanceof ApiError ? error.reason ?? error.code : "request_failed";
-          if (active) setLaunch({ state: "signed-out", health, message: rejectionMessages[code] ?? "launch.errorTelegramFailed" });
+          if (active) setLaunch({ state: "signed-out", health, message: messageKeyFor(rejectionMessages, code) ?? "launch.errorTelegramFailed" });
           return;
         }
       }
