@@ -70,7 +70,7 @@ export function TabBar({
       window.setTimeout(() => {
         suppressClick.current = false;
       }, 0);
-      open(current.hovered);
+      if (current.hovered !== active) open(current.hovered);
     }
   };
 
