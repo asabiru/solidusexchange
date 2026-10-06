@@ -1,6 +1,7 @@
 import type { Messages } from "./ru.js";
 
 export const ky: Messages = {
+  "a11y.quoteReady": "Курстун алдын ала көрүнүшү даяр. Сыноо нускасында ырастоо жеткиликсиз.",
   "app.devBadge": "Сыноо версиясы",
   "app.navLabel": "Негизги навигация",
   "app.themeLight": "Жарык тема",
