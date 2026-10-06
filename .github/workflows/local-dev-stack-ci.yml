@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  verify:
+  dev-stack:
     runs-on: ubuntu-latest
 
     steps:
