@@ -7,6 +7,7 @@ export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
 export const customerApiPlatform = "telegram-mini-app";
 const tokenTtlSeconds = 300;
 const capabilityPattern = /^customer\.[a-z-]+(?:\.[a-z-]+)*$/;
+export const maxCustomerApiResponseBytes = 16_384;
 
 export interface CustomerApiClientOptions {
   baseUrl?: string;
@@ -28,6 +29,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isJsonContentType(value: string | null): boolean {
+  return value !== null && value.split(";")[0].trim().toLowerCase() === "application/json";
+}
+
+async function readBoundedJson(response: Response): Promise<unknown> {
+  const declared = response.headers.get("content-length");
+  if (!isJsonContentType(response.headers.get("content-type"))
+    || (declared !== null && !(Number(declared) <= maxCustomerApiResponseBytes))
+    || !response.body) {
+    await response.body?.cancel();
+    throw new Error("customer-api response rejected");
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxCustomerApiResponseBytes) {
+      await reader.cancel();
+      throw new Error("customer-api response too large");
+    }
+    chunks.push(value);
+  }
+  return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
+}
+
 function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(value).sort();
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
@@ -36,7 +65,8 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session and capabilities GETs, never sends X-Device-Id and fails
- * closed to "unavailable" on any unexpected response.
+ * closed to "unavailable" on any unexpected response, including a non-JSON
+ * content type or a body above maxCustomerApiResponseBytes.
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -65,7 +95,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       await response.body?.cancel();
       throw new Error("customer-api request failed");
     }
-    return response.json();
+    return readBoundedJson(response);
   }
 
   async function access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess> {

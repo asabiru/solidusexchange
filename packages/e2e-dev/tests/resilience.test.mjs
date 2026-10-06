@@ -1,0 +1,551 @@
+import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
+import { once } from "node:events";
+import { createServer } from "node:http";
+import { createServer as createTcpServer } from "node:net";
+import { after, before, describe, it } from "node:test";
+import { demoRepository } from "../../../backoffice/.server-dist/data/demo.js";
+import { AuditUnavailableError, MemoryAuditStore } from "../../../backoffice/.server-dist/server/audit-store.js";
+import { PostgresAuditStore } from "../../../backoffice/.server-dist/server/postgres-audit-store.js";
+import { createBackofficeServer } from "../../../backoffice/.server-dist/server/server.js";
+import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
+import { createMiniappServer } from "../../../miniapp/.server-dist/server/server.js";
+import {
+  backofficeEntry,
+  closeServer,
+  cookieOf,
+  customerApiEntry,
+  freePort,
+  listen,
+  readJson,
+  runToExit,
+  startService
+} from "./stack.mjs";
+
+// Failure injection for the synthetic dev stack: customer-api outages and
+// malformed upstream responses, provider-simulator failure scenarios and an
+// unreachable PostgreSQL audit store. Every failure must surface as a documented
+// fail-closed response, never as a 500, a hang or a leaked upstream body.
+
+const miniappOrigin = "http://127.0.0.1:4183";
+const backofficeOrigin = "http://127.0.0.1:5174";
+const requestTimeoutMs = 10_000;
+const marker = `syn-upstream-${randomBytes(6).toString("hex")}`;
+// Public synthetic TRON testnet address already used by the Mini App fixtures.
+const tronTestnet = "TJD46Huff79KfsBbvCHF55qYvA6HDpjpwB";
+const screeningBody = { asset: "USDT", network: "TRON_TESTNET", address: tronTestnet };
+const quotePath = "/bff/quotes/preview?from=RUB&to=USDT&amount=5000";
+
+function call(base, path, { method = "GET", cookie, body, origin = miniappOrigin } = {}) {
+  return fetch(`${base}${path}`, {
+    method,
+    headers: {
+      ...(cookie ? { cookie } : {}),
+      ...(method === "POST" ? { "content-type": "application/json", origin } : {})
+    },
+    body: method === "POST" ? JSON.stringify(body ?? {}) : undefined,
+    signal: AbortSignal.timeout(requestTimeoutMs)
+  });
+}
+
+async function startMiniapp(env = {}) {
+  const clock = { now: Date.now() };
+  const config = loadServerConfig({
+    MINIAPP_ALLOW_DEV_LOGIN: "true",
+    MINIAPP_ALLOWED_ORIGINS: miniappOrigin,
+    MINIAPP_QUOTE_SOURCE: "provider-simulator",
+    ...env
+  });
+  const server = createMiniappServer(config, { clock: () => clock.now });
+  return { server, clock, base: await listen(server) };
+}
+
+async function devLogin(app, kyc) {
+  const response = await call(app.base, "/bff/auth/dev-session", { method: "POST", body: { kyc } });
+  assert.equal(response.status, 201);
+  return cookieOf(response);
+}
+
+async function getJson(app, path, cookie) {
+  const response = await call(app.base, path, { cookie });
+  assert.equal(response.status, 200, path);
+  return readJson(response);
+}
+
+async function assertGated(app, cookie, label) {
+  assert.equal((await getJson(app, "/bff/session", cookie)).kyc, "kyc-gated", label);
+  const wallet = await getJson(app, "/bff/wallet", cookie);
+  assert.equal(wallet.kyc, "kyc-gated", label);
+  assert.equal(wallet.availableRub, "0.00", label);
+  assert.deepEqual(await getJson(app, "/bff/operations", cookie), { operations: [] }, label);
+  const quote = await getJson(app, quotePath, cookie);
+  assert.equal(quote.kycRequired, true, label);
+  assert.equal(quote.executable, false, label);
+  const screening = await call(app.base, "/bff/address-screening", { method: "POST", cookie, body: screeningBody });
+  assert.equal(screening.status, 403, label);
+  assert.deepEqual(await readJson(screening), { error: "kyc_required" }, label);
+}
+
+async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
+  const seen = [];
+  for (let step = 0; step <= maxSteps; step += 1) {
+    const view = await getJson(app, path, cookie);
+    if (seen.at(-1) !== view.state && view.state !== undefined) seen.push(view.state);
+    if (view.status !== undefined && seen.at(-1) !== view.status) seen.push(view.status);
+    if (done(view)) return { view, seen };
+    app.clock.now += stepMs;
+  }
+  assert.fail(`${path} did not settle: ${seen.join(" -> ")}`);
+}
+
+describe("Mini App BFF with a failing customer-api", () => {
+  const key = randomBytes(32).toString("hex");
+  const timers = new Set();
+  let mode = "valid";
+  let stub;
+  let app;
+  let cookie;
+
+  function subjectOf(request) {
+    return (request.headers.authorization ?? "").split(".")[1] ?? "";
+  }
+
+  function validBody(request, extra = {}) {
+    return request.url.endsWith("/session")
+      ? { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z", ...extra }
+      : { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
+  }
+
+  function send(response, status, contentType, text) {
+    if (contentType) response.setHeader("content-type", contentType);
+    response.statusCode = status;
+    response.end(text);
+  }
+
+  const modes = {
+    valid: (request, response) => send(response, 200, "application/json", JSON.stringify(validBody(request))),
+    server_error: (_, response) => send(response, 500, "application/json", JSON.stringify({ error: marker })),
+    unauthorized: (_, response) => send(response, 401, "application/json", JSON.stringify({ code: marker })),
+    redirect: (_, response) => {
+      response.writeHead(302, { location: `http://127.0.0.1:${stub.address().port}/${marker}` });
+      response.end(marker);
+    },
+    invalid_json: (_, response) => send(response, 200, "application/json", `{"subject":"${marker}"`),
+    wrong_content_type: (request, response) => send(response, 200, "text/html", JSON.stringify(validBody(request))),
+    missing_content_type: (request, response) => send(response, 200, undefined, JSON.stringify(validBody(request))),
+    oversized_declared: (request, response) =>
+      send(response, 200, "application/json", JSON.stringify(validBody(request)) + " ".repeat(65_536)),
+    oversized_chunked: (request, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write(JSON.stringify(validBody(request)));
+      for (let chunk = 0; chunk < 64; chunk += 1) response.write(" ".repeat(1_024));
+      response.end();
+    },
+    wrong_shape: (_, response) => send(response, 200, "application/json", JSON.stringify([marker])),
+    extra_fields: (request, response) =>
+      send(response, 200, "application/json", JSON.stringify(validBody(request, { kyc: "verified", note: marker }))),
+    subject_mismatch: (request, response) =>
+      send(response, 200, "application/json", JSON.stringify({ ...validBody(request), subject: "syn_cust_00000000" })),
+    commands_enabled: (request, response) =>
+      send(response, 200, "application/json", JSON.stringify({ ...validBody(request), commands_enabled: true })),
+    connection_reset: (request) => request.socket.destroy(),
+    slow_headers: (request, response) => {
+      const timer = setTimeout(() => modes.valid(request, response), 3_000);
+      timers.add(timer);
+    },
+    stalled_body: (_, response) => {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.write(`{"subject":"${marker}"`);
+    }
+  };
+
+  async function profileFailsClosed(label) {
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/profile", { cookie });
+    assert.equal(response.status, 200, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.deepEqual(JSON.parse(text).apiAccess, { status: "unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    return elapsed;
+  }
+
+  before(async () => {
+    stub = createServer((request, response) => modes[mode](request, response));
+    const stubBase = await listen(stub);
+    app = await startMiniapp({ MINIAPP_CUSTOMER_API_URL: stubBase, MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key });
+    cookie = await devLogin(app, "kyc-gated");
+  });
+
+  after(async () => {
+    for (const timer of timers) clearTimeout(timer);
+    await closeServer(app.server);
+    await closeServer(stub);
+  });
+
+  it("connects through the stub when upstream answers correctly", async () => {
+    mode = "valid";
+    const profile = await getJson(app, "/bff/profile", cookie);
+    assert.deepEqual(profile.apiAccess, {
+      status: "connected",
+      granted: ["customer.session.read"],
+      commandsEnabled: false
+    });
+  });
+
+  it("fails closed on error statuses, redirects and malformed bodies without leaking them", async () => {
+    const malformed = [
+      "server_error",
+      "unauthorized",
+      "redirect",
+      "invalid_json",
+      "wrong_content_type",
+      "missing_content_type",
+      "oversized_declared",
+      "oversized_chunked",
+      "wrong_shape",
+      "extra_fields",
+      "subject_mismatch",
+      "commands_enabled",
+      "connection_reset"
+    ];
+    for (const name of malformed) {
+      mode = name;
+      await profileFailsClosed(name);
+      await assertGated(app, cookie, name);
+    }
+  });
+
+  it("times out slow and stalled upstream responses within the client deadline", async () => {
+    for (const name of ["slow_headers", "stalled_body"]) {
+      mode = name;
+      const elapsed = await profileFailsClosed(name);
+      assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
+      await assertGated(app, cookie, name);
+    }
+  });
+
+  it("recovers once upstream answers correctly again", async () => {
+    mode = "valid";
+    assert.equal((await getJson(app, "/bff/profile", cookie)).apiAccess.status, "connected");
+  });
+});
+
+describe("Mini App BFF with an unreachable customer-api", () => {
+  const key = randomBytes(32).toString("hex");
+
+  async function assertUnavailable(app, cookie, label) {
+    const response = await call(app.base, "/bff/profile", { cookie });
+    assert.equal(response.status, 200, label);
+    const profile = await readJson(response);
+    assert.deepEqual(profile.apiAccess, { status: "unavailable" }, label);
+    await assertGated(app, cookie, label);
+  }
+
+  it("fails closed when customer-api was never started", async () => {
+    const port = await freePort();
+    const app = await startMiniapp({
+      MINIAPP_CUSTOMER_API_URL: `http://127.0.0.1:${port}`,
+      MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
+    });
+    try {
+      await assertUnavailable(app, await devLogin(app, "kyc-gated"), "never started");
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+
+  it("fails closed when the port accepts and immediately drops connections", async () => {
+    const refusing = createTcpServer((socket) => socket.destroy());
+    await new Promise((resolve) => refusing.listen(0, "127.0.0.1", resolve));
+    const app = await startMiniapp({
+      MINIAPP_CUSTOMER_API_URL: `http://127.0.0.1:${refusing.address().port}`,
+      MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
+    });
+    try {
+      await assertUnavailable(app, await devLogin(app, "kyc-gated"), "refusing");
+    } finally {
+      await closeServer(app.server);
+      await new Promise((resolve) => refusing.close(resolve));
+    }
+  });
+
+  it("fails closed after customer-api is killed mid-session", async () => {
+    const customerApi = await startService(
+      customerApiEntry,
+      {
+        CUSTOMER_API_HOST: "127.0.0.1",
+        CUSTOMER_API_PORT: "0",
+        CUSTOMER_API_DEV_AUTH: "synthetic",
+        CUSTOMER_API_DEV_TOKEN_KEY: key
+      },
+      /listening on http:\/\/127\.0\.0\.1:(\d+) auth=synthetic/
+    );
+    const app = await startMiniapp({
+      MINIAPP_CUSTOMER_API_URL: `http://127.0.0.1:${customerApi.match[1]}`,
+      MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
+    });
+    try {
+      const cookie = await devLogin(app, "kyc-gated");
+      assert.equal((await getJson(app, "/bff/profile", cookie)).apiAccess.status, "connected");
+      const exited = once(customerApi.child, "exit");
+      customerApi.child.kill("SIGKILL");
+      assert.deepEqual(await exited, [null, "SIGKILL"]);
+      await assertUnavailable(app, cookie, "killed");
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+});
+
+describe("Mini App BFF provider-simulator failure scenarios", () => {
+  it("maps quote outage and stale price to quote_unavailable for every session", async () => {
+    for (const scenario of ["provider_outage", "stale_price"]) {
+      const app = await startMiniapp({ MINIAPP_QUOTE_SCENARIO: scenario });
+      try {
+        for (const kyc of ["verified", "kyc-gated"]) {
+          const response = await call(app.base, quotePath, { cookie: await devLogin(app, kyc) });
+          assert.equal(response.status, 503, `${scenario} ${kyc}`);
+          assert.deepEqual(await readJson(response), { error: "quote_unavailable", reason: scenario });
+        }
+      } finally {
+        await closeServer(app.server);
+      }
+    }
+  });
+
+  it("serves expired quotes as non-executable previews that are already expired", async () => {
+    const app = await startMiniapp({ MINIAPP_QUOTE_SCENARIO: "expired_quote" });
+    try {
+      for (const kyc of ["verified", "kyc-gated"]) {
+        const quote = await getJson(app, quotePath, await devLogin(app, kyc));
+        assert.equal(quote.executable, false, kyc);
+        assert.equal(quote.kycRequired, kyc !== "verified", kyc);
+        assert.ok(quote.expiresAt <= quote.serverTime, kyc);
+      }
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+
+  it("keeps the session gated when the KYC provider is down", async () => {
+    const app = await startMiniapp({ MINIAPP_KYC_SCENARIO: "provider_outage" });
+    try {
+      const cookie = await devLogin(app, "kyc-gated");
+      const submitted = await call(app.base, "/bff/kyc/applications", { method: "POST", cookie });
+      assert.equal(submitted.status, 503);
+      assert.deepEqual(await readJson(submitted), { error: "kyc_unavailable" });
+      assert.deepEqual(await getJson(app, "/bff/kyc/status", cookie), {
+        mode: "test",
+        provider: "simulator",
+        state: "unavailable",
+        sessionKyc: "kyc-gated",
+        canSubmit: true
+      });
+      await assertGated(app, cookie, "kyc provider_outage");
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+
+  it("times out KYC reviews without approval, even when a late callback arrives", async () => {
+    for (const scenario of ["pending_timeout", "late_callback"]) {
+      const app = await startMiniapp({
+        MINIAPP_KYC_SCENARIO: scenario,
+        MINIAPP_KYC_REVIEW_TIMEOUT_SECONDS: "600",
+        MINIAPP_SESSION_TTL_SECONDS: "3600"
+      });
+      try {
+        const cookie = await devLogin(app, "kyc-gated");
+        const submitted = await call(app.base, "/bff/kyc/applications", { method: "POST", cookie });
+        assert.equal(submitted.status, 202, scenario);
+        const { view, seen } = await advanceUntil(app, "/bff/kyc/status", cookie, (state) => state.state === "timed_out", {
+          stepMs: 30_000,
+          maxSteps: 40
+        });
+        assert.equal(view.sessionKyc, "kyc-gated", scenario);
+        assert.equal(seen.includes("approved"), false, `${scenario}: ${seen.join(" -> ")}`);
+        app.clock.now += 1_200_000;
+        assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "timed_out", scenario);
+        await assertGated(app, cookie, `kyc ${scenario}`);
+      } finally {
+        await closeServer(app.server);
+      }
+    }
+  });
+
+  it("only verifies an out-of-order KYC journey after the signed approval is applied", async () => {
+    const app = await startMiniapp({ MINIAPP_KYC_SCENARIO: "out_of_order_callback" });
+    try {
+      const cookie = await devLogin(app, "kyc-gated");
+      const submitted = await call(app.base, "/bff/kyc/applications", { method: "POST", cookie });
+      assert.equal(submitted.status, 202);
+      await assertGated(app, cookie, "before approval");
+      const { seen } = await advanceUntil(app, "/bff/kyc/status", cookie, (state) => state.state === "approved", {
+        stepMs: 5_000,
+        maxSteps: 120
+      });
+      assert.equal(seen.at(-1), "approved");
+      assert.equal((await getJson(app, "/bff/session", cookie)).kyc, "verified");
+      assert.equal((await getJson(app, "/bff/wallet", cookie)).kyc, "verified");
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+
+  it("returns screening_unavailable without the address when the KYT provider is down", async () => {
+    const app = await startMiniapp({ MINIAPP_KYT_SCENARIO: "provider_outage" });
+    try {
+      const cookie = await devLogin(app, "verified");
+      const response = await call(app.base, "/bff/address-screening", { method: "POST", cookie, body: screeningBody });
+      assert.equal(response.status, 503);
+      const text = await response.text();
+      assert.equal(text.includes(tronTestnet), false);
+      const body = JSON.parse(text);
+      assert.deepEqual(Object.keys(body).sort(), ["error", "screening"]);
+      assert.equal(body.error, "screening_unavailable");
+      assert.equal(body.screening.status, "unavailable");
+      assert.equal(body.screening.advisory, true);
+      assert.equal(body.screening.executable, false);
+    } finally {
+      await closeServer(app.server);
+    }
+  });
+
+  it("times out KYT screenings, and a late callback never yields a risk level", async () => {
+    for (const scenario of ["pending_timeout", "late_callback"]) {
+      const app = await startMiniapp({ MINIAPP_KYT_SCENARIO: scenario, MINIAPP_KYT_TIMEOUT_SECONDS: "60" });
+      try {
+        const cookie = await devLogin(app, "verified");
+        const submitted = await call(app.base, "/bff/address-screening", { method: "POST", cookie, body: screeningBody });
+        assert.equal(submitted.status, 202, scenario);
+        const created = await readJson(submitted);
+        assert.equal(created.status, "pending", scenario);
+        const path = `/bff/address-screening/${created.id}`;
+        const { view, seen } = await advanceUntil(app, path, cookie, (state) => state.status === "timed_out", {
+          stepMs: 5_000,
+          maxSteps: 60
+        });
+        assert.equal(view.executable, false, scenario);
+        assert.deepEqual(seen.filter((status) => status !== "pending" && status !== "timed_out"), [], scenario);
+        app.clock.now += 1_200_000;
+        const late = await getJson(app, path, cookie);
+        assert.equal(late.status, "timed_out", scenario);
+        assert.equal(late.executable, false, scenario);
+      } finally {
+        await closeServer(app.server);
+      }
+    }
+  });
+});
+
+describe("backoffice BFF with an unreachable PostgreSQL audit store", () => {
+  const password = `syn-${randomBytes(12).toString("hex")}`;
+  let databaseUrl;
+
+  function backofficeConfig() {
+    return {
+      host: "127.0.0.1",
+      port: 0,
+      allowedOrigins: [backofficeOrigin],
+      allowDevLogin: true,
+      sessionTtlSeconds: 900,
+      audit: { storage: "postgresql", retentionDays: 30, databaseUrl },
+      stepUp: { provider: "synthetic-dev", challengeTtlSeconds: 300, grantTtlSeconds: 60, maxAttempts: 3 },
+      signing: { backend: "ephemeral-dev", rotationSeconds: 900, retainedVerificationKeys: 2 }
+    };
+  }
+
+  async function operatorCookie(base) {
+    const response = await call(base, "/bff/auth/dev-session", {
+      method: "POST",
+      body: { role: "compliance-lead" },
+      origin: backofficeOrigin
+    });
+    assert.equal(response.status, 200);
+    return cookieOf(response);
+  }
+
+  async function assertAuditUnavailable(base, path, cookie) {
+    const response = await call(base, path, { cookie });
+    assert.equal(response.status, 503, path);
+    assert.deepEqual(await readJson(response), { error: "audit_integrity_unavailable" }, path);
+  }
+
+  before(async () => {
+    databaseUrl = `postgresql://syn_audit:${password}@127.0.0.1:${await freePort()}/syn_audit`;
+  });
+
+  it("refuses to start without reachable audit storage and never listens", async () => {
+    const port = await freePort();
+    const result = await runToExit(backofficeEntry, {
+      BACKOFFICE_BFF_HOST: "127.0.0.1",
+      BACKOFFICE_BFF_PORT: String(port),
+      BACKOFFICE_ALLOWED_ORIGINS: backofficeOrigin,
+      BACKOFFICE_ALLOW_DEV_LOGIN: "true",
+      BACKOFFICE_AUDIT_STORAGE: "postgresql",
+      BACKOFFICE_AUDIT_DATABASE_URL: databaseUrl
+    });
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /refused to start because audit storage is not ready/);
+    assert.doesNotMatch(result.stdout, /listening/);
+    assert.equal(`${result.stdout}${result.stderr}`.includes(password), false);
+    await assert.rejects(fetch(`http://127.0.0.1:${port}/bff/healthz`, { signal: AbortSignal.timeout(2_000) }));
+  });
+
+  it("reports not-ready and fails audited routes closed when the store drops after startup", async () => {
+    const store = new PostgresAuditStore(backofficeConfig().audit);
+    await assert.rejects(store.initialize(demoRepository.auditSource()), AuditUnavailableError);
+    const server = createBackofficeServer(backofficeConfig(), store);
+    const base = await listen(server);
+    try {
+      const health = await call(base, "/bff/healthz");
+      assert.equal(health.status, 503);
+      const text = await health.text();
+      assert.equal(text.includes(password), false);
+      assert.deepEqual(JSON.parse(text), { error: "audit_integrity_unavailable" });
+      const cookie = await operatorCookie(base);
+      for (const path of [
+        "/bff/api/audit",
+        "/bff/api/audit/export",
+        "/bff/api/reports/kyc-queue-daily",
+        "/bff/api/reports/kyc-queue-daily/export"
+      ]) {
+        await assertAuditUnavailable(base, path, cookie);
+      }
+    } finally {
+      await closeServer(server);
+      await store.close();
+    }
+  });
+
+  it("serves no report when the audit append fails", async () => {
+    class AppendFailingStore extends MemoryAuditStore {
+      async append() {
+        throw new AuditUnavailableError();
+      }
+    }
+    const store = new AppendFailingStore(demoRepository.auditSource(), 30);
+    const before = (await store.snapshot()).status.length;
+    const server = createBackofficeServer({ ...backofficeConfig(), audit: { storage: "memory", retentionDays: 30 } }, store);
+    const base = await listen(server);
+    try {
+      assert.equal((await call(base, "/bff/healthz")).status, 200);
+      const cookie = await operatorCookie(base);
+      const listing = await call(base, "/bff/api/reports", { cookie });
+      assert.equal(listing.status, 200);
+      const reports = (await readJson(listing)).payload.reports;
+      assert.ok(reports.length > 0);
+      for (const report of reports) {
+        await assertAuditUnavailable(base, `/bff/api/reports/${report.id}`, cookie);
+        await assertAuditUnavailable(base, `/bff/api/reports/${report.id}/export`, cookie);
+      }
+      assert.equal((await store.snapshot()).status.length, before);
+    } finally {
+      await closeServer(server);
+    }
+  });
+});

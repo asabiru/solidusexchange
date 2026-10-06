@@ -5,7 +5,12 @@ import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
 import { startCustomerApi } from "@solidchange/customer-api/dev-server";
 import { loadServerConfig } from "./config.js";
-import { createCustomerApiClient, customerApiPlatform, customerApiSubject } from "./customer-api-client.js";
+import {
+  createCustomerApiClient,
+  customerApiPlatform,
+  customerApiSubject,
+  maxCustomerApiResponseBytes
+} from "./customer-api-client.js";
 
 const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -109,6 +114,48 @@ describe("customer API client", () => {
     }
     const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
     assert.deepEqual(await unreachable.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("fails closed on non-JSON content types and oversized bodies", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const session = JSON.stringify({ subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" });
+    const capabilities = (count: number) => JSON.stringify({
+      capabilities: Array.from({ length: count }, () => "customer.session.read"),
+      commands_enabled: false
+    });
+    const cases: [string, string | undefined, number][] = [
+      ["control", "application/json; charset=utf-8", 1],
+      ["text/html", "text/html", 1],
+      ["text/plain", "text/plain; charset=utf-8", 1],
+      ["missing", undefined, 1],
+      ["oversized", "application/json", 5_000]
+    ];
+    for (const [label, contentType, count] of cases) {
+      const server = createServer((request, response) => {
+        const text = request.url?.endsWith("/session") ? session : capabilities(count);
+        if (contentType !== undefined) response.setHeader("content-type", contentType);
+        if (count > 1) {
+          // Chunked, without content-length: the client must cap the stream itself.
+          response.write(text.slice(0, 1_000));
+          response.end(text.slice(1_000));
+          return;
+        }
+        response.end(text);
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.access("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, label === "control" ? "connected" : "unavailable", label);
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+    assert.ok(capabilities(5_000).length > maxCustomerApiResponseBytes);
   });
 
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
