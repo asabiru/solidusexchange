@@ -157,7 +157,7 @@ function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps 
         {requests?.length === 0 ? <p className="sheet__note">{t("support.empty")}</p> : null}
       </div>
       {requests && requests.length > 0 ? (
-        <ul className="list" aria-label={t("support.listLabel")}>
+        <ul className="list activity" aria-label={t("support.listLabel")}>
           {requests.map((request) => {
             const badge = statusBadges[request.status];
             return (
@@ -221,6 +221,8 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
     return () => { active = false; };
   }, []);
 
+  const clear = (field: Field) => setErrors((current) => (current[field] ? {} : current));
+
   const fail = (field: Field, key: MessageKey) => {
     setErrors({ [field]: key });
     fields[field].current?.focus();
@@ -267,7 +269,7 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
           autoComplete="off"
           aria-invalid={errors.topic !== undefined}
           aria-describedby={`${ids.topicError} ${ids.topicCount}`}
-          onChange={(event) => setTopic(event.target.value)}
+          onChange={(event) => { setTopic(event.target.value); clear("topic"); }}
         />
         <span className="form-control__hint num" id={ids.topicCount}>{t("support.counter", { count: topic.length, max: maxSupportTopicLength })}</span>
       </label>
@@ -282,7 +284,7 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
           maxLength={maxSupportMessageLength}
           aria-invalid={errors.message !== undefined}
           aria-describedby={`${ids.messageError} ${ids.messageCount}`}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => { setMessage(event.target.value); clear("message"); }}
         />
         <span className="form-control__hint num" id={ids.messageCount}>{t("support.counter", { count: message.length, max: maxSupportMessageLength })}</span>
       </label>
@@ -295,7 +297,7 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
           value={activityId}
           aria-invalid={errors.activityId !== undefined}
           aria-describedby={ids.activityError}
-          onChange={(event) => setActivityId(event.target.value)}
+          onChange={(event) => { setActivityId(event.target.value); clear("activityId"); }}
         >
           <option value="">{t("support.referenceNone")}</option>
           {activity.map((item) => (
