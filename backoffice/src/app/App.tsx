@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { roleProfiles, type Capability, type OperatorRole } from "../auth/access";
 import {
   ApiError,
@@ -71,7 +71,14 @@ function Status({ children, tone = "neutral" }: { children: React.ReactNode; ton
 }
 
 function TableShell({ children, label }: { children: React.ReactNode; label: string }) {
-  return <section className="table-scroll" aria-label={label}>{children}</section>;
+  return (
+    // biome-ignore lint/a11y/noNoninteractiveTabindex: scrollable table regions must stay keyboard-scrollable (WCAG 2.1.1)
+    <section className="table-scroll" aria-label={label} tabIndex={0}>{children}</section>
+  );
+}
+
+function LiveStatus({ message }: { message: string }) {
+  return <output className="sr-only" aria-live="polite" aria-atomic="true">{message}</output>;
 }
 
 function Backdrop() {
@@ -140,7 +147,7 @@ function DashboardView({ data }: { data: DashboardPayload }) {
           </header>
           <TableShell label="Приоритетные очереди">
             <table>
-              <thead><tr><th>Очередь</th><th>Критично</th><th>Всего</th><th>Старейшая</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Очередь</th><th scope="col">Критично</th><th scope="col">Всего</th><th scope="col">Старейшая</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {data.queues.map((row) => (
                   <tr key={row.queue}>
@@ -210,7 +217,7 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
           </header>
           <TableShell label="Список клиентов">
             <table>
-              <thead><tr><th>Клиент</th><th>KYC / KYB</th><th>Risk</th><th>30d volume</th><th>Next action</th></tr></thead>
+              <thead><tr><th scope="col">Клиент</th><th scope="col">KYC / KYB</th><th scope="col">Risk</th><th scope="col">30d volume</th><th scope="col">Next action</th></tr></thead>
               <tbody>
                 {customers.map((customer) => (
                   <tr key={customer.id} data-selected={customer.id === selected?.id}>
@@ -218,6 +225,7 @@ function CustomersView({ query, data }: { query: string; data: CustomersPayload 
                       <button
                         className="person"
                         type="button"
+                        aria-current={customer.id === selected?.id ? "true" : undefined}
                         onClick={() => setSelectedId(customer.id)}
                       >
                         <span>{customer.initials}</span>
@@ -354,12 +362,12 @@ function ProviderEvidencePanel<T extends KycProviderEvidence | KytProviderEviden
         </header>
         <TableShell label={title}>
           <table>
-            <thead><tr><th>Run</th><th>Scenario</th><th>Provider claim</th><th>Projection</th><th>Seq</th><th>Callbacks</th></tr></thead>
+            <thead><tr><th scope="col">Run</th><th scope="col">Scenario</th><th scope="col">Provider claim</th><th scope="col">Projection</th><th scope="col">Seq</th><th scope="col">Callbacks</th></tr></thead>
             <tbody>
               {feed.cases.map((item) => (
                 <tr key={item.id} data-selected={item.id === selected?.id}>
                   <td>
-                    <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                    <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                       {item.id}
                     </button>
                     <small className="cell-note">{item.linkedCaseId ?? "unlinked"}</small>
@@ -449,12 +457,12 @@ function KycView({ query, data }: { query: string; data: KycPayload }) {
           </header>
           <TableShell label="KYC и KYB cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Stage</th><th>Risk</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Stage</th><th scope="col">Risk</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.type} · {item.status}</small>
@@ -542,12 +550,12 @@ function AmlView({ query, data }: { query: string; data: AmlPayload }) {
           </header>
           <TableShell label="AML cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Source</th><th>Severity</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Source</th><th scope="col">Severity</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.state}</small>
@@ -652,12 +660,12 @@ function InvestigationsView({
           </header>
           <TableShell label="Investigation cases">
             <table>
-              <thead><tr><th>Case</th><th>Subject</th><th>Category</th><th>Priority</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Case</th><th scope="col">Subject</th><th scope="col">Category</th><th scope="col">Priority</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {cases.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.state}</small>
@@ -763,12 +771,12 @@ function FraudView({ query, data }: { query: string; data: FraudPayload }) {
           </header>
           <TableShell label="Fraud alerts">
             <table>
-              <thead><tr><th>Alert</th><th>Subject</th><th>Scenario</th><th>Score</th><th>Exposure</th><th>SLA</th></tr></thead>
+              <thead><tr><th scope="col">Alert</th><th scope="col">Subject</th><th scope="col">Scenario</th><th scope="col">Score</th><th scope="col">Exposure</th><th scope="col">SLA</th></tr></thead>
               <tbody>
                 {alerts.map((item) => (
                   <tr key={item.id} data-selected={item.id === selected?.id}>
                     <td>
-                      <button className="table-link" type="button" onClick={() => setSelectedId(item.id)}>
+                      <button className="table-link" type="button" aria-current={item.id === selected?.id ? "true" : undefined} onClick={() => setSelectedId(item.id)}>
                         {item.id}
                       </button>
                       <small className="cell-note">{item.channel} · {item.state}</small>
@@ -834,6 +842,8 @@ function ApprovalsView({
   const [selected, setSelected] = useState<ApprovalSummary>(approvals[0]);
   const [preview, setPreview] = useState<ApprovalPreview>();
   const [previewState, setPreviewState] = useState<"idle" | "loading" | "failed">("idle");
+  const stepUpErrorId = useId();
+  const previewReasonId = useId();
   const [challenge, setChallenge] = useState<StepUpChallengePayload>();
   const [verificationCode, setVerificationCode] = useState("");
   const [stepUpState, setStepUpState] = useState<
@@ -934,7 +944,7 @@ function ApprovalsView({
           </header>
           <TableShell label="Ожидающие approvals">
             <table>
-              <thead><tr><th>ID</th><th>Action</th><th>Exposure</th><th>Evidence</th><th>Age</th><th>State</th></tr></thead>
+              <thead><tr><th scope="col">ID</th><th scope="col">Action</th><th scope="col">Exposure</th><th scope="col">Evidence</th><th scope="col">Age</th><th scope="col">State</th></tr></thead>
               <tbody>
                 {approvals.map((approval) => (
                   <tr key={approval.id} data-selected={approval.id === selected.id}>
@@ -942,6 +952,7 @@ function ApprovalsView({
                       <button
                         className="table-link"
                         type="button"
+                        aria-current={approval.id === selected.id ? "true" : undefined}
                         onClick={() => {
                           operationVersion.current += 1;
                           setSelected(approval);
@@ -1018,6 +1029,8 @@ function ApprovalsView({
                     <input
                       autoComplete="one-time-code"
                       inputMode="numeric"
+                      aria-invalid={stepUpState === "retry"}
+                      aria-describedby={stepUpState === "retry" ? stepUpErrorId : undefined}
                       maxLength={6}
                       value={verificationCode}
                       onChange={(event) => {
@@ -1026,7 +1039,7 @@ function ApprovalsView({
                     />
                   </label>
                   {stepUpState === "retry" && (
-                    <p className="step-up-result" data-state="failed">
+                    <p className="step-up-result" data-state="failed" id={stepUpErrorId} role="alert">
                       Код отклонён. Challenge остаётся активным до лимита попыток.
                     </p>
                   )}
@@ -1048,7 +1061,7 @@ function ApprovalsView({
               ) : (
                 <>
                   {(stepUpState === "failed" || stepUpState === "locked") && (
-                    <p className="step-up-result" data-state="failed">
+                    <p className="step-up-result" data-state="failed" role="alert">
                       {stepUpState === "locked"
                         ? "Challenge заблокирован после исчерпания попыток."
                         : "Challenge отклонён или устарел. Запустите новый."}
@@ -1072,19 +1085,33 @@ function ApprovalsView({
             className="button primary"
             type="button"
             disabled={!mayPreview || previewState === "loading"}
+            aria-describedby={previewReasonId}
             onClick={() => void loadPreview()}
           >
             {previewState === "loading" ? "Формируем preview…" : "Сформировать безопасный preview"}
           </button>
-          <small className="disabled-reason">
+          <small className="disabled-reason" id={previewReasonId}>
             {!mayPreview
               ? "Роль не имеет approvals:preview."
               : "Финансовая команда не создаётся и не отправляется."}
           </small>
           {previewState === "failed" && (
-            <div className="preview-error">Preview отклонён BFF или устарел.</div>
+            <div className="preview-error" role="alert">Preview отклонён BFF или устарел.</div>
           )}
           {preview && <ApprovalPreviewPanel preview={preview} />}
+          <LiveStatus
+            message={
+              previewState === "loading"
+                ? "Формируем безопасный preview"
+                : stepUpState === "creating"
+                  ? "Создаём synthetic step-up challenge"
+                  : stepUpState === "verifying"
+                    ? "Проверяем одноразовый код"
+                    : preview
+                      ? "Preview сформирован"
+                      : ""
+            }
+          />
         </aside>
       </section>
     </>
@@ -1190,20 +1217,21 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
           </div>
         </header>
         {exportState === "failed" && (
-          <div className="preview-error">Экспорт отклонён или integrity verification недоступна.</div>
+          <div className="preview-error" role="alert">Экспорт отклонён или integrity verification недоступна.</div>
         )}
+        <LiveStatus message={exportState === "loading" ? "Экспорт evidence…" : ""} />
         <TableShell label="Audit trail">
           <table>
             <thead>
               <tr>
-                <th>Seq</th>
-                <th>Event</th>
-                <th>Actor</th>
-                <th>Resource</th>
-                <th>Outcome</th>
-                <th>Evidence</th>
-                <th>Previous hash</th>
-                <th>Hash</th>
+                <th scope="col">Seq</th>
+                <th scope="col">Event</th>
+                <th scope="col">Actor</th>
+                <th scope="col">Resource</th>
+                <th scope="col">Outcome</th>
+                <th scope="col">Evidence</th>
+                <th scope="col">Previous hash</th>
+                <th scope="col">Hash</th>
               </tr>
             </thead>
             <tbody>
@@ -1308,8 +1336,11 @@ function ReportsView({ data }: { data: ReportListPayload }) {
         </article>
         <article className="panel report-detail">
           {detailState === "loading" && <div className="empty">Загрузка черновика…</div>}
+          <LiveStatus
+            message={detailState === "loading" ? "Загрузка черновика…" : exportState === "loading" ? "Экспорт CSV…" : ""}
+          />
           {detailState === "failed" && (
-            <div className="preview-error">Отчёт отклонён или integrity verification недоступна.</div>
+            <div className="preview-error" role="alert">Отчёт отклонён или integrity verification недоступна.</div>
           )}
           {report && (
             <>
@@ -1331,7 +1362,7 @@ function ReportsView({ data }: { data: ReportListPayload }) {
                 </div>
               </header>
               {exportState === "failed" && (
-                <div className="preview-error">CSV экспорт отклонён или integrity verification недоступна.</div>
+                <div className="preview-error" role="alert">CSV экспорт отклонён или integrity verification недоступна.</div>
               )}
               <div className="report-sections">
                 {report.sections.map((item) => (
@@ -1355,7 +1386,7 @@ function ReportsView({ data }: { data: ReportListPayload }) {
                 <TableShell key={table.id} label={table.title}>
                   <table>
                     <thead>
-                      <tr>{table.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+                      <tr>{table.columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr>
                     </thead>
                     <tbody>
                       {table.rows.map((row) => (
@@ -1447,7 +1478,7 @@ function AccessGate({
   return (
     <div className="access-shell" data-theme={theme}>
       <Backdrop />
-      <section className="access-card">
+      <main className="access-card">
         <div className="brand access-brand">
           <span>SC</span>
           <div>
@@ -1465,7 +1496,7 @@ function AccessGate({
         {state.status === "failed" && (
           <>
             <h1 className="access-title">Backoffice недоступен</h1>
-            <p className="access-copy">{state.message}</p>
+            <p className="access-copy" role="alert">{state.message}</p>
             <Status tone="danger">Fail closed</Status>
           </>
         )}
@@ -1505,7 +1536,7 @@ function AccessGate({
             )}
           </>
         )}
-      </section>
+      </main>
     </div>
   );
 }
@@ -1520,6 +1551,17 @@ export function App() {
   const [density, setDensity] = useState<Density>("compact");
   const [railExpanded, setRailExpanded] = useState(false);
   const [tooltip, setTooltip] = useState<{ label: string; top: number; left: number }>();
+  const mainRef = useRef<HTMLElement>(null);
+  const navigationId = useId();
+
+  useEffect(() => {
+    if (!tooltip) return;
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setTooltip(undefined);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [tooltip]);
 
   const loadWorkspace = useCallback(async () => {
     try {
@@ -1640,6 +1682,9 @@ export function App() {
 
   return (
     <div className="app" data-theme={theme} data-density={density} data-rail={railExpanded ? "expanded" : "collapsed"}>
+      <button className="skip-link" type="button" onClick={() => mainRef.current?.focus()}>
+        Перейти к содержимому
+      </button>
       <Backdrop />
       <aside className="sidebar">
         <div className="brand"><span>SC</span><div><strong>SolidChange</strong><small>Operator backoffice</small></div></div>
@@ -1647,6 +1692,7 @@ export function App() {
           className="rail-toggle"
           type="button"
           aria-expanded={railExpanded}
+          aria-controls={navigationId}
           aria-label={railExpanded ? "Свернуть навигацию" : "Развернуть навигацию"}
           onClick={() => {
             setTooltip(undefined);
@@ -1655,7 +1701,7 @@ export function App() {
         >
           <UiIcon name={railExpanded ? "collapse" : "expand"} />
         </button>
-        <nav aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
+        <nav id={navigationId} aria-label="Backoffice navigation" onScroll={() => setTooltip(undefined)}>
           {navigationGroups.map((group) => (
             <div className="nav-group" key={group}>
               <p>{group}</p>
@@ -1714,10 +1760,22 @@ export function App() {
           </label>
           <div className="topbar-spacer" />
           <span className="environment"><i />DEV · dry-run</span>
-          <button className="icon-button density-button" type="button" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")} aria-label="Переключить плотность">
+          <button
+            className="icon-button density-button"
+            type="button"
+            onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}
+            aria-label={density === "compact" ? "Переключить на просторную плотность" : "Переключить на компактную плотность"}
+            title={density === "compact" ? "Просторная плотность" : "Компактная плотность"}
+          >
             <UiIcon name={density === "compact" ? "density" : "comfortable"} />
           </button>
-          <button className="icon-button" type="button" onClick={() => setTheme(theme === "light" ? "dark" : "light")} aria-label="Переключить тему">
+          <button
+            className="icon-button"
+            type="button"
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            aria-label={theme === "light" ? "Переключить на тёмную тему" : "Переключить на светлую тему"}
+            title={theme === "light" ? "Тёмная тема" : "Светлая тема"}
+          >
             <UiIcon name={theme === "light" ? "moon" : "sun"} />
           </button>
           <span className="avatar" aria-hidden="true">{profile.initials}</span>
@@ -1740,12 +1798,13 @@ export function App() {
               <small>{profile.label}</small>
             </div>
           )}
-          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию">
+          <button className="icon-button" type="button" onClick={() => void endSession()} aria-label="Завершить сессию" title="Завершить сессию">
             <UiIcon name="logout" />
           </button>
         </header>
 
-        <main>
+        <main ref={mainRef} tabIndex={-1}>
+          <LiveStatus message={`Раздел: ${activeItem.label}`} />
           <nav className="segmented" aria-label="Группы разделов">
             {navigationGroups.map((group) => {
               const target = navigation.find((item) => item.group === group && !isDenied(item));
