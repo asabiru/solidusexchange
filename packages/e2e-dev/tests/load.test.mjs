@@ -10,6 +10,11 @@ import { demoRepository } from "../../../backoffice/.server-dist/data/demo.js";
 import { MemoryAuditStore } from "../../../backoffice/.server-dist/server/audit-store.js";
 import { createBackofficeServer } from "../../../backoffice/.server-dist/server/server.js";
 import {
+  createActivityLog,
+  maxActivityPerSubject,
+  maxActivitySubjects
+} from "../../../miniapp/.server-dist/server/activity.js";
+import {
   createAddressScreeningService,
   maxNewScreeningsPerWindow,
   maxScreeningsPerSubject
@@ -51,6 +56,7 @@ let backofficeBase;
 let auditStore;
 let outbox;
 let addressScreening;
+let activity;
 let devSubject;
 
 function rssBytes() {
@@ -128,6 +134,10 @@ function telegramLogin(userId) {
   return request(miniappBase, "/bff/session/telegram", { method: "POST", body: { initData } });
 }
 
+function telegramSubject(userId) {
+  return `tg-${createHash("sha256").update(`solidchange-miniapp-dev|${userId}`).digest("hex").slice(0, 16)}`;
+}
+
 function customerApiHeaders(subject) {
   return {
     authorization: `Bearer ${mintSyntheticCustomerToken({
@@ -165,7 +175,8 @@ before(async () => {
     screeningTimeoutSeconds: config.kytScreeningTimeoutSeconds,
     clock: Date.now
   });
-  miniapp = createMiniappServer(config, { notifications: outbox, addressScreening });
+  activity = createActivityLog({ clock: Date.now });
+  miniapp = createMiniappServer(config, { notifications: outbox, addressScreening, activity });
   miniappBase = await listen(miniapp);
 
   auditStore = new MemoryAuditStore(demoRepository.auditSource(), 30);
@@ -197,7 +208,7 @@ describe("bounded load on the dev stack", () => {
   let devCookie;
   let operatorCookie;
 
-  it("creates hundreds of concurrent sessions while the notification outbox stays bounded", async () => {
+  it("creates hundreds of concurrent sessions while the outbox and activity log stay bounded", async () => {
     const userIds = Array.from({ length: defaultMaxTotal + 200 }, (_, index) => 2_000_000 + index);
     cookies = [];
     for (let offset = 0; offset < userIds.length; offset += 400) {
@@ -208,8 +219,10 @@ describe("bounded load on the dev stack", () => {
         await response.body?.cancel();
       }
       assert.ok(outbox.size() <= defaultMaxTotal, `outbox ${outbox.size()}`);
+      assert.ok(activity.subjects() <= maxActivitySubjects, `activity ${activity.subjects()}`);
     }
     assert.equal(outbox.size(), defaultMaxTotal);
+    assert.equal(activity.subjects(), maxActivitySubjects);
     cookies = cookies.slice(-300);
   });
 
@@ -233,6 +246,11 @@ describe("bounded load on the dev stack", () => {
     assert.equal(view.body.notifications.length, defaultMaxPerSubject);
     assert.equal(view.body.unread, defaultMaxPerSubject);
     assert.ok(outbox.size() <= defaultMaxTotal);
+    assert.equal(activity.size(telegramSubject(hotUser)), maxActivityPerSubject);
+    const history = await outcome("activity", request(miniappBase, "/bff/activity", { cookie: live }));
+    assert.equal(history.status, 200);
+    assert.equal(history.body.items.length, maxActivityPerSubject);
+    assert.equal(history.body.executable, false);
   });
 
   it("serves a mixed concurrent burst with only documented statuses", async () => {
@@ -251,10 +269,10 @@ describe("bounded load on the dev stack", () => {
     await operator.body?.cancel();
     const auditBefore = (await auditStore.snapshot()).status.length;
 
-    const total = 480;
+    const total = 540;
     const burst = Array.from({ length: total }, (_, index) => {
       const cookie = cookies[index % cookies.length];
-      switch (index % 8) {
+      switch (index % 9) {
         case 0:
           return outcome("kyc-status", request(miniappBase, "/bff/kyc/status", { cookie }));
         case 1:
@@ -276,6 +294,11 @@ describe("bounded load on the dev stack", () => {
           );
         case 6:
           return outcome("report", request(backofficeBase, "/bff/api/reports/kyc-queue-daily", { cookie: operatorCookie }));
+        case 7:
+          return outcome(
+            "activity",
+            request(miniappBase, index % 2 === 0 ? "/bff/activity" : "/bff/activity?limit=10", { cookie: devCookie })
+          );
         default:
           return outcome("verified-quote", request(miniappBase, "/bff/quotes/preview?from=USDT&to=RUB&amount=25", { cookie: devCookie }));
       }
@@ -284,18 +307,23 @@ describe("bounded load on the dev stack", () => {
     assert.equal(results.length, total);
     assertDocumented(results);
 
-    assert.deepEqual(countBy(results, "kyc-status"), { 200: total / 8 });
-    assert.deepEqual(countBy(results, "quote"), { 200: total / 8 });
-    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 8 });
-    assert.deepEqual(countBy(results, "notifications"), { 200: total / 8 });
-    assert.deepEqual(countBy(results, "profile"), { 200: total / 8 });
+    assert.deepEqual(countBy(results, "kyc-status"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "quote"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "notifications"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "profile"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "activity"), { 200: total / 9 });
     const submits = countBy(results, "kyc-submit");
-    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 8);
+    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 9);
 
     for (const result of results) {
       if (result.kind === "quote") assert.equal(result.body.kycRequired, true);
       if (result.kind === "quote" || result.kind === "verified-quote") assert.equal(result.body.executable, false);
       if (result.kind === "notifications") assert.ok(result.body.notifications.length <= defaultMaxPerSubject);
+      if (result.kind === "activity") {
+        assert.ok(result.body.items.length <= maxActivityPerSubject);
+        assert.equal(result.body.executable, false);
+      }
       if (result.kind === "profile") assert.ok(["connected", "unavailable"].includes(result.body.apiAccess.status));
     }
     const profiles = results.filter((result) => result.kind === "profile");
@@ -303,13 +331,15 @@ describe("bounded load on the dev stack", () => {
 
     assert.deepEqual(countBy(results, "screening"), {
       202: maxNewScreeningsPerWindow,
-      429: total / 8 - maxNewScreeningsPerWindow
+      429: total / 9 - maxNewScreeningsPerWindow
     });
     assert.equal(addressScreening.size(devSubject), maxScreeningsPerSubject);
+    assert.equal(activity.size(devSubject), maxActivityPerSubject);
+    assert.ok(activity.subjects() <= maxActivitySubjects);
 
     const reports = countBy(results, "report");
     assert.ok((reports[200] ?? 0) >= 1, JSON.stringify(reports));
-    assert.equal((reports[200] ?? 0) + (reports[503] ?? 0), total / 8);
+    assert.equal((reports[200] ?? 0) + (reports[503] ?? 0), total / 9);
     assert.equal((await auditStore.snapshot()).status.length - auditBefore, reports[200] ?? 0);
     assert.ok(outbox.size() <= defaultMaxTotal);
   });

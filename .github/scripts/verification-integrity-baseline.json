@@ -638,7 +638,7 @@
       "minCases": 17
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 319,
+      "minLines": 348,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
