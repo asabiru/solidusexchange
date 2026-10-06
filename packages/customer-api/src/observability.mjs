@@ -161,6 +161,7 @@ export function createRequestObserver({
     let done = false;
     // A response closed before "finish" was aborted: record status 0 ("other"),
     // not the 200 default of an unwritten response.
+    /** @param {number} status */
     const finish = (status) => {
       if (!done) {
         done = true;
