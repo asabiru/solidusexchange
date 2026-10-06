@@ -592,8 +592,8 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 466,
-      "minCases": 15
+      "minLines": 538,
+      "minCases": 17
     },
     "packages/e2e-dev/tests/stack.mjs": {
       "minLines": 126

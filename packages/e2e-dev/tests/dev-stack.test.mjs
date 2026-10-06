@@ -25,6 +25,20 @@ const miniappOrigin = "http://127.0.0.1:4183";
 const backofficeOrigin = "http://127.0.0.1:5174";
 const devTokenKey = randomBytes(32).toString("hex");
 const botToken = `${randomInt(100_000, 999_999_999)}:${randomBytes(30).toString("base64url")}`;
+// Public synthetic TRON testnet address already used by the Mini App fixtures.
+const tronTestnet = "TJD46Huff79KfsBbvCHF55qYvA6HDpjpwB";
+const screeningBody = { asset: "USDT", network: "TRON_TESTNET", address: tronTestnet };
+const screeningKeys = [
+  "advisory",
+  "asset",
+  "deadline",
+  "executable",
+  "id",
+  "mode",
+  "network",
+  "status",
+  "submittedAt"
+];
 const quoteKeys = [
   "amountIn",
   "amountOut",
@@ -55,7 +69,9 @@ const moneyRoutes = [
   "/bff/settlements",
   "/bff/ledger/entries",
   "/bff/custody/sign",
-  "/bff/transactions/broadcast"
+  "/bff/transactions/broadcast",
+  "/bff/kyt/callbacks",
+  "/bff/address-screening/callbacks"
 ];
 
 let now = Date.now();
@@ -175,6 +191,7 @@ before(async () => {
     MINIAPP_TELEGRAM_BOT_TOKEN: botToken,
     MINIAPP_QUOTE_SOURCE: "provider-simulator",
     MINIAPP_KYC_SCENARIO: "approve",
+    MINIAPP_KYT_SCENARIO: "medium",
     MINIAPP_CUSTOMER_API_URL: customerApiBase,
     MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: devTokenKey
   });
@@ -220,6 +237,9 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(quote.kycRequired, true);
     assert.equal(quote.executable, false);
     assert.equal(quote.executionUnavailableReason, "dev_test_version");
+    const screening = await postMiniapp("/bff/address-screening", screeningBody, { cookie });
+    assert.equal(screening.status, 403);
+    assert.deepEqual(await readJson(screening), { error: "kyc_required" });
   });
 
   it("submits KYC and reaches verified via signed simulator callbacks", async () => {
@@ -252,6 +272,37 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(profile.apiAccess.status, "connected");
     assert.ok(Array.isArray(profile.apiAccess.granted));
     assert.equal(profile.apiAccess.commandsEnabled, false);
+  });
+
+  it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {
+    const submitted = await postMiniapp("/bff/address-screening", screeningBody, { cookie });
+    assert.equal(submitted.status, 202);
+    const text = await submitted.text();
+    assert.equal(text.includes(tronTestnet), false);
+    const created = JSON.parse(text);
+    assert.deepEqual(Object.keys(created).sort(), screeningKeys);
+    assert.deepEqual(
+      [created.mode, created.asset, created.network, created.status, created.advisory, created.executable],
+      ["test", "USDT", "TRON_TESTNET", "pending", true, false]
+    );
+
+    let view = created;
+    for (let step = 0; step < 200 && view.status === "pending"; step += 1) {
+      now += 5_000;
+      view = await getMiniapp(`/bff/address-screening/${created.id}`, cookie);
+    }
+    assert.equal(view.status, "medium");
+    assert.equal(view.id, created.id);
+    assert.equal(view.advisory, true);
+    assert.equal(view.executable, false);
+
+    const repeat = await postMiniapp("/bff/address-screening", screeningBody, { cookie });
+    assert.equal(repeat.status, 200);
+    assert.equal((await readJson(repeat)).id, created.id);
+    const device = await fetch(`${miniappBase}/bff/address-screening/${created.id}`, {
+      headers: { cookie, "x-device-id": "synthetic-device" }
+    });
+    assert.equal(device.status, 400);
   });
 
   it("previews buy and sell quotes that are never executable", async () => {
@@ -299,6 +350,10 @@ describe("customer journey through the Mini App BFF", () => {
     const foreignLogin = await postMiniapp("/bff/session/telegram", { initData });
     assert.equal(foreignLogin.status, 201);
     const foreign = cookieOf(foreignLogin);
+    const foreignScreening = await fetch(`${miniappBase}/bff/address-screening/scr_${"0".repeat(32)}`, {
+      headers: { cookie: foreign }
+    });
+    assert.equal(foreignScreening.status, 403);
     const foreignView = await getMiniapp("/bff/notifications", foreign);
     assert.deepEqual(
       foreignView.notifications.map((entry) => entry.template),
@@ -340,7 +395,13 @@ describe("customer negative paths", () => {
   });
 
   it("rejects POST without Origin with 403", async () => {
-    for (const path of ["/bff/session/telegram", "/bff/kyc/applications", "/bff/notifications/read", "/bff/auth/logout"]) {
+    for (const path of [
+      "/bff/session/telegram",
+      "/bff/kyc/applications",
+      "/bff/notifications/read",
+      "/bff/address-screening",
+      "/bff/auth/logout"
+    ]) {
       const response = await fetch(`${miniappBase}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", cookie },
@@ -363,6 +424,7 @@ describe("customer negative paths", () => {
     const attempts = [
       ["/bff/kyc/applications", { status: "approved" }],
       ["/bff/notifications/read", { ids: "", all: true }],
+      ["/bff/address-screening", { ...screeningBody, executable: true }],
       ["/bff/auth/dev-session", { kyc: "kyc-gated", subject: "other" }]
     ];
     for (const [path, body] of attempts) {
@@ -381,6 +443,9 @@ describe("customer negative paths", () => {
     const read = await postMiniapp("/bff/notifications/read", { ids: "" }, { cookie, ...deviceId });
     assert.equal(read.status, 400);
     assert.deepEqual(await readJson(read), { error: "invalid_request" });
+    const screening = await postMiniapp("/bff/address-screening", screeningBody, { cookie, ...deviceId });
+    assert.equal(screening.status, 400);
+    assert.deepEqual(await readJson(screening), { error: "invalid_request" });
 
     // The BFF never forwards the header: customer-api would refuse the call.
     const profile = await getMiniapp("/bff/profile", cookie, deviceId);
@@ -497,6 +562,17 @@ describe("operator journey through the backoffice BFF", () => {
     await deniedGet("/bff/api/reports/kyc-queue-daily", support);
     await deniedGet("/bff/api/kyc", support);
     await deniedGet("/bff/api/aml", support);
+  });
+
+  it("rejects cross-site report fetches before authorization", async () => {
+    for (const site of ["cross-site", "same-site"]) {
+      const response = await fetch(`${backofficeBase}/bff/api/reports`, {
+        headers: { cookie: lead, "sec-fetch-site": site }
+      });
+      assert.equal(response.status, 403, site);
+      assert.deepEqual(await readJson(response), { error: "fetch_site_rejected" });
+    }
+    await signedGet("/bff/api/reports", lead, "reports");
   });
 
   it("exposes no POST money routes to operators", async () => {

@@ -8,8 +8,9 @@ Shell-level, browser-free smoke test of the synthetic dev stack. It starts, on
   customer-api and to the deterministic `packages/provider-simulators`;
 - the backoffice BFF (subprocess, dev mode, signed envelopes).
 
-`tests/dev-stack.test.mjs` covers the customer KYC journey, customer negative
-paths and operator evidence/report access. `tests/boundaries.test.mjs` checks
+`tests/dev-stack.test.mjs` covers the customer KYC journey, advisory address
+screening via signed KYT simulator callbacks, customer negative paths and
+operator evidence/report access. `tests/boundaries.test.mjs` checks
 that every server refuses `NODE_ENV=production` and non-loopback hosts.
 
 Nothing here moves money, calls third parties or uses real credentials or PII.
