@@ -17,6 +17,7 @@
     "src/data/demo.ts",
     "src/data/demo.test.ts",
     "src/data/provider-evidence.ts",
+    "src/data/reports.ts",
     "src/data/client.ts",
     "src/data/client.test.ts",
     "src/server/**/*.ts"

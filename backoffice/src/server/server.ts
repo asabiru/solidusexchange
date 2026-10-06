@@ -26,6 +26,13 @@ import {
   buildApprovalPreview
 } from "./controls.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
+import {
+  buildReport,
+  buildReportExport,
+  findReportDefinition,
+  listReports,
+  reportAccessEvent
+} from "./reports.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import {
   StepUpRejectedError,
@@ -547,6 +554,56 @@ export function createBackofficeServer(
           chain: audit.status,
           events: audit.events
         });
+        return;
+      }
+
+      const reportMatch = path.match(/^\/bff\/api\/reports\/([^/]+)$/);
+      const reportExportMatch = path.match(/^\/bff\/api\/reports\/([^/]+)\/export$/);
+      if (path === "/bff/api/reports" || reportMatch || reportExportMatch) {
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        const session = authorized(request, response, "reports:read");
+        if (!session) return;
+        if (!reportMatch && !reportExportMatch) {
+          signed(response, "reports", listReports(new Date().toISOString()));
+          return;
+        }
+        let reportId: string;
+        try {
+          reportId = decodeURIComponent((reportMatch ?? reportExportMatch)?.[1] ?? "");
+        } catch {
+          json(response, 404, { error: "report_not_found" });
+          return;
+        }
+        const definition = findReportDefinition(reportId);
+        if (!definition) {
+          json(response, 404, { error: "report_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        const report = buildReport(definition.id, {
+          repository: demoRepository,
+          kycEvidence: await providerEvidence.kyc(),
+          kytEvidence: await providerEvidence.kyt(),
+          auditEvents: audit.events
+        }, new Date().toISOString());
+        await auditStore.append(
+          reportAccessEvent(
+            `AUD-RPT-${randomUUID()}`,
+            session.subject,
+            report,
+            reportExportMatch ? "report.exported" : "report.viewed"
+          ),
+          audit.status.headHash
+        );
+        if (reportExportMatch) {
+          signed(response, `report-export:${report.id}`, buildReportExport(report));
+        } else {
+          signed(response, `report:${report.id}`, report);
+        }
         return;
       }
 

@@ -15,6 +15,9 @@ import {
   getHealth,
   getInvestigations,
   getKycCases,
+  getReport,
+  getReportExport,
+  getReports,
   getSession,
   logout,
   previewApproval,
@@ -31,6 +34,7 @@ import {
   type SessionPayload,
   type StepUpChallengePayload
 } from "../data/client";
+import type { DraftReport, ReportId, ReportListPayload } from "../data/reports";
 import type {
   AmlCase,
   ApprovalPreview,
@@ -1223,6 +1227,154 @@ function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean
   );
 }
 
+const draftLabel = "Черновик — не для подачи регулятору";
+
+function ReportsView({ data }: { data: ReportListPayload }) {
+  const [selected, setSelected] = useState<ReportId | undefined>(data.reports[0]?.id);
+  const [report, setReport] = useState<DraftReport | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+
+  useEffect(() => {
+    if (!selected) return;
+    let active = true;
+    setDetailState("loading");
+    setReport(undefined);
+    getReport(selected)
+      .then((payload) => {
+        if (!active) return;
+        setReport(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selected]);
+
+  async function downloadCsv(id: ReportId) {
+    setExportState("loading");
+    try {
+      const payload = await getReportExport(id);
+      const blob = new Blob([payload.csv], { type: payload.mediaType });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = payload.filename;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      setExportState("idle");
+    } catch {
+      setExportState("failed");
+    }
+  }
+
+  return (
+    <>
+      <PageHeading
+        title="Отчёты"
+        description="Draft compliance reports · synthetic dev data · read-only signed evidence"
+      />
+      <section className="report-draft-banner" role="note">
+        <strong>{draftLabel}</strong>
+        <span>
+          status: {data.status} · not_for_submission · {data.environment} · период {data.period.from.slice(0, 10)}
+        </span>
+      </section>
+      <section className="reports-layout">
+        <article className="panel report-list">
+          <header className="panel-heading">
+            <div><h2>Доступные черновики</h2><p>{data.reports.length} deterministic reports</p></div>
+          </header>
+          <ul>
+            {data.reports.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  aria-current={selected === item.id ? "true" : undefined}
+                  onClick={() => setSelected(item.id)}
+                >
+                  <strong>{item.title}</strong>
+                  <small>{item.description}</small>
+                  <Status tone="warning">draft</Status>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </article>
+        <article className="panel report-detail">
+          {detailState === "loading" && <div className="empty">Загрузка черновика…</div>}
+          {detailState === "failed" && (
+            <div className="preview-error">Отчёт отклонён или integrity verification недоступна.</div>
+          )}
+          {report && (
+            <>
+              <header className="panel-heading">
+                <div>
+                  <h2>{report.title}</h2>
+                  <p>{draftLabel} · digest {report.contentDigest.slice(0, 12)}…</p>
+                </div>
+                <div className="audit-actions">
+                  <Status tone="warning">Черновик</Status>
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={exportState === "loading"}
+                    onClick={() => void downloadCsv(report.id)}
+                  >
+                    {exportState === "loading" ? "Экспорт…" : "Скачать CSV"}
+                  </button>
+                </div>
+              </header>
+              {exportState === "failed" && (
+                <div className="preview-error">CSV экспорт отклонён или integrity verification недоступна.</div>
+              )}
+              <div className="report-sections">
+                {report.sections.map((item) => (
+                  <section key={item.id} className="report-section">
+                    <h3>{item.title}</h3>
+                    <dl>
+                      {item.rows.map((row) => (
+                        <div key={row.key}>
+                          <dt>{row.key}</dt>
+                          <dd className="numeric">
+                            {row.value}
+                            {row.unit !== "count" && <small> {row.unit}</small>}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </section>
+                ))}
+              </div>
+              {report.tables.map((table) => (
+                <TableShell key={table.id} label={table.title}>
+                  <table>
+                    <thead>
+                      <tr>{table.columns.map((column) => <th key={column}>{column}</th>)}</tr>
+                    </thead>
+                    <tbody>
+                      {table.rows.map((row) => (
+                        <tr key={row[0]}>
+                          {row.map((cell, index) => <td key={table.columns[index]}>{cell}</td>)}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableShell>
+              ))}
+            </>
+          )}
+        </article>
+      </section>
+    </>
+  );
+}
+
 function PlaceholderView({ item }: { item: NavigationItem }) {
   return (
     <>
@@ -1258,6 +1410,7 @@ interface WorkspaceData {
   fraud?: FraudPayload;
   approvals?: ApprovalsPayload;
   audit?: AuditPayload;
+  reports?: ReportListPayload;
 }
 
 type AccessState =
@@ -1386,7 +1539,7 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit] = await Promise.all([
+      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
@@ -1394,12 +1547,13 @@ export function App() {
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
         hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
         hasCapability(session, "approvals:read") ? getApprovals() : Promise.resolve(undefined),
-        hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined)
+        hasCapability(session, "audit:read") ? getAudit() : Promise.resolve(undefined),
+        hasCapability(session, "reports:read") ? getReports() : Promise.resolve(undefined)
       ]);
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit }
+        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -1638,6 +1792,7 @@ export function App() {
               mayExport={hasCapability(access.data.session, "audit:export")}
             />
           )}
+          {screen === "reports" && access.data.reports && <ReportsView data={access.data.reports} />}
           {!activeItem.implemented && <PlaceholderView item={activeItem} />}
         </main>
       </div>
