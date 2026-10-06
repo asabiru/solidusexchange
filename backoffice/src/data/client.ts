@@ -11,6 +11,7 @@ import type {
   Metric,
   QueueRow
 } from "./demo.js";
+import type { KycProviderEvidence, KytProviderEvidence, ProviderEvidenceFeed } from "./provider-evidence.js";
 
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
@@ -63,10 +64,12 @@ export interface CustomersPayload {
 
 export interface KycPayload {
   cases: readonly KycCase[];
+  providerEvidence: ProviderEvidenceFeed<KycProviderEvidence>;
 }
 
 export interface AmlPayload {
   cases: readonly AmlCase[];
+  providerEvidence: ProviderEvidenceFeed<KytProviderEvidence>;
 }
 
 export interface InvestigationsPayload {

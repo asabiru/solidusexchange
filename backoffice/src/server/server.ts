@@ -25,6 +25,7 @@ import {
   approvalCommandDigest,
   buildApprovalPreview
 } from "./controls.js";
+import { createProviderEvidenceSource } from "./provider-evidence.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import {
   StepUpRejectedError,
@@ -129,6 +130,7 @@ export function createBackofficeServer(
     ?? new EphemeralSigningKeyProvider(config.signing.retainedVerificationKeys);
   const signer = new ResponseSigner(signingKeys);
   const stepUp = new SyntheticStepUpService(config.stepUp);
+  const providerEvidence = createProviderEvidenceSource();
   const deviceBinding = config.deviceBinding ?? { mode: "off", approvedDeviceDigests: [] };
   const enforceDevices = deviceBinding.mode === "enforce";
   const approvedDevices = new Set(deviceBinding.approvedDeviceDigests);
@@ -478,13 +480,19 @@ export function createBackofficeServer(
 
       if (request.method === "GET" && path === "/bff/api/kyc") {
         if (!authorized(request, response, "kyc:read")) return;
-        signed(response, "kyc-cases", { cases: demoRepository.kycCases() });
+        signed(response, "kyc-cases", {
+          cases: demoRepository.kycCases(),
+          providerEvidence: await providerEvidence.kyc()
+        });
         return;
       }
 
       if (request.method === "GET" && path === "/bff/api/aml") {
         if (!authorized(request, response, "aml:read")) return;
-        signed(response, "aml-cases", { cases: demoRepository.amlCases() });
+        signed(response, "aml-cases", {
+          cases: demoRepository.amlCases(),
+          providerEvidence: await providerEvidence.kyt()
+        });
         return;
       }
 
