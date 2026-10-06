@@ -423,8 +423,8 @@
       "minCases": 1
     },
     "backoffice/src/server/observability.test.ts": {
-      "minLines": 276,
-      "minCases": 9
+      "minLines": 331,
+      "minCases": 12
     },
     "backoffice/src/server/oidc-session.test.ts": {
       "minLines": 289,
@@ -498,11 +498,11 @@
       "minCases": 5
     },
     "miniapp/src/server/customer-api-client.test.ts": {
-      "minLines": 170,
-      "minCases": 6
+      "minLines": 261,
+      "minCases": 8
     },
     "miniapp/src/server/dev-server.test.ts": {
-      "minLines": 50,
+      "minLines": 51,
       "minCases": 1
     },
     "miniapp/src/server/init-data.test.ts": {
@@ -526,8 +526,8 @@
       "minCases": 15
     },
     "miniapp/src/server/observability.test.ts": {
-      "minLines": 313,
-      "minCases": 10
+      "minLines": 367,
+      "minCases": 13
     },
     "miniapp/src/server/provider-quotes.test.ts": {
       "minLines": 114,
@@ -638,8 +638,8 @@
       "minLines": 125
     },
     "packages/customer-api/tests/observability.test.mjs": {
-      "minLines": 215,
-      "minCases": 9
+      "minLines": 248,
+      "minCases": 11
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
       "minLines": 191,
@@ -658,11 +658,11 @@
       "minCases": 17
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 348,
+      "minLines": 349,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 511,
+      "minLines": 533,
       "minCases": 17
     },
     "packages/e2e-dev/tests/stack.mjs": {

@@ -68,7 +68,7 @@ export function metricsRequestAllowed(request, headers) {
   if (headers.has("origin") || headers.has("forwarded") || headers.has("via")) {
     return false;
   }
-  if ([...headers.keys()].some((name) => name.startsWith("x-forwarded-"))) {
+  if ([...headers.keys()].some((name) => name.startsWith("x-forwarded-") || name === "x-real-ip")) {
     return false;
   }
   const fetchSite = headers.get("sec-fetch-site");
@@ -159,14 +159,17 @@ export function createRequestObserver({
     const method = methodLabel(/** @type {string} */ (request.method));
     const route = routeOf(/** @type {string} */ (request.url));
     let done = false;
-    const finish = () => {
+    // A response closed before "finish" was aborted: record status 0 ("other"),
+    // not the 200 default of an unwritten response.
+    /** @param {number} status */
+    const finish = (status) => {
       if (!done) {
         done = true;
-        complete(method, route, response.statusCode, Math.max(0, timer() - started));
+        complete(method, route, status, Math.max(0, timer() - started));
       }
     };
-    response.once("finish", finish);
-    response.once("close", finish);
+    response.once("finish", () => finish(response.statusCode));
+    response.once("close", () => finish(0));
   }
 
   /** @param {number} status */

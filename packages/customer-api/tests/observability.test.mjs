@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
+import { EventEmitter } from "node:events";
 import test from "node:test";
 
 import { loadConfig } from "../src/config.mjs";
-import { DURATION_BUCKETS_SECONDS } from "../src/observability.mjs";
+import { createRequestObserver, DURATION_BUCKETS_SECONDS } from "../src/observability.mjs";
 import { startCustomerApi } from "../src/server.mjs";
 import {
   customerHeaders,
@@ -200,6 +201,7 @@ test("metrics are GET-only and refuse browser or proxied requests", async () => 
       [["Origin", "http://127.0.0.1:4183"]],
       [["X-Forwarded-For", "203.0.113.7"]],
       [["Forwarded", "for=203.0.113.7"]],
+      [["X-Real-IP", "203.0.113.7"]],
       [["Via", "1.1 proxy"]],
       [["Sec-Fetch-Site", "cross-site"]],
       [["Host", "127.0.0.1"]]
@@ -213,6 +215,39 @@ test("metrics are GET-only and refuse browser or proxied requests", async () => 
   } finally {
     await stopServer(server);
   }
+});
+
+test("metrics answer only the exact request target", async () => {
+  const { server, port } = await startObserved();
+  try {
+    for (const path of ["/./metrics", "/%6detrics", "/x/../metrics", "//metrics", "/metrics/", "/metrics?format=text"]) {
+      assert.equal((await request(port, { path })).status, 404, path);
+    }
+    assert.equal((await request(port, { path: "/metrics" })).status, 200);
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test("a response closed before finish is recorded with status 0, not its 200 default", async () => {
+  const lines = [];
+  const observer = createRequestObserver({
+    service: "test",
+    routes: ["/a"],
+    config: { log: "json", metrics: "loopback" },
+    sink: (line) => lines.push(line),
+    timer: () => 0,
+    wallClock: () => 0
+  });
+  const response = Object.assign(new EventEmitter(), { statusCode: 200, setHeader: () => undefined });
+  observer.observe({ method: "GET", url: "/a" }, response);
+  response.emit("close");
+  response.emit("finish");
+  const metrics = await observer.renderMetrics([]);
+  assert.ok(metrics.includes('solidchange_http_requests_total{service="test",route="/a",method="GET",status_class="other"} 1\n'));
+  assert.equal(metrics.includes('status_class="2xx"'), false);
+  assert.equal(lines.length, 1);
+  assert.equal(JSON.parse(lines[0]).status, 0);
 });
 
 test("startCustomerApi wires the configured flags", async () => {

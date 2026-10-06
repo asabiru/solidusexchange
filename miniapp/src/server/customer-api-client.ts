@@ -36,7 +36,7 @@ function isJsonContentType(value: string | null): boolean {
 async function readBoundedJson(response: Response): Promise<unknown> {
   const declared = response.headers.get("content-length");
   if (!isJsonContentType(response.headers.get("content-type"))
-    || (declared !== null && !(Number(declared) <= maxCustomerApiResponseBytes))
+    || (declared !== null && !(/^\d{1,9}$/.test(declared) && Number(declared) <= maxCustomerApiResponseBytes))
     || !response.body) {
     await response.body?.cancel();
     throw new Error("customer-api response rejected");
@@ -44,15 +44,17 @@ async function readBoundedJson(response: Response): Promise<unknown> {
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > maxCustomerApiResponseBytes) {
-      await reader.cancel();
-      throw new Error("customer-api response too large");
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxCustomerApiResponseBytes) throw new Error("customer-api response too large");
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
   }
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks)));
 }
