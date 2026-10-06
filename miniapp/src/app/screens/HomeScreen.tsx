@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { OperationSummary, SessionView, WalletView } from "../../shared/api";
-import { assets } from "../../shared/assets";
-import { amount, money } from "../format";
+import { assetNameKeys, assetNetworkKeys } from "../format";
+import { useI18n } from "../i18n-context";
 import { Icon } from "../Icon";
 import type { SheetRequest, Tab } from "../navigation";
 import { Coin, EmptyState, OperationRow, ScreenTitle, Tick } from "../ui";
@@ -17,23 +17,25 @@ interface Props {
 
 export function HomeScreen({ session, wallet, operations, unreadNotifications, openSheet, openTab }: Props) {
   const [hidden, setHidden] = useState(false);
+  const { t, format } = useI18n();
+  const { amount, money } = format;
   const verified = wallet.kyc === "verified";
   const gate = (sheet: SheetRequest) => openSheet(verified ? sheet : { kind: "kyc-required" });
   const masked = "•••••• ₽";
 
   return (
-    <section className="screen" aria-label="Главная">
-      <ScreenTitle>Главная</ScreenTitle>
+    <section className="screen" aria-label={t("tab.home")}>
+      <ScreenTitle>{t("tab.home")}</ScreenTitle>
       <div className="greeting">
-        <span className="avatar" aria-hidden="true">Т</span>
+        <span className="avatar" aria-hidden="true">{session.displayName.slice(0, 1).toUpperCase()}</span>
         <div>
-          <strong>Добрый день, {session.displayName}</strong>
-          <span className="num">SolidChange ID · {session.customerRef}</span>
+          <strong>{t("home.greeting", { name: session.displayName })}</strong>
+          <span className="num">{t("home.customerId", { ref: session.customerRef })}</span>
         </div>
         <button
           type="button"
           className="icon-btn bell"
-          aria-label={unreadNotifications > 0 ? `Уведомления: ${unreadNotifications} новых` : "Уведомления"}
+          aria-label={unreadNotifications > 0 ? t("home.notificationsUnread", { count: unreadNotifications }) : t("home.notifications")}
           onClick={() => openSheet({ kind: "notifications" })}
         >
           <Icon name="bell" />
@@ -47,8 +49,8 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         <button type="button" className="kyc kyc--ok" onClick={() => openSheet({ kind: "kyc" })}>
           <span className="kyc__mark"><Icon name="check" /></span>
           <span className="kyc__main">
-            <strong>Проверка пройдена</strong>
-            <span>Уровень Standard · лимиты не настроены (D-014)</span>
+            <strong>{t("home.kycVerifiedTitle")}</strong>
+            <span>{t("home.kycVerifiedDetail")}</span>
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
@@ -56,8 +58,8 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         <button type="button" className="kyc kyc--gated" onClick={() => openSheet({ kind: "kyc-required" })}>
           <span className="kyc__mark"><Icon name="id-card" /></span>
           <span className="kyc__main">
-            <strong>Подтвердите личность</strong>
-            <span>Пройти проверку (тест) · обмен, пополнение и вывод откроются после неё</span>
+            <strong>{t("home.kycGatedTitle")}</strong>
+            <span>{t("home.kycGatedDetail")}</span>
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
@@ -65,11 +67,11 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
 
       <div className="balance">
         <div className="balance__top">
-          <span className="balance__label">Общая стоимость активов</span>
+          <span className="balance__label">{t("home.balanceLabel")}</span>
           <button
             type="button"
             className="balance__visibility"
-            aria-label={hidden ? "Показать баланс" : "Скрыть баланс"}
+            aria-label={t(hidden ? "home.showBalance" : "home.hideBalance")}
             aria-pressed={hidden}
             onClick={() => setHidden((value) => !value)}
           >
@@ -78,27 +80,27 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         </div>
         <Tick className="balance__value num" value={hidden ? masked : money("RUB", wallet.totalRub)} />
         <div className="balance__meta num">
-          <span>Доступно {hidden ? masked : money("RUB", wallet.availableRub)}</span>
-          <span>Hold {hidden ? masked : money("RUB", wallet.holdRub)}</span>
+          <span>{t("common.availableAmount", { amount: hidden ? masked : money("RUB", wallet.availableRub) })}</span>
+          <span>{t("home.holdAmount", { amount: hidden ? masked : money("RUB", wallet.holdRub) })}</span>
         </div>
       </div>
 
       <div className="actions">
         <button type="button" className="action" onClick={() => gate({ kind: "deposit" })}>
           <span className="action__icon"><Icon name="plus" /></span>
-          <span className="action__label">Пополнить</span>
+          <span className="action__label">{t("common.deposit")}</span>
         </button>
         <button type="button" className="action" onClick={() => openTab("exchange")}>
           <span className="action__icon"><Icon name="swap" /></span>
-          <span className="action__label">Обменять</span>
+          <span className="action__label">{t("home.actionExchange")}</span>
         </button>
         <button type="button" className="action" onClick={() => gate({ kind: "withdraw" })}>
           <span className="action__icon"><Icon name="up" /></span>
-          <span className="action__label">Вывести</span>
+          <span className="action__label">{t("common.withdraw")}</span>
         </button>
         <button type="button" className="action" onClick={() => openSheet({ kind: "support" })}>
           <span className="action__icon"><Icon name="help" /></span>
-          <span className="action__label">Поддержка</span>
+          <span className="action__label">{t("common.support")}</span>
         </button>
       </div>
 
@@ -106,15 +108,15 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         <button type="button" className="row" onClick={() => gate({ kind: "address-screening" })}>
           <span className="coin coin--menu" aria-hidden="true"><Icon name="shield-check" size="sm" /></span>
           <span className="row__main">
-            <strong>Проверить адрес (тест)</strong>
-            <span>KYT-симулятор · перевод не выполняется</span>
+            <strong>{t("screening.title")}</strong>
+            <span>{t("home.screeningDetail")}</span>
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
       </div>
 
       <div className="heading">
-        <h3>Активы</h3>
+        <h3>{t("home.assets")}</h3>
       </div>
       <div className="list">
         {wallet.assets.map((balance) => (
@@ -126,13 +128,13 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
           >
             <Coin asset={balance.code} />
             <span className="row__main">
-              <strong>{assets[balance.code].name}</strong>
-              <span>{balance.code} · {assets[balance.code].network}</span>
+              <strong>{t(assetNameKeys[balance.code])}</strong>
+              <span>{balance.code} · {t(assetNetworkKeys[balance.code])}</span>
             </span>
             <span className="row__amount">
               <strong className="num">{hidden ? "••••" : money(balance.code, balance.available)}</strong>
               <span className="num">
-                Hold · {hidden ? "••" : amount(balance.code, balance.hold)}
+                {t("home.assetHold", { amount: hidden ? "••" : amount(balance.code, balance.hold) })}
                 {balance.code === "RUB" ? "" : ` · ≈ ${hidden ? "••" : money("RUB", balance.valueRub)}`}
               </span>
             </span>
@@ -141,11 +143,11 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
       </div>
 
       <div className="heading">
-        <h3>Последние операции</h3>
-        <button type="button" className="link" onClick={() => openTab("activity")}>Вся история</button>
+        <h3>{t("home.recent")}</h3>
+        <button type="button" className="link" onClick={() => openTab("activity")}>{t("home.allHistory")}</button>
       </div>
       {operations.length === 0 ? (
-        <EmptyState title="Операций пока нет">Здесь появятся обмены, пополнения и выводы.</EmptyState>
+        <EmptyState title={t("home.emptyTitle")}>{t("home.emptyDetail")}</EmptyState>
       ) : (
         <div className="list">
           {operations.slice(0, 3).map((operation) => (

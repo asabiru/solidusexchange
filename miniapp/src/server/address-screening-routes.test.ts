@@ -390,8 +390,11 @@ describe("address screening: browser bundle boundary", () => {
     const end = sheets.indexOf("\nfunction ", start + 1);
     assert.ok(start > 0 && end > start);
     const sheet = sheets.slice(start, end);
-    assert.match(sheet, /Тестовый режим — перевод не выполняется/);
-    assert.match(sheet, /Проверить адрес \(тест\)/);
+    assert.match(sheet, /t\("screening\.banner"\)/);
+    assert.match(sheet, /t\("screening\.title"\)/);
+    const catalog = readFileSync(join(sourceRoot, "app", "locales", "ru.ts"), "utf8");
+    assert.match(catalog, /"screening\.banner": "Тестовый режим — перевод не выполняется"/);
+    assert.match(catalog, /"screening\.title": "Проверить адрес \(тест\)"/);
     assert.doesNotMatch(sheet, /Отправить|Перевести|Вывести|withdraw|transfer|executable: true/i);
   });
 });
