@@ -197,3 +197,51 @@ export interface AddressScreeningView {
   submittedAt: number;
   deadline: number;
 }
+
+export type ActivityKycState = Exclude<KycVerificationState, "not_started">;
+export type ActivityKind = "session_login" | `kyc_${ActivityKycState}` | "quote_previewed" | "address_screened";
+
+interface ActivityBase {
+  id: string;
+  at: number;
+}
+
+export interface SessionLoginActivity extends ActivityBase {
+  kind: "session_login";
+  source: SessionSource;
+}
+
+export interface KycActivity extends ActivityBase {
+  kind: `kyc_${ActivityKycState}`;
+}
+
+export interface QuotePreviewedActivity extends ActivityBase {
+  kind: "quote_previewed";
+  pair: `${AssetCode}/${AssetCode}`;
+  side: "buy" | "sell";
+  from: AssetCode;
+  to: AssetCode;
+  amountIn: string;
+  amountOut: string;
+  fee: string;
+  feeAsset: AssetCode;
+  rate: ExchangeRate;
+  executable: false;
+}
+
+export interface AddressScreenedActivity extends ActivityBase {
+  kind: "address_screened";
+  asset: ScreeningAsset;
+  network: ScreeningNetwork;
+  status: AddressScreeningStatus;
+  advisory: true;
+  executable: false;
+}
+
+export type ActivityItem = SessionLoginActivity | KycActivity | QuotePreviewedActivity | AddressScreenedActivity;
+
+export interface ActivityView {
+  mode: "test";
+  items: readonly ActivityItem[];
+  executable: false;
+}

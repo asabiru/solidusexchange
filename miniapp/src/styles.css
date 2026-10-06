@@ -387,6 +387,16 @@ fieldset {
   font-weight: 600;
 }
 
+.activity {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity .row__main > strong {
+  white-space: normal;
+}
+
 .unread-dot {
   width: 10px;
   height: 10px;

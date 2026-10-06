@@ -6,6 +6,7 @@ import {
   type ServerResponse
 } from "node:http";
 import type {
+  ActivityView,
   HealthView,
   KycStatus,
   KycVerificationState,
@@ -14,6 +15,7 @@ import type {
   SessionView
 } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
+import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
 import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
@@ -63,6 +65,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/address-screening/:id" },
   { method: "GET", path: "/bff/kyc/status" },
   { method: "GET", path: "/bff/notifications" },
+  { method: "GET", path: "/bff/activity" },
   { method: "POST", path: "/bff/notifications/read" }
 ] satisfies Route[]);
 
@@ -74,6 +77,7 @@ export interface MiniappServerOptions {
   kyc?: KycService;
   addressScreening?: AddressScreeningService;
   notifications?: NotificationOutbox;
+  activity?: ActivityLog;
 }
 
 const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTemplate>>> = Object.freeze({
@@ -87,6 +91,13 @@ const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTe
 });
 
 const maxReadIds = defaultMaxPerSubject;
+const activityQueryPattern = /^\?limit=([1-9][0-9]?)$/;
+
+function parseActivityLimit(search: string): number | undefined {
+  if (search === "") return maxActivityPerSubject;
+  const limit = Number(activityQueryPattern.exec(search)?.[1]);
+  return Number.isSafeInteger(limit) && limit >= 1 && limit <= maxActivityPerSubject ? limit : undefined;
+}
 
 function parseNotificationIds(value: string): readonly string[] | undefined {
   const ids = value.split(",");
@@ -209,9 +220,11 @@ export function createMiniappServer(
   });
 
   const outbox = options.notifications ?? createNotificationOutbox({ clock });
+  const activity = options.activity ?? createActivityLog({ clock });
   const unsubscribeKyc = kycOnboarding.subscribe((subject, state) => {
     const template = kycTemplates[state];
     if (template) outbox.record(subject, template);
+    activity.recordKyc(subject, state);
   });
 
   function notificationsView(subject: string): NotificationsView {
@@ -246,6 +259,7 @@ export function createMiniappServer(
     sessions.set(created.id, created);
     sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
     outbox.record(created.subject, "session_login");
+    activity.recordLogin(created.subject, created.source);
     response.setHeader("set-cookie", sessionCookieValue(created.id, config.sessionTtlSeconds, origin));
     json(response, 201, sessionView(created));
   }
@@ -388,6 +402,8 @@ export function createMiniappServer(
         }
         try {
           const { created, view } = await addressScreening.submit(session.subject, body);
+          const subject = session.subject;
+          if (created) activity.recordScreening(subject, view, () => addressScreening.view(subject, view.id)?.status);
           json(response, created ? 202 : 200, view);
         } catch (error) {
           if (error instanceof ScreeningInputError) {
@@ -399,6 +415,7 @@ export function createMiniappServer(
             return;
           }
           if (error instanceof ScreeningUnavailableError) {
+            activity.recordScreening(session.subject, error.view);
             json(response, 503, { error: "screening_unavailable", screening: error.view });
             return;
           }
@@ -505,6 +522,16 @@ export function createMiniappServer(
       json(response, 200, notificationsView(session.subject));
       return;
     }
+    if (path === "/bff/activity") {
+      const limit = parseActivityLimit(url.search);
+      if (limit === undefined || request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      const view: ActivityView = { mode: "test", items: activity.list(session.subject, limit), executable: false };
+      json(response, 200, view);
+      return;
+    }
     if (path.startsWith("/bff/address-screening/")) {
       if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
         json(response, 400, { error: "invalid_request" });
@@ -534,6 +561,7 @@ export function createMiniappServer(
           available: isAssetCode(from) ? syntheticData.available(session.kyc, from) : undefined,
           kycRequired: session.kyc !== "verified"
         });
+        activity.recordQuote(session.subject, quote);
         json(response, 200, quote);
       } catch (error) {
         if (error instanceof QuoteError) {
