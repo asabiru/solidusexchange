@@ -9,6 +9,8 @@ import {
   getAudit,
   getAuditExport,
   getAuthStatus,
+  getCheck,
+  getChecks,
   getCustomers,
   getDashboard,
   getFraudAlerts,
@@ -25,6 +27,7 @@ import {
   type AmlPayload,
   type ApprovalsPayload,
   type AuditPayload,
+  type ChecksPayload,
   type CustomersPayload,
   type DashboardPayload,
   type FraudPayload,
@@ -39,6 +42,8 @@ import type {
   AmlCase,
   ApprovalPreview,
   ApprovalSummary,
+  ChatCheck,
+  CheckStatus,
   EvidenceItem,
   FraudAlert,
   InvestigationCase,
@@ -1394,6 +1399,181 @@ function ReportsView({ data }: { data: ReportListPayload }) {
   );
 }
 
+type CheckStatusFilter = CheckStatus | "all";
+
+function CheckDetail({ item }: { item: ChatCheck }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.kind} · {item.channel}</p></div>
+        <Status tone={item.tone}>{t(`checks.status.${item.status}`)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("checks.sender")}</dt><dd>{item.sender} · {item.senderCustomerId}</dd></div>
+        <div><dt>{t("checks.recipient")}</dt><dd>{item.recipient}{item.recipientCustomerId ? ` · ${item.recipientCustomerId}` : ""}</dd></div>
+        <div><dt>{t("checks.amount")}</dt><dd className="numeric">{item.amount} {item.asset}</dd></div>
+        <div><dt>{t("checks.fee")}</dt><dd className="numeric">{item.fee} {item.asset}</dd></div>
+        {item.comment && <div><dt>{t("checks.comment")}</dt><dd>{item.comment}</dd></div>}
+        <div><dt>{t("checks.createdAt")}</dt><dd>{item.createdAt}</dd></div>
+        <div><dt>{t("checks.expiresAt")}</dt><dd>{item.expiresAt}</dd></div>
+        {item.resolvedAt && <div><dt>{t("checks.resolvedAt")}</dt><dd>{item.resolvedAt}</dd></div>}
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">{t("checks.monitoring")}</h3>
+      <WorkflowChecks checks={item.monitoring} />
+      <h3 className="detail-section-title">{t("checks.timeline")}</h3>
+      <div className="timeline-list">
+        {item.timeline.map((event) => (
+          <div key={event.id}>
+            <span />
+            <div>
+              <strong>{event.action}</strong>
+              <small>{event.occurredAt} · {event.actor}</small>
+              <p>{event.outcome}</p>
+              <code>{event.evidenceDigest}</code>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <div className="safe-action">
+        <strong>{t("checks.readOnlyTitle")}</strong>
+        <p>{t("checks.readOnlyNote")}</p>
+      </div>
+    </>
+  );
+}
+
+function ChecksView({ query, data }: { query: string; data: ChecksPayload }) {
+  const { t, count } = useI18n();
+  const [statusFilter, setStatusFilter] = useState<CheckStatusFilter>("all");
+  const [checks, setChecks] = useState<readonly ChatCheck[]>(data.checks);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+  const [selectedId, setSelectedId] = useState(data.checks[0]?.id ?? "");
+  const [detail, setDetail] = useState<ChatCheck | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return checks;
+    return checks.filter((check) =>
+      [check.id, check.sender, check.recipient, check.amount, check.asset, check.status]
+        .some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [checks, query]);
+
+  function applyFilter(next: CheckStatusFilter) {
+    setStatusFilter(next);
+    setExportState("loading");
+    getChecks(next === "all" ? undefined : next)
+      .then((payload) => {
+        setChecks(payload.checks);
+        setSelectedId((current) =>
+          payload.checks.some((check) => check.id === current) ? current : payload.checks[0]?.id ?? ""
+        );
+        setExportState("idle");
+      })
+      .catch(() => setExportState("failed"));
+  }
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setDetailState("loading");
+    setDetail(undefined);
+    getCheck(selectedId)
+      .then((payload) => {
+        if (!active) return;
+        setDetail(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
+  return (
+    <>
+      <PageHeading title={t("screen.checks")} description={t("checks.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("checks.queueTitle")}</h2><p>{t("checks.count", { count: count(visible.length) })}</p></div>
+            <div className="audit-actions">
+              <select
+                className="check-filter"
+                value={statusFilter}
+                disabled={exportState === "loading"}
+                onChange={(event) => applyFilter(event.target.value as CheckStatusFilter)}
+                aria-label={t("checks.filterLabel")}
+                title={t("checks.filterLabel")}
+              >
+                <option value="all">{t("checks.status.all")}</option>
+                {data.statuses.map((status) => (
+                  <option key={status} value={status}>{t(`checks.status.${status}`)}</option>
+                ))}
+              </select>
+              <Status tone="info">{t("common.readOnly")}</Status>
+            </div>
+          </header>
+          <LiveStatus
+            message={exportState === "loading" ? t("checks.loadingList") : detailState === "loading" ? t("checks.loadingDetail") : ""}
+          />
+          {exportState === "failed" && (
+            <div className="preview-error" role="alert">{t("checks.listFailed")}</div>
+          )}
+          <TableShell label={t("checks.queueTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("checks.check")}</th><th scope="col">{t("checks.parties")}</th><th scope="col">{t("checks.amount")}</th><th scope="col">{t("checks.status")}</th><th scope="col">{t("checks.expiresAt")}</th></tr></thead>
+              <tbody>
+                {visible.map((check) => (
+                  <tr key={check.id} data-selected={check.id === selectedId}>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        aria-current={check.id === selectedId ? "true" : undefined}
+                        onClick={() => setSelectedId(check.id)}
+                      >
+                        {check.id}
+                      </button>
+                      <small className="cell-note">{check.channel}</small>
+                    </td>
+                    <td>
+                      {check.sender} → {check.recipient}
+                      <small className="cell-note">
+                        {check.senderCustomerId}{check.recipientCustomerId ? ` → ${check.recipientCustomerId}` : ""}
+                      </small>
+                    </td>
+                    <td className="numeric">{check.amount} {check.asset}</td>
+                    <td><Status tone={check.tone}>{t(`checks.status.${check.status}`)}</Status></td>
+                    <td>{check.expiresAt}</td>
+                  </tr>
+                ))}
+                {!visible.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("checks.empty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <aside className="panel case-detail">
+          {detailState === "loading" && <div className="empty">{t("checks.loadingDetail")}</div>}
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">{t("checks.failed")}</div>
+          )}
+          {detail && <CheckDetail item={detail} />}
+        </aside>
+      </section>
+    </>
+  );
+}
+
 function PlaceholderView({ item }: { item: NavigationItem }) {
   const { t, intlTag } = useI18n();
   const label = t(screenKey(item.id));
@@ -1426,6 +1606,7 @@ interface WorkspaceData {
   session: SessionPayload;
   dashboard: DashboardPayload;
   customers: CustomersPayload;
+  checks?: ChecksPayload;
   kyc?: KycPayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
@@ -1577,9 +1758,10 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
+        hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
@@ -1591,7 +1773,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, kyc, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, kyc, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -1839,6 +2021,9 @@ export function App() {
           {screen === "dashboard" && <DashboardView data={access.data.dashboard} />}
           {screen === "customers" && (
             <CustomersView query={query} data={access.data.customers} />
+          )}
+          {screen === "checks" && access.data.checks && (
+            <ChecksView query={query} data={access.data.checks} />
           )}
           {screen === "kyc" && access.data.kyc && (
             <KycView query={query} data={access.data.kyc} />
