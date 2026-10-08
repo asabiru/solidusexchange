@@ -67,8 +67,6 @@ export const api = {
   sessions: () => call<DeviceSessionsView>("/bff/sessions"),
   revokeSession: (handle: string) => call<DeviceSessionsView>("/bff/sessions/revoke", { handle }),
   revokeOtherSessions: () => call<DeviceSessionsView>("/bff/sessions/revoke-others", {}),
-  markNotificationsRead: (ids: readonly string[]) =>
-    call<{ marked: number; unread: number }>("/bff/notifications/read", { ids: ids.join(",") }),
   screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>
     call<AddressScreeningView>("/bff/address-screening", { asset, network, address }),
   supportRequests: () => call<SupportRequestsView>("/bff/support/requests"),

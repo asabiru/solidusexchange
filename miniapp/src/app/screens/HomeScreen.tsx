@@ -121,6 +121,15 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
+        <button type="button" className="row" onClick={() => openSheet({ kind: "notifications" })}>
+          <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
+          <span className="row__main">
+            <strong>{t("notifications.title")}</strong>
+            <span>{t("home.notificationsDetail")}</span>
+          </span>
+          {unreadNotifications > 0 ? <span className="pill pill--muted num">{unreadNotifications}</span> : null}
+          <Icon name="chevron-right" size="sm" />
+        </button>
       </div>
 
       <div className="heading">
