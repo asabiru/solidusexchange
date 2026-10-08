@@ -67,7 +67,7 @@ export function createNotificationOutbox(options: NotificationOutboxOptions): No
 
   return Object.freeze({
     record(subject: string, template: NotificationTemplate): NotificationDraft {
-      const text = notificationTexts[template];
+      const text = Object.hasOwn(notificationTexts, template) ? notificationTexts[template] : undefined;
       if (text === undefined) throw new RangeError("unknown notification template");
       const sequence = (sequences.get(subject) ?? 0) + 1;
       sequences.set(subject, sequence);
@@ -87,6 +87,15 @@ export function createNotificationOutbox(options: NotificationOutboxOptions): No
         entries.splice(entries.findIndex((entry) => entry.subject === subject), 1);
       }
       while (entries.length > maxTotal) entries.shift();
+      // Sequences are only needed while a subject can still own drafts; keep
+      // the map as bounded as the draft store by dropping dead subjects.
+      if (sequences.size > maxTotal) {
+        const live = new Set(entries.map((entry) => entry.subject));
+        for (const key of sequences.keys()) {
+          if (sequences.size <= maxTotal) break;
+          if (!live.has(key)) sequences.delete(key);
+        }
+      }
       return { ...draft };
     },
 
