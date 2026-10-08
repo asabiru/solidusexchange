@@ -170,6 +170,52 @@ export interface ChatCheck {
   auditEvidenceDigest: string;
 }
 
+export type SupportTicketStatus = "open" | "pending-customer" | "escalated" | "resolved";
+
+export type SupportTicketChannel = "miniapp" | "telegram";
+
+export type SupportTicketPriority = "low" | "normal" | "high" | "urgent";
+
+export interface SupportTicketMessage {
+  id: string;
+  occurredAt: string;
+  author: "customer" | "operator" | "system";
+  body: string;
+}
+
+export interface SupportTicketNote {
+  id: string;
+  occurredAt: string;
+  author: string;
+  body: string;
+}
+
+// Synthetic customer-support ticket, read-only. Tickets carry conversation
+// history and linked entity references for operator context; replying,
+// assigning or closing stays outside this console.
+export interface SupportTicket {
+  id: string;
+  subject: string;
+  customerId: string;
+  customer: string;
+  topic: string;
+  priority: SupportTicketPriority;
+  status: SupportTicketStatus;
+  channel: SupportTicketChannel;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt?: string;
+  linkedCheckId?: string;
+  linkedKycCaseId?: string;
+  linkedScreeningId?: string;
+  disputedAmount?: string;
+  asset?: string;
+  messages: readonly SupportTicketMessage[];
+  internalNotes: readonly SupportTicketNote[];
+  tone: Tone;
+  auditEvidenceDigest: string;
+}
+
 export interface ApprovalRow {
   id: string;
   action: string;
@@ -252,6 +298,7 @@ export interface ReadonlyBackofficeRepository {
   queues(): readonly QueueRow[];
   customers(): readonly CustomerRow[];
   chatChecks(): readonly ChatCheck[];
+  supportTickets(): readonly SupportTicket[];
   kycCases(): readonly KycCase[];
   amlCases(): readonly AmlCase[];
   investigationCases(): readonly InvestigationCase[];
@@ -528,6 +575,125 @@ const data = deepFreeze({
       ],
       tone: "warning",
       auditEvidenceDigest: "sha256:d9aa51b60734"
+    }
+  ],
+  supportTickets: [
+    {
+      id: "SUP-384120",
+      subject: "sim-alina-mironova",
+      customerId: "CUS-10482",
+      customer: "Алина Миронова",
+      topic: "Получатель не может принять чек",
+      priority: "high",
+      status: "escalated",
+      channel: "telegram",
+      createdAt: "2026-09-28T12:41:09.000Z",
+      updatedAt: "2026-09-28T13:35:47.000Z",
+      linkedCheckId: "CHK-771298",
+      linkedKycCaseId: "KYC-220177",
+      disputedAmount: "120.000000",
+      asset: "USDT",
+      messages: [
+        { id: "M1", occurredAt: "2026-09-28T12:41:09.000Z", author: "customer", body: "Отправила чек подруге — у неё ошибка «получатель не прошёл проверку». Деньги вернутся?" },
+        { id: "M2", occurredAt: "2026-09-28T12:52:36.000Z", author: "operator", body: "Чек в статусе ожидания: получателю нужно завершить идентификацию. Средства удержаны и не списаны окончательно." },
+        { id: "M3", occurredAt: "2026-09-28T13:35:47.000Z", author: "system", body: "Эскалация в очередь комплаенс: связанный кейс KYC-220177 ждёт документы о происхождении средств." }
+      ],
+      internalNotes: [
+        { id: "N1", occurredAt: "2026-09-28T13:36:12.000Z", author: "operator:support-l1-12", body: "Связано с чеком CHK-771298 и кейсом KYC-220177. Сумма в споре — строковое значение, движения нет." }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:9c41de72ab55"
+    },
+    {
+      id: "SUP-384087",
+      subject: "sim-nikita-serov",
+      customerId: "CUS-10477",
+      customer: "Никита Серов",
+      topic: "Запрос статуса усиленной проверки",
+      priority: "normal",
+      status: "pending-customer",
+      channel: "miniapp",
+      createdAt: "2026-09-28T08:14:52.000Z",
+      updatedAt: "2026-09-28T11:02:18.000Z",
+      linkedKycCaseId: "KYC-220177",
+      messages: [
+        { id: "M1", occurredAt: "2026-09-28T08:14:52.000Z", author: "customer", body: "Приложение просит документы о доходах. Сколько ещё ждать решения?" },
+        { id: "M2", occurredAt: "2026-09-28T09:03:40.000Z", author: "operator", body: "Проверка идёт по кейсу KYC-220177: нужен документ о происхождении средств. Ориентир — 1 рабочий день после загрузки." },
+        { id: "M3", occurredAt: "2026-09-28T11:02:18.000Z", author: "system", body: "Ожидается ответ клиента: напоминание отправлено в Mini App." }
+      ],
+      internalNotes: [
+        { id: "N1", occurredAt: "2026-09-28T09:05:02.000Z", author: "operator:support-l1-07", body: "Клиенту объяснили EDD-статус; доступ ограничений не снимался." }
+      ],
+      tone: "info",
+      auditEvidenceDigest: "sha256:4fb21ac90e38"
+    },
+    {
+      id: "SUP-384055",
+      subject: "sim-sofia-romanova",
+      customerId: "CUS-10468",
+      customer: "София Романова",
+      topic: "Вопрос о санкционном совпадении",
+      priority: "urgent",
+      status: "open",
+      channel: "telegram",
+      createdAt: "2026-09-28T13:48:21.000Z",
+      updatedAt: "2026-09-28T13:48:21.000Z",
+      linkedScreeningId: "AML-78031",
+      messages: [
+        { id: "M1", occurredAt: "2026-09-28T13:48:21.000Z", author: "customer", body: "В банке сказали, что перевод задержали из-за «совпадения в списках». Это ошибка?" }
+      ],
+      internalNotes: [
+        { id: "N1", occurredAt: "2026-09-28T13:49:03.000Z", author: "service:intake-router", body: "Автосвязка: открытый кейс скрининга AML-78031, диспозиция аналитика ещё не вынесена." }
+      ],
+      tone: "danger",
+      auditEvidenceDigest: "sha256:6d2e78f14a09"
+    },
+    {
+      id: "SUP-383991",
+      subject: "sim-dmitry-panov",
+      customerId: "CUS-10475",
+      customer: "Дмитрий Панов",
+      topic: "Не пришёл код подтверждения в Mini App",
+      priority: "normal",
+      status: "resolved",
+      channel: "miniapp",
+      createdAt: "2026-09-27T16:44:30.000Z",
+      updatedAt: "2026-09-28T09:17:55.000Z",
+      resolvedAt: "2026-09-28T09:17:55.000Z",
+      messages: [
+        { id: "M1", occurredAt: "2026-09-27T16:44:30.000Z", author: "customer", body: "Не приходит код подтверждения уже час. Приложение переустанавливал." },
+        { id: "M2", occurredAt: "2026-09-27T17:02:11.000Z", author: "operator", body: "Проверили доставку: коды уходят, но оператор фильтрует короткие номера. Попробуйте авторизацию через Telegram." },
+        { id: "M3", occurredAt: "2026-09-28T09:17:55.000Z", author: "customer", body: "Зашёл через Telegram — всё работает, спасибо." },
+        { id: "M4", occurredAt: "2026-09-28T09:17:55.000Z", author: "system", body: "Обращение закрыто клиентом: подтверждён вход через альтернативный канал." }
+      ],
+      internalNotes: [
+        { id: "N1", occurredAt: "2026-09-27T17:05:48.000Z", author: "operator:support-l1-03", body: "Операторская фильтрация коротких кодов — известная синтетическая проблема канала." }
+      ],
+      tone: "success",
+      auditEvidenceDigest: "sha256:1e8a45c9b276"
+    },
+    {
+      id: "SUP-383964",
+      subject: "sim-aurora-trade",
+      customerId: "ORG-20018",
+      customer: "Aurora Trade LLC",
+      topic: "Документы бенефициара для KYB",
+      priority: "high",
+      status: "pending-customer",
+      channel: "telegram",
+      createdAt: "2026-09-28T07:29:14.000Z",
+      updatedAt: "2026-09-28T10:55:31.000Z",
+      linkedKycCaseId: "KYB-220165",
+      messages: [
+        { id: "M1", occurredAt: "2026-09-28T07:29:14.000Z", author: "customer", body: "Нужен список документов по бенефициарным владельцам — регистрация остановилась." },
+        { id: "M2", occurredAt: "2026-09-28T08:12:47.000Z", author: "operator", body: "По кейсу KYB-220165 нужны выписка из реестра и подтверждение структуры владения. Загрузите в досье компании." },
+        { id: "M3", occurredAt: "2026-09-28T10:55:31.000Z", author: "system", body: "Ожидается ответ клиента: чек-лист документов отправлен." }
+      ],
+      internalNotes: [
+        { id: "N1", occurredAt: "2026-09-28T08:15:20.000Z", author: "operator:support-l1-09", body: "Онбординг на паузе до завершения проверки UBO; решения оператор не принимает." }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:83f0d6a51b92"
     }
   ],
   kycCases: [
@@ -1136,6 +1302,7 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   queues: () => data.queues,
   customers: () => data.customers,
   chatChecks: () => data.chatChecks,
+  supportTickets: () => data.supportTickets,
   kycCases: () => data.kycCases,
   amlCases: () => data.amlCases,
   investigationCases: () => data.investigationCases,

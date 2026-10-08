@@ -274,4 +274,27 @@ describe("backoffice client signed envelope verification", () => {
     serve(signer.envelope("checks", { statuses: [], checks: [{ forged: true }] }, "request-23"));
     await assert.rejects(client.getCheck("CHK-771312"), /resource mismatch/);
   });
+
+  it("fetches the support ticket queue and a single ticket through the signed path", async () => {
+    expireCachedKeyset();
+    const provider = new EphemeralSigningKeyProvider(1);
+    const signer = new ResponseSigner(provider);
+    servedKeyset = () => signer.publicKeyset();
+
+    const requestsBefore = paths.length;
+    serve(signer.envelope("support", { statuses: ["escalated"], tickets: [] }, "request-24"));
+    assert.deepEqual(await client.getSupportTickets("escalated"), { statuses: ["escalated"], tickets: [] });
+    assert.equal(paths[requestsBefore], "/bff/api/support?status=escalated");
+
+    serve(signer.envelope("support", { statuses: ["escalated"], tickets: [] }, "request-25"));
+    assert.deepEqual(await client.getSupportTickets(), { statuses: ["escalated"], tickets: [] });
+    assert.ok(paths.includes("/bff/api/support"));
+
+    serve(signer.envelope("support:SUP-384120", { id: "SUP-384120" }, "request-26"));
+    assert.deepEqual(await client.getSupportTicket("SUP-384120"), { id: "SUP-384120" });
+    assert.ok(paths.includes("/bff/api/support/SUP-384120"));
+
+    serve(signer.envelope("support", { statuses: [], tickets: [{ forged: true }] }, "request-27"));
+    await assert.rejects(client.getSupportTicket("SUP-384120"), /resource mismatch/);
+  });
 });

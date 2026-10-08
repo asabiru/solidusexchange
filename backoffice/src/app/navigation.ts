@@ -54,7 +54,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "treasury-planning", group: "money-movement", implemented: false },
   { id: "ledger", group: "money-movement", implemented: false },
   { id: "cards", group: "service", implemented: false },
-  { id: "support", group: "service", implemented: false },
+  { id: "support", group: "service", capability: "support:read", implemented: true },
   { id: "channels", group: "service", implemented: false },
   { id: "approvals", group: "control", capability: "approvals:read", implemented: true },
   { id: "analytics", group: "control", implemented: false },
