@@ -18,7 +18,7 @@ import { assertEpochSeconds } from "./deterministic.mjs";
 
 export const SIGNATURE_SCHEME = "solidchange-sim-callback-v1";
 export const SIMULATOR_ENVIRONMENT = "dev-simulator";
-export const SIMULATOR_DOMAINS = Object.freeze(["kyc", "kyt", "bank", "quote"]);
+export const SIMULATOR_DOMAINS = Object.freeze(["kyc", "kyt", "bank", "quote", "checks"]);
 export const SIGNATURE_HEADERS = Object.freeze({
   keyId: "x-sim-key-id",
   timestamp: "x-sim-timestamp",
@@ -37,7 +37,7 @@ const MAX_HEADER_VALUE = 256;
 const SIGNATURE_BYTES = Object.freeze({ ed25519: 64, "hmac-sha256": 32 });
 
 /** @typedef {"ed25519" | "hmac-sha256"} SignatureAlgorithm */
-/** @typedef {"kyc" | "kyt" | "bank" | "quote"} SimulatorDomain */
+/** @typedef {"kyc" | "kyt" | "bank" | "quote" | "checks"} SimulatorDomain */
 
 /**
  * @typedef {object} SimulatorKey

@@ -69,6 +69,132 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects check commands downgraded to reads",
+  "Command operation must remain POST: claimCustomerCheck",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const claim = openapi.paths["/api/v1/customer/checks/{checkId}/claim"];
+    openapi.paths["/api/v1/customer/checks/{checkId}/claim"] = {
+      get: structuredClone(claim.post)
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects check commands without an idempotency key",
+  "Missing Idempotency-Key: claimCustomerCheck",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/checks/{checkId}/claim"].post;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/IdempotencyKey"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive check command bodies",
+  "Command request must use canonical schema: claimCustomerCheck",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/checks/{checkId}/claim"].post.requestBody
+      .content["application/json"].schema = { type: "object" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects optional check command bodies",
+  "Command request body must be required: previewCustomerCheck",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/checks/preview"].post.requestBody.required = false;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects command bodies on bodyless check commands",
+  "Request bodies are prohibited in this slice: cancelCustomerCheck",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/customer/checks/{checkId}/cancel"].post.requestBody =
+      structuredClone(
+        openapi.paths["/api/v1/customer/checks/{checkId}/claim"].post.requestBody
+      );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects unbound check path templates",
+  "checkId path parameter must be bound exactly on templated check paths: getCustomerCheckStatus",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/checks/{checkId}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/CheckId"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects noncanonical check path parameters",
+  "Path parameter must use only the canonical CheckId parameter",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/checks/{checkId}"].get;
+    operation.parameters = operation.parameters.map((parameter) =>
+      parameter.$ref === "#/components/parameters/CheckId"
+        ? {
+            name: "checkId",
+            in: "path",
+            required: true,
+            schema: { type: "string" }
+          }
+        : parameter
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects bearer check types in canonical preview requests",
+  "Canonical CheckPreviewRequest schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CheckPreviewRequest.properties.check_type = {
+      type: "string",
+      enum: ["personal", "bearer"]
+    };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects postings enabled in canonical check views",
+  "Canonical CheckView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CheckView.properties.posting.const = "enabled";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects weakened canonical check definitions",
+  "Canonical OpenAPI decimalAmount definition must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.$defs.decimalAmount = { type: "string" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects anonymous security alternatives",
   "Security must contain exactly one CustomerBearer requirement",
   (scratch) => {

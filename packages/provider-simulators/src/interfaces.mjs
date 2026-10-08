@@ -4,7 +4,8 @@
  * pass `assertProviderAdapter` and the shared callback verifier rules.
  *
  * Contracts: KycProviderAdapter (kyc.mjs), KytProviderAdapter (kyt.mjs),
- * BankPaymentAdapter (bank.mjs), LiquidityQuoteAdapter (quotes.mjs).
+ * BankPaymentAdapter (bank.mjs), LiquidityQuoteAdapter (quotes.mjs),
+ * ChecksProviderAdapter (checks.mjs).
  */
 
 export const ADAPTER_OPERATIONS = Object.freeze({
@@ -12,6 +13,14 @@ export const ADAPTER_OPERATIONS = Object.freeze({
   kyt: Object.freeze(["screenTransfer", "getAssessment"]),
   bank: Object.freeze(["createPaymentIntent", "getPaymentStatus"]),
   quote: Object.freeze(["requestQuote", "getQuote"]),
+  checks: Object.freeze([
+    "previewCheck",
+    "createCheck",
+    "issueCheck",
+    "claimCheck",
+    "cancelCheck",
+    "getCheckStatus",
+  ]),
 });
 
 /** @typedef {keyof typeof ADAPTER_OPERATIONS} AdapterKind */

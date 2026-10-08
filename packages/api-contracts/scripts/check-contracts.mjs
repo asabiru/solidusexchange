@@ -141,6 +141,104 @@ const pinnedResponseSchemas = {
       capabilities: { type: "array", uniqueItems: true, items: boundedString },
       commands_enabled: { const: false }
     }
+  },
+  CheckPreviewRequest: {
+    type: "object",
+    additionalProperties: false,
+    required: ["check_type", "recipient_ref", "amount", "asset"],
+    properties: {
+      check_type: { const: "personal" },
+      recipient_ref: boundedString,
+      amount: { $ref: "#/$defs/decimalAmount" },
+      asset: { $ref: "#/$defs/assetCode" },
+      comment: { type: "string", maxLength: 140 }
+    }
+  },
+  CheckClaimRequest: {
+    type: "object",
+    additionalProperties: false,
+    required: ["claim_reference"],
+    properties: {
+      claim_reference: {
+        type: "string",
+        minLength: 16,
+        maxLength: 128,
+        pattern: "^[A-Za-z0-9._:-]+$"
+      }
+    }
+  },
+  CheckPreview: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "check_type",
+      "recipient_ref",
+      "amount",
+      "asset",
+      "fee_amount",
+      "preview_reference",
+      "expires_at",
+      "posting"
+    ],
+    properties: {
+      check_type: { const: "personal" },
+      recipient_ref: boundedString,
+      amount: { $ref: "#/$defs/decimalAmount" },
+      asset: { $ref: "#/$defs/assetCode" },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      preview_reference: {
+        type: "string",
+        minLength: 16,
+        maxLength: 128,
+        pattern: "^[A-Za-z0-9._:-]+$"
+      },
+      expires_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
+  CheckView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "check_id",
+      "check_type",
+      "status",
+      "sender_ref",
+      "recipient_ref",
+      "amount",
+      "asset",
+      "fee_amount",
+      "outstanding_amount",
+      "created_at",
+      "expires_at",
+      "resolved_at",
+      "posting"
+    ],
+    properties: {
+      check_id: boundedString,
+      check_type: { const: "personal" },
+      status: {
+        type: "string",
+        enum: [
+          "awaiting_confirmation",
+          "created",
+          "awaiting_recipient_kyc",
+          "claimed",
+          "cancelled",
+          "expired"
+        ]
+      },
+      sender_ref: boundedString,
+      recipient_ref: boundedString,
+      amount: { $ref: "#/$defs/decimalAmount" },
+      asset: { $ref: "#/$defs/assetCode" },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      outstanding_amount: { $ref: "#/$defs/decimalAmount" },
+      created_at: { type: "string", format: "date-time" },
+      expires_at: { type: "string", format: "date-time" },
+      resolved_at: { type: ["string", "null"], format: "date-time" },
+      posting: { const: "none" }
+    }
   }
 };
 
@@ -163,6 +261,13 @@ const canonicalHeaderParameters = new Map([
 function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
   for (const parameter of parameters ?? []) {
     const resolved = parameter?.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
+    if (resolved?.in === "path") {
+      assert(
+        canonicalJson(parameter) === canonicalJson({ $ref: "#/components/parameters/CheckId" }),
+        `Path parameter must use only the canonical CheckId parameter: ${label}`
+      );
+      continue;
+    }
     const canonical = canonicalHeaderParameters.get(String(resolved?.name ?? "").toLowerCase());
     if (!canonical) continue;
     assert(
@@ -241,7 +346,20 @@ function checkOpenApi() {
     ["getCustomerSession", "/api/v1/customer/session"],
     ["getCustomerCapabilities", "/api/v1/customer/capabilities"],
     ["getOperatorSession", "/api/v1/operator/session"],
-    ["getOperatorCapabilities", "/api/v1/operator/capabilities"]
+    ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
+    ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
+    ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
+    ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
+    ["cancelCustomerCheck", "/api/v1/customer/checks/{checkId}/cancel"]
+  ]);
+  const commandOperations = new Set([
+    "previewCustomerCheck",
+    "claimCustomerCheck",
+    "cancelCustomerCheck"
+  ]);
+  const commandRequestSchemas = new Map([
+    ["previewCustomerCheck", "#/components/schemas/CheckPreviewRequest"],
+    ["claimCustomerCheck", "#/components/schemas/CheckClaimRequest"]
   ]);
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
   const successSchemas = new Map([
@@ -249,7 +367,11 @@ function checkOpenApi() {
     ["getCustomerSession", "#/components/schemas/SessionView"],
     ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
-    ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"]
+    ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
+    ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
+    ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
+    ["claimCustomerCheck", "#/components/schemas/CheckView"],
+    ["cancelCustomerCheck", "#/components/schemas/CheckView"]
   ]);
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {
     assert(pathName.startsWith("/api/v1/"), `Unversioned API path: ${pathName}`);
@@ -257,8 +379,14 @@ function checkOpenApi() {
     verifyCanonicalHeaderParameters(pathItem.parameters, path, pathName);
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!methodNames.has(method)) continue;
-      assert(method === "get", `Mutation method is prohibited in this slice: ${method.toUpperCase()} ${pathName}`);
       assert(operation.operationId, `Missing operationId: ${method.toUpperCase()} ${pathName}`);
+      const commandOperation = commandOperations.has(operation.operationId);
+      assert(
+        commandOperation ? method === "post" : method === "get",
+        commandOperation
+          ? `Command operation must remain POST: ${operation.operationId} ${pathName}`
+          : `Mutation method is prohibited in this slice: ${method.toUpperCase()} ${pathName}`
+      );
       assert(!operationIds.has(operation.operationId), `Duplicate operationId: ${operation.operationId}`);
       operationIds.add(operation.operationId);
       assert(
@@ -266,10 +394,26 @@ function checkOpenApi() {
         `Operation path is not pinned: ${operation.operationId} ${pathName}`
       );
 
-      assert(
-        !Object.hasOwn(operation, "requestBody"),
-        `Request bodies are prohibited in this slice: ${operation.operationId}`
-      );
+      const expectedRequestSchema = commandRequestSchemas.get(operation.operationId);
+      if (expectedRequestSchema !== undefined) {
+        const body = operation.requestBody;
+        assert(body?.required === true, `Command request body must be required: ${operation.operationId}`);
+        sameSet(
+          Object.keys(body?.content ?? {}),
+          ["application/json"],
+          `Command request media types for ${operation.operationId}`
+        );
+        assert(
+          canonicalJson(body?.content?.["application/json"]?.schema)
+            === canonicalJson({ $ref: expectedRequestSchema }),
+          `Command request must use canonical schema: ${operation.operationId}`
+        );
+      } else {
+        assert(
+          !Object.hasOwn(operation, "requestBody"),
+          `Request bodies are prohibited in this slice: ${operation.operationId}`
+        );
+      }
       assert(
         !Object.hasOwn(operation, "callbacks"),
         `Callbacks are prohibited in this slice: ${operation.operationId}`
@@ -280,10 +424,22 @@ function checkOpenApi() {
         requestHeaders.has("#/components/parameters/RequestId"),
         `Missing X-Request-Id: ${operation.operationId}`
       );
+      const isCheckPath = pathName.includes("{checkId}");
       assert(
-        !requestHeaders.has("#/components/parameters/IdempotencyKey"),
-        `Read-only operation must not require Idempotency-Key: ${operation.operationId}`
+        isCheckPath === requestHeaders.has("#/components/parameters/CheckId"),
+        `checkId path parameter must be bound exactly on templated check paths: ${operation.operationId}`
       );
+      if (commandOperation) {
+        assert(
+          requestHeaders.has("#/components/parameters/IdempotencyKey"),
+          `Missing Idempotency-Key: ${operation.operationId}`
+        );
+      } else {
+        assert(
+          !requestHeaders.has("#/components/parameters/IdempotencyKey"),
+          `Read-only operation must not require Idempotency-Key: ${operation.operationId}`
+        );
+      }
       if (pathName.startsWith("/api/v1/operator/")) {
         assert(
           requestHeaders.has("#/components/parameters/DeviceId"),
@@ -435,6 +591,23 @@ function checkOpenApi() {
       && idempotencyKeySchema.pattern === "^[A-Za-z0-9._:-]+$",
     "Canonical IdempotencyKey constraints must remain pinned"
   );
+  const checkIdParameter = parameters.CheckId;
+  assert(checkIdParameter?.required === true, "CheckId must be required when used");
+  assert(checkIdParameter?.in === "path", "CheckId must remain a path parameter");
+  assert(checkIdParameter?.name === "checkId", "CheckId must use checkId");
+  assert(
+    canonicalJson(checkIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^[a-z][a-z0-9_-]{2,127}$"
+    }),
+    "Canonical CheckId constraints must remain pinned"
+  );
+  for (const name of ["decimalAmount", "assetCode"]) {
+    assert(
+      canonicalJson(openapi.$defs?.[name]) === canonicalJson(pinnedEventEnvelopeDefinitions[name]),
+      `Canonical OpenAPI ${name} definition must remain pinned`
+    );
+  }
   for (const [name, expected] of Object.entries(pinnedResponseSchemas)) {
     assert(
       canonicalJson(openapi.components?.schemas?.[name]) === canonicalJson(expected),

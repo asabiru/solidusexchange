@@ -10,6 +10,7 @@ scenario-driven simulator, signed callbacks and a strict verifier.
 | KYT | `KytProviderAdapter` in `src/kyt.mjs` | `createKytSimulator` | D-011 (Ranex/KYT integration method), `Open` |
 | RUB bank / SBP | `BankPaymentAdapter` in `src/bank.mjs` | `createBankSimulator` | D-004 (bank for RUB/SBP), `Open` |
 | Liquidity quotes | `LiquidityQuoteAdapter` in `src/quotes.mjs` | `createQuoteSimulator` | D-007 (liquidity model), `Open` |
+| Telegram in-chat checks | `ChecksProviderAdapter` in `src/checks.mjs` | `createChecksSimulator` | D-019 (Telegram in-chat checks), `Open` |
 
 ## Dev-only boundary
 
@@ -25,6 +26,10 @@ scenario-driven simulator, signed callbacks and a strict verifier.
   - the bank simulator only produces synthetic payment-intent and callback
     records with `posting: "none"`; nothing posts to a ledger, settles, pays
     out or refunds;
+  - the checks simulator only records synthetic personal-check records and
+    callback evidence with `posting: "none"`; bearer and multi-claim checks
+    are refused, nothing reserves funds, and the outstanding amount is a pure
+    function of open check state;
   - KYC/KYT outputs are evidence for human-owned policy, not decisions.
 - Synthetic, non-PII data only: subject references must match
   `^sim-[a-z0-9-]{1,60}$`; unknown request members are refused.
@@ -64,10 +69,19 @@ with `defaultScenario`; an unmapped subject fails with
   the record carries `amount_mode` (`base` | `quote`) and
   `requested_quote_amount` (`null` in base mode), and the verifier rechecks
   that the base amount is maximal (schema `solidchange.sim.quote.v2`).
+- Checks (per `check_ref`): `delivered`, `duplicate_callback`,
+  `late_callback`, `silent_callback`, `provider_outage`. Lifecycle is
+  `createCheck` → `issueCheck` (sender confirmation) → `claimCheck` /
+  `cancelCheck` / expiry; personal checks only. Membership and KYC status
+  come from the `members` option and are deny-by-default. The outstanding
+  amount is the check amount while open (`created` /
+  `awaiting_recipient_kyc`) and zero otherwise.
 
 Every create call is idempotent: the same `idempotency_key` with the same
 request returns the stored response, a different request fails with
-`idempotency_conflict`. Outages throw `ProviderError` with
+`idempotency_conflict`. Every checks command (`createCheck`, `issueCheck`,
+`claimCheck`, `cancelCheck`) is idempotent the same way, keyed per
+operation. Outages throw `ProviderError` with
 `code: "provider_unavailable"` and `retryable: true`.
 
 Same seed + same key + same calls produce byte-identical records, nonces and

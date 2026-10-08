@@ -164,6 +164,276 @@
         }
       }
     },
+    "/api/v1/customer/checks/preview": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Preview a personal check before the sender confirms",
+        "description": "Computes the check terms a sender sees before confirming in the chat. Personal checks only; bearer and multi-claim checks are out of scope. This operation creates no check and moves no funds.",
+        "operationId": "previewCustomerCheck",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckPreviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Check preview",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckPreview"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/checks/{checkId}": {
+      "get": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the status of a personal check",
+        "operationId": "getCustomerCheckStatus",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/CheckId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check status",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/checks/{checkId}/claim": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Claim a personal check as the named recipient",
+        "operationId": "claimCustomerCheck",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/CheckId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CheckClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Check claimed",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/checks/{checkId}/cancel": {
+      "post": {
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Cancel an unclaimed personal check",
+        "operationId": "cancelCustomerCheck",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/CheckId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Check cancelled",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CheckView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/operator/session": {
       "get": {
         "operationId": "getOperatorSession",
@@ -349,6 +619,16 @@
         "schema": {
           "$ref": "#/components/schemas/IdempotencyKey"
         }
+      },
+      "CheckId": {
+        "name": "checkId",
+        "in": "path",
+        "required": true,
+        "description": "Check identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{2,127}$"
+        }
       }
     },
     "headers": {
@@ -474,6 +754,177 @@
           }
         }
       },
+      "CheckPreviewRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_type",
+          "recipient_ref",
+          "amount",
+          "asset"
+        ],
+        "properties": {
+          "check_type": {
+            "const": "personal"
+          },
+          "recipient_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "comment": {
+            "type": "string",
+            "maxLength": 140
+          }
+        }
+      },
+      "CheckClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claim_reference"
+        ],
+        "properties": {
+          "claim_reference": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          }
+        }
+      },
+      "CheckPreview": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_type",
+          "recipient_ref",
+          "amount",
+          "asset",
+          "fee_amount",
+          "preview_reference",
+          "expires_at",
+          "posting"
+        ],
+        "properties": {
+          "check_type": {
+            "const": "personal"
+          },
+          "recipient_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "fee_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "preview_reference": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9._:-]+$"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "CheckView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "check_id",
+          "check_type",
+          "status",
+          "sender_ref",
+          "recipient_ref",
+          "amount",
+          "asset",
+          "fee_amount",
+          "outstanding_amount",
+          "created_at",
+          "expires_at",
+          "resolved_at",
+          "posting"
+        ],
+        "properties": {
+          "check_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "check_type": {
+            "const": "personal"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "awaiting_confirmation",
+              "created",
+              "awaiting_recipient_kyc",
+              "claimed",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "sender_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "recipient_ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "fee_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "outstanding_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resolved_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
       "Error": {
         "$ref": "./schemas/error.schema.json"
       }
@@ -496,6 +947,36 @@
       },
       "Forbidden": {
         "description": "The actor is authenticated but lacks the capability.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The referenced resource does not exist.",
+        "headers": {
+          "X-Request-Id": {
+            "$ref": "#/components/headers/RequestId"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The command conflicts with the current resource state.",
         "headers": {
           "X-Request-Id": {
             "$ref": "#/components/headers/RequestId"
@@ -542,6 +1023,16 @@
           }
         }
       }
+    }
+  },
+  "$defs": {
+    "decimalAmount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)(\\.[0-9]+)?$"
+    },
+    "assetCode": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]{2,16}$"
     }
   },
   "x-solidchange-runtime-boundary": "contract-only",
