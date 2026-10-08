@@ -542,8 +542,8 @@
       "minCases": 13
     },
     "miniapp/src/server/notifications.test.ts": {
-      "minLines": 383,
-      "minCases": 15
+      "minLines": 404,
+      "minCases": 17
     },
     "miniapp/src/server/observability.test.ts": {
       "minLines": 367,
