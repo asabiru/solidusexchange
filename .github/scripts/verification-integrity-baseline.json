@@ -33,7 +33,7 @@
     "packages/customer-api/package.json": {
       "check": "node scripts/check-boundary.mjs",
       "dev": "node src/server.mjs",
-      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/observability.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/observability.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && npm run check",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/observability.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/observability.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && npm run check",
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
       "test": "npm run check && node --test tests/*.test.mjs",
       "typecheck": "tsc -p tsconfig.json --pretty false"
@@ -698,6 +698,10 @@
     "packages/customer-api/tests/contract-conformance.test.mjs": {
       "minLines": 239,
       "minCases": 14
+    },
+    "packages/customer-api/tests/contract-coverage.test.mjs": {
+      "minLines": 246,
+      "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
       "minLines": 256
