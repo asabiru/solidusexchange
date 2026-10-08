@@ -63,6 +63,15 @@ describe("operator access", () => {
     assert.equal(can("compliance-lead", "audit:export"), true);
   });
 
+  it("grants custody visibility only to compliance, aml and auditor roles", () => {
+    assert.equal(can("compliance-lead", "custody:read"), true);
+    assert.equal(can("aml-investigator", "custody:read"), true);
+    assert.equal(can("auditor", "custody:read"), true);
+    assert.equal(can("support-l1", "custody:read"), false);
+    assert.equal(can("fraud-investigator", "custody:read"), false);
+    assert.equal(can("unknown", "custody:read"), false);
+  });
+
   it("grants draft reports only to compliance and auditor read roles", () => {
     assert.equal(can("compliance-lead", "reports:read"), true);
     assert.equal(can("auditor", "reports:read"), true);

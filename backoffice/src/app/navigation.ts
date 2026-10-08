@@ -46,7 +46,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "investigations", group: "customer-risk", capability: "investigations:read", implemented: true },
   { id: "fraud", group: "customer-risk", capability: "fraud:read", implemented: true },
   { id: "operations", group: "money-movement", implemented: false },
-  { id: "withdrawal", group: "money-movement", implemented: false },
+  { id: "withdrawal", group: "money-movement", capability: "custody:read", implemented: true },
   { id: "payments", group: "money-movement", implemented: false },
   { id: "checks", group: "money-movement", capability: "checks:read", implemented: true },
   { id: "custody", group: "money-movement", implemented: false },
