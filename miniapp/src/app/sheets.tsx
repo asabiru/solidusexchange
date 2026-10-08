@@ -7,6 +7,7 @@ import type {
   KycVerificationState,
   KycVerificationView,
   NotificationDraft,
+  NotificationTemplate,
   NotificationsView,
   OperationDetail,
   ProfileView,
@@ -20,6 +21,12 @@ import { ChecksSheet } from "./ChecksSheet";
 import { assetNameKeys, assetNetworkKeys } from "./format";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
+import {
+  loadSeenIds,
+  notificationSeenStorage,
+  rememberSeenIds,
+  unseenNotifications
+} from "./notification-seen";
 import { Icon } from "./Icon";
 import type { SheetRequest } from "./navigation";
 import { SupportSheet } from "./SupportSheet";
@@ -694,8 +701,22 @@ function SessionsSheet({ close }: { close: () => void }) {
   );
 }
 
+const notificationTemplateKeys: Readonly<Record<NotificationTemplate, { title: MessageKey; body: MessageKey }>> = {
+  session_login: { title: "notifications.template.sessionLogin.title", body: "notifications.template.sessionLogin.body" },
+  kyc_submitted: { title: "notifications.template.kycSubmitted.title", body: "notifications.template.kycSubmitted.body" },
+  kyc_in_review: { title: "notifications.template.kycInReview.title", body: "notifications.template.kycInReview.body" },
+  kyc_approved: { title: "notifications.template.kycApproved.title", body: "notifications.template.kycApproved.body" },
+  kyc_rejected: { title: "notifications.template.kycRejected.title", body: "notifications.template.kycRejected.body" },
+  kyc_needs_more_data: { title: "notifications.template.kycNeedsMoreData.title", body: "notifications.template.kycNeedsMoreData.body" },
+  kyc_timed_out: { title: "notifications.template.kycTimedOut.title", body: "notifications.template.kycTimedOut.body" },
+  kyc_unavailable: { title: "notifications.template.kycUnavailable.title", body: "notifications.template.kycUnavailable.body" },
+  support_received: { title: "notifications.template.supportReceived.title", body: "notifications.template.supportReceived.body" },
+  complaint_received: { title: "notifications.template.complaintReceived.title", body: "notifications.template.complaintReceived.body" }
+};
+
 function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (view: NotificationsView) => void }) {
   const [drafts, setDrafts] = useState<readonly NotificationDraft[] | undefined>();
+  const [seenAtOpen, setSeenAtOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [failed, setFailed] = useState(false);
   const { t, format } = useI18n();
   useEffect(() => {
@@ -703,17 +724,12 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
     async function load() {
       const view = await api.notifications();
       if (!active) return;
+      const storage = notificationSeenStorage();
+      setSeenAtOpen(loadSeenIds(storage));
       setDrafts(view.notifications);
-      const unread = view.notifications.filter((draft) => !draft.read).map((draft) => draft.id);
-      if (unread.length === 0) return;
-      const marked = await api.markNotificationsRead(unread);
-      if (active) {
-        onRead({
-          ...view,
-          unread: marked.unread,
-          notifications: view.notifications.map((draft) => ({ ...draft, read: true }))
-        });
-      }
+      // Seen state is a cosmetic per-browser marker kept in web storage.
+      const seen = rememberSeenIds(storage, view.notifications.map((draft) => draft.id));
+      if (active) onRead({ ...view, unread: unseenNotifications(view, seen) });
     }
     load().catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
@@ -730,16 +746,23 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
       {drafts?.length === 0 ? <p className="sheet__note">{t("notifications.empty")}</p> : null}
       {drafts && drafts.length > 0 ? (
         <ul className="list notifications" aria-label={t("notifications.listLabel")}>
-          {drafts.map((draft) => (
-            <li key={draft.id} className={`row row--static${draft.read ? "" : " is-unread"}`}>
-              <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
-              <span className="row__main">
-                <strong>{draft.text}</strong>
-                <span className="num">{t("notifications.draftMeta", { when: format.dateTime(new Date(draft.createdAt).toISOString()) })}</span>
-              </span>
-              {draft.read ? null : <span className="unread-dot"><span className="visually-hidden">{t("notifications.new")}</span></span>}
-            </li>
-          ))}
+          {drafts.map((draft) => {
+            const copy = Object.hasOwn(notificationTemplateKeys, draft.template)
+              ? notificationTemplateKeys[draft.template]
+              : undefined;
+            const unseen = !draft.read && !seenAtOpen.has(draft.id);
+            return (
+              <li key={draft.id} className={`row row--static${unseen ? " is-unread" : " is-seen"}`}>
+                <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
+                <span className="row__main">
+                  <strong>{copy ? t(copy.title) : draft.text}</strong>
+                  {copy ? <span>{t(copy.body)}</span> : null}
+                  <span className="num">{t("notifications.draftMeta", { when: format.dateTime(new Date(draft.createdAt).toISOString()) })}</span>
+                </span>
+                {unseen ? <span className="unread-dot"><span className="visually-hidden">{t("notifications.new")}</span></span> : null}
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       <p className="sheet__note">{t("notifications.note")}</p>

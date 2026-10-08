@@ -412,6 +412,10 @@ fieldset {
   font-weight: 600;
 }
 
+.notifications .is-seen {
+  opacity: 0.66;
+}
+
 .activity {
   margin: 0;
   padding: 0;

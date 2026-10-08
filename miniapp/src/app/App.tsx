@@ -13,6 +13,7 @@ import { applyDocumentLocale, initialLocale, type Locale, type LocaleStorage, ty
 import { I18nProvider } from "./i18n-context";
 import { Icon, type IconName } from "./Icon";
 import type { SheetRequest, Tab } from "./navigation";
+import { notificationSeenStorage, withLocalUnread } from "./notification-seen";
 import { ExchangeScreen } from "./screens/ExchangeScreen";
 import { HomeScreen } from "./screens/HomeScreen";
 import { OperationsScreen } from "./screens/OperationsScreen";
@@ -76,7 +77,12 @@ async function loadCustomerData(): Promise<CustomerData> {
     api.profile(),
     api.notifications()
   ]);
-  return { wallet, operations: operations.operations, profile, notifications };
+  return {
+    wallet,
+    operations: operations.operations,
+    profile,
+    notifications: withLocalUnread(notifications, notificationSeenStorage())
+  };
 }
 
 export function App() {
@@ -192,7 +198,9 @@ export function App() {
 
   const closeSheet = useCallback(() => {
     setSheet(undefined);
-    api.notifications().then(setNotifications).catch(() => undefined);
+    api.notifications()
+      .then((view) => setNotifications(withLocalUnread(view, notificationSeenStorage())))
+      .catch(() => undefined);
   }, [setNotifications]);
 
   const logout = useCallback(async () => {

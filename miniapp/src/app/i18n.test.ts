@@ -152,6 +152,32 @@ describe("i18n: support and complaints", () => {
   });
 });
 
+describe("i18n: notification feed", () => {
+  const templateKeys = Object.keys(ru).filter((key) => key.startsWith("notifications.template.")) as MessageKey[];
+  const bodyKeys = templateKeys.filter((key) => key.endsWith(".body"));
+  const markers: Readonly<Record<Locale, string>> = { ru: "Тестовый режим", ky: "Сыноо режими", en: "Test mode" };
+
+  it("carries a localized title and body for every outbox template", () => {
+    assert.equal(templateKeys.length, 20);
+    assert.equal(bodyKeys.length, 10);
+    for (const locale of locales) {
+      for (const key of templateKeys) assert.ok(catalogs[locale][key].trim(), `${locale}:${key}`);
+      assert.ok(catalogs[locale]["home.notificationsDetail"].trim(), locale);
+      assert.ok(catalogs[locale]["notifications.new"].trim(), locale);
+    }
+  });
+
+  it("keeps template bodies test-marked and free of amounts, providers and identifiers", () => {
+    for (const locale of locales) {
+      for (const key of bodyKeys) {
+        assert.match(catalogs[locale][key], new RegExp(`^${markers[locale]}\\. `), `${locale}:${key}`);
+        assert.doesNotMatch(catalogs[locale][key], /\d|₽|USDT|TON|sim-|tg-|ntf_|SC-DEV|провайдер|симулятор|provider/i, `${locale}:${key}`);
+      }
+      assert.match(catalogs[locale]["notifications.template.sessionLogin.body"], /SOLID/, locale);
+    }
+  });
+});
+
 describe("i18n: locale detection", () => {
   it("maps Telegram language codes to ky, en, or the Russian default", () => {
     assert.equal(defaultLocale, "ru");
@@ -447,7 +473,7 @@ describe("i18n: browser boundary", () => {
     assert.deepEqual(usesOf(/telegramLanguageCode\(/), ["app/App.tsx", "app/telegram.ts"]);
     assert.match(sources.get("app/App.tsx") ?? "", /initialLocale\(\{ storage: localeStorage\(\), languageCode: telegramLanguageCode\(\) \}\)/);
     assert.equal((sources.get("app/App.tsx") ?? "").match(/telegramLanguageCode\(\)/g)?.length, 1);
-    assert.deepEqual(usesOf(/localeStorageKey|localStorage/), ["app/App.tsx", "app/i18n.ts"]);
+    assert.deepEqual(usesOf(/localeStorageKey|localStorage/), ["app/App.tsx", "app/i18n.ts", "app/notification-seen.ts"]);
     assert.deepEqual(usesOf(/initDataUnsafe/), ["app/telegram.ts"]);
     assert.doesNotMatch(sources.get("app/api.ts") ?? "", /locale|language|Accept-Language|initDataUnsafe/i);
   });
