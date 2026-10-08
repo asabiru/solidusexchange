@@ -4,6 +4,8 @@ import type {
   ApprovalPreview,
   ApprovalSummary,
   AuditEvent,
+  ChatCheck,
+  CheckStatus,
   CustomerRow,
   FraudAlert,
   InvestigationCase,
@@ -66,6 +68,11 @@ export interface DashboardPayload {
 
 export interface CustomersPayload {
   customers: readonly CustomerRow[];
+}
+
+export interface ChecksPayload {
+  statuses: readonly CheckStatus[];
+  checks: readonly ChatCheck[];
 }
 
 export interface KycPayload {
@@ -414,6 +421,15 @@ export function getDashboard(): Promise<DashboardPayload> {
 
 export function getCustomers(): Promise<CustomersPayload> {
   return getSigned("/bff/api/customers", "customers");
+}
+
+export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return getSigned(`/bff/api/checks${query}`, "checks");
+}
+
+export function getCheck(id: string): Promise<ChatCheck> {
+  return getSigned(`/bff/api/checks/${encodeURIComponent(id)}`, `check:${id}`);
 }
 
 export function getKycCases(): Promise<KycPayload> {

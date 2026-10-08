@@ -10,6 +10,7 @@ export type ScreenId =
   | "operations"
   | "withdrawal"
   | "payments"
+  | "checks"
   | "custody"
   | "liquidity"
   | "treasury-planning"
@@ -47,6 +48,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "operations", group: "money-movement", implemented: false },
   { id: "withdrawal", group: "money-movement", implemented: false },
   { id: "payments", group: "money-movement", implemented: false },
+  { id: "checks", group: "money-movement", capability: "checks:read", implemented: true },
   { id: "custody", group: "money-movement", implemented: false },
   { id: "liquidity", group: "money-movement", implemented: false },
   { id: "treasury-planning", group: "money-movement", implemented: false },

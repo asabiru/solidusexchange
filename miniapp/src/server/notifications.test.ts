@@ -180,6 +180,29 @@ describe("notification outbox: drafts only, bounded and isolated", () => {
     }
   });
 
+  it("rejects prototype property names as templates instead of storing non-string text", () => {
+    const outbox = createNotificationOutbox({ clock: () => 0 });
+    for (const template of ["toString", "constructor", "hasOwnProperty", "valueOf", "__proto__"] as unknown as NotificationTemplate[]) {
+      assert.throws(() => outbox.record("tg-a", template), RangeError, template);
+    }
+    assert.equal(outbox.size(), 0);
+    for (const draft of outbox.list("tg-a")) {
+      assert.equal(typeof draft.text, "string");
+    }
+  });
+
+  it("bounds per-subject id sequences together with the drafts", () => {
+    const outbox = createNotificationOutbox({ clock: () => 0, maxPerSubject: 1, maxTotal: 2 });
+    const first = outbox.record("tg-a", "session_login");
+    outbox.record("tg-b", "session_login");
+    const pending = outbox.record("tg-c", "session_login");
+    // tg-a's only draft was globally evicted, so its sequence entry must go too.
+    const again = outbox.record("tg-a", "session_login");
+    assert.equal(again.id, first.id);
+    // tg-c kept a live draft, so its sequence survives and ids stay unique.
+    assert.notEqual(outbox.record("tg-c", "session_login").id, pending.id);
+  });
+
   it("has no network, Telegram Bot API or token access in the outbox module", async () => {
     const source = await readFile(new URL("./notifications.js", import.meta.url), "utf8");
     assert.doesNotMatch(source, /fetch\(|node:https?|node:net|node:dgram|api\.telegram\.org|sendMessage|bot_?token|BOT_TOKEN/i);

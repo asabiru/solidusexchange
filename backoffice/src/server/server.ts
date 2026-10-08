@@ -25,6 +25,7 @@ import {
   approvalCommandDigest,
   buildApprovalPreview
 } from "./controls.js";
+import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
 import {
   buildReport,
@@ -133,6 +134,8 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/session",
   "/bff/api/dashboard",
   "/bff/api/customers",
+  "/bff/api/checks",
+  "/bff/api/checks/:checkId",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -562,6 +565,57 @@ export function createBackofficeServer(
       if (request.method === "GET" && path === "/bff/api/customers") {
         if (!authorized(request, response, "customers:read")) return;
         signed(response, "customers", { customers: demoRepository.customers() });
+        return;
+      }
+
+      const checkMatch = path.match(/^\/bff\/api\/checks\/([^/]+)$/);
+      if (path === "/bff/api/checks" || checkMatch) {
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        // Check views append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "checks:read");
+        if (!session) return;
+        if (!checkMatch) {
+          const statusFilters = url.searchParams.getAll("status");
+          if (!statusFilters.every(isCheckStatus)) {
+            json(response, 400, { error: "invalid_check_status" });
+            return;
+          }
+          const wanted = new Set(statusFilters);
+          const checks = demoRepository.chatChecks();
+          signed(response, "checks", {
+            statuses: checkStatuses,
+            checks: wanted.size === 0 ? checks : checks.filter((check) => wanted.has(check.status))
+          });
+          return;
+        }
+        let checkId: string;
+        try {
+          checkId = decodeURIComponent(checkMatch[1]);
+        } catch {
+          json(response, 404, { error: "check_not_found" });
+          return;
+        }
+        const check = demoRepository.chatChecks().find((item) => item.id === checkId);
+        if (!check) {
+          json(response, 404, { error: "check_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          checkAccessEvent(`AUD-CHK-${randomUUID()}`, session.subject, check),
+          audit.status.headHash
+        );
+        signed(response, `check:${check.id}`, check);
         return;
       }
 

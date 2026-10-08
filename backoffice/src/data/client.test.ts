@@ -22,9 +22,11 @@ let servedKeyset: () => Keyset = () => ({});
 let keysetFetches = 0;
 let keysetFailures = 0;
 let servedBody = "";
+const paths: string[] = [];
 const originalFetch = globalThis.fetch;
 
 globalThis.fetch = (async (input: string | URL | Request) => {
+  paths.push(String(input));
   if (String(input) === "/bff/api/signing-keys") {
     keysetFetches += 1;
     if (keysetFailures > 0) {
@@ -248,5 +250,28 @@ describe("backoffice client signed envelope verification", () => {
     const fetchesBefore = keysetFetches;
     assert.deepEqual(await client.getSession(), {});
     assert.equal(keysetFetches, fetchesBefore + 1);
+  });
+
+  it("fetches the checks queue and a single check through the signed path", async () => {
+    expireCachedKeyset();
+    const provider = new EphemeralSigningKeyProvider(1);
+    const signer = new ResponseSigner(provider);
+    servedKeyset = () => signer.publicKeyset();
+
+    const requestsBefore = paths.length;
+    serve(signer.envelope("checks", { statuses: ["claimed"], checks: [] }, "request-20"));
+    assert.deepEqual(await client.getChecks("claimed"), { statuses: ["claimed"], checks: [] });
+    assert.equal(paths[requestsBefore], "/bff/api/checks?status=claimed");
+
+    serve(signer.envelope("checks", { statuses: ["claimed"], checks: [] }, "request-21"));
+    assert.deepEqual(await client.getChecks(), { statuses: ["claimed"], checks: [] });
+    assert.ok(paths.includes("/bff/api/checks"));
+
+    serve(signer.envelope("check:CHK-771312", { id: "CHK-771312" }, "request-22"));
+    assert.deepEqual(await client.getCheck("CHK-771312"), { id: "CHK-771312" });
+    assert.ok(paths.includes("/bff/api/checks/CHK-771312"));
+
+    serve(signer.envelope("checks", { statuses: [], checks: [{ forged: true }] }, "request-23"));
+    await assert.rejects(client.getCheck("CHK-771312"), /resource mismatch/);
   });
 });
