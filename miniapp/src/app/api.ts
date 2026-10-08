@@ -1,6 +1,9 @@
 import type {
   ActivityView,
   AddressScreeningView,
+  CheckPreview,
+  CheckView,
+  ChecksView,
   DeviceSessionsView,
   HealthView,
   KycStatus,
@@ -75,5 +78,11 @@ export const api = {
   quote: (from: AssetCode, to: AssetCode, amount: string) => {
     const query = new URLSearchParams({ from, to, amount });
     return call<QuotePreview>(`/bff/quotes/preview?${query.toString()}`);
+  },
+  checks: () => call<ChecksView>("/bff/checks"),
+  check: (reference: string) => call<CheckView>(`/bff/checks/${encodeURIComponent(reference)}`),
+  checkPreview: (asset: AssetCode, amount: string) => {
+    const query = new URLSearchParams({ asset, amount });
+    return call<CheckPreview>(`/bff/checks/preview?${query.toString()}`);
   }
 };

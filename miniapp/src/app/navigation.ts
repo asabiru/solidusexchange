@@ -16,4 +16,6 @@ export type SheetRequest =
   | { kind: "qr-manual" }
   | { kind: "qr-image" }
   | { kind: "notifications" }
-  | { kind: "address-screening" };
+  | { kind: "address-screening" }
+  | { kind: "checks" }
+  | { kind: "check"; reference: string };

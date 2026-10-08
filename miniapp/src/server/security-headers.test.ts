@@ -296,6 +296,12 @@ describe("Mini App BFF security headers on every route", () => {
       },
       "GET /bff/profile": () => get("/bff/profile"),
       "GET /bff/quotes/preview": () => get("/bff/quotes/preview?from=RUB&to=USDT&amount=1000"),
+      "GET /bff/checks": () => get("/bff/checks"),
+      "GET /bff/checks/preview": () => get("/bff/checks/preview?asset=USDT&amount=1"),
+      "GET /bff/checks/:id": async () => {
+        const list = JSON.parse((await get("/bff/checks")).body) as { checks: { reference: string }[] };
+        return get(`/bff/checks/${list.checks[0].reference}`);
+      },
       "POST /bff/kyc/applications": () => postJson(port, "/bff/kyc/applications", {}, { cookie: gated }),
       "POST /bff/address-screening": () => postJson(port, "/bff/address-screening", screening, { cookie: verified }),
       "GET /bff/address-screening/:id": async () => {
