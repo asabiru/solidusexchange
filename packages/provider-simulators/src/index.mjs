@@ -1,6 +1,7 @@
 export * from "./bank.mjs";
 export * from "./callback-inbox.mjs";
 export * from "./canonical-json.mjs";
+export * from "./checks.mjs";
 export * from "./decimal.mjs";
 export * from "./deterministic.mjs";
 export * from "./errors.mjs";

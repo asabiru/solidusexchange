@@ -48,7 +48,7 @@ function headerParameterNames(operation) {
     .map((parameter) => parameter.name.toLowerCase());
 }
 
-test("served operations match the contract exactly; operator paths are not served", () => {
+test("served operations match the contract exactly; operator and checks paths are not served", () => {
   const served = new Set(OPERATIONS.map((operation) => operation.path));
   const contractOperations = [];
   for (const [path, item] of Object.entries(contract.openapi.paths)) {
@@ -56,7 +56,9 @@ test("served operations match the contract exactly; operator paths are not serve
       contractOperations.push({ path, method: method.toUpperCase(), operation });
     }
   }
-  const expected = contractOperations.filter(({ path }) => !path.startsWith("/api/v1/operator/"));
+  const expected = contractOperations.filter(
+    ({ path }) => !path.startsWith("/api/v1/operator/") && !path.startsWith("/api/v1/customer/checks/")
+  );
   assert.equal(OPERATIONS.length, expected.length);
   for (const { path, method, operation } of expected) {
     const runtime = OPERATIONS.find((candidate) => candidate.operationId === operation.operationId);
@@ -76,9 +78,11 @@ test("served operations match the contract exactly; operator paths are not serve
     assert.deepEqual([...runtime.requiredHeaders].sort(), required.sort());
     assert.ok(!required.includes("x-device-id"));
   }
-  const operatorPaths = contractOperations.filter(({ path }) => path.startsWith("/api/v1/operator/"));
-  assert.ok(operatorPaths.length > 0);
-  for (const { path } of operatorPaths) {
+  const unservedPaths = contractOperations.filter(
+    ({ path }) => path.startsWith("/api/v1/operator/") || path.startsWith("/api/v1/customer/checks/")
+  );
+  assert.ok(unservedPaths.length > 0);
+  for (const { path } of unservedPaths) {
     assert.ok(!served.has(path), path);
   }
 });

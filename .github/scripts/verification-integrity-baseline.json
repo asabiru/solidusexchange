@@ -589,7 +589,7 @@
       "minLines": 28
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 959,
+      "minLines": 1266,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
@@ -660,7 +660,7 @@
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 235,
+      "minLines": 239,
       "minCases": 14
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -867,6 +867,10 @@
     "packages/provider-simulators/tests/canonical-json.test.mjs": {
       "minLines": 89,
       "minCases": 7
+    },
+    "packages/provider-simulators/tests/checks.test.mjs": {
+      "minLines": 561,
+      "minCases": 36
     },
     "packages/provider-simulators/tests/decimal.test.mjs": {
       "minLines": 68,
