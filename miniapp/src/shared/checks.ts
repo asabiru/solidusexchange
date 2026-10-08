@@ -10,6 +10,14 @@ export const checkStatuses: readonly CheckStatus[] = Object.freeze([
 
 export type CheckDirection = "sent" | "received";
 
+export function isCheckStatus(value: string): value is CheckStatus {
+  return (checkStatuses as readonly string[]).includes(value);
+}
+
+export function isCheckDirection(value: string): value is CheckDirection {
+  return value === "sent" || value === "received";
+}
+
 /** Opaque synthetic claim reference. In this demo it is a fixed fixture value, never a real secret. */
 export const checkReferencePattern = /^chk_[0-9a-f]{24}$/;
 
