@@ -26,6 +26,7 @@ import {
   buildApprovalPreview
 } from "./controls.js";
 import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
+import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from "./support.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
 import {
   buildReport,
@@ -136,6 +137,8 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/customers",
   "/bff/api/checks",
   "/bff/api/checks/:checkId",
+  "/bff/api/support",
+  "/bff/api/support/:ticketId",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -616,6 +619,57 @@ export function createBackofficeServer(
           audit.status.headHash
         );
         signed(response, `check:${check.id}`, check);
+        return;
+      }
+
+      const ticketMatch = path.match(/^\/bff\/api\/support\/([^/]+)$/);
+      if (path === "/bff/api/support" || ticketMatch) {
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        // Ticket views append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "support:read");
+        if (!session) return;
+        if (!ticketMatch) {
+          const statusFilters = url.searchParams.getAll("status");
+          if (!statusFilters.every(isSupportTicketStatus)) {
+            json(response, 400, { error: "invalid_support_status" });
+            return;
+          }
+          const wanted = new Set(statusFilters);
+          const tickets = demoRepository.supportTickets();
+          signed(response, "support", {
+            statuses: supportTicketStatuses,
+            tickets: wanted.size === 0 ? tickets : tickets.filter((ticket) => wanted.has(ticket.status))
+          });
+          return;
+        }
+        let ticketId: string;
+        try {
+          ticketId = decodeURIComponent(ticketMatch[1]);
+        } catch {
+          json(response, 404, { error: "ticket_not_found" });
+          return;
+        }
+        const ticket = demoRepository.supportTickets().find((item) => item.id === ticketId);
+        if (!ticket) {
+          json(response, 404, { error: "ticket_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          supportAccessEvent(`AUD-SUP-${randomUUID()}`, session.subject, ticket),
+          audit.status.headHash
+        );
+        signed(response, `support:${ticket.id}`, ticket);
         return;
       }
 
