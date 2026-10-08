@@ -18,6 +18,8 @@
     "src/app/locales/*.ts",
     "src/app/i18n.test.ts",
     "src/app/a11y.test.ts",
+    "src/app/checks-badges.ts",
+    "src/app/checks-badges.test.ts",
     "src/app/notification-seen.ts",
     "src/app/notification-seen.test.ts",
     "src/server/**/*.ts",

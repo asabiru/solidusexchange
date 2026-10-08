@@ -1,9 +1,10 @@
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import type { CheckPreview, CheckView } from "../shared/api";
 import { type AssetCode, assets } from "../shared/assets";
-import { type CheckDirection, type CheckStatus, isCheckReference } from "../shared/checks";
+import { isCheckReference } from "../shared/checks";
 import { isDecimalString, toUnits } from "../shared/decimal";
 import { ApiError, api } from "./api";
+import { checkDirectionKey, checkStatusBadge } from "./checks-badges";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
@@ -11,19 +12,6 @@ import { Coin, DisabledCta, Sheet } from "./ui";
 
 type CheckAsset = Exclude<AssetCode, "RUB">;
 const checkAssets: readonly CheckAsset[] = Object.freeze(["USDT", "TON"]);
-
-const statusBadges: Readonly<Record<CheckStatus, { label: MessageKey; tone: string }>> = {
-  created: { label: "checks.statusCreated", tone: "warning" },
-  awaiting_recipient_kyc: { label: "checks.statusAwaitingKyc", tone: "warning" },
-  claimed: { label: "checks.statusClaimed", tone: "success" },
-  cancelled: { label: "checks.statusCancelled", tone: "muted" },
-  expired: { label: "checks.statusExpired", tone: "muted" }
-};
-
-const directionKeys: Readonly<Record<CheckDirection, MessageKey>> = {
-  sent: "checks.sent",
-  received: "checks.received"
-};
 
 const previewErrors: Readonly<Record<string, MessageKey>> = {
   invalid_asset: "checks.errorInvalidAsset",
@@ -191,18 +179,22 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
           {checks?.length === 0 ? <p className="sheet__note">{t("checks.empty")}</p> : null}
           {checks && checks.length > 0 ? (
             <ul className="list" aria-label={t("checks.listLabel")}>
-              {checks.map((check) => (
-                <li key={check.reference}>
-                  <button type="button" className="row" onClick={() => show({ kind: "detail", reference: check.reference })}>
-                    <Coin asset={check.asset} />
-                    <span className="row__main">
-                      <strong className="num">{money(check.asset, check.amount)}</strong>
-                      <span className="num">{t(directionKeys[check.direction])} · {format.dateTime(new Date(check.createdAt).toISOString())}</span>
-                    </span>
-                    <span className={`pill pill--${statusBadges[check.status].tone}`}>{t(statusBadges[check.status].label)}</span>
-                  </button>
-                </li>
-              ))}
+              {checks.map((check) => {
+                const badge = checkStatusBadge(check.status);
+                const direction = checkDirectionKey(check.direction);
+                return (
+                  <li key={check.reference}>
+                    <button type="button" className="row" onClick={() => show({ kind: "detail", reference: check.reference })}>
+                      <Coin asset={check.asset} />
+                      <span className="row__main">
+                        <strong className="num">{money(check.asset, check.amount)}</strong>
+                        <span className="num">{direction ? t(direction) : check.direction} · {format.dateTime(new Date(check.createdAt).toISOString())}</span>
+                      </span>
+                      <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : check.status}</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
 
@@ -251,20 +243,21 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
     return () => { active = false; };
   }, [reference]);
 
-  const badge = check ? statusBadges[check.status] : undefined;
+  const badge = check ? checkStatusBadge(check.status) : undefined;
+  const direction = check ? checkDirectionKey(check.direction) : undefined;
   return (
     <>
       <h3 className="section-label" ref={heading} tabIndex={-1}>{t("checks.detailTitle")}</h3>
       {failed ? <p className="sheet__note" role="alert">{t(failed)}</p> : null}
       {!check && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
-      {check && badge ? (
+      {check ? (
         <>
           <div className="sheet__summary" aria-live="polite" aria-atomic="true">
-            <span className="sheet__eyebrow">{t(directionKeys[check.direction])}</span>
+            <span className="sheet__eyebrow">{direction ? t(direction) : check.direction}</span>
             <span className="sheet__amount num">{money(check.asset, check.amount)}</span>
             <span className="sheet__summary-meta">
               <span className="num">{format.dateTime(new Date(check.createdAt).toISOString())}</span>
-              <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
+              <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : check.status}</span>
             </span>
           </div>
           <dl className="meta-list">
@@ -278,15 +271,18 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
           </dl>
           <p className="sheet__note">{t("checks.linkNote")}</p>
           <ol className="timeline" aria-label={t("checks.timelineLabel")}>
-            {check.timeline.map((entry) => (
-              <li key={entry.status} className="timeline__step is-done">
-                <span className="timeline__mark"><Icon name="check" size="xs" /></span>
-                <span>
-                  <strong>{t(statusBadges[entry.status].label)}</strong>
-                  <span className="num">{format.dateTime(new Date(entry.at).toISOString())}</span>
-                </span>
-              </li>
-            ))}
+            {check.timeline.map((entry) => {
+              const step = checkStatusBadge(entry.status);
+              return (
+                <li key={entry.status} className="timeline__step is-done">
+                  <span className="timeline__mark"><Icon name="check" size="xs" /></span>
+                  <span>
+                    <strong>{step ? t(step.label) : entry.status}</strong>
+                    <span className="num">{format.dateTime(new Date(entry.at).toISOString())}</span>
+                  </span>
+                </li>
+              );
+            })}
           </ol>
           {check.status === "awaiting_recipient_kyc" ? <p className="sheet__note">{t("checks.kycWait")}</p> : null}
           {check.direction === "received" && (check.status === "created" || check.status === "awaiting_recipient_kyc") ? (

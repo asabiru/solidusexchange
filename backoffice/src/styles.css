@@ -551,7 +551,8 @@ button {
 }
 
 .locale-select,
-.check-filter {
+.check-filter,
+.ticket-filter {
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid rgba(var(--edge), var(--edge-a));
@@ -563,7 +564,8 @@ button {
 }
 
 .locale-select option,
-.check-filter option {
+.check-filter option,
+.ticket-filter option {
   color: #172238;
   background: #faf8f3;
 }
@@ -1407,6 +1409,13 @@ tbody tr[data-selected="true"] {
   color: rgb(var(--muted));
   font-size: 12px;
   line-height: 1.5;
+}
+
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .step-up-panel {
