@@ -18,6 +18,7 @@ import type {
 } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
 import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
+import { type CheckBook, CheckError, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
 import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
@@ -78,6 +79,9 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/operations/:id" },
   { method: "GET", path: "/bff/profile" },
   { method: "GET", path: "/bff/quotes/preview" },
+  { method: "GET", path: "/bff/checks" },
+  { method: "GET", path: "/bff/checks/preview" },
+  { method: "GET", path: "/bff/checks/:id" },
   { method: "POST", path: "/bff/kyc/applications" },
   { method: "POST", path: "/bff/address-screening" },
   { method: "GET", path: "/bff/address-screening/:id" },
@@ -104,6 +108,7 @@ export interface MiniappServerOptions {
   notifications?: NotificationOutbox;
   activity?: ActivityLog;
   support?: SupportDesk;
+  checks?: CheckBook;
   /** Receives one JSON log line per completed request when MINIAPP_LOG=json. */
   logSink?: (line: string) => void;
   /** Monotonic milliseconds for request durations. */
@@ -251,6 +256,7 @@ export function createMiniappServer(
   const outbox = options.notifications ?? createNotificationOutbox({ clock });
   const activity = options.activity ?? createActivityLog({ clock });
   const support = options.support ?? createSupportDesk({ clock });
+  const checks = options.checks ?? createCheckBook({ clock });
   const unsubscribeKyc = kycOnboarding.subscribe((subject, state) => {
     const template = kycTemplates[state];
     if (template) outbox.record(subject, template);
@@ -774,6 +780,51 @@ export function createMiniappServer(
         }
         throw error;
       }
+      return;
+    }
+
+    if (path === "/bff/checks" || path === "/bff/checks/preview" || path.startsWith("/bff/checks/")) {
+      if (request.headers["x-device-id"] !== undefined) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      if (path === "/bff/checks") {
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
+        json(response, 200, checks.list(session.kyc));
+        return;
+      }
+      if (path === "/bff/checks/preview") {
+        const asset = url.searchParams.get("asset") ?? "";
+        const amount = url.searchParams.get("amount") ?? "";
+        try {
+          const preview = checks.preview({ asset, amount }, {
+            nowMs: clock(),
+            available: isAssetCode(asset) ? syntheticData.available(session.kyc, asset) : undefined,
+            kycRequired: session.kyc !== "verified"
+          });
+          json(response, 200, preview);
+        } catch (error) {
+          if (error instanceof CheckError) {
+            json(response, 400, { error: error.code });
+            return;
+          }
+          throw error;
+        }
+        return;
+      }
+      if (url.search !== "") {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      const found = checks.view(path.slice("/bff/checks/".length), session.kyc);
+      if (!found) {
+        json(response, 404, { error: "not_found" });
+        return;
+      }
+      json(response, 200, found);
       return;
     }
 

@@ -1,5 +1,6 @@
 import type { ScreeningAsset, ScreeningNetwork } from "./address-screening.js";
 import type { AssetCode } from "./assets.js";
+import type { CheckDirection, CheckStatus } from "./checks.js";
 import type { SupportCategory, SupportStatus } from "./support.js";
 
 export type KycStatus = "verified" | "kyc-gated";
@@ -312,4 +313,53 @@ export interface SupportRequestsView {
   mode: "test";
   delivery: "disabled";
   requests: readonly SupportRequestView[];
+}
+
+export interface CheckStatusEntry {
+  status: CheckStatus;
+  at: number;
+}
+
+export interface CheckView {
+  /** Opaque synthetic claim reference; in the demo it doubles as the check id. */
+  reference: string;
+  mode: "test";
+  direction: CheckDirection;
+  status: CheckStatus;
+  asset: AssetCode;
+  amount: string;
+  fee: string;
+  total: string;
+  claimRule: "personal";
+  comment?: string;
+  timeline: readonly CheckStatusEntry[];
+  createdAt: number;
+  expiresAt: number;
+  executable: false;
+  executionUnavailableReason: "dev_test_version";
+}
+
+export interface ChecksView {
+  mode: "test";
+  checks: readonly CheckView[];
+}
+
+export interface CheckPreview {
+  id: string;
+  mode: "test";
+  asset: AssetCode;
+  amount: string;
+  fee: string;
+  feeAsset: AssetCode;
+  feeBps: number;
+  total: string;
+  claimRule: "personal";
+  issuedAt: number;
+  expiresAt: number;
+  ttlSeconds: number;
+  serverTime: number;
+  insufficientBalance: boolean;
+  kycRequired: boolean;
+  executable: false;
+  executionUnavailableReason: "dev_test_version";
 }
