@@ -297,4 +297,27 @@ describe("backoffice client signed envelope verification", () => {
     serve(signer.envelope("support", { statuses: [], tickets: [{ forged: true }] }, "request-27"));
     await assert.rejects(client.getSupportTicket("SUP-384120"), /resource mismatch/);
   });
+
+  it("fetches the withdrawal intent queue and a single intent through the signed path", async () => {
+    expireCachedKeyset();
+    const provider = new EphemeralSigningKeyProvider(1);
+    const signer = new ResponseSigner(provider);
+    servedKeyset = () => signer.publicKeyset();
+
+    const requestsBefore = paths.length;
+    serve(signer.envelope("withdrawals", { statuses: ["screened"], intents: [] }, "request-30"));
+    assert.deepEqual(await client.getWithdrawals("screened"), { statuses: ["screened"], intents: [] });
+    assert.equal(paths[requestsBefore], "/bff/api/withdrawals?status=screened");
+
+    serve(signer.envelope("withdrawals", { statuses: ["screened"], intents: [] }, "request-31"));
+    assert.deepEqual(await client.getWithdrawals(), { statuses: ["screened"], intents: [] });
+    assert.ok(paths.includes("/bff/api/withdrawals"));
+
+    serve(signer.envelope("withdrawal:WDR-991804", { id: "WDR-991804" }, "request-32"));
+    assert.deepEqual(await client.getWithdrawal("WDR-991804"), { id: "WDR-991804" });
+    assert.ok(paths.includes("/bff/api/withdrawals/WDR-991804"));
+
+    serve(signer.envelope("withdrawals", { statuses: [], intents: [{ forged: true }] }, "request-33"));
+    await assert.rejects(client.getWithdrawal("WDR-991804"), /resource mismatch/);
+  });
 });

@@ -13,7 +13,9 @@ import type {
   Metric,
   QueueRow,
   SupportTicket,
-  SupportTicketStatus
+  SupportTicketStatus,
+  WithdrawalIntent,
+  WithdrawalIntentStatus
 } from "./demo.js";
 import type {
   DraftReport,
@@ -80,6 +82,11 @@ export interface ChecksPayload {
 export interface SupportTicketsPayload {
   statuses: readonly SupportTicketStatus[];
   tickets: readonly SupportTicket[];
+}
+
+export interface WithdrawalsPayload {
+  statuses: readonly WithdrawalIntentStatus[];
+  intents: readonly WithdrawalIntent[];
 }
 
 export interface KycPayload {
@@ -446,6 +453,15 @@ export function getSupportTickets(status?: SupportTicketStatus): Promise<Support
 
 export function getSupportTicket(id: string): Promise<SupportTicket> {
   return getSigned(`/bff/api/support/${encodeURIComponent(id)}`, `support:${id}`);
+}
+
+export function getWithdrawals(status?: WithdrawalIntentStatus): Promise<WithdrawalsPayload> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return getSigned(`/bff/api/withdrawals${query}`, "withdrawals");
+}
+
+export function getWithdrawal(id: string): Promise<WithdrawalIntent> {
+  return getSigned(`/bff/api/withdrawals/${encodeURIComponent(id)}`, `withdrawal:${id}`);
 }
 
 export function getKycCases(): Promise<KycPayload> {

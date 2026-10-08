@@ -2,6 +2,7 @@ export type Capability =
   | "dashboard:read"
   | "customers:read"
   | "checks:read"
+  | "custody:read"
   | "support:read"
   | "kyc:read"
   | "aml:read"
@@ -40,6 +41,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "dashboard:read",
       "customers:read",
       "checks:read",
+      "custody:read",
       "support:read",
       "kyc:read",
       "aml:read",
@@ -70,6 +72,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "dashboard:read",
       "customers:read",
       "checks:read",
+      "custody:read",
       "support:read",
       "kyc:read",
       "aml:read",
@@ -100,6 +103,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "dashboard:read",
       "customers:read",
       "checks:read",
+      "custody:read",
       "support:read",
       "kyc:read",
       "aml:read",

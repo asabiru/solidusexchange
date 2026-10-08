@@ -27,6 +27,7 @@ import {
 } from "./controls.js";
 import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
 import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from "./support.js";
+import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
 import {
   buildReport,
@@ -139,6 +140,8 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/checks/:checkId",
   "/bff/api/support",
   "/bff/api/support/:ticketId",
+  "/bff/api/withdrawals",
+  "/bff/api/withdrawals/:withdrawalId",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -670,6 +673,57 @@ export function createBackofficeServer(
           audit.status.headHash
         );
         signed(response, `support:${ticket.id}`, ticket);
+        return;
+      }
+
+      const withdrawalMatch = path.match(/^\/bff\/api\/withdrawals\/([^/]+)$/);
+      if (path === "/bff/api/withdrawals" || withdrawalMatch) {
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        // Withdrawal intent views append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "custody:read");
+        if (!session) return;
+        if (!withdrawalMatch) {
+          const statusFilters = url.searchParams.getAll("status");
+          if (!statusFilters.every(isWithdrawalStatus)) {
+            json(response, 400, { error: "invalid_withdrawal_status" });
+            return;
+          }
+          const wanted = new Set(statusFilters);
+          const intents = demoRepository.withdrawalIntents();
+          signed(response, "withdrawals", {
+            statuses: withdrawalStatuses,
+            intents: wanted.size === 0 ? intents : intents.filter((intent) => wanted.has(intent.status))
+          });
+          return;
+        }
+        let withdrawalId: string;
+        try {
+          withdrawalId = decodeURIComponent(withdrawalMatch[1]);
+        } catch {
+          json(response, 404, { error: "withdrawal_not_found" });
+          return;
+        }
+        const intent = demoRepository.withdrawalIntents().find((item) => item.id === withdrawalId);
+        if (!intent) {
+          json(response, 404, { error: "withdrawal_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          withdrawalAccessEvent(`AUD-WDR-${randomUUID()}`, session.subject, intent),
+          audit.status.headHash
+        );
+        signed(response, `withdrawal:${intent.id}`, intent);
         return;
       }
 

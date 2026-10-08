@@ -23,6 +23,8 @@ import {
   getSession,
   getSupportTicket,
   getSupportTickets,
+  getWithdrawal,
+  getWithdrawals,
   logout,
   previewApproval,
   verifyStepUpChallenge,
@@ -38,7 +40,8 @@ import {
   type KycPayload,
   type SessionPayload,
   type StepUpChallengePayload,
-  type SupportTicketsPayload
+  type SupportTicketsPayload,
+  type WithdrawalsPayload
 } from "../data/client";
 import type { DraftReport, ReportId, ReportListPayload } from "../data/reports";
 import type {
@@ -55,6 +58,8 @@ import type {
   SupportTicket,
   SupportTicketStatus,
   Tone,
+  WithdrawalIntent,
+  WithdrawalIntentStatus,
   WorkflowCheck
 } from "../data/demo";
 import type {
@@ -1770,6 +1775,212 @@ function SupportView({ query, data }: { query: string; data: SupportTicketsPaylo
   );
 }
 
+type WithdrawalStatusFilter = WithdrawalIntentStatus | "all";
+
+function WithdrawalDetail({ item }: { item: WithdrawalIntent }) {
+  const { t, count } = useI18n();
+  return (
+    <>
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{item.intentId}</p></div>
+        <Status tone={item.tone}>{t(`withdrawals.status.${item.status}`)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("withdrawals.customer")}</dt><dd>{item.customer} · {item.customerId}</dd></div>
+        <div><dt>{t("withdrawals.subject")}</dt><dd>{item.subject}</dd></div>
+        <div><dt>{t("withdrawals.amount")}</dt><dd className="numeric">{item.amount} {item.asset}</dd></div>
+        <div><dt>{t("withdrawals.destination")}</dt><dd className="hash-value">{item.destination}</dd></div>
+        <div><dt>{t("withdrawals.destinationRef")}</dt><dd>{item.destinationReference}</dd></div>
+        <div><dt>{t("withdrawals.network")}</dt><dd>{item.network}</dd></div>
+        <div><dt>{t("withdrawals.policyVersion")}</dt><dd>{item.policyVersion}</dd></div>
+        <div><dt>{t("withdrawals.runtimeBoundary")}</dt><dd>{item.runtimeBoundary}</dd></div>
+        <div><dt>{t("withdrawals.guardrails")}</dt><dd>{t("withdrawals.guardrailsValue")}</dd></div>
+        <div><dt>{t("withdrawals.idempotencyKey")}</dt><dd>{item.idempotencyKey}</dd></div>
+        <div><dt>{t("withdrawals.correlationId")}</dt><dd>{item.correlationId}</dd></div>
+        <div><dt>{t("withdrawals.intentDigest")}</dt><dd className="hash-value">{item.intentDigest}</dd></div>
+        <div><dt>{t("withdrawals.policyDigest")}</dt><dd className="hash-value">{item.policyDigest}</dd></div>
+        {item.approvalEvidenceDigest && <div><dt>{t("withdrawals.approvalEvidence")}</dt><dd className="hash-value">{item.approvalEvidenceDigest}</dd></div>}
+        {item.linkedKytCaseId && <div><dt>{t("withdrawals.linkedKytCase")}</dt><dd>{item.linkedKytCaseId}</dd></div>}
+        {item.linkedApprovalId && <div><dt>{t("withdrawals.linkedApproval")}</dt><dd>{item.linkedApprovalId}</dd></div>}
+        <div><dt>{t("withdrawals.createdAt")}</dt><dd>{item.createdAt}</dd></div>
+        <div><dt>{t("withdrawals.updatedAt")}</dt><dd>{item.updatedAt}</dd></div>
+        <div><dt>{t("withdrawals.expiresAt")}</dt><dd>{item.expiresAt}</dd></div>
+        {item.resolvedAt && <div><dt>{t("withdrawals.resolvedAt")}</dt><dd>{item.resolvedAt}</dd></div>}
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">{t("withdrawals.screening")}</h3>
+      <WorkflowChecks checks={item.screening} />
+      <h3 className="detail-section-title">{t("withdrawals.approvalSteps")}</h3>
+      <div className="timeline-list">
+        {item.approvalSteps.map((step) => (
+          <div key={step.id}>
+            <span />
+            <div>
+              <strong>{t(`withdrawals.role.${step.role}`)} · {t(`withdrawals.decision.${step.decision}`)}</strong>
+              <small>{step.id}{step.decidedAt ? ` · ${step.decidedAt}` : ""}</small>
+              <p>{step.subjectReference}{step.stepUpGrantId ? ` · ${step.stepUpGrantId}` : ""}</p>
+              {step.evidenceDigest && <code>{step.evidenceDigest}</code>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="cell-note">{t("withdrawals.requiredApprovals", { count: count(item.requiredApprovals) })}</p>
+      <h3 className="detail-section-title">{t("withdrawals.timeline")}</h3>
+      <div className="timeline-list">
+        {item.timeline.map((event) => (
+          <div key={event.id}>
+            <span />
+            <div>
+              <strong>{event.action}</strong>
+              <small>{event.occurredAt} · {event.actor}</small>
+              <p>{event.outcome}</p>
+              <code>{event.evidenceDigest}</code>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 className="detail-section-title">{t("common.evidence")}</h3>
+      <EvidenceList items={item.evidenceItems} />
+      <div className="safe-action">
+        <strong>{t("withdrawals.readOnlyTitle")}</strong>
+        <p>{t("withdrawals.readOnlyNote")}</p>
+        <div className="ticket-actions">
+          <button className="button" type="button" disabled>{t("withdrawals.actionApprove")}</button>
+          <button className="button" type="button" disabled>{t("withdrawals.actionBroadcast")}</button>
+          <button className="button" type="button" disabled>{t("withdrawals.actionCancel")}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function WithdrawalsView({ query, data }: { query: string; data: WithdrawalsPayload }) {
+  const { t, count } = useI18n();
+  const [statusFilter, setStatusFilter] = useState<WithdrawalStatusFilter>("all");
+  const [intents, setIntents] = useState<readonly WithdrawalIntent[]>(data.intents);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+  const [selectedId, setSelectedId] = useState(data.intents[0]?.id ?? "");
+  const [detail, setDetail] = useState<WithdrawalIntent | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return intents;
+    return intents.filter((intent) =>
+      [intent.id, intent.customer, intent.subject, intent.destination, intent.amount, intent.asset, intent.network, intent.status]
+        .some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [intents, query]);
+
+  function applyFilter(next: WithdrawalStatusFilter) {
+    setStatusFilter(next);
+    setExportState("loading");
+    getWithdrawals(next === "all" ? undefined : next)
+      .then((payload) => {
+        setIntents(payload.intents);
+        setSelectedId((current) =>
+          payload.intents.some((intent) => intent.id === current) ? current : payload.intents[0]?.id ?? ""
+        );
+        setExportState("idle");
+      })
+      .catch(() => setExportState("failed"));
+  }
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setDetailState("loading");
+    setDetail(undefined);
+    getWithdrawal(selectedId)
+      .then((payload) => {
+        if (!active) return;
+        setDetail(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
+  return (
+    <>
+      <PageHeading title={t("screen.withdrawal")} description={t("withdrawals.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("withdrawals.queueTitle")}</h2><p>{t("withdrawals.count", { count: count(visible.length) })}</p></div>
+            <div className="audit-actions">
+              <select
+                className="check-filter"
+                value={statusFilter}
+                disabled={exportState === "loading"}
+                onChange={(event) => applyFilter(event.target.value as WithdrawalStatusFilter)}
+                aria-label={t("withdrawals.filterLabel")}
+                title={t("withdrawals.filterLabel")}
+              >
+                <option value="all">{t("withdrawals.status.all")}</option>
+                {data.statuses.map((status) => (
+                  <option key={status} value={status}>{t(`withdrawals.status.${status}`)}</option>
+                ))}
+              </select>
+              <Status tone="info">{t("common.readOnly")}</Status>
+            </div>
+          </header>
+          <LiveStatus
+            message={exportState === "loading" ? t("withdrawals.loadingList") : detailState === "loading" ? t("withdrawals.loadingDetail") : ""}
+          />
+          {exportState === "failed" && (
+            <div className="preview-error" role="alert">{t("withdrawals.listFailed")}</div>
+          )}
+          <TableShell label={t("withdrawals.queueTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("withdrawals.intent")}</th><th scope="col">{t("withdrawals.customer")}</th><th scope="col">{t("withdrawals.destination")}</th><th scope="col">{t("withdrawals.amount")}</th><th scope="col">{t("withdrawals.status")}</th><th scope="col">{t("withdrawals.updatedAt")}</th></tr></thead>
+              <tbody>
+                {visible.map((intent) => (
+                  <tr key={intent.id} data-selected={intent.id === selectedId}>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        aria-current={intent.id === selectedId ? "true" : undefined}
+                        onClick={() => setSelectedId(intent.id)}
+                      >
+                        {intent.id}
+                      </button>
+                      <small className="cell-note">{intent.network}</small>
+                    </td>
+                    <td>
+                      {intent.customer}
+                      <small className="cell-note">{intent.subject} · {intent.customerId}</small>
+                    </td>
+                    <td className="hash-value">{intent.destination}</td>
+                    <td className="numeric">{intent.amount} {intent.asset}</td>
+                    <td><Status tone={intent.tone}>{t(`withdrawals.status.${intent.status}`)}</Status></td>
+                    <td>{intent.updatedAt}</td>
+                  </tr>
+                ))}
+                {!visible.length && (
+                  <tr><td colSpan={6}><div className="empty">{t("withdrawals.empty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <aside className="panel case-detail">
+          {detailState === "loading" && <div className="empty">{t("withdrawals.loadingDetail")}</div>}
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">{t("withdrawals.failed")}</div>
+          )}
+          {detail && <WithdrawalDetail item={detail} />}
+        </aside>
+      </section>
+    </>
+  );
+}
+
 function PlaceholderView({ item }: { item: NavigationItem }) {
   const { t, intlTag } = useI18n();
   const label = t(screenKey(item.id));
@@ -1804,6 +2015,7 @@ interface WorkspaceData {
   customers: CustomersPayload;
   checks?: ChecksPayload;
   support?: SupportTicketsPayload;
+  withdrawals?: WithdrawalsPayload;
   kyc?: KycPayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
@@ -1955,11 +2167,12 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, support, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, withdrawals, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
         hasCapability(session, "support:read") ? getSupportTickets() : Promise.resolve(undefined),
+        hasCapability(session, "custody:read") ? getWithdrawals() : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
@@ -1971,7 +2184,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, support, kyc, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, withdrawals, kyc, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -2225,6 +2438,9 @@ export function App() {
           )}
           {screen === "support" && access.data.support && (
             <SupportView query={query} data={access.data.support} />
+          )}
+          {screen === "withdrawal" && access.data.withdrawals && (
+            <WithdrawalsView query={query} data={access.data.withdrawals} />
           )}
           {screen === "kyc" && access.data.kyc && (
             <KycView query={query} data={access.data.kyc} />
