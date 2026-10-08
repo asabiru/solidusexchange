@@ -136,6 +136,40 @@ export interface FraudAlert {
   auditEvidenceDigest: string;
 }
 
+export type CheckStatus = "created" | "waiting-recipient-kyc" | "claimed" | "cancelled" | "expired";
+
+export interface CheckTimelineEvent {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  outcome: string;
+  evidenceDigest: string;
+}
+
+export interface ChatCheck {
+  id: string;
+  kind: "personal";
+  channel: "Telegram chat";
+  status: CheckStatus;
+  senderCustomerId: string;
+  sender: string;
+  recipient: string;
+  recipientCustomerId?: string;
+  amount: string;
+  asset: string;
+  fee: string;
+  comment?: string;
+  createdAt: string;
+  expiresAt: string;
+  resolvedAt?: string;
+  monitoring: readonly WorkflowCheck[];
+  timeline: readonly CheckTimelineEvent[];
+  evidenceItems: readonly EvidenceItem[];
+  tone: Tone;
+  auditEvidenceDigest: string;
+}
+
 export interface ApprovalRow {
   id: string;
   action: string;
@@ -217,6 +251,7 @@ export interface ReadonlyBackofficeRepository {
   metrics(): readonly Metric[];
   queues(): readonly QueueRow[];
   customers(): readonly CustomerRow[];
+  chatChecks(): readonly ChatCheck[];
   kycCases(): readonly KycCase[];
   amlCases(): readonly AmlCase[];
   investigationCases(): readonly InvestigationCase[];
@@ -341,6 +376,158 @@ const data = deepFreeze({
       openAmlCases: 0,
       lastReviewedAt: "2026-09-28T09:41:03.000Z",
       tone: "danger"
+    }
+  ],
+  chatChecks: [
+    {
+      id: "CHK-771312",
+      kind: "personal",
+      channel: "Telegram chat",
+      status: "created",
+      senderCustomerId: "CUS-10482",
+      sender: "Алина Миронова",
+      recipient: "@berlin_life",
+      amount: "25.000000",
+      asset: "USDT",
+      fee: "0.050000",
+      comment: "Долг за ужин",
+      createdAt: "2026-09-28T13:41:22.000Z",
+      expiresAt: "2026-10-01T13:41:22.000Z",
+      monitoring: [
+        { id: "velocity", label: "Check velocity", status: "clear", detail: "2 checks in 24h, under threshold", tone: "success" },
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Sender screened at creation", tone: "success" }
+      ],
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T13:41:22.000Z", actor: "customer:CUS-10482", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:5f31aa0e7214" }
+      ],
+      evidenceItems: [
+        { id: "creation", label: "Creation record", status: "ready", digest: "sha256:5f31aa0e7214" },
+        { id: "hold", label: "Funds hold receipt", status: "ready", digest: "sha256:18b92cd4a05e" }
+      ],
+      tone: "info",
+      auditEvidenceDigest: "sha256:5f31aa0e7214"
+    },
+    {
+      id: "CHK-771298",
+      kind: "personal",
+      channel: "Telegram chat",
+      status: "waiting-recipient-kyc",
+      senderCustomerId: "CUS-10477",
+      sender: "Никита Серов",
+      recipient: "София Романова",
+      recipientCustomerId: "CUS-10468",
+      amount: "120.000000",
+      asset: "USDT",
+      fee: "0.240000",
+      createdAt: "2026-09-28T11:58:07.000Z",
+      expiresAt: "2026-10-01T11:58:07.000Z",
+      monitoring: [
+        { id: "kyc", label: "Recipient KYC", status: "review", detail: "Recipient level insufficient — claim held", tone: "warning" },
+        { id: "velocity", label: "Check velocity", status: "clear", detail: "Within sender baseline", tone: "success" },
+        { id: "structuring", label: "Structuring screen", status: "clear", detail: "No split-payment pattern", tone: "success" }
+      ],
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T11:58:07.000Z", actor: "customer:CUS-10477", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:7cc42e91b301" },
+        { id: "T2", occurredAt: "2026-09-28T12:36:49.000Z", actor: "service:check-engine", action: "check.claim_held", outcome: "recorded", evidenceDigest: "sha256:e5149c08af62" }
+      ],
+      evidenceItems: [
+        { id: "creation", label: "Creation record", status: "ready", digest: "sha256:7cc42e91b301" },
+        { id: "kyc-hold", label: "KYC hold notice", status: "ready", digest: "sha256:e5149c08af62" }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:e5149c08af62"
+    },
+    {
+      id: "CHK-771277",
+      kind: "personal",
+      channel: "Telegram chat",
+      status: "claimed",
+      senderCustomerId: "CUS-10468",
+      sender: "София Романова",
+      recipient: "Алина Миронова",
+      recipientCustomerId: "CUS-10482",
+      amount: "8.750000000",
+      asset: "TON",
+      fee: "0.015000000",
+      comment: "За билеты",
+      createdAt: "2026-09-27T19:12:44.000Z",
+      expiresAt: "2026-09-30T19:12:44.000Z",
+      resolvedAt: "2026-09-28T08:05:31.000Z",
+      monitoring: [
+        { id: "velocity", label: "Check velocity", status: "clear", detail: "Within sender baseline", tone: "success" },
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Both parties screened", tone: "success" },
+        { id: "circular", label: "Circular sending", status: "clear", detail: "No return-path correlation", tone: "success" }
+      ],
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-27T19:12:44.000Z", actor: "customer:CUS-10468", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:2d47a9fe8166" },
+        { id: "T2", occurredAt: "2026-09-28T08:05:31.000Z", actor: "customer:CUS-10482", action: "check.claimed", outcome: "recorded", evidenceDigest: "sha256:96be0c374ad0" }
+      ],
+      evidenceItems: [
+        { id: "creation", label: "Creation record", status: "ready", digest: "sha256:2d47a9fe8166" },
+        { id: "claim", label: "Claim receipt", status: "ready", digest: "sha256:96be0c374ad0" }
+      ],
+      tone: "success",
+      auditEvidenceDigest: "sha256:96be0c374ad0"
+    },
+    {
+      id: "CHK-771260",
+      kind: "personal",
+      channel: "Telegram chat",
+      status: "cancelled",
+      senderCustomerId: "CUS-10482",
+      sender: "Алина Миронова",
+      recipient: "@tourmate_anna",
+      amount: "430.000000",
+      asset: "USDT",
+      fee: "0.860000",
+      comment: "Аренда студии",
+      createdAt: "2026-09-28T09:26:18.000Z",
+      expiresAt: "2026-10-01T09:26:18.000Z",
+      resolvedAt: "2026-09-28T10:02:55.000Z",
+      monitoring: [
+        { id: "velocity", label: "Check velocity", status: "review", detail: "3 creates in 24h, near threshold", tone: "warning" },
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Sender screened at creation", tone: "success" }
+      ],
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T09:26:18.000Z", actor: "customer:CUS-10482", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:3ab7f0e59c44" },
+        { id: "T2", occurredAt: "2026-09-28T10:02:55.000Z", actor: "customer:CUS-10482", action: "check.cancelled", outcome: "recorded", evidenceDigest: "sha256:71e3d5bc8a10" }
+      ],
+      evidenceItems: [
+        { id: "creation", label: "Creation record", status: "ready", digest: "sha256:3ab7f0e59c44" },
+        { id: "release", label: "Hold release receipt", status: "ready", digest: "sha256:71e3d5bc8a10" }
+      ],
+      tone: "neutral",
+      auditEvidenceDigest: "sha256:71e3d5bc8a10"
+    },
+    {
+      id: "CHK-771204",
+      kind: "personal",
+      channel: "Telegram chat",
+      status: "expired",
+      senderCustomerId: "CUS-10477",
+      sender: "Никита Серов",
+      recipient: "@kite_school",
+      amount: "65.500000",
+      asset: "USDT",
+      fee: "0.131000",
+      createdAt: "2026-09-25T14:33:51.000Z",
+      expiresAt: "2026-09-28T14:33:51.000Z",
+      resolvedAt: "2026-09-28T14:33:51.000Z",
+      monitoring: [
+        { id: "velocity", label: "Check velocity", status: "clear", detail: "Within sender baseline", tone: "success" },
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Sender screened at creation", tone: "success" }
+      ],
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-25T14:33:51.000Z", actor: "customer:CUS-10477", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:0e6ba3d17f98" },
+        { id: "T2", occurredAt: "2026-09-27T20:14:02.000Z", actor: "customer:@kite_school", action: "check.claim_denied", outcome: "denied", evidenceDigest: "sha256:b4d8720fe551" },
+        { id: "T3", occurredAt: "2026-09-28T14:33:51.000Z", actor: "service:check-engine", action: "check.expired", outcome: "recorded", evidenceDigest: "sha256:d9aa51b60734" }
+      ],
+      evidenceItems: [
+        { id: "creation", label: "Creation record", status: "ready", digest: "sha256:0e6ba3d17f98" },
+        { id: "expiry", label: "Expiry and return receipt", status: "ready", digest: "sha256:d9aa51b60734" }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:d9aa51b60734"
     }
   ],
   kycCases: [
@@ -948,6 +1135,7 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   metrics: () => data.metrics,
   queues: () => data.queues,
   customers: () => data.customers,
+  chatChecks: () => data.chatChecks,
   kycCases: () => data.kycCases,
   amlCases: () => data.amlCases,
   investigationCases: () => data.investigationCases,

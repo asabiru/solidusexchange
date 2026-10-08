@@ -7,6 +7,7 @@ const collections = [
   "metrics",
   "queues",
   "customers",
+  "chatChecks",
   "kycCases",
   "amlCases",
   "investigationCases",

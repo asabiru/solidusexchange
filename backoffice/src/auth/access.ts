@@ -1,6 +1,7 @@
 export type Capability =
   | "dashboard:read"
   | "customers:read"
+  | "checks:read"
   | "kyc:read"
   | "aml:read"
   | "investigations:read"
@@ -37,6 +38,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     capabilities: [
       "dashboard:read",
       "customers:read",
+      "checks:read",
       "kyc:read",
       "aml:read",
       "investigations:read",
@@ -55,7 +57,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     label: "Support L1",
     operator: "Илья Нуров",
     initials: "ИН",
-    capabilities: ["dashboard:read", "customers:read"]
+    capabilities: ["dashboard:read", "customers:read", "checks:read"]
   },
   {
     id: "aml-investigator",
@@ -65,6 +67,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     capabilities: [
       "dashboard:read",
       "customers:read",
+      "checks:read",
       "kyc:read",
       "aml:read",
       "investigations:read",
@@ -93,6 +96,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     capabilities: [
       "dashboard:read",
       "customers:read",
+      "checks:read",
       "kyc:read",
       "aml:read",
       "investigations:read",

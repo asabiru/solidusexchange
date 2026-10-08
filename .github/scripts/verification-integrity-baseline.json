@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/checks.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -399,7 +399,7 @@
       "minCases": 29
     },
     "backoffice/src/app/i18n.test.ts": {
-      "minLines": 412,
+      "minLines": 419,
       "minCases": 38
     },
     "backoffice/src/auth/access.test.ts": {
@@ -407,11 +407,11 @@
       "minCases": 7
     },
     "backoffice/src/data/client.test.ts": {
-      "minLines": 226,
-      "minCases": 7
+      "minLines": 246,
+      "minCases": 8
     },
     "backoffice/src/data/demo.test.ts": {
-      "minLines": 47,
+      "minLines": 48,
       "minCases": 2
     },
     "backoffice/src/server/audit-store.test.ts": {
@@ -455,7 +455,7 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 540,
+      "minLines": 542,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
@@ -471,7 +471,7 @@
       "minCases": 5
     },
     "backoffice/tsconfig.test.json": {
-      "minLines": 26
+      "minLines": 31
     },
     "infra/local/tests/dev-material.test.mjs": {
       "minLines": 93,
@@ -909,6 +909,14 @@
     },
     "tests/Unit/ExampleTest.php": {
       "minLines": 13
+    },
+    "backoffice/src/app/checks.test.ts": {
+      "minLines": 52,
+      "minCases": 4
+    },
+    "backoffice/src/server/checks.test.ts": {
+      "minLines": 190,
+      "minCases": 9
     }
   }
 }

@@ -550,7 +550,8 @@ button {
   box-shadow: 0 0 0 3px rgba(var(--success), .2);
 }
 
-.locale-select {
+.locale-select,
+.check-filter {
   min-height: 34px;
   padding: 0 10px;
   border: 1px solid rgba(var(--edge), var(--edge-a));
@@ -561,7 +562,8 @@ button {
   font-weight: 650;
 }
 
-.locale-select option {
+.locale-select option,
+.check-filter option {
   color: #172238;
   background: #faf8f3;
 }
