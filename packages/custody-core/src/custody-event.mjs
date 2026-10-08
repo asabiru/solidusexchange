@@ -138,6 +138,8 @@ function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOcc
   assert(event.actor.type === "operator", "withdrawal approval actor must be an operator");
   assert(
     typeof event.actor.subject === "string" &&
+      event.actor.subject.length > "operator_".length &&
+      event.actor.subject.length <= 127 &&
       referencePattern.test(event.actor.subject) &&
       event.actor.subject.startsWith("operator_"),
     "withdrawal approval actor subject must be an operator reference"
@@ -159,6 +161,8 @@ function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOcc
   );
   assert(
     typeof event.payload.approval_id === "string" &&
+      event.payload.approval_id.length > "approval_".length &&
+      event.payload.approval_id.length <= 127 &&
       referencePattern.test(event.payload.approval_id) &&
       event.payload.approval_id.startsWith("approval_"),
     "withdrawal approval_id must be an approval reference"

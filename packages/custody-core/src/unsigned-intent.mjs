@@ -187,8 +187,14 @@ function parseTimestamp(value, label) {
 }
 
 function assertReference(value, label, prefix) {
-  assert(typeof value === "string" && referencePattern.test(value), `${label} must be a reference`);
-  assert(value.startsWith(prefix), `${label} must start with ${prefix}`);
+  assert(
+    typeof value === "string" &&
+      value.length > prefix.length &&
+      value.length <= 127 &&
+      referencePattern.test(value) &&
+      value.startsWith(prefix),
+    `${label} must be a ${prefix} reference`
+  );
 }
 
 function assertUuid(value, label) {
@@ -259,7 +265,9 @@ function assertCommand(command, policy, now) {
   assert(typeof command.amount === "string", "amount must be a decimal string");
   const amountMatch = decimalPattern.exec(command.amount);
   assert(amountMatch, "amount must be a canonical positive decimal string");
-  assert(BigInt(command.amount.replace(".", "")) > 0n, "amount must be positive");
+  const amountDigits = command.amount.replace(".", "");
+  assert(amountDigits.length <= 78, "amount exceeds the custody precision limit");
+  assert(BigInt(amountDigits) > 0n, "amount must be positive");
   assert((amountMatch[1]?.length ?? 0) <= assetPolicy.maximum_scale, "amount exceeds asset scale");
 
   const createdAt = parseTimestamp(command.created_at, "created_at");
@@ -281,6 +289,8 @@ function assertApprovals(approvals, intentDigest, policy, timing, now) {
   const approvalIds = new Set();
   const subjects = new Set();
   const roles = new Set();
+  const stepUpGrantIds = new Set();
+  const evidenceDigests = new Set();
   for (const [index, approval] of approvals.entries()) {
     const label = `approvals[${index}]`;
     assertExactKeys(approval, approvalKeys, label);
@@ -297,9 +307,13 @@ function assertApprovals(approvals, intentDigest, policy, timing, now) {
     assert(!approvalIds.has(approval.approval_id), "approval IDs must be unique");
     assert(!subjects.has(approval.subject_reference), "maker and checker must be different humans");
     assert(!roles.has(approval.role), "approval roles must be unique");
+    assert(!stepUpGrantIds.has(approval.step_up_grant_id), "step-up grant references must be unique");
+    assert(!evidenceDigests.has(approval.evidence_digest), "approval evidence digests must be unique");
     approvalIds.add(approval.approval_id);
     subjects.add(approval.subject_reference);
     roles.add(approval.role);
+    stepUpGrantIds.add(approval.step_up_grant_id);
+    evidenceDigests.add(approval.evidence_digest);
 
     const approvedAt = parseTimestamp(approval.approved_at, `${label}.approved_at`);
     assert(approvedAt >= timing.createdAt, `${label} predates the custody intent`);

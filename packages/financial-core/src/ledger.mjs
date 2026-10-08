@@ -414,7 +414,15 @@ function validateAccounts(accounts, chartDefinitions, assets) {
       reject("LEDGER_CONFIGURATION_INVALID", `Unknown definition ${account.definition_code}.`);
     }
     if (definition.owner_scope === "required") {
-      assertString(account.owner_reference, IDENTIFIER_PATTERN, "Account owner reference");
+      if (
+        typeof account.owner_reference !== "string" ||
+        !IDENTIFIER_PATTERN.test(account.owner_reference)
+      ) {
+        reject(
+          "LEDGER_CONFIGURATION_INVALID",
+          `${account.definition_code} requires an owner reference.`
+        );
+      }
     } else if (definition.owner_scope === "forbidden" && account.owner_reference !== null) {
       reject("LEDGER_CONFIGURATION_INVALID", `${account.definition_code} forbids an owner reference.`);
     } else if (

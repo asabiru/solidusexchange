@@ -683,6 +683,10 @@
     "packages/custody-core/tests/runtime-writer-grants.sql": {
       "minLines": 105
     },
+    "packages/custody-core/tests/unsigned-intent-hardening.test.mjs": {
+      "minLines": 486,
+      "minCases": 15
+    },
     "packages/custody-core/tests/unsigned-intent.test.mjs": {
       "minLines": 297,
       "minCases": 13
@@ -746,6 +750,10 @@
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44
+    },
+    "packages/financial-core/tests/ledger-hardening.test.mjs": {
+      "minLines": 377,
+      "minCases": 11
     },
     "packages/financial-core/tests/ledger.test.mjs": {
       "minLines": 479,
