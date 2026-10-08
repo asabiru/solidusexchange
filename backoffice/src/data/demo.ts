@@ -216,6 +216,80 @@ export interface SupportTicket {
   auditEvidenceDigest: string;
 }
 
+export type WithdrawalIntentStatus =
+  | "draft"
+  | "pending-approval"
+  | "screened"
+  | "broadcast"
+  | "confirmed"
+  | "rejected"
+  | "cancelled";
+
+export type WithdrawalApprovalRole = "custody_maker" | "custody_checker";
+
+export type WithdrawalApprovalDecision = "pending" | "approved" | "rejected";
+
+export interface WithdrawalApprovalStep {
+  id: string;
+  role: WithdrawalApprovalRole;
+  subjectReference: string;
+  decision: WithdrawalApprovalDecision;
+  decidedAt?: string;
+  stepUpGrantId?: string;
+  evidenceDigest?: string;
+}
+
+export interface WithdrawalTimelineEvent {
+  id: string;
+  occurredAt: string;
+  actor: string;
+  action: string;
+  outcome: string;
+  evidenceDigest: string;
+}
+
+// Synthetic custody withdrawal intent, read-only. Rows mirror the
+// packages/custody-core unsigned-intent vocabulary (command references,
+// maker-checker approval roles, policy digests) so operators can inspect the
+// lifecycle; approving, broadcasting or cancelling stays outside this console.
+export interface WithdrawalIntent {
+  id: string;
+  intentId: string;
+  withdrawalId: string;
+  subject: string;
+  customerId: string;
+  customer: string;
+  asset: string;
+  amount: string;
+  network: string;
+  destination: string;
+  destinationReference: string;
+  status: WithdrawalIntentStatus;
+  screening: readonly WorkflowCheck[];
+  approvalSteps: readonly WithdrawalApprovalStep[];
+  requiredApprovals: number;
+  policyVersion: string;
+  runtimeBoundary: "dev-dry-run";
+  executionAuthority: false;
+  productionSigningEnabled: false;
+  keyMaterialPresent: false;
+  intentDigest: string;
+  policyDigest: string;
+  approvalEvidenceDigest?: string;
+  idempotencyKey: string;
+  correlationId: string;
+  linkedKytCaseId?: string;
+  linkedApprovalId?: string;
+  createdAt: string;
+  updatedAt: string;
+  expiresAt: string;
+  resolvedAt?: string;
+  timeline: readonly WithdrawalTimelineEvent[];
+  evidenceItems: readonly EvidenceItem[];
+  tone: Tone;
+  auditEvidenceDigest: string;
+}
+
 export interface ApprovalRow {
   id: string;
   action: string;
@@ -299,6 +373,7 @@ export interface ReadonlyBackofficeRepository {
   customers(): readonly CustomerRow[];
   chatChecks(): readonly ChatCheck[];
   supportTickets(): readonly SupportTicket[];
+  withdrawalIntents(): readonly WithdrawalIntent[];
   kycCases(): readonly KycCase[];
   amlCases(): readonly AmlCase[];
   investigationCases(): readonly InvestigationCase[];
@@ -694,6 +769,348 @@ const data = deepFreeze({
       ],
       tone: "warning",
       auditEvidenceDigest: "sha256:83f0d6a51b92"
+    }
+  ],
+  withdrawalIntents: [
+    {
+      id: "WDR-991804",
+      intentId: "custody_intent_991804",
+      withdrawalId: "withdrawal_991804",
+      subject: "sim-alina-mironova",
+      customerId: "CUS-10482",
+      customer: "Алина Миронова",
+      asset: "USDT",
+      amount: "2450.000000",
+      network: "TON_TESTNET",
+      destination: "EQDkR9u5xT2mB8wP4nS7vH3fL6jK1cA0dG4yN9iQ5oE7rU2tVz",
+      destinationReference: "destination_ref_alina_ton_main",
+      status: "pending-approval",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened at creation", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "review", detail: "Indirect high-risk wallet exposure — case AML-78041", tone: "warning" },
+        { id: "velocity", label: "Withdrawal velocity", status: "review", detail: "3 withdrawal intents in 24h, above baseline", tone: "warning" }
+      ],
+      approvalSteps: [
+        { id: "approval_991804_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T12:58:11.000Z", stepUpGrantId: "step_up_grant_991804_mk", evidenceDigest: "sha256:96ff7d30da42" },
+        { id: "approval_991804_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:a17e95c2b340",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      approvalEvidenceDigest: "sha256:63c1ae27f09b",
+      idempotencyKey: "custody_idempotency_991804",
+      correlationId: "7a2f1c9e-4b35-4d68-9a71-2c8e5f01b3d4",
+      linkedKytCaseId: "AML-78041",
+      linkedApprovalId: "APV-843921",
+      createdAt: "2026-09-28T12:44:37.000Z",
+      updatedAt: "2026-09-28T12:58:11.000Z",
+      expiresAt: "2026-09-28T12:49:37.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T12:44:37.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:f07fd061c671" },
+        { id: "T2", occurredAt: "2026-09-28T12:53:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:96ff7d30da42" },
+        { id: "T3", occurredAt: "2026-09-28T12:58:11.000Z", actor: "service:custody-orchestrator", action: "withdrawal.pending_approval", outcome: "recorded", evidenceDigest: "sha256:63c1ae27f09b" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:f07fd061c671" },
+        { id: "kyt", label: "KYT trace", status: "ready", digest: "sha256:96ff7d30da42" },
+        { id: "sof", label: "Source of funds", status: "missing", digest: "sha256:000000000000" }
+      ],
+      tone: "danger",
+      auditEvidenceDigest: "sha256:f07fd061c671"
+    },
+    {
+      id: "WDR-991817",
+      intentId: "custody_intent_991817",
+      withdrawalId: "withdrawal_991817",
+      subject: "sim-nikita-serov",
+      customerId: "CUS-10477",
+      customer: "Никита Серов",
+      asset: "TON",
+      amount: "85.250000000",
+      network: "TON_TESTNET",
+      destination: "UQCmH4wP8rT5nB2kS9vF6jL3dG1xY0eA7iQ4oU8cM5zE2rN6tH",
+      destinationReference: "destination_ref_nikita_ton",
+      status: "screened",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "No high-risk exposure on testnet path", tone: "success" },
+        { id: "edd", label: "Enhanced due diligence", status: "review", detail: "Customer EDD open on KYC-220177", tone: "warning" }
+      ],
+      approvalSteps: [
+        { id: "approval_991817_maker", role: "custody_maker", subjectReference: "operator_ref_pending", decision: "pending" },
+        { id: "approval_991817_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:7d04c8be1a63",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      idempotencyKey: "custody_idempotency_991817",
+      correlationId: "3b8d4e21-7c46-4f59-b2a8-9d1e6f03c7b5",
+      linkedKytCaseId: "AML-78038",
+      createdAt: "2026-09-28T13:12:05.000Z",
+      updatedAt: "2026-09-28T13:22:48.000Z",
+      expiresAt: "2026-09-28T13:17:05.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T13:12:05.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:5ce29d81b4f6" },
+        { id: "T2", occurredAt: "2026-09-28T13:22:48.000Z", actor: "service:kyt-simulator", action: "withdrawal.screened", outcome: "recorded", evidenceDigest: "sha256:7d04c8be1a63" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:5ce29d81b4f6" },
+        { id: "kyt", label: "KYT trace", status: "ready", digest: "sha256:7d04c8be1a63" },
+        { id: "quorum", label: "Maker-checker quorum", status: "missing", digest: "sha256:000000000000" }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:7d04c8be1a63"
+    },
+    {
+      id: "WDR-991822",
+      intentId: "custody_intent_991822",
+      withdrawalId: "withdrawal_991822",
+      subject: "sim-dmitry-panov",
+      customerId: "CUS-10475",
+      customer: "Дмитрий Панов",
+      asset: "USDT",
+      amount: "310.500000",
+      network: "TRON_TESTNET",
+      destination: "0x7F3aE9d41cB28e51b6C4F0a2D9e8B5f1A3c7D2E4",
+      destinationReference: "destination_ref_dmitry_tron",
+      status: "broadcast",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "Clean testnet destination", tone: "success" },
+        { id: "velocity", label: "Withdrawal velocity", status: "clear", detail: "Within customer baseline", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991822_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T11:41:16.000Z", stepUpGrantId: "step_up_grant_991822_mk", evidenceDigest: "sha256:2b7f9c40d1e5" },
+        { id: "approval_991822_checker", role: "custody_checker", subjectReference: "operator_ref_elena_sokolova", decision: "approved", decidedAt: "2026-09-28T11:44:52.000Z", stepUpGrantId: "step_up_grant_991822_es", evidenceDigest: "sha256:8a13e6d5b904" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:19f2e7a4c8b1",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      approvalEvidenceDigest: "sha256:c48d05f1a7e2",
+      idempotencyKey: "custody_idempotency_991822",
+      correlationId: "9e5c2a71-3d84-4b16-8f47-1a6c0e52d9b8",
+      createdAt: "2026-09-28T11:38:44.000Z",
+      updatedAt: "2026-09-28T11:52:09.000Z",
+      expiresAt: "2026-09-28T11:43:44.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T11:38:44.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:0f53a7c1e8d9" },
+        { id: "T2", occurredAt: "2026-09-28T11:41:16.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:2b7f9c40d1e5" },
+        { id: "T3", occurredAt: "2026-09-28T11:44:52.000Z", actor: "operator_ref_elena_sokolova", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:8a13e6d5b904" },
+        { id: "T4", occurredAt: "2026-09-28T11:52:09.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:c48d05f1a7e2" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:0f53a7c1e8d9" },
+        { id: "quorum", label: "Maker-checker quorum", status: "ready", digest: "sha256:c48d05f1a7e2" },
+        { id: "broadcast", label: "Broadcast receipt", status: "ready", digest: "sha256:c48d05f1a7e2" }
+      ],
+      tone: "info",
+      auditEvidenceDigest: "sha256:c48d05f1a7e2"
+    },
+    {
+      id: "WDR-991805",
+      intentId: "custody_intent_991805",
+      withdrawalId: "withdrawal_991805",
+      subject: "sim-sofia-romanova",
+      customerId: "CUS-10468",
+      customer: "София Романова",
+      asset: "TON",
+      amount: "42.000000000",
+      network: "TON_TESTNET",
+      destination: "EQBjK7nM3wR9vP5sT2yF8hL4dA6cE0iG1uX5oQ7zN9eB3tV8",
+      destinationReference: "destination_ref_sofia_ton",
+      status: "confirmed",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "Clean testnet destination", tone: "success" },
+        { id: "velocity", label: "Withdrawal velocity", status: "clear", detail: "Within customer baseline", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991805_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T15:02:31.000Z", stepUpGrantId: "step_up_grant_991805_mk", evidenceDigest: "sha256:31e8b7c5f2a0" },
+        { id: "approval_991805_checker", role: "custody_checker", subjectReference: "operator_ref_anton_bely", decision: "approved", decidedAt: "2026-09-27T15:05:47.000Z", stepUpGrantId: "step_up_grant_991805_ab", evidenceDigest: "sha256:66d4a1e08c39" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:85c3f7e1a9d4",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      approvalEvidenceDigest: "sha256:b2e17c95a308",
+      idempotencyKey: "custody_idempotency_991805",
+      correlationId: "1c7e4b90-5f23-4a58-9d36-8e0b2c47a5f1",
+      createdAt: "2026-09-27T14:58:12.000Z",
+      updatedAt: "2026-09-27T15:21:36.000Z",
+      expiresAt: "2026-09-27T15:03:12.000Z",
+      resolvedAt: "2026-09-27T15:21:36.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-27T14:58:12.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:4f68d2a91e05" },
+        { id: "T2", occurredAt: "2026-09-27T15:02:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:31e8b7c5f2a0" },
+        { id: "T3", occurredAt: "2026-09-27T15:05:47.000Z", actor: "operator_ref_anton_bely", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:66d4a1e08c39" },
+        { id: "T4", occurredAt: "2026-09-27T15:14:20.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:9c01d7e6f4a2" },
+        { id: "T5", occurredAt: "2026-09-27T15:21:36.000Z", actor: "service:custody-orchestrator", action: "withdrawal.confirmed", outcome: "recorded", evidenceDigest: "sha256:b2e17c95a308" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:4f68d2a91e05" },
+        { id: "quorum", label: "Maker-checker quorum", status: "ready", digest: "sha256:b2e17c95a308" },
+        { id: "confirmation", label: "Confirmation receipt", status: "ready", digest: "sha256:b2e17c95a308" }
+      ],
+      tone: "success",
+      auditEvidenceDigest: "sha256:b2e17c95a308"
+    },
+    {
+      id: "WDR-991799",
+      intentId: "custody_intent_991799",
+      withdrawalId: "withdrawal_991799",
+      subject: "sim-aurora-trade",
+      customerId: "ORG-20018",
+      customer: "Aurora Trade LLC",
+      asset: "USDT",
+      amount: "12000.000000",
+      network: "TRON_TESTNET",
+      destination: "0xB4e2F8aC15d7093E6cA1bD48e7F20C5d9A3E61fB",
+      destinationReference: "destination_ref_aurora_tron",
+      status: "draft",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "review", detail: "Entity screening scheduled at submission", tone: "warning" },
+        { id: "kyb", label: "KYB status", status: "review", detail: "UBO review open on KYB-220165", tone: "warning" }
+      ],
+      approvalSteps: [
+        { id: "approval_991799_maker", role: "custody_maker", subjectReference: "operator_ref_pending", decision: "pending" },
+        { id: "approval_991799_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:d51f8a2c7e94",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      idempotencyKey: "custody_idempotency_991799",
+      correlationId: "6f0a3d85-2c91-4e47-a5b8-7d9f1e04c6a3",
+      createdAt: "2026-09-28T13:40:22.000Z",
+      updatedAt: "2026-09-28T13:40:22.000Z",
+      expiresAt: "2026-09-28T13:45:22.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T13:40:22.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:d51f8a2c7e94" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:d51f8a2c7e94" },
+        { id: "quorum", label: "Maker-checker quorum", status: "missing", digest: "sha256:000000000000" }
+      ],
+      tone: "neutral",
+      auditEvidenceDigest: "sha256:d51f8a2c7e94"
+    },
+    {
+      id: "WDR-991788",
+      intentId: "custody_intent_991788",
+      withdrawalId: "withdrawal_991788",
+      subject: "sim-nikita-serov",
+      customerId: "CUS-10477",
+      customer: "Никита Серов",
+      asset: "USDT",
+      amount: "500.000000",
+      network: "TON_TESTNET",
+      destination: "UQAzP3xR8kT1nB5wS7vF2jL9dG4yH0eA6iQ8oU4cM2zE5rN9tL",
+      destinationReference: "destination_ref_nikita_ton_alt",
+      status: "rejected",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "match", detail: "Destination matches case AML-78038 cluster", tone: "danger" }
+      ],
+      approvalSteps: [
+        { id: "approval_991788_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T09:14:08.000Z", stepUpGrantId: "step_up_grant_991788_mk", evidenceDigest: "sha256:12f7c4a9d6b0" },
+        { id: "approval_991788_checker", role: "custody_checker", subjectReference: "operator_ref_roman_yudin", decision: "rejected", decidedAt: "2026-09-27T09:26:41.000Z", stepUpGrantId: "step_up_grant_991788_ry", evidenceDigest: "sha256:5d92e0b7f3c1" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:71b9e5c3d0f6",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      approvalEvidenceDigest: "sha256:5d92e0b7f3c1",
+      idempotencyKey: "custody_idempotency_991788",
+      correlationId: "4d9b2e67-8a15-4c03-b7f2-5e6a9c10d3f8",
+      linkedKytCaseId: "AML-78038",
+      createdAt: "2026-09-27T09:08:55.000Z",
+      updatedAt: "2026-09-27T09:26:41.000Z",
+      expiresAt: "2026-09-27T09:13:55.000Z",
+      resolvedAt: "2026-09-27T09:26:41.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-27T09:08:55.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:71b9e5c3d0f6" },
+        { id: "T2", occurredAt: "2026-09-27T09:14:08.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:12f7c4a9d6b0" },
+        { id: "T3", occurredAt: "2026-09-27T09:26:41.000Z", actor: "operator_ref_roman_yudin", action: "withdrawal.rejected", outcome: "denied", evidenceDigest: "sha256:5d92e0b7f3c1" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:71b9e5c3d0f6" },
+        { id: "kyt", label: "KYT trace", status: "ready", digest: "sha256:5d92e0b7f3c1" },
+        { id: "rejection", label: "Rejection record", status: "ready", digest: "sha256:5d92e0b7f3c1" }
+      ],
+      tone: "danger",
+      auditEvidenceDigest: "sha256:5d92e0b7f3c1"
+    },
+    {
+      id: "WDR-991760",
+      intentId: "custody_intent_991760",
+      withdrawalId: "withdrawal_991760",
+      subject: "sim-alina-mironova",
+      customerId: "CUS-10482",
+      customer: "Алина Миронова",
+      asset: "TON",
+      amount: "15.000000000",
+      network: "TON_TESTNET",
+      destination: "UQDwK5nB2mR7vT9sP4yF6hL1dA8cE3iG0uX2oQ9zN5eB7tV4",
+      destinationReference: "destination_ref_alina_ton_test",
+      status: "cancelled",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Screened at creation", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991760_maker", role: "custody_maker", subjectReference: "operator_ref_pending", decision: "pending" },
+        { id: "approval_991760_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:08e4f6a2b9d7",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      idempotencyKey: "custody_idempotency_991760",
+      correlationId: "8b5e1f42-6d79-4a20-9c84-3f7d0e52b9a6",
+      createdAt: "2026-09-26T17:33:40.000Z",
+      updatedAt: "2026-09-26T17:41:12.000Z",
+      expiresAt: "2026-09-26T17:38:40.000Z",
+      resolvedAt: "2026-09-26T17:41:12.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-26T17:33:40.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:08e4f6a2b9d7" },
+        { id: "T2", occurredAt: "2026-09-26T17:41:12.000Z", actor: "customer:CUS-10482", action: "withdrawal.cancelled", outcome: "recorded", evidenceDigest: "sha256:3f91c8d5e0a2" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:08e4f6a2b9d7" },
+        { id: "cancellation", label: "Cancellation record", status: "ready", digest: "sha256:3f91c8d5e0a2" }
+      ],
+      tone: "neutral",
+      auditEvidenceDigest: "sha256:3f91c8d5e0a2"
     }
   ],
   kycCases: [
@@ -1303,6 +1720,7 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   customers: () => data.customers,
   chatChecks: () => data.chatChecks,
   supportTickets: () => data.supportTickets,
+  withdrawalIntents: () => data.withdrawalIntents,
   kycCases: () => data.kycCases,
   amlCases: () => data.amlCases,
   investigationCases: () => data.investigationCases,

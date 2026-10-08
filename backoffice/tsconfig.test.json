@@ -17,6 +17,7 @@
     "src/app/a11y.test.ts",
     "src/app/checks.test.ts",
     "src/app/support.test.ts",
+    "src/app/withdrawals.test.ts",
     "src/app/i18n.ts",
     "src/app/i18n.test.ts",
     "src/app/locales/*.ts",
