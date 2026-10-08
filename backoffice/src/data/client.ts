@@ -11,7 +11,9 @@ import type {
   InvestigationCase,
   KycCase,
   Metric,
-  QueueRow
+  QueueRow,
+  SupportTicket,
+  SupportTicketStatus
 } from "./demo.js";
 import type {
   DraftReport,
@@ -73,6 +75,11 @@ export interface CustomersPayload {
 export interface ChecksPayload {
   statuses: readonly CheckStatus[];
   checks: readonly ChatCheck[];
+}
+
+export interface SupportTicketsPayload {
+  statuses: readonly SupportTicketStatus[];
+  tickets: readonly SupportTicket[];
 }
 
 export interface KycPayload {
@@ -430,6 +437,15 @@ export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {
 
 export function getCheck(id: string): Promise<ChatCheck> {
   return getSigned(`/bff/api/checks/${encodeURIComponent(id)}`, `check:${id}`);
+}
+
+export function getSupportTickets(status?: SupportTicketStatus): Promise<SupportTicketsPayload> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return getSigned(`/bff/api/support${query}`, "support");
+}
+
+export function getSupportTicket(id: string): Promise<SupportTicket> {
+  return getSigned(`/bff/api/support/${encodeURIComponent(id)}`, `support:${id}`);
 }
 
 export function getKycCases(): Promise<KycPayload> {

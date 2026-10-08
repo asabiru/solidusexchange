@@ -21,6 +21,8 @@ import {
   getReportExport,
   getReports,
   getSession,
+  getSupportTicket,
+  getSupportTickets,
   logout,
   previewApproval,
   verifyStepUpChallenge,
@@ -35,7 +37,8 @@ import {
   type InvestigationsPayload,
   type KycPayload,
   type SessionPayload,
-  type StepUpChallengePayload
+  type StepUpChallengePayload,
+  type SupportTicketsPayload
 } from "../data/client";
 import type { DraftReport, ReportId, ReportListPayload } from "../data/reports";
 import type {
@@ -49,6 +52,8 @@ import type {
   InvestigationCase,
   KycCase,
   QueueRow,
+  SupportTicket,
+  SupportTicketStatus,
   Tone,
   WorkflowCheck
 } from "../data/demo";
@@ -1574,6 +1579,197 @@ function ChecksView({ query, data }: { query: string; data: ChecksPayload }) {
   );
 }
 
+type TicketStatusFilter = SupportTicketStatus | "all";
+
+function TicketDetail({ item }: { item: SupportTicket }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <header className="panel-heading">
+        <div><h2>{item.id}</h2><p>{t(`support.channel.${item.channel}`)} · {item.subject}</p></div>
+        <Status tone={item.tone}>{t(`support.status.${item.status}`)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("support.customer")}</dt><dd>{item.customer} · {item.customerId}</dd></div>
+        <div><dt>{t("support.subject")}</dt><dd>{item.subject}</dd></div>
+        <div><dt>{t("support.topic")}</dt><dd>{item.topic}</dd></div>
+        <div><dt>{t("support.priority")}</dt><dd>{t(`support.priority.${item.priority}`)}</dd></div>
+        <div><dt>{t("support.channel")}</dt><dd>{t(`support.channel.${item.channel}`)}</dd></div>
+        <div><dt>{t("support.createdAt")}</dt><dd>{item.createdAt}</dd></div>
+        <div><dt>{t("support.updatedAt")}</dt><dd>{item.updatedAt}</dd></div>
+        {item.resolvedAt && <div><dt>{t("support.resolvedAt")}</dt><dd>{item.resolvedAt}</dd></div>}
+        {item.linkedCheckId && <div><dt>{t("support.linkedCheck")}</dt><dd>{item.linkedCheckId}</dd></div>}
+        {item.linkedKycCaseId && <div><dt>{t("support.linkedKycCase")}</dt><dd>{item.linkedKycCaseId}</dd></div>}
+        {item.linkedScreeningId && <div><dt>{t("support.linkedScreening")}</dt><dd>{item.linkedScreeningId}</dd></div>}
+        {item.disputedAmount && <div><dt>{t("support.disputedAmount")}</dt><dd className="numeric">{item.disputedAmount} {item.asset}</dd></div>}
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{item.auditEvidenceDigest}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">{t("support.messages")}</h3>
+      <div className="timeline-list">
+        {item.messages.map((message) => (
+          <div key={message.id}>
+            <span />
+            <div>
+              <strong>{t(`support.author.${message.author}`)}</strong>
+              <small>{message.occurredAt}</small>
+              <p>{message.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <h3 className="detail-section-title">{t("support.internalNotes")}</h3>
+      <div className="timeline-list">
+        {item.internalNotes.map((note) => (
+          <div key={note.id}>
+            <span />
+            <div>
+              <strong>{note.author}</strong>
+              <small>{note.occurredAt}</small>
+              <p>{note.body}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="safe-action">
+        <strong>{t("support.readOnlyTitle")}</strong>
+        <p>{t("support.readOnlyNote")}</p>
+        <div className="ticket-actions">
+          <button className="button" type="button" disabled>{t("support.actionReply")}</button>
+          <button className="button" type="button" disabled>{t("support.actionAssign")}</button>
+          <button className="button" type="button" disabled>{t("support.actionClose")}</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SupportView({ query, data }: { query: string; data: SupportTicketsPayload }) {
+  const { t, count } = useI18n();
+  const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>("all");
+  const [tickets, setTickets] = useState<readonly SupportTicket[]>(data.tickets);
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+  const [selectedId, setSelectedId] = useState(data.tickets[0]?.id ?? "");
+  const [detail, setDetail] = useState<SupportTicket | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return tickets;
+    return tickets.filter((ticket) =>
+      [ticket.id, ticket.customer, ticket.subject, ticket.topic, ticket.priority, ticket.status]
+        .some((value) => value.toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [tickets, query]);
+
+  function applyFilter(next: TicketStatusFilter) {
+    setStatusFilter(next);
+    setExportState("loading");
+    getSupportTickets(next === "all" ? undefined : next)
+      .then((payload) => {
+        setTickets(payload.tickets);
+        setSelectedId((current) =>
+          payload.tickets.some((ticket) => ticket.id === current) ? current : payload.tickets[0]?.id ?? ""
+        );
+        setExportState("idle");
+      })
+      .catch(() => setExportState("failed"));
+  }
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setDetailState("loading");
+    setDetail(undefined);
+    getSupportTicket(selectedId)
+      .then((payload) => {
+        if (!active) return;
+        setDetail(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
+  return (
+    <>
+      <PageHeading title={t("screen.support")} description={t("support.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("support.queueTitle")}</h2><p>{t("support.count", { count: count(visible.length) })}</p></div>
+            <div className="audit-actions">
+              <select
+                className="ticket-filter"
+                value={statusFilter}
+                disabled={exportState === "loading"}
+                onChange={(event) => applyFilter(event.target.value as TicketStatusFilter)}
+                aria-label={t("support.filterLabel")}
+                title={t("support.filterLabel")}
+              >
+                <option value="all">{t("support.status.all")}</option>
+                {data.statuses.map((status) => (
+                  <option key={status} value={status}>{t(`support.status.${status}`)}</option>
+                ))}
+              </select>
+              <Status tone="info">{t("common.readOnly")}</Status>
+            </div>
+          </header>
+          <LiveStatus
+            message={exportState === "loading" ? t("support.loadingList") : detailState === "loading" ? t("support.loadingDetail") : ""}
+          />
+          {exportState === "failed" && (
+            <div className="preview-error" role="alert">{t("support.listFailed")}</div>
+          )}
+          <TableShell label={t("support.queueTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("support.ticket")}</th><th scope="col">{t("support.customer")}</th><th scope="col">{t("support.topic")}</th><th scope="col">{t("support.priority")}</th><th scope="col">{t("support.status")}</th><th scope="col">{t("support.updatedAt")}</th></tr></thead>
+              <tbody>
+                {visible.map((ticket) => (
+                  <tr key={ticket.id} data-selected={ticket.id === selectedId}>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        aria-current={ticket.id === selectedId ? "true" : undefined}
+                        onClick={() => setSelectedId(ticket.id)}
+                      >
+                        {ticket.id}
+                      </button>
+                      <small className="cell-note">{t(`support.channel.${ticket.channel}`)}</small>
+                    </td>
+                    <td>
+                      {ticket.customer}
+                      <small className="cell-note">{ticket.subject} · {ticket.customerId}</small>
+                    </td>
+                    <td>{ticket.topic}</td>
+                    <td>{t(`support.priority.${ticket.priority}`)}</td>
+                    <td><Status tone={ticket.tone}>{t(`support.status.${ticket.status}`)}</Status></td>
+                    <td>{ticket.updatedAt}</td>
+                  </tr>
+                ))}
+                {!visible.length && (
+                  <tr><td colSpan={6}><div className="empty">{t("support.empty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <aside className="panel case-detail">
+          {detailState === "loading" && <div className="empty">{t("support.loadingDetail")}</div>}
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">{t("support.failed")}</div>
+          )}
+          {detail && <TicketDetail item={detail} />}
+        </aside>
+      </section>
+    </>
+  );
+}
+
 function PlaceholderView({ item }: { item: NavigationItem }) {
   const { t, intlTag } = useI18n();
   const label = t(screenKey(item.id));
@@ -1607,6 +1803,7 @@ interface WorkspaceData {
   dashboard: DashboardPayload;
   customers: CustomersPayload;
   checks?: ChecksPayload;
+  support?: SupportTicketsPayload;
   kyc?: KycPayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
@@ -1758,10 +1955,11 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
+        hasCapability(session, "support:read") ? getSupportTickets() : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
@@ -1773,7 +1971,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, kyc, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, kyc, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -2024,6 +2222,9 @@ export function App() {
           )}
           {screen === "checks" && access.data.checks && (
             <ChecksView query={query} data={access.data.checks} />
+          )}
+          {screen === "support" && access.data.support && (
+            <SupportView query={query} data={access.data.support} />
           )}
           {screen === "kyc" && access.data.kyc && (
             <KycView query={query} data={access.data.kyc} />
