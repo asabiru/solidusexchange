@@ -36,6 +36,7 @@
 | [Compliance operations](compliance-operations.md) | CDD, sanctions/PEP, KYT, monitoring, cases, reporting assessment and compliance stop conditions |
 | [Own HSM custody program](hsm-custody-program.md) | Self-operated HSM custody plan: wallet tiers, in-HSM policy, ceremonies, backup, independent assurance and delivery phases |
 | [In-chat crypto checks](telegram-chat-checks.md) | Telegram inline-mode checks between customers: flow, ledger model, compliance, security and delivery phases |
+| [Checks posting draft](telegram-chat-checks-posting-draft.md) | Proposed chart addition, posting rules and reconciliation for Telegram checks; Finance review input |
 | [Phase 0 evidence index](phase-0-evidence-index.md) | Exit gate, approvals и проверяемые доказательства |
 | [Finance ledger approval pack](finance-ledger-approval-pack.md) | Chart, posting rules, trial balance и sign-off gate перед Session D |
 
