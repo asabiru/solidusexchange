@@ -1,3 +1,5 @@
+import { timingSafeEqual } from "node:crypto";
+
 import { createCallbackInbox } from "./callback-inbox.mjs";
 import { formatAmount, parseAmount, parsePositiveAmount } from "./decimal.mjs";
 import { createSeededRandom, createSimulatedClock, toIsoSeconds } from "./deterministic.mjs";
@@ -236,8 +238,11 @@ export function validateChecksCallback(payload) {
   if (fee !== 0n) {
     return "fee_amount must be zero in this slice";
   }
+  if (payload.sender_ref === payload.recipient_ref) {
+    return "sender and recipient must differ";
+  }
   const open = status === "created" || status === "awaiting_recipient_kyc";
-  if (open !== (outstanding === amount)) {
+  if (open ? outstanding !== amount : outstanding !== 0n) {
     return "outstanding amount must equal the check amount while open and be zero otherwise";
   }
   return null;
@@ -547,7 +552,12 @@ export function createChecksSimulator(options) {
         if (check.status !== "created") {
           throw new ProviderError("invalid_request", `check is ${check.status}`);
         }
-        if (sha256Hex(claimReference) !== check.claimDigest) {
+        const suppliedDigest = Buffer.from(sha256Hex(claimReference), "utf8");
+        const storedDigest = Buffer.from(check.claimDigest, "utf8");
+        if (
+          suppliedDigest.length !== storedDigest.length
+          || !timingSafeEqual(suppliedDigest, storedDigest)
+        ) {
           check.failed_claim_attempts += 1;
           throw new ProviderError("invalid_request", "claim reference does not match this check");
         }
