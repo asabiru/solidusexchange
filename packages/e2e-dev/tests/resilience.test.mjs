@@ -90,6 +90,9 @@ async function assertGated(app, cookie, label) {
   const withdrawals = await getJson(app, "/bff/withdrawals", cookie);
   assert.equal(withdrawals.kyc, "kyc-gated", label);
   assert.equal(withdrawals.withdrawals.length, 0, label);
+  const quotes = await getJson(app, "/bff/quotes", cookie);
+  assert.equal(quotes.kyc, "kyc-gated", label);
+  assert.equal(quotes.quotes.length, 0, label);
 }
 
 async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
@@ -185,6 +188,37 @@ describe("Mini App BFF with a failing customer-api", () => {
             created_at: "2026-10-02T14:05:00.000Z",
             updated_at: "2026-10-02T14:20:00.000Z",
             expires_at: "2026-10-02T14:10:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/quotes")) {
+      return {
+        mode: "test",
+        quotes: [
+          {
+            quote_id: "qte_0123456789abcdef01234567",
+            pair: "USDT/RUB",
+            base_asset: "USDT",
+            quote_asset: "RUB",
+            side: "sell",
+            base_amount: "25.000000",
+            mid_price: "90.00000000",
+            price: "89.77500000",
+            spread_bps: 50,
+            fee_bps: 30,
+            quote_amount: "2244.37",
+            fee_amount: "6.74",
+            total_quote_amount: "2237.63",
+            rounding: "down",
+            price_observed_at: "2026-10-02T14:04:57.000Z",
+            issued_at: "2026-10-02T14:05:00.000Z",
+            expires_at: "2026-10-02T14:05:30.000Z",
+            ttl_seconds: 30,
+            status: "indicative",
+            execution: "not_supported",
             posting: "none"
           }
         ],
@@ -381,6 +415,23 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("wdr_"), false, label);
     assert.equal(text.includes("wdl_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "withdrawals_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
+  async function quotesFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/quotes", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("qte_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "quotes_unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
@@ -597,6 +648,47 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedWithdrawals = await getJson(app, "/bff/withdrawals", cookie);
     assert.equal(gatedWithdrawals.kyc, "kyc-gated");
     assert.equal(gatedWithdrawals.withdrawals.length, 0);
+    // The quotes list is KYC-gated the same way: only the verified session
+    // consults upstream, and the adapted view keeps the indicative
+    // not_supported entries read-only (posting stays "none").
+    const quotes = await getJson(app, "/bff/quotes", verifiedCookie);
+    assert.equal(quotes.mode, "test");
+    assert.equal(quotes.kyc, "verified");
+    assert.deepEqual(Object.keys(quotes).sort(), ["kyc", "mode", "quotes"]);
+    assert.equal(quotes.quotes.length, 1);
+    assert.deepEqual(Object.keys(quotes.quotes[0]).sort(), [
+      "base",
+      "baseAmount",
+      "execution",
+      "expiresAt",
+      "feeAmount",
+      "feeBps",
+      "id",
+      "issuedAt",
+      "midPrice",
+      "pair",
+      "posting",
+      "price",
+      "priceObservedAt",
+      "quote",
+      "quoteAmount",
+      "rounding",
+      "side",
+      "spreadBps",
+      "status",
+      "totalQuoteAmount",
+      "ttlSeconds"
+    ]);
+    assert.equal(quotes.quotes[0].id, "qte_0123456789abcdef01234567");
+    assert.equal(quotes.quotes[0].pair, "USDT/RUB");
+    assert.equal(quotes.quotes[0].side, "sell");
+    assert.equal(quotes.quotes[0].rounding, "down");
+    assert.equal(quotes.quotes[0].status, "indicative");
+    assert.equal(quotes.quotes[0].execution, "not_supported");
+    assert.equal(quotes.quotes[0].posting, "none");
+    const gatedQuotes = await getJson(app, "/bff/quotes", cookie);
+    assert.equal(gatedQuotes.kyc, "kyc-gated");
+    assert.equal(gatedQuotes.quotes.length, 0);
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -733,6 +825,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await walletFailsClosed(name);
       await depositsFailsClosed(name);
       await withdrawalsFailsClosed(name);
+      await quotesFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -749,6 +842,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await walletFailsClosed(name);
       await depositsFailsClosed(name);
       await withdrawalsFailsClosed(name);
+      await quotesFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -765,6 +859,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
     assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/withdrawals", verifiedCookie)).withdrawals[0].id, "wdr_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/quotes", verifiedCookie)).quotes[0].id, "qte_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");
