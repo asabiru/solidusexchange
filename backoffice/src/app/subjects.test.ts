@@ -58,7 +58,7 @@ describe("subject timeline wiring", () => {
   });
 
   it("aggregates every entity family into a frozen, newest-first feed", () => {
-    const timeline = demoRepository.subjectTimeline("sim-alina-mironova");
+    const timeline = demoRepository.subjectTimeline("sim-alina-mironova", new Set(timelineKinds));
     assert.ok(timeline);
     assert.equal(timeline.subject, "sim-alina-mironova");
     assert.ok(Object.isFrozen(timeline));
@@ -83,8 +83,8 @@ describe("subject timeline wiring", () => {
   });
 
   it("returns undefined for unmatched refs and stays silent about coverage", () => {
-    assert.equal(demoRepository.subjectTimeline("sim-ghost-404"), undefined);
-    assert.equal(demoRepository.subjectTimeline("cust_missing_01"), undefined);
+    assert.equal(demoRepository.subjectTimeline("sim-ghost-404", new Set(timelineKinds)), undefined);
+    assert.equal(demoRepository.subjectTimeline("cust_missing_01", new Set(timelineKinds)), undefined);
   });
 
   it("validates the subject ref shape before lookup", () => {

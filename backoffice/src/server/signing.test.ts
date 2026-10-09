@@ -19,6 +19,30 @@ describe("response signing", () => {
     assert.equal(signer.verify({ ...envelope, signatureVersion: 2 as 1 }), false);
   });
 
+  it("rejects envelopes with extra or missing top-level fields", () => {
+    const signer = new ResponseSigner();
+    const envelope = signer.envelope("dashboard", { value: 42 }, "request-1");
+    assert.equal(signer.verify({ ...envelope, isAdmin: true } as typeof envelope), false);
+    assert.equal(signer.verify({ ...envelope, bff: "x" } as typeof envelope), false);
+    const { requestId: _requestId, ...withoutRequestId } = envelope;
+    assert.equal(signer.verify(withoutRequestId as typeof envelope), false);
+    assert.equal(signer.verify({ ...envelope, keyVersion: 1.5 }), false);
+    assert.equal(signer.verify({ ...envelope, keyVersion: 0 }), false);
+  });
+
+  it("signs deterministically for identical canonical inputs", () => {
+    const provider = new EphemeralSigningKeyProvider();
+    const payload = { nested: { list: [1, "two", null], flag: true } };
+    const first = provider.sign("2026-10-09T12:00:00.000Z", "request-1", "resource", payload);
+    const second = provider.sign("2026-10-09T12:00:00.000Z", "request-1", "resource", payload);
+    assert.equal(first.signature, second.signature);
+    // Any input field change alters the signature.
+    const altered = provider.sign("2026-10-09T12:00:00.000Z", "request-2", "resource", payload);
+    assert.notEqual(altered.signature, first.signature);
+    const alteredResource = provider.sign("2026-10-09T12:00:00.000Z", "request-1", "other", payload);
+    assert.notEqual(alteredResource.signature, first.signature);
+  });
+
   it("retains bounded verification keys across rotation", () => {
     const provider = new EphemeralSigningKeyProvider(1);
     const signer = new ResponseSigner(provider);

@@ -49,12 +49,21 @@ export class AuditUnavailableError extends AuditStoreError {
   }
 }
 
+// Bounded in-memory chain: every audited view appends one event, so without a
+// cap the store (and the O(n) chain re-verification on each operation) would
+// grow without bound for the life of the server. Once full it fails closed —
+// appends throw and audited views answer 503 rather than grow silently.
 export class MemoryAuditStore implements AuditStore {
   readonly #retentionDays: number;
+  readonly #maxEvents: number;
   #events: readonly AuditEvent[];
 
-  constructor(source: readonly AuditSourceEvent[], retentionDays: number) {
+  constructor(source: readonly AuditSourceEvent[], retentionDays: number, maxEvents = 10_000) {
+    if (!Number.isSafeInteger(maxEvents) || maxEvents < source.length) {
+      throw new AuditUnavailableError("Audit capacity cannot hold the seed chain");
+    }
     this.#retentionDays = retentionDays;
+    this.#maxEvents = maxEvents;
     this.#events = buildAuditChain(source);
     this.#verifiedEvents();
   }
@@ -82,6 +91,9 @@ export class MemoryAuditStore implements AuditStore {
     }
     if (events.some((existing) => existing.eventId === event.eventId)) {
       throw new AuditIntegrityError("Audit event ID already exists");
+    }
+    if (events.length >= this.#maxEvents) {
+      throw new AuditUnavailableError("Audit capacity is exhausted");
     }
     const next = buildAuditEvent(
       events.length + 1,

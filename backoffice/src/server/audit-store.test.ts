@@ -1,8 +1,22 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { demoRepository } from "../data/demo.js";
-import { AuditIntegrityError, MemoryAuditStore } from "./audit-store.js";
+import {
+  AuditIntegrityError,
+  AuditUnavailableError,
+  MemoryAuditStore
+} from "./audit-store.js";
 import { verifyAuditChain } from "./controls.js";
+
+const syntheticEvent = (eventId: string) => ({
+  eventId,
+  occurredAt: "2026-09-29T10:30:00.000Z",
+  actor: "service:test",
+  action: "audit.tested",
+  resource: "audit-store:synthetic",
+  outcome: "recorded" as const,
+  evidenceDigest: "sha256:9c04304c88dd"
+});
 
 describe("audit store", () => {
   it("returns a verified synthetic snapshot with retention metadata", async () => {
@@ -45,6 +59,33 @@ describe("audit store", () => {
     await assert.rejects(
       store.append(existing, snapshot.status.headHash),
       AuditIntegrityError
+    );
+  });
+
+  it("bounds the in-memory chain instead of growing without limit", async () => {
+    const source = demoRepository.auditSource();
+    const store = new MemoryAuditStore(source, 30, source.length + 1);
+    const head = (await store.snapshot()).status.headHash;
+    const appended = await store.append(syntheticEvent("AUD-000157"), head);
+    await assert.rejects(
+      store.append(syntheticEvent("AUD-000158"), appended.hash),
+      AuditUnavailableError
+    );
+    // Reads still succeed at capacity; only appends fail closed.
+    const snapshot = await store.snapshot();
+    assert.equal(snapshot.status.length, source.length + 1);
+    assert.equal(verifyAuditChain(snapshot.events), true);
+  });
+
+  it("refuses a capacity that cannot hold the seed chain", () => {
+    const source = demoRepository.auditSource();
+    assert.throws(
+      () => new MemoryAuditStore(source, 30, source.length - 1),
+      AuditUnavailableError
+    );
+    assert.throws(
+      () => new MemoryAuditStore(source, 30, 0),
+      AuditUnavailableError
     );
   });
 });

@@ -1,4 +1,5 @@
-import type { AuditSourceEvent, SubjectTimeline } from "../data/demo.js";
+import { can, type Capability } from "../auth/access.js";
+import type { AuditSourceEvent, SubjectTimeline, SubjectTimelineKind } from "../data/demo.js";
 import { sha256 } from "./controls.js";
 
 // Cross-entity subject timeline lookup, read-only over synthetic data.
@@ -10,6 +11,28 @@ export const subjectRefPattern = /^[a-z0-9_-]{4,64}$/i;
 
 export function isSubjectRef(value: string): boolean {
   return subjectRefPattern.test(value);
+}
+
+// The timeline aggregates across every domain, so each entry kind is gated by
+// the same capability that guards the domain's own read route. A role sees a
+// kind only when it could read that collection directly.
+export const subjectTimelineKindCapability: Readonly<Record<SubjectTimelineKind, Capability>> = Object.freeze({
+  check: "checks:read",
+  support: "support:read",
+  withdrawal: "custody:read",
+  kyc: "kyc:read",
+  aml: "aml:read",
+  investigation: "investigations:read",
+  "fraud-alert": "fraud:read",
+  audit: "audit:read"
+});
+
+export function readableSubjectKinds(role: string): ReadonlySet<SubjectTimelineKind> {
+  const kinds = new Set<SubjectTimelineKind>();
+  for (const kind of Object.keys(subjectTimelineKindCapability) as SubjectTimelineKind[]) {
+    if (can(role, subjectTimelineKindCapability[kind])) kinds.add(kind);
+  }
+  return kinds;
 }
 
 export function subjectTimelineAccessEvent(

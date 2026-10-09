@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import type { Server } from "node:http";
+import { demoRepository } from "../data/demo.js";
+import { MemoryAuditStore } from "./audit-store.js";
 import { sha256 } from "./controls.js";
 import { createBackofficeServer } from "./server.js";
 
@@ -86,7 +88,13 @@ describe("subject timeline BFF", () => {
   });
 
   it("serves a signed read-only timeline to authorized roles", async () => {
-    for (const role of ["compliance-lead", "support-l1", "aml-investigator", "auditor"]) {
+    const expectedKinds: Record<string, readonly string[]> = {
+      "compliance-lead": ["check", "support", "withdrawal", "kyc", "aml", "investigation", "fraud-alert", "audit"],
+      "support-l1": ["check", "support"],
+      "aml-investigator": ["check", "support", "withdrawal", "kyc", "aml", "investigation", "fraud-alert"],
+      auditor: ["check", "support", "withdrawal", "kyc", "aml", "investigation", "fraud-alert", "audit"]
+    };
+    for (const [role, wanted] of Object.entries(expectedKinds)) {
       const cookie = await devSession(role);
       const response = await fetch(`${baseUrl}/bff/api/subjects/${subjectRef}/timeline`, {
         headers: { cookie }
@@ -109,10 +117,73 @@ describe("subject timeline BFF", () => {
         assert.ok(!Number.isNaN(Date.parse(entry.at)), entry.at);
       }
       const kinds = new Set(envelope.payload.entries.map((entry) => entry.kind));
-      for (const expected of ["check", "support", "withdrawal", "kyc", "aml", "investigation", "fraud-alert", "audit"]) {
-        assert.ok(kinds.has(expected), `${role}: missing ${expected}`);
-      }
+      assert.deepEqual([...kinds].sort(), [...wanted].sort(), `${role} saw wrong kind set`);
       assert.equal(response.headers.get("cache-control"), "no-store");
+    }
+  });
+
+  it("hides entries from domains the role cannot read", async () => {
+    // support-l1 holds only checks:read and support:read; the aggregation must
+    // not leak custody, KYC/AML, investigation, fraud or audit aggregates.
+    const cookie = await devSession("support-l1");
+    const response = await fetch(`${baseUrl}/bff/api/subjects/${subjectRef}/timeline`, {
+      headers: { cookie }
+    });
+    assert.equal(response.status, 200);
+    const entries = (await response.json() as {
+      payload: { entries: readonly { kind: string; ref: string; summary: string }[] };
+    }).payload.entries;
+    assert.ok(entries.length > 0);
+    const kinds = new Set(entries.map((entry) => entry.kind));
+    for (const denied of ["withdrawal", "kyc", "aml", "investigation", "fraud-alert", "audit"]) {
+      assert.ok(!kinds.has(denied), `support-l1 leaked ${denied} entries`);
+    }
+    for (const denied of ["WDR-991804", "KYC-220184", "AML-78041", "INV-43018", "FRD-61084", "AUD-000152"]) {
+      assert.ok(!entries.some((entry) => entry.ref === denied), `support-l1 leaked ${denied}`);
+    }
+  });
+
+  it("refuses refs that name entities, ledger rows or operator handles", async () => {
+    const cookie = await devSession("compliance-lead");
+    for (const ref of [
+      "AML-78031",
+      "KYC-220184",
+      "INV-43018",
+      "FRD-61084",
+      "WDR-991804",
+      "WDL-991804",
+      "LED-221840",
+      "aml-08",
+      "fraud-04",
+      "finance-03",
+      "support-l1-12",
+      "payments-orchestration",
+      "compliance-workflow",
+      "fraud-monitor"
+    ]) {
+      const response = await fetch(`${baseUrl}/bff/api/subjects/${ref}/timeline`, {
+        headers: { cookie }
+      });
+      assert.equal(response.status, 404, ref);
+      assert.deepEqual(await response.json(), { error: "subject_not_found" });
+    }
+  });
+
+  it("joins audit entries only through the subject's own resolved refs", async () => {
+    const cookie = await devSession("compliance-lead");
+    const response = await fetch(`${baseUrl}/bff/api/subjects/${subjectRef}/timeline`, {
+      headers: { cookie }
+    });
+    assert.equal(response.status, 200);
+    const entries = (await response.json() as {
+      payload: { entries: readonly { kind: string; ref: string }[] };
+    }).payload.entries;
+    const auditRefs = new Set(entries.filter((entry) => entry.kind === "audit").map((entry) => entry.ref));
+    for (const expected of ["AUD-000148", "AUD-000149", "AUD-000152", "AUD-000154", "AUD-000155"]) {
+      assert.ok(auditRefs.has(expected), `missing ${expected}`);
+    }
+    for (const denied of ["AUD-000150", "AUD-000151", "AUD-000153"]) {
+      assert.ok(!auditRefs.has(denied), `leaked ${denied}`);
     }
   });
 
@@ -259,6 +330,46 @@ describe("subject timeline BFF", () => {
     });
     assert.equal(response.status, 403);
     assert.deepEqual(await response.json(), { error: "fetch_site_rejected" });
+  });
+
+  it("fails closed with 503 when the audit store cannot commit the view event", async () => {
+    const source = demoRepository.auditSource();
+    const boundedServer = createBackofficeServer(
+      {
+        host: "127.0.0.1",
+        port: 0,
+        allowedOrigins: [origin],
+        allowDevLogin: true,
+        sessionTtlSeconds: 900,
+        audit: { storage: "memory", retentionDays: 30 },
+        stepUp: { provider: "synthetic-dev", challengeTtlSeconds: 300, grantTtlSeconds: 60, maxAttempts: 3 },
+        signing: { backend: "ephemeral-dev", rotationSeconds: 900, retainedVerificationKeys: 2 }
+      },
+      new MemoryAuditStore(source, 30, source.length)
+    );
+    await new Promise<void>((resolve) => boundedServer.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = boundedServer.address();
+      if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+      const boundedBase = `http://127.0.0.1:${address.port}`;
+      const sessionResponse = await fetch(`${boundedBase}/bff/auth/dev-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ role: "compliance-lead" })
+      });
+      assert.equal(sessionResponse.status, 200);
+      const cookie = sessionResponse.headers.get("set-cookie")?.split(";")[0];
+      const response = await fetch(`${boundedBase}/bff/api/subjects/${subjectRef}/timeline`, {
+        headers: { cookie: cookie ?? "" }
+      });
+      // The view must not be served when its audit event cannot be committed.
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "audit_integrity_unavailable" });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        boundedServer.close((error) => error ? reject(error) : resolve());
+      });
+    }
   });
 
   it("accepts no mutation verbs on the timeline route", async () => {
