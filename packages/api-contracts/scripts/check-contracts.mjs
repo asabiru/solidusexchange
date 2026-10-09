@@ -350,6 +350,58 @@ const pinnedResponseSchemas = {
       expires_at: { type: "string", format: "date-time" }
     }
   },
+  DepositsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "deposits"],
+    properties: {
+      mode: { const: "test" },
+      deposits: {
+        type: "array",
+        items: { $ref: "#/components/schemas/DepositView" }
+      }
+    }
+  },
+  DepositView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "deposit_id",
+      "asset",
+      "method",
+      "status",
+      "expected_amount",
+      "received_total",
+      "reversed_total",
+      "payment_reference",
+      "created_at",
+      "updated_at",
+      "posting"
+    ],
+    properties: {
+      deposit_id: { type: "string", pattern: "^dep_[0-9a-f]{24}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      method: { const: "sbp" },
+      status: {
+        type: "string",
+        enum: [
+          "awaiting_payment",
+          "payment_received",
+          "partial_payment",
+          "duplicate_payment",
+          "payment_reversed",
+          "expired_no_payment"
+        ]
+      },
+      expected_amount: { $ref: "#/$defs/decimalAmount" },
+      received_total: { $ref: "#/$defs/decimalAmount" },
+      reversed_total: { $ref: "#/$defs/decimalAmount" },
+      payment_reference: { type: "string", pattern: "^SIMSBP[0-9A-F]{12}$" },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -566,7 +618,6 @@ function checkOpenApi() {
     [
       "/api/v1/customer/auth",
       "/api/v1/customer/cards",
-      "/api/v1/customer/deposits",
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
       "/api/v1/customer/quotes",
@@ -602,6 +653,7 @@ function checkOpenApi() {
     ["getCustomerKyc", "/api/v1/customer/kyc"],
     ["getCustomerProfile", "/api/v1/customer/profile"],
     ["getCustomerSupport", "/api/v1/customer/support"],
+    ["getCustomerDeposits", "/api/v1/customer/deposits"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -628,6 +680,7 @@ function checkOpenApi() {
     ["getCustomerKyc", "#/components/schemas/KycStatusView"],
     ["getCustomerProfile", "#/components/schemas/ProfileView"],
     ["getCustomerSupport", "#/components/schemas/SupportTicketsView"],
+    ["getCustomerDeposits", "#/components/schemas/DepositsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

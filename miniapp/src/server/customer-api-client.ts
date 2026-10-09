@@ -4,6 +4,7 @@ import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-
 import type { CustomerApiAccess, KycVerificationState, NotificationTemplate } from "../shared/api.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { isDecimalString } from "../shared/decimal.js";
+import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
@@ -97,6 +98,40 @@ export type CustomerApiProfile =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiTicketTimelineEntry {
+  status: SupportStatus;
+  at: string;
+}
+
+export interface CustomerApiTicketView {
+  ticket_id: string;
+  category: SupportCategory;
+  topic: string;
+  message: string;
+  status: SupportStatus;
+  timeline: readonly CustomerApiTicketTimelineEntry[];
+  complaint_acknowledged: boolean;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface CustomerApiSupportTicketsView {
+  mode: "test";
+  delivery: "disabled";
+  tickets: readonly CustomerApiTicketView[];
+}
+
+/**
+ * The support tickets read has no "denied" arm either: customer.support.read
+ * is granted at every session KYC status upstream (like customer.kyc.read and
+ * customer.profile.read), so a 403 can only mean contract drift — it maps to
+ * "unavailable" with every other non-200 outcome.
+ */
+export type CustomerApiSupport =
+  | { status: "ok"; view: CustomerApiSupportTicketsView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
@@ -104,6 +139,7 @@ export interface CustomerApiClient {
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
+  support(bffSubject: string, nowMs: number): Promise<CustomerApiSupport>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -287,6 +323,22 @@ function isCodeList(value: unknown, allowed: readonly string[]): boolean {
   );
 }
 
+const supportTicketIdPattern = /^tck_[0-9a-f]{24}$/;
+const supportTicketKeys = [
+  "ticket_id",
+  "category",
+  "topic",
+  "message",
+  "status",
+  "timeline",
+  "complaint_acknowledged",
+  "created_at",
+  "expires_at"
+] as const;
+const supportTimelineKeys = ["at", "status"] as const;
+const supportTopicMaxLength = 120;
+const supportMessageMaxLength = 1_000;
+
 const profileLocales: readonly CustomerApiProfileView["locale"][] = ["en", "ky", "ru"];
 const profileCustomerRefPattern = /^SC-DEV-[0-9A-Z]{5}$/;
 const profileDisplayNamePattern = /^Customer [0-9a-f]{8}$/;
@@ -313,6 +365,67 @@ function parseProfileView(value: unknown): CustomerApiProfileView | undefined {
     locale: value.locale as CustomerApiProfileView["locale"],
     registered_at: value.registered_at
   });
+}
+
+function parseSupportView(value: unknown): CustomerApiSupportTicketsView | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["delivery", "mode", "tickets"])
+    || value.mode !== "test"
+    || value.delivery !== "disabled"
+    || !Array.isArray(value.tickets)
+  ) {
+    return undefined;
+  }
+  const tickets: CustomerApiTicketView[] = [];
+  for (const entry of value.tickets) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, supportTicketKeys)
+      || typeof entry.ticket_id !== "string"
+      || !supportTicketIdPattern.test(entry.ticket_id)
+      || !isSupportCategory(entry.category)
+      || typeof entry.topic !== "string"
+      || [...entry.topic].length < 1
+      || [...entry.topic].length > supportTopicMaxLength
+      || typeof entry.message !== "string"
+      || [...entry.message].length < 1
+      || [...entry.message].length > supportMessageMaxLength
+      || !isSupportStatus(entry.status)
+      || !Array.isArray(entry.timeline)
+      || entry.timeline.length < 1
+      || typeof entry.complaint_acknowledged !== "boolean"
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.expires_at)
+    ) {
+      return undefined;
+    }
+    const timeline: CustomerApiTicketTimelineEntry[] = [];
+    for (const step of entry.timeline) {
+      if (
+        !isRecord(step)
+        || !hasExactKeys(step, supportTimelineKeys)
+        || !isSupportStatus(step.status)
+        || !isIsoTimestamp(step.at)
+      ) {
+        return undefined;
+      }
+      timeline.push(Object.freeze({ status: step.status, at: step.at }));
+    }
+    if (timeline.at(-1)?.status !== entry.status) return undefined;
+    tickets.push(Object.freeze({
+      ticket_id: entry.ticket_id,
+      category: entry.category,
+      topic: entry.topic,
+      message: entry.message,
+      status: entry.status,
+      timeline: Object.freeze(timeline),
+      complaint_acknowledged: entry.complaint_acknowledged,
+      created_at: entry.created_at,
+      expires_at: entry.expires_at
+    }));
+  }
+  return Object.freeze({ mode: "test", delivery: "disabled", tickets: Object.freeze(tickets) });
 }
 
 function parseKycStatusView(value: unknown): CustomerApiKycStatusView | undefined {
@@ -372,12 +485,12 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets, notifications, kyc and profile
- * GETs, never sends X-Device-Id and fails closed to "unavailable" on any
- * unexpected response, including a non-JSON content type or a body above
+ * customer session, capabilities, wallets, notifications, kyc, profile and
+ * support GETs, never sends X-Device-Id and fails closed to "unavailable" on
+ * any unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
- * capability gate) surfaces as "denied"; the KYC status and profile reads
- * are never gated upstream, so they report every non-200 outcome as
+ * capability gate) surfaces as "denied"; the KYC status, profile and support
+ * reads are never gated upstream, so they report every non-200 outcome as
  * "unavailable".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
@@ -390,7 +503,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
-      profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" })
+      profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
+      support: async (): Promise<CustomerApiSupport> => ({ status: "not-configured" })
     });
   }
 
@@ -527,5 +641,24 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, notifications, kyc, profile });
+  async function support(bffSubject: string, nowMs: number): Promise<CustomerApiSupport> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/support", token, nowMs);
+      const view = parseSupportView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      // No 403 carve-out, like kyc() and profile(): the read is granted at
+      // every upstream session status, so a refusal is contract drift, not a
+      // real denial.
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets, notifications, kyc, profile, support });
 }

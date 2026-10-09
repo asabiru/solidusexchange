@@ -43,7 +43,7 @@ const rssGrowthBudgetBytes = 256 * 1024 * 1024;
 const customerApiRateLimit = 40;
 const maxSessionsPerSubject = 5;
 const documentedStatuses = new Set([200, 201, 202, 429, 503]);
-const documented503 = new Set(["audit_integrity_unavailable", "kyc_unavailable", "profile_unavailable", "quote_unavailable", "screening_unavailable"]);
+const documented503 = new Set(["audit_integrity_unavailable", "kyc_unavailable", "profile_unavailable", "quote_unavailable", "screening_unavailable", "support_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 let startedAt;
@@ -273,7 +273,7 @@ describe("bounded load on the dev stack", () => {
     const total = 540;
     const burst = Array.from({ length: total }, (_, index) => {
       const cookie = cookies[index % cookies.length];
-      switch (index % 9) {
+      switch (index % 10) {
         case 0:
           return outcome("kyc-status", request(miniappBase, "/bff/kyc/status", { cookie }));
         case 1:
@@ -300,6 +300,8 @@ describe("bounded load on the dev stack", () => {
             "activity",
             request(miniappBase, index % 2 === 0 ? "/bff/activity" : "/bff/activity?limit=10", { cookie: devCookie })
           );
+        case 8:
+          return outcome("support", request(miniappBase, "/bff/support/requests", { cookie }));
         default:
           return outcome("verified-quote", request(miniappBase, "/bff/quotes/preview?from=USDT&to=RUB&amount=25", { cookie: devCookie }));
       }
@@ -313,27 +315,37 @@ describe("bounded load on the dev stack", () => {
     // calls saturate the customer-api rate limit and some reads degrade to
     // the documented 503 kyc_unavailable instead of 200.
     const kycStatuses = countBy(results, "kyc-status");
-    assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 9);
+    assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 10);
     assert.ok((kycStatuses[503] ?? 0) > 0, "customer-api rate limit applies to kyc status");
     for (const result of results.filter((entry) => entry.kind === "kyc-status" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "kyc_unavailable" });
     }
-    assert.deepEqual(countBy(results, "quote"), { 200: total / 9 });
-    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 9 });
-    assert.deepEqual(countBy(results, "notifications"), { 200: total / 9 });
+    assert.deepEqual(countBy(results, "quote"), { 200: total / 10 });
+    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 10 });
+    assert.deepEqual(countBy(results, "notifications"), { 200: total / 10 });
     // /bff/profile consults upstream for gated sessions too
     // (customer.profile.read is never denied), so under the saturated
     // customer-api rate limit some reads degrade to the documented 503
     // profile_unavailable instead of 200.
     const profiles = countBy(results, "profile");
-    assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 9);
+    assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 10);
     assert.ok((profiles[503] ?? 0) > 0, "customer-api rate limit applies to profile");
     for (const result of results.filter((entry) => entry.kind === "profile" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "profile_unavailable" });
     }
-    assert.deepEqual(countBy(results, "activity"), { 200: total / 9 });
+    // /bff/support/requests consults upstream for gated sessions too
+    // (customer.support.read is never denied), so under the saturated
+    // customer-api rate limit some reads degrade to the documented 503
+    // support_unavailable instead of 200.
+    const supports = countBy(results, "support");
+    assert.equal((supports[200] ?? 0) + (supports[503] ?? 0), total / 10);
+    assert.ok((supports[503] ?? 0) > 0, "customer-api rate limit applies to support");
+    for (const result of results.filter((entry) => entry.kind === "support" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "support_unavailable" });
+    }
+    assert.deepEqual(countBy(results, "activity"), { 200: total / 10 });
     const submits = countBy(results, "kyc-submit");
-    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 9);
+    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 10);
 
     for (const result of results) {
       if (result.kind === "quote") assert.equal(result.body.kycRequired, true);
@@ -346,11 +358,18 @@ describe("bounded load on the dev stack", () => {
       if (result.kind === "profile" && result.status === 200) {
         assert.ok(["connected", "unavailable"].includes(result.body.apiAccess.status));
       }
+      if (result.kind === "support" && result.status === 200) {
+        assert.equal(result.body.mode, "test");
+        assert.equal(result.body.delivery, "disabled");
+        for (const request of result.body.requests) {
+          assert.match(request.id, /^tck_[0-9a-f]{24}$/);
+        }
+      }
     }
 
     assert.deepEqual(countBy(results, "screening"), {
       202: maxNewScreeningsPerWindow,
-      429: total / 9 - maxNewScreeningsPerWindow
+      429: total / 10 - maxNewScreeningsPerWindow
     });
     assert.equal(addressScreening.size(devSubject), maxScreeningsPerSubject);
     assert.equal(activity.size(devSubject), maxActivityPerSubject);
@@ -358,7 +377,7 @@ describe("bounded load on the dev stack", () => {
 
     const reports = countBy(results, "report");
     assert.ok((reports[200] ?? 0) >= 1, JSON.stringify(reports));
-    assert.equal((reports[200] ?? 0) + (reports[503] ?? 0), total / 9);
+    assert.equal((reports[200] ?? 0) + (reports[503] ?? 0), total / 10);
     assert.equal((await auditStore.snapshot()).status.length - auditBefore, reports[200] ?? 0);
     assert.ok(outbox.size() <= defaultMaxTotal);
   });
