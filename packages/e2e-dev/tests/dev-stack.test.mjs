@@ -580,12 +580,18 @@ describe("operator journey through the backoffice BFF", () => {
   });
 
   it("exposes no POST money routes to operators", async () => {
+    // Money routes that gained a read-only GET view keep rejecting POST, now
+    // with the standard 405 Allow: GET of every registered read route.
+    const readOnlyMoneyPaths = new Set(["/bff/api/withdrawals"]);
     for (const path of moneyRoutes.map((route) => route.replace("/bff/", "/bff/api/"))) {
       const response = await postBackoffice(path, {}, lead);
-      // /bff/api/withdrawals is a real GET-only route; the rest are fabricated.
-      const expected = path === "/bff/api/withdrawals" ? [405, "method_not_allowed"] : [404, "not_found"];
-      assert.equal(response.status, expected[0], path);
-      assert.deepEqual(await readJson(response), { error: expected[1] });
+      if (readOnlyMoneyPaths.has(path)) {
+        assert.equal(response.status, 405, path);
+        assert.equal(response.headers.get("allow"), "GET", path);
+      } else {
+        assert.equal(response.status, 404, path);
+        assert.deepEqual(await readJson(response), { error: "not_found" });
+      }
     }
     const reportPost = await postBackoffice("/bff/api/reports", {}, lead);
     assert.equal(reportPost.status, 405);

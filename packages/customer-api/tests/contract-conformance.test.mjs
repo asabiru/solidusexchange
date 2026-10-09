@@ -17,12 +17,14 @@ import {
   startTestServer,
   stopServer,
   token,
-  validator
+  validator,
+  verifiedCustomerHeaders
 } from "./http-client.mjs";
 
 const META = "/api/v1/meta";
 const SESSION = "/api/v1/customer/session";
 const CAPABILITIES = "/api/v1/customer/capabilities";
+const WALLETS = "/api/v1/customer/wallets";
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -142,7 +144,9 @@ test("GET /api/v1/customer/capabilities grants only read capabilities, even afte
       });
       assert.equal(response.status, 200);
       assert.deepEqual(JSON.parse(response.body), {
-        capabilities: ["customer.session.read", "customer.capabilities.read"],
+        capabilities: subject === "syn_cust_verified01"
+          ? ["customer.session.read", "customer.capabilities.read", "customer.wallets.read"]
+          : ["customer.session.read", "customer.capabilities.read"],
         commands_enabled: false
       });
     }
@@ -160,7 +164,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -173,11 +177,11 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS]) {
       now += 61_000;
-      assert.equal((await observe(port, { path, headers: customerHeaders() })).status, 200);
+      assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
-      const limited = await observe(port, { path, headers: customerHeaders() });
+      const limited = await observe(port, { path, headers: verifiedCustomerHeaders() });
       assert.equal(limited.status, 429);
       assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
       assert.equal(header(limited, "retry-after"), "60");
@@ -218,6 +222,12 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
   await withServer({ rateLimiter: { consume() { throw new Error("limiter broken"); } } }, async (port) => {
     assert.equal((await observe(port, { path: SESSION, headers: customerHeaders() })).status, 500);
   });
+  await withServer({ walletDirectory: { async listFor() { throw new Error("wallet store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: WALLETS, headers: verifiedCustomerHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
 });
 
 test("metadata drift fails closed with a 500 envelope", async () => {
@@ -235,6 +245,18 @@ test("metadata drift fails closed with a 500 envelope", async () => {
       assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     });
   }
+});
+
+test("GET /api/v1/customer/wallets serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: WALLETS, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: WALLETS, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
 });
 
 test("a principal for a non-customer actor is never accepted as a customer", async () => {

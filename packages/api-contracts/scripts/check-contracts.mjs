@@ -142,6 +142,28 @@ const pinnedResponseSchemas = {
       commands_enabled: { const: false }
     }
   },
+  WalletsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["wallets"],
+    properties: {
+      wallets: {
+        type: "array",
+        items: { $ref: "#/components/schemas/WalletView" }
+      }
+    }
+  },
+  WalletView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["wallet_id", "asset", "available", "hold"],
+    properties: {
+      wallet_id: { type: "string", pattern: "^syn_wal_[a-z0-9]{8,32}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      available: { $ref: "#/$defs/decimalAmount" },
+      hold: { $ref: "#/$defs/decimalAmount" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -318,7 +340,6 @@ function checkOpenApi() {
       "/api/v1/customer/quotes",
       "/api/v1/customer/support",
       "/api/v1/customer/users",
-      "/api/v1/customer/wallets",
       "/api/v1/customer/withdrawals"
     ],
     "Planned customer namespaces"
@@ -345,6 +366,7 @@ function checkOpenApi() {
     ["getApiMetadata", "/api/v1/meta"],
     ["getCustomerSession", "/api/v1/customer/session"],
     ["getCustomerCapabilities", "/api/v1/customer/capabilities"],
+    ["getCustomerWallets", "/api/v1/customer/wallets"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -366,6 +388,7 @@ function checkOpenApi() {
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
     ["getCustomerSession", "#/components/schemas/SessionView"],
     ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
+    ["getCustomerWallets", "#/components/schemas/WalletsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
