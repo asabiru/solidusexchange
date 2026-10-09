@@ -100,6 +100,9 @@ export function createSyntheticTokenVerifier({
   maxTtlSeconds = SYNTHETIC_TOKEN_MAX_TTL_SECONDS
 }) {
   assertKey(key);
+  if (!Number.isSafeInteger(maxTtlSeconds) || maxTtlSeconds < 1) {
+    throw new Error("Synthetic token TTL bound must be a positive integer");
+  }
   return Object.freeze({
     kind: "synthetic-dev",
     async verify(token) {
@@ -117,6 +120,11 @@ export function createSyntheticTokenVerifier({
       }
       const expiresAtSeconds = Number(expiresText);
       const nowSeconds = Math.floor(clock() / 1000);
+      // A non-finite clock (NaN, a string, undefined) makes every comparison
+      // false and would silently skip the expiry and TTL checks.
+      if (!Number.isFinite(nowSeconds)) {
+        return null;
+      }
       if (
         expiresAtSeconds <= nowSeconds ||
         expiresAtSeconds - nowSeconds > maxTtlSeconds

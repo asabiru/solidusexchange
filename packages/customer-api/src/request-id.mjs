@@ -13,7 +13,10 @@ export function isUuidV7(value) {
 
 export function generateUuidV7(nowMs = Date.now()) {
   const bytes = randomBytes(16);
-  let timestamp = BigInt(nowMs);
+  // BigInt() throws on non-integer or non-finite input (for example a caller
+  // passing performance.now), and callers invoke this outside the request
+  // pipeline's error boundary, so the id stays generatable for any clock drift.
+  let timestamp = BigInt(Number.isFinite(nowMs) ? Math.trunc(nowMs) : 0);
   for (let index = 5; index >= 0; index -= 1) {
     bytes[index] = Number(timestamp & 0xffn);
     timestamp >>= 8n;

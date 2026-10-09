@@ -14,6 +14,12 @@ export function createFixedWindowRateLimiter({
   if (!Number.isSafeInteger(limit) || limit < 1) {
     throw new Error("Rate limit must be a positive integer");
   }
+  if (!Number.isSafeInteger(windowMs) || windowMs < 1) {
+    throw new Error("Rate-limit window must be a positive integer");
+  }
+  if (!Number.isSafeInteger(maxKeys) || maxKeys < 1) {
+    throw new Error("Rate-limit key bound must be a positive integer");
+  }
   /** @type {Map<string, { count: number, resetAt: number }>} */
   const buckets = new Map();
 
@@ -29,6 +35,11 @@ export function createFixedWindowRateLimiter({
   return Object.freeze({
     consume(key) {
       const now = clock();
+      // A non-finite clock would leave a bucket with a NaN resetAt that never
+      // expires and answers retry-after: NaN; deny the request instead.
+      if (!Number.isFinite(now)) {
+        return { allowed: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
+      }
       let bucket = buckets.get(key);
       if (!bucket || now >= bucket.resetAt) {
         if (!bucket && buckets.size >= maxKeys) {
