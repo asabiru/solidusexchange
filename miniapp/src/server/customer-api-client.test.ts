@@ -251,6 +251,103 @@ describe("customer API client", () => {
     }
   });
 
+  it("reads wallets with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const wallets = [
+      { wallet_id: "syn_wal_rub00001", asset: "RUB", available: "84200.00", hold: "0.00" },
+      { wallet_id: "syn_wal_usdt0001", asset: "USDT", available: "482.180000", hold: "25.000000" },
+      { wallet_id: "syn_wal_ton00001", asset: "TON", available: "18.250000000", hold: "1.500000000" }
+    ];
+    await withFakeApi(
+      () => ({ wallets }),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.wallets("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result.wallets, wallets);
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream wallets refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const wallets = JSON.stringify({ wallets: [] });
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER", wallets }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.wallets("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed wallets bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = { wallet_id: "syn_wal_rub00001", asset: "RUB", available: "84200.00", hold: "0.00" };
+    for (const body of [
+      { wallets: "oops" },
+      { wallets: [{ ...entry, extra: true }] },
+      { wallets: [{ ...entry, wallet_id: 42 }] },
+      { wallets: [{ ...entry, asset: "BTC" }] },
+      { wallets: [{ ...entry, asset: "TON", available: "1.0000000000" }] },
+      { wallets: [{ ...entry, hold: "-1.00" }] },
+      { wallets: [{ ...entry, available: "abc" }] },
+      { wallets: [{ wallet_id: entry.wallet_id, asset: entry.asset, available: entry.available }] },
+      { wallets: [], extra: true },
+      ["wallets"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.wallets("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.wallets("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.wallets.read is refused with 403.
+      assert.deepEqual(await client.wallets("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.wallets("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

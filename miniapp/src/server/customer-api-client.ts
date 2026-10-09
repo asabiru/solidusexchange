@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import type { CustomerApiAccess } from "../shared/api.js";
+import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
+import { isDecimalString } from "../shared/decimal.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
 export const customerApiPlatform = "telegram-mini-app";
@@ -15,9 +17,23 @@ export interface CustomerApiClientOptions {
   timeoutMs?: number;
 }
 
+export interface CustomerApiWallet {
+  wallet_id: string;
+  asset: AssetCode;
+  available: string;
+  hold: string;
+}
+
+export type CustomerApiWallets =
+  | { status: "ok"; wallets: readonly CustomerApiWallet[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
+  wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -64,11 +80,48 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
 }
 
+function parseWalletsView(value: unknown): readonly CustomerApiWallet[] | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, ["wallets"]) || !Array.isArray(value.wallets)) {
+    return undefined;
+  }
+  const wallets: CustomerApiWallet[] = [];
+  for (const entry of value.wallets) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, ["wallet_id", "asset", "available", "hold"])
+      || typeof entry.wallet_id !== "string"
+      || typeof entry.asset !== "string"
+      || !isAssetCode(entry.asset)
+      || typeof entry.available !== "string"
+      || typeof entry.hold !== "string"
+      || !isDecimalString(entry.available, assets[entry.asset].scale)
+      || !isDecimalString(entry.hold, assets[entry.asset].scale)
+    ) {
+      return undefined;
+    }
+    wallets.push(Object.freeze({
+      wallet_id: entry.wallet_id,
+      asset: entry.asset,
+      available: entry.available,
+      hold: entry.hold
+    }));
+  }
+  return Object.freeze(wallets);
+}
+
+class CustomerApiHttpError extends Error {
+  constructor(readonly status: number) {
+    super("customer-api request failed");
+    this.name = "CustomerApiHttpError";
+  }
+}
+
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session and capabilities GETs, never sends X-Device-Id and fails
- * closed to "unavailable" on any unexpected response, including a non-JSON
- * content type or a body above maxCustomerApiResponseBytes.
+ * customer session, capabilities and wallets GETs, never sends X-Device-Id and
+ * fails closed to "unavailable" on any unexpected response, including a non-JSON
+ * content type or a body above maxCustomerApiResponseBytes. An upstream refusal
+ * of the wallets read (403 capability gate) surfaces as "denied".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -76,7 +129,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
   if (!baseUrl || !devTokenKey) {
     return Object.freeze({
       configured: false,
-      access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" })
+      access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
+      wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" })
     });
   }
 
@@ -95,7 +149,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     });
     if (response.status !== 200) {
       await response.body?.cancel();
-      throw new Error("customer-api request failed");
+      throw new CustomerApiHttpError(response.status);
     }
     return readBoundedJson(response);
   }
@@ -137,5 +191,24 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access });
+  async function wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/wallets", token, nowMs);
+      const view = parseWalletsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", wallets: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets });
 }

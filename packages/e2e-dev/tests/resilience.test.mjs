@@ -106,15 +106,26 @@ describe("Mini App BFF with a failing customer-api", () => {
   let stub;
   let app;
   let cookie;
+  let verifiedCookie;
 
   function subjectOf(request) {
     return (request.headers.authorization ?? "").split(".")[1] ?? "";
   }
 
   function validBody(request, extra = {}) {
-    return request.url.endsWith("/session")
-      ? { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z", ...extra }
-      : { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
+    if (request.url.endsWith("/session")) {
+      return { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z", ...extra };
+    }
+    if (request.url.endsWith("/wallets")) {
+      return {
+        wallets: [
+          { wallet_id: "syn_wal_rub00001", asset: "RUB", available: "84200.00", hold: "0.00" },
+          { wallet_id: "syn_wal_usdt0001", asset: "USDT", available: "10.000000", hold: "0.000000" }
+        ],
+        ...extra
+      };
+    }
+    return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
   }
 
   function send(response, status, contentType, text) {
@@ -149,6 +160,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       send(response, 200, "application/json", JSON.stringify({ ...validBody(request), subject: "syn_cust_00000000" })),
     commands_enabled: (request, response) =>
       send(response, 200, "application/json", JSON.stringify({ ...validBody(request), commands_enabled: true })),
+    capability_denied: (_, response) =>
+      send(response, 403, "application/json", JSON.stringify({ code: "CAPABILITY_DENIED", detail: marker })),
     connection_reset: (request) => request.socket.destroy(),
     slow_headers: (request, response) => {
       const timer = setTimeout(() => modes.valid(request, response), 3_000);
@@ -159,7 +172,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       response.write(`{"subject":"${marker}"`);
     },
     invalid_utf8: (request, response) =>
-      send(response, 200, "application/json", Buffer.from(JSON.stringify(validBody(request)).replace("2026", "\u00ff026"), "latin1"))
+      send(response, 200, "application/json", Buffer.concat([Buffer.from([0xff]), Buffer.from(JSON.stringify(validBody(request)), "latin1")]))
   };
 
   async function upstreamReleased(label) {
@@ -168,6 +181,22 @@ describe("Mini App BFF with a failing customer-api", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
     assert.equal(last.closed, true, `${label}: upstream response still open`);
+  }
+
+  async function walletFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/wallet", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "wallet_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
   }
 
   async function profileFailsClosed(label) {
@@ -199,6 +228,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     const stubBase = await listen(stub);
     app = await startMiniapp({ MINIAPP_CUSTOMER_API_URL: stubBase, MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key });
     cookie = await devLogin(app, "kyc-gated");
+    verifiedCookie = await devLogin(app, "verified");
   });
 
   after(async () => {
@@ -215,6 +245,32 @@ describe("Mini App BFF with a failing customer-api", () => {
       granted: ["customer.session.read"],
       commandsEnabled: false
     });
+    const wallet = await getJson(app, "/bff/wallet", verifiedCookie);
+    assert.equal(wallet.kyc, "verified");
+    assert.deepEqual(wallet.assets, [
+      { code: "RUB", available: "84200.00", hold: "0.00", valueRub: "84200.00" },
+      { code: "USDT", available: "10.000000", hold: "0.000000", valueRub: "924.00" }
+    ]);
+    assert.equal(wallet.availableRub, "85124.00");
+    assert.equal(wallet.holdRub, "0.00");
+    assert.equal(wallet.totalRub, "85124.00");
+  });
+
+  it("degrades a verified session's wallet to the gated view on an upstream capability denial", async () => {
+    mode = "capability_denied";
+    const hits = upstream.length;
+    const response = await call(app.base, "/bff/wallet", { cookie: verifiedCookie });
+    assert.equal(response.status, 200);
+    const text = await response.text();
+    assert.equal(text.includes(marker), false);
+    assert.equal(text.includes(key), false);
+    assert.equal(text.includes("syn_wal_"), false);
+    const wallet = JSON.parse(text);
+    assert.equal(wallet.kyc, "kyc-gated");
+    assert.equal(wallet.availableRub, "0.00");
+    assert.equal(wallet.holdRub, "0.00");
+    assert.ok(upstream.length > hits, "upstream was never called");
+    assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
   });
 
   it("fails closed on error statuses, redirects and malformed bodies without leaking them", async () => {
@@ -237,6 +293,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     for (const name of malformed) {
       mode = name;
       await profileFailsClosed(name);
+      await walletFailsClosed(name);
       await assertGated(app, cookie, name);
     }
   });
@@ -246,6 +303,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       mode = name;
       const elapsed = await profileFailsClosed(name);
       assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
+      await walletFailsClosed(name);
       await upstreamReleased(name);
       await assertGated(app, cookie, name);
     }
@@ -254,6 +312,7 @@ describe("Mini App BFF with a failing customer-api", () => {
   it("recovers once upstream answers correctly again", async () => {
     mode = "valid";
     assert.equal((await getJson(app, "/bff/profile", cookie)).apiAccess.status, "connected");
+    assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
   });
 });
 

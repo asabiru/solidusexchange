@@ -29,13 +29,14 @@ function sumRub(values: readonly string[]): string {
   return fromUnits(total, assets.RUB.scale);
 }
 
-function buildWallet(kyc: KycStatus): WalletView {
-  const balances: AssetBalance[] = verifiedBalances.map((entry) => {
+export function walletView(
+  kyc: KycStatus,
+  entries: readonly { code: AssetCode; available: string; hold: string }[]
+): WalletView {
+  const balances: AssetBalance[] = entries.map((entry) => {
     const scale = assets[entry.code].scale;
-    const available = kyc === "verified" ? entry.available : fromUnits(0n, scale);
-    const hold = kyc === "verified" ? entry.hold : fromUnits(0n, scale);
-    const total = fromUnits(toUnits(available, scale) + toUnits(hold, scale), scale);
-    return { code: entry.code, available, hold, valueRub: valueInRub(entry.code, total) };
+    const total = fromUnits(toUnits(entry.available, scale) + toUnits(entry.hold, scale), scale);
+    return { code: entry.code, available: entry.available, hold: entry.hold, valueRub: valueInRub(entry.code, total) };
   });
   return {
     kyc,
@@ -44,6 +45,15 @@ function buildWallet(kyc: KycStatus): WalletView {
     holdRub: sumRub(balances.map((balance) => valueInRub(balance.code, balance.hold))),
     assets: balances
   };
+}
+
+function buildWallet(kyc: KycStatus): WalletView {
+  const entries = verifiedBalances.map((entry) => ({
+    code: entry.code,
+    available: kyc === "verified" ? entry.available : fromUnits(0n, assets[entry.code].scale),
+    hold: kyc === "verified" ? entry.hold : fromUnits(0n, assets[entry.code].scale)
+  }));
+  return walletView(kyc, entries);
 }
 
 const operations: readonly OperationDetail[] = [
