@@ -24,7 +24,8 @@ const KEYWORDS = new Set([
   "items",
   "maxItems",
   "uniqueItems",
-  "minimum"
+  "minimum",
+  "maximum"
 ]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const DATE_TIME =
@@ -142,8 +143,13 @@ export function createValidator(contract) {
         errors.push(`${path}: invalid ${schema.format}`);
       }
     }
-    if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) {
-      errors.push(`${path}: below minimum ${schema.minimum}`);
+    if (typeof value === "number") {
+      if (schema.minimum !== undefined && value < schema.minimum) {
+        errors.push(`${path}: below minimum ${schema.minimum}`);
+      }
+      if (schema.maximum !== undefined && value > schema.maximum) {
+        errors.push(`${path}: above maximum ${schema.maximum}`);
+      }
     }
     if (Array.isArray(value)) {
       if (schema.maxItems !== undefined && value.length > schema.maxItems) {

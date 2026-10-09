@@ -99,7 +99,33 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-011",
     "D-014"
   ]),
-  entry("customer.quotes.create", "financial", true, ["D-001", "D-007", "D-014"]),
+  // The served quotes collection read is KYC-gated like the deposits,
+  // withdrawals, wallets and notifications reads: quotes are an
+  // asset/activity collection (the indicative prices a subject was shown —
+  // the miniapp gates the quote preview surface to verified sessions), not
+  // an onboarding or identity surface — unlike profile/kyc/support it must
+  // stay gated on a verified KYC status. The read is synthetic and carries
+  // no ledger effect (posting stays "none", execution stays "not_supported"),
+  // so it needs no open money-movement decisions: the unserved quote
+  // commands below keep the financial denial with their decision reasons.
+  entry("customer.quotes.read", "read", true, []),
+  // Requesting a quote spends provider idempotency/nonce budget and fixes a
+  // rate against liquidity (D-007): preview stays a denied financial
+  // capability like the create-style commands above.
+  entry("customer.quotes.preview", "financial", true, [
+    "D-001",
+    "D-007",
+    "D-014"
+  ]),
+  // Accepting a quote is the execution leg of the exchange flow: it needs
+  // the liquidity decision and additionally the KYT screening decision that
+  // exchange-orders.create also carries.
+  entry("customer.quotes.accept", "financial", true, [
+    "D-001",
+    "D-007",
+    "D-011",
+    "D-014"
+  ]),
   entry("customer.exchange-orders.create", "financial", true, [
     "D-001",
     "D-007",

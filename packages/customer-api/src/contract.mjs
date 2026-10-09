@@ -166,6 +166,23 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The quotes collection read is KYC-gated like the deposits, withdrawals,
+  // wallets and notifications reads, so it declares a 403: quotes are an
+  // asset/activity collection (indicative prices the subject was shown), not
+  // an onboarding or identity surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerQuotes",
+    method: "GET",
+    path: "/api/v1/customer/quotes",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
   })
 ]);
 
