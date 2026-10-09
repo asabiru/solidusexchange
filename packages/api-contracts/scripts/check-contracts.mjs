@@ -797,6 +797,10 @@ function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
         `Parameter location ${JSON.stringify(resolved?.in)} is not allowed in this slice: ${label}`
       );
       assert(resolved?.required !== true, `Only canonical parameters may be required: ${label}`);
+      assert(
+        resolved?.required === undefined || typeof resolved.required === "boolean",
+        `Non-canonical parameters must be explicitly optional: ${label}`
+      );
     }
   }
 }
@@ -866,6 +870,11 @@ function checkOpenApi() {
   );
 
   const securitySchemes = openapi.components?.securitySchemes ?? {};
+  sameSet(
+    Object.keys(securitySchemes),
+    ["CustomerBearer", "OperatorBearer"],
+    "OpenAPI securitySchemes"
+  );
   for (const name of ["CustomerBearer", "OperatorBearer"]) {
     const scheme = securitySchemes[name];
     assert(scheme?.type === "http", `${name} must remain an HTTP security scheme`);
@@ -908,6 +917,40 @@ function checkOpenApi() {
     ["claimCustomerCheck", "#/components/schemas/CheckClaimRequest"]
   ]);
   const methodNames = new Set(["get", "put", "post", "delete", "patch", "options", "head", "trace"]);
+  // Every declared non-2xx status must be a pure $ref to the canonical
+  // component for that status, and the status set itself is pinned so an
+  // operation can neither grow nor silently drop an error response.
+  const canonicalErrorResponses = new Map([
+    ["401", "#/components/responses/Unauthenticated"],
+    ["403", "#/components/responses/Forbidden"],
+    ["404", "#/components/responses/NotFound"],
+    ["409", "#/components/responses/Conflict"],
+    ["429", "#/components/responses/RateLimited"],
+    ["500", "#/components/responses/InternalError"]
+  ]);
+  const readStatuses = ["200", "401", "429", "500"];
+  const gatedReadStatuses = ["200", "401", "403", "429", "500"];
+  const pinnedResponseStatuses = new Map([
+    ["getApiMetadata", ["200", "500"]],
+    ["getCustomerSession", readStatuses],
+    ["getCustomerCapabilities", readStatuses],
+    ["getCustomerWallets", gatedReadStatuses],
+    ["getCustomerNotifications", gatedReadStatuses],
+    ["getCustomerKyc", readStatuses],
+    ["getCustomerProfile", readStatuses],
+    ["getCustomerSupport", readStatuses],
+    ["getCustomerDeposits", gatedReadStatuses],
+    ["getCustomerWithdrawals", gatedReadStatuses],
+    ["getCustomerQuotes", gatedReadStatuses],
+    ["getCustomerExchangeOrders", gatedReadStatuses],
+    ["getCustomerPayments", gatedReadStatuses],
+    ["getOperatorSession", gatedReadStatuses],
+    ["getOperatorCapabilities", gatedReadStatuses],
+    ["previewCustomerCheck", gatedReadStatuses],
+    ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
+    ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
+    ["cancelCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]]
+  ]);
   const successSchemas = new Map([
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
     ["getCustomerSession", "#/components/schemas/SessionView"],
@@ -1040,7 +1083,12 @@ function checkOpenApi() {
           `X-Device-Id is approved only for operator operations: ${operation.operationId}`
         );
       }
-      if (pathName !== "/api/v1/meta") {
+      if (pathName === "/api/v1/meta") {
+        assert(
+          canonicalJson(operation.security) === "[]",
+          `Metadata operation must stay unauthenticated: ${operation.operationId}`
+        );
+      } else {
         const expectedScheme = pathName.startsWith("/api/v1/customer/")
           ? "CustomerBearer"
           : "OperatorBearer";
@@ -1087,8 +1135,14 @@ function checkOpenApi() {
         canonicalJson(success.content?.["application/json"]?.schema) === canonicalJson({ $ref: expectedSchema }),
         `Success response must use canonical schema: ${operation.operationId} 200`
       );
+      sameSet(
+        Object.keys(operation.responses ?? {}),
+        pinnedResponseStatuses.get(operation.operationId) ?? [],
+        `Response statuses for ${operation.operationId}`
+      );
       for (const [status, response] of Object.entries(operation.responses ?? {})) {
         if (status.startsWith("2")) continue;
+        const canonicalError = canonicalErrorResponses.get(status);
         const resolvedResponse = response.$ref
           ? resolveRef(path, response.$ref).value
           : response;
@@ -1103,6 +1157,10 @@ function checkOpenApi() {
           `Error response must use canonical Error schema: ${operation.operationId} ${status}`
         );
         verifyRequestIdResponseHeader(resolvedResponse, `${operation.operationId} ${status}`);
+        assert(
+          canonicalJson(response) === canonicalJson({ $ref: canonicalError }),
+          `Error response ${status} must reference the canonical component: ${operation.operationId}`
+        );
       }
     }
   }
@@ -1209,6 +1267,11 @@ function checkOpenApi() {
   );
   for (const [name, response] of Object.entries(openapi.components?.responses ?? {})) {
     verifyRequestIdResponseHeader(response, `${name} response`);
+    sameSet(
+      Object.keys(response?.headers ?? {}),
+      name === "RateLimited" ? ["Retry-After", "X-Request-Id"] : ["X-Request-Id"],
+      `${name} response headers`
+    );
   }
   const { description: _requestIdDescription, ...requestIdHeader } = openapi.components?.headers?.RequestId ?? {};
   assert(
@@ -1218,10 +1281,46 @@ function checkOpenApi() {
     }),
     "Canonical RequestId response header must remain required with the UuidV7 schema"
   );
+  const { description: _retryAfterDescription, ...retryAfterHeader } =
+    openapi.components?.headers?.RetryAfter ?? {};
+  assert(
+    canonicalJson(retryAfterHeader) === canonicalJson({
+      required: true,
+      schema: { type: "integer", minimum: 1 }
+    }),
+    "Canonical RetryAfter response header must remain required with a positive-integer schema"
+  );
   verifyReferences(openapi, path);
   verifyNoExtensions(openapi, "OpenAPI", new Set(allowedOpenApiExtensions));
   verifyMoneyFieldSchemas(openapi, "OpenAPI");
   verifySafeFields(openapi, "OpenAPI");
+  // The container sets are pinned last so dedicated checks keep their
+  // dedicated rejections when a fixture mutates a member's shape.
+  sameSet(
+    Object.keys(openapi.components ?? {}),
+    ["headers", "parameters", "responses", "schemas", "securitySchemes"],
+    "OpenAPI components fields"
+  );
+  sameSet(
+    Object.keys(openapi.components?.schemas ?? {}),
+    ["UuidV7", "DeviceId", "IdempotencyKey", ...Object.keys(pinnedResponseSchemas), "Error"],
+    "OpenAPI components.schemas"
+  );
+  sameSet(
+    Object.keys(openapi.components?.responses ?? {}),
+    ["Unauthenticated", "Forbidden", "NotFound", "Conflict", "RateLimited", "InternalError"],
+    "OpenAPI components.responses"
+  );
+  sameSet(
+    Object.keys(openapi.components?.parameters ?? {}),
+    [...pinnedParameterNames],
+    "OpenAPI components.parameters"
+  );
+  sameSet(
+    Object.keys(openapi.components?.headers ?? {}),
+    ["RequestId", "RetryAfter"],
+    "OpenAPI components.headers"
+  );
 }
 
 const pinnedErrorProperties = {
@@ -1388,18 +1487,51 @@ const prohibitedFields = new Set([
 function verifySafeFields(value, label) {
   if (!value || typeof value !== "object") return;
   for (const [key, child] of Object.entries(value)) {
-    assert(!prohibitedFields.has(key.toLowerCase()), `${label}: prohibited field ${key}`);
+    const name = key.toLowerCase();
+    assert(
+      ![...prohibitedFields].some((field) => name.includes(field)),
+      `${label}: prohibited field ${key}`
+    );
     verifySafeFields(child, `${label}.${key}`);
   }
 }
 
+// Money-bearing names a field can pick without ever containing "amount":
+// the convention would otherwise let e.g. unit_price or wallet_balance drift
+// to a float or a free-form string while every check stays green.
+const moneyFieldWords = new Set([
+  "balance",
+  "commission",
+  "cost",
+  "discount",
+  "fee",
+  "interest",
+  "leverage",
+  "margin",
+  "notional",
+  "payout",
+  "premium",
+  "price",
+  "principal",
+  "qty",
+  "quantity",
+  "rate",
+  "spread",
+  "sum",
+  "tax",
+  "volume"
+]);
+
 function allowedMoneyFieldSchemas(propertyName) {
   const name = propertyName.toLowerCase();
-  if (name.includes("amount")) return [decimalAmountRef];
+  if (name.includes("amount") || name.includes("total")) return [decimalAmountRef];
   if (name === "asset" || name.endsWith("_asset") || name === "currency" || name.endsWith("_currency")) {
     return [assetCodeRef];
   }
   if (name === "network" || name.endsWith("_network")) return [networkCodeRef, testnetNetwork];
+  if (moneyFieldWords.has(name) || [...moneyFieldWords].some((word) => name.endsWith(`_${word}`))) {
+    return [decimalAmountRef];
+  }
   return null;
 }
 
@@ -2179,11 +2311,12 @@ function checkEvents() {
 
   verifyReferences(eventSchema, schemaPath);
   verifyMoneyFieldSchemas(eventSchema, "event schema");
+  // PII names keep their dedicated rejection before the broader safe-field scan.
+  verifyNoPiiPropertyNames(eventSchema, "event schema");
   verifySafeFields(eventSchema, "event schema");
   verifySafeFields(examples, "event examples");
   verifyNoNestedSchemaIdentifiers(eventSchema, "event schema");
   verifyClosedEventSchemas(eventSchema);
-  verifyNoPiiPropertyNames(eventSchema, "event schema");
 }
 
 checkOpenApi();
