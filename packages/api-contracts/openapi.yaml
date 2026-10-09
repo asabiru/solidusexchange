@@ -323,6 +323,57 @@
         }
       }
     },
+    "/api/v1/customer/profile": {
+      "get": {
+        "operationId": "getCustomerProfile",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the authenticated customer's synthetic profile",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer profile in test mode with synthetic identity fields only",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -1122,6 +1173,44 @@
           },
           "can_submit": {
             "type": "boolean"
+          }
+        }
+      },
+      "ProfileView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "customer_ref",
+          "display_name",
+          "locale",
+          "registered_at"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "customer_ref": {
+            "type": "string",
+            "pattern": "^SC-DEV-[0-9A-Z]{5}$"
+          },
+          "display_name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^Customer [0-9a-f]{8}$"
+          },
+          "locale": {
+            "type": "string",
+            "enum": [
+              "en",
+              "ky",
+              "ru"
+            ]
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
