@@ -44,6 +44,7 @@ import {
   notificationIdPattern
 } from "./notifications.js";
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
+import { contractProfileView } from "./profile.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { apiSecurityHeaders, guardRawResponses, requestHostname } from "./security-headers.js";
@@ -723,8 +724,29 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/profile") {
+      // Like /bff/kyc/status — and unlike /bff/wallet and /bff/notifications
+      // — the profile surface is not KYC-gated upstream: customer.profile.read
+      // is granted at every session status, so a configured customer-api
+      // answers gated sessions too and only the standalone unconfigured dev
+      // BFF keeps the local synthetic view. Since the read is never denied, an
+      // upstream 403 signals contract drift and maps, like every other non-ok
+      // outcome, to the sibling *_unavailable shape.
+      const local = () => syntheticData.profile(session.kyc, displayName, customerRef(session.subject));
+      if (!customerApi.configured) {
+        const apiAccess = await customerApi.access(session.subject, clock());
+        json(response, 200, { ...local(), apiAccess });
+        return;
+      }
+      const upstream = await customerApi.profile(session.subject, clock());
+      if (upstream.status !== "ok") {
+        json(response, 503, { error: "profile_unavailable" });
+        return;
+      }
+      // The apiAccess block is still consulted separately and degrades in
+      // place exactly as before; the upstream view only overlays the identity
+      // fields the app shape has (displayName/customerRef).
       const apiAccess = await customerApi.access(session.subject, clock());
-      json(response, 200, { ...syntheticData.profile(session.kyc, displayName, customerRef(session.subject)), apiAccess });
+      json(response, 200, contractProfileView(upstream.view, local(), apiAccess));
       return;
     }
     if (path === "/bff/kyc/status") {

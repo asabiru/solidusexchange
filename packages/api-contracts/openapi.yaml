@@ -374,6 +374,57 @@
         }
       }
     },
+    "/api/v1/customer/support": {
+      "get": {
+        "operationId": "getCustomerSupport",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the authenticated customer's synthetic support tickets",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer support tickets in test mode with delivery disabled",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SupportTicketsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -1214,6 +1265,115 @@
           }
         }
       },
+      "SupportTicketsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "delivery",
+          "tickets"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "delivery": {
+            "const": "disabled"
+          },
+          "tickets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TicketView"
+            }
+          }
+        }
+      },
+      "TicketView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket_id",
+          "category",
+          "topic",
+          "message",
+          "status",
+          "timeline",
+          "complaint_acknowledged",
+          "created_at",
+          "expires_at"
+        ],
+        "properties": {
+          "ticket_id": {
+            "type": "string",
+            "pattern": "^tck_[0-9a-f]{24}$"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "question",
+              "operation_problem",
+              "complaint",
+              "data_request"
+            ]
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "received",
+              "in_review",
+              "answered",
+              "closed"
+            ]
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "at"
+              ],
+              "properties": {
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "received",
+                    "in_review",
+                    "answered",
+                    "closed"
+                  ]
+                },
+                "at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "complaint_acknowledged": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1507,8 +1667,7 @@
       "/api/v1/customer/quotes",
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
-      "/api/v1/customer/cards",
-      "/api/v1/customer/support"
+      "/api/v1/customer/cards"
     ],
     "operator": [
       "/api/v1/operator/admin"

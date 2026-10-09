@@ -322,6 +322,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/notifications", "getCustomerNotifications"],
   ["/api/v1/customer/kyc", "getCustomerKyc"],
   ["/api/v1/customer/profile", "getCustomerProfile"],
+  ["/api/v1/customer/support", "getCustomerSupport"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -665,6 +666,56 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.ProfileView.properties.registered_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical support ticket views",
+  "Canonical SupportTicketsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.SupportTicketsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects enabled delivery in canonical support ticket views",
+  "Canonical SupportTicketsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.SupportTicketsView.properties.delivery.const = "enabled";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical support ticket categories",
+  "Canonical TicketView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.TicketView.properties.category.enum.push("security_incident");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical support ticket statuses",
+  "Canonical TicketView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.TicketView.properties.status.enum.push("escalated");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical support ticket timestamps",
+  "Canonical TicketView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.TicketView.properties.created_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

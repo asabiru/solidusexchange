@@ -52,6 +52,14 @@ export const CAPABILITY_POLICY = Object.freeze([
   // in place instead of gating. Like the KYC status read it must stay
   // readable without a verified KYC status.
   entry("customer.profile.read", "read", false, []),
+  // The served support tickets read is the customer's own service-requests
+  // surface (synthetic test-mode drafts, delivery disabled), not a collection
+  // read on assets or activity: the miniapp serves /bff/support/requests to
+  // every authenticated session, kyc-gated included — support notifications
+  // (support_received/complaint_received) are recorded for unverified flows
+  // too. Like the KYC status and profile reads it must stay readable without
+  // a verified KYC status.
+  entry("customer.support.read", "read", false, []),
   // The served wallet collection read is KYC-gated but synthetic: it needs no
   // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).
   entry("customer.wallets.read", "read", true, []),

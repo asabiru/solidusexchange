@@ -115,6 +115,23 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The support tickets read is served to every authenticated customer like
+  // the KYC status and profile reads, so it declares no 403: tickets are the
+  // subject's own service-requests surface and the miniapp serves
+  // /bff/support/requests to kyc-gated sessions too (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerSupport",
+    method: "GET",
+    path: "/api/v1/customer/support",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

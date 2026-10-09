@@ -41,7 +41,8 @@ function kycStub(result: CustomerApiKyc | (() => Promise<CustomerApiKyc>)): KycS
     kyc: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
-    }
+    },
+    profile: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }
