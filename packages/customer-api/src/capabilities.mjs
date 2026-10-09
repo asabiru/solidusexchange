@@ -37,6 +37,13 @@ function entry(capability, kind, requiresVerifiedKyc, decisions) {
 export const CAPABILITY_POLICY = Object.freeze([
   entry("customer.session.read", "read", false, []),
   entry("customer.capabilities.read", "read", false, []),
+  // The KYC status read is the onboarding surface itself: it must stay
+  // readable for unverified and pending subjects or they could never see the
+  // state that gates everything else (a verified-KYC requirement would
+  // deadlock onboarding). This mirrors the miniapp, which serves
+  // /bff/kyc/status to kyc-gated sessions too. The submit side stays an
+  // unserved onboarding capability below.
+  entry("customer.kyc.read", "read", false, []),
   entry("customer.kyc.submit", "onboarding", false, ["D-001", "D-008"]),
   // The served wallet collection read is KYC-gated but synthetic: it needs no
   // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).

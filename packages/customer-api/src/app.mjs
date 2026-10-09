@@ -9,6 +9,7 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import { validKycStatusView } from "./kyc.mjs";
 import {
   createRequestObserver,
   METRICS_CONTENT_TYPE,
@@ -34,6 +35,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./rate-limit.mjs").RateLimiter} rateLimiter
  * @property {import("./wallets.mjs").WalletDirectory} walletDirectory
  * @property {import("./notifications.mjs").NotificationDirectory} notificationDirectory
+ * @property {import("./kyc.mjs").KycApplicationDirectory} kycApplicationDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -203,6 +205,7 @@ export function createCustomerApiHandler({
   rateLimiter,
   walletDirectory,
   notificationDirectory,
+  kycApplicationDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -221,6 +224,9 @@ export function createCustomerApiHandler({
   }
   if (typeof notificationDirectory?.listFor !== "function") {
     throw new Error("A notification directory is required");
+  }
+  if (typeof kycApplicationDirectory?.viewFor !== "function") {
+    throw new Error("A KYC application directory is required");
   }
 
   /**
@@ -324,6 +330,22 @@ export function createCustomerApiHandler({
 
     const kycStatus = await kycDirectory.statusFor(principal.subject);
     const evaluation = evaluateCapabilities({ kycStatus });
+    if (operation.operationId === "getCustomerKyc") {
+      // customer.kyc.read is granted for every KYC status: the status surface
+      // is the subject's own onboarding state and must stay readable while
+      // they are unverified. The check stays so a served route can never
+      // drift from the capabilities the service exposes.
+      if (!evaluation.granted.includes("customer.kyc.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await kycApplicationDirectory.viewFor(principal.subject, kycStatus);
+      if (!validKycStatusView(view)) {
+        throw new Error("KYC application directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
     if (operation.operationId === "getCustomerWallets") {
       if (!evaluation.granted.includes("customer.wallets.read")) {
         fail(403, "CAPABILITY_DENIED");

@@ -326,6 +326,32 @@ declare module "@solidchange/customer-api/dev-server" {
           }[];
         }>;
       };
+      kycApplicationDirectory?: {
+        viewFor(
+          subject: string,
+          sessionKyc: "unverified" | "pending" | "verified"
+        ): Promise<{
+          mode: "test";
+          provider: "simulator";
+          session_kyc: "unverified" | "pending" | "verified";
+          status:
+            | "not_started"
+            | "submitted"
+            | "in_review"
+            | "approved"
+            | "rejected"
+            | "needs_more_data"
+            | "timed_out"
+            | "unavailable";
+          application_id?: string;
+          submitted_at?: string;
+          updated_at: string;
+          review_deadline?: string;
+          reason_codes?: readonly string[];
+          requested_items?: readonly string[];
+          can_submit: boolean;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

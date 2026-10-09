@@ -22,6 +22,7 @@ const KEYWORDS = new Set([
   "pattern",
   "format",
   "items",
+  "maxItems",
   "uniqueItems",
   "minimum"
 ]);
@@ -145,6 +146,9 @@ export function createValidator(contract) {
       errors.push(`${path}: below minimum ${schema.minimum}`);
     }
     if (Array.isArray(value)) {
+      if (schema.maxItems !== undefined && value.length > schema.maxItems) {
+        errors.push(`${path}: longer than ${schema.maxItems} items`);
+      }
       if (schema.uniqueItems === true && new Set(value.map(canonical)).size !== value.length) {
         errors.push(`${path}: items must be unique`);
       }
