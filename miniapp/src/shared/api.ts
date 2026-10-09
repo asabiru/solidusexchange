@@ -450,6 +450,37 @@ export interface ExchangeOrdersView {
   orders: readonly ExchangeOrderView[];
 }
 
+/** Mirrors the customer-api payments contract outbound status set exactly. */
+export type PaymentStatus =
+  | "created"
+  | "processing"
+  | "completed"
+  | "failed"
+  | "reversed"
+  | "cancelled"
+  | "expired";
+
+export interface PaymentView {
+  id: string;
+  asset: AssetCode;
+  method: "sbp";
+  status: PaymentStatus;
+  amount: string;
+  fee: string;
+  total: string;
+  recipientReference: string;
+  providerReference: string | null;
+  createdAt: number;
+  updatedAt: number;
+  posting: "none";
+}
+
+export interface PaymentsView {
+  mode: "test";
+  kyc: KycStatus;
+  payments: readonly PaymentView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;

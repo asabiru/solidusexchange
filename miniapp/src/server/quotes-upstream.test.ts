@@ -41,6 +41,7 @@ function quotesStub(result: CustomerApiQuotes | (() => Promise<CustomerApiQuotes
       return typeof result === "function" ? result() : result;
     },
     exchangeOrders: async () => ({ status: "not-configured" }),
+    payments: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

@@ -43,6 +43,7 @@ function exchangeOrdersStub(
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
+    payments: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

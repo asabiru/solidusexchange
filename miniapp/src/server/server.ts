@@ -65,6 +65,7 @@ import {
 } from "./support.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
+import { contractPaymentsView, paymentsView } from "./payments.js";
 import { contractWithdrawalsView, withdrawalsView } from "./withdrawals.js";
 import { syntheticData, walletView } from "./synthetic.js";
 
@@ -94,6 +95,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/quotes" },
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "GET", path: "/bff/exchange-orders" },
+  { method: "GET", path: "/bff/payments" },
   { method: "GET", path: "/bff/checks" },
   { method: "GET", path: "/bff/checks/preview" },
   { method: "GET", path: "/bff/checks/:id" },
@@ -966,6 +968,30 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "exchange_orders_unavailable" });
+      return;
+    }
+    if (path === "/bff/payments") {
+      // Same gating as /bff/exchange-orders: the local KYC gate and the
+      // standalone (unconfigured) dev BFF keep the synthetic payments list;
+      // only a verified session with customer-api access reads the contract
+      // view. An upstream refusal degrades to the same emptied list a gated
+      // session sees (in place); any other upstream failure answers the
+      // sibling *_unavailable error shape. Payment create/confirm/cancel
+      // stay unserved — nothing here wires an upstream command.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, paymentsView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.payments(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractPaymentsView(upstream.payments, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, paymentsView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "payments_unavailable" });
       return;
     }
     if (path === "/bff/quotes/preview") {

@@ -491,6 +491,32 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      paymentDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          payments: ReadonlyArray<{
+            payment_id: string;
+            asset: "RUB";
+            method: "sbp";
+            status:
+              | "created"
+              | "processing"
+              | "completed"
+              | "failed"
+              | "reversed"
+              | "cancelled"
+              | "expired";
+            amount: string;
+            fee_amount: string;
+            total_amount: string;
+            recipient_reference: string;
+            provider_reference: string | null;
+            created_at: string;
+            updated_at: string;
+            posting: "none";
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

@@ -639,6 +639,53 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  CardsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "cards"],
+    properties: {
+      mode: { const: "test" },
+      cards: {
+        type: "array",
+        items: { $ref: "#/components/schemas/CardView" }
+      }
+    }
+  },
+  CardView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "card_id",
+      "brand",
+      "kind",
+      "status",
+      "last4",
+      "token_reference",
+      "asset",
+      "monthly_limit",
+      "created_at",
+      "expires_at",
+      "updated_at",
+      "posting"
+    ],
+    properties: {
+      card_id: { type: "string", pattern: "^crd_[0-9a-f]{24}$" },
+      brand: { type: "string", enum: ["visa", "mastercard", "mir"] },
+      kind: { type: "string", enum: ["virtual", "physical"] },
+      status: {
+        type: "string",
+        enum: ["pending_activation", "active", "frozen", "blocked", "expired", "terminated"]
+      },
+      last4: { type: "string", pattern: "^[0-9]{4}$" },
+      token_reference: { type: "string", pattern: "^tok_[0-9a-f]{24}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      monthly_limit: { $ref: "#/$defs/decimalAmount" },
+      created_at: { type: "string", format: "date-time" },
+      expires_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -858,7 +905,6 @@ function checkOpenApi() {
     openapi["x-solidchange-planned-namespaces"]?.customer ?? [],
     [
       "/api/v1/customer/auth",
-      "/api/v1/customer/cards",
       "/api/v1/customer/users"
     ],
     "Planned customer namespaces"
@@ -900,6 +946,7 @@ function checkOpenApi() {
     ["getCustomerQuotes", "/api/v1/customer/quotes"],
     ["getCustomerExchangeOrders", "/api/v1/customer/exchange-orders"],
     ["getCustomerPayments", "/api/v1/customer/payments"],
+    ["getCustomerCards", "/api/v1/customer/cards"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -944,6 +991,7 @@ function checkOpenApi() {
     ["getCustomerQuotes", gatedReadStatuses],
     ["getCustomerExchangeOrders", gatedReadStatuses],
     ["getCustomerPayments", gatedReadStatuses],
+    ["getCustomerCards", gatedReadStatuses],
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
@@ -965,6 +1013,7 @@ function checkOpenApi() {
     ["getCustomerQuotes", "#/components/schemas/QuotesView"],
     ["getCustomerExchangeOrders", "#/components/schemas/ExchangeOrdersView"],
     ["getCustomerPayments", "#/components/schemas/PaymentsView"],
+    ["getCustomerCards", "#/components/schemas/CardsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

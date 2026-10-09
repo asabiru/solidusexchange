@@ -328,6 +328,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/quotes", "getCustomerQuotes"],
   ["/api/v1/customer/exchange-orders", "getCustomerExchangeOrders"],
   ["/api/v1/customer/payments", "getCustomerPayments"],
+  ["/api/v1/customer/cards", "getCustomerCards"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -1061,6 +1062,77 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.PaymentView.properties.updated_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical cards views",
+  "Canonical CardsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical cards views",
+  "Canonical CardsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardsView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical card views",
+  "Canonical CardView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects an unmasked canonical card identifier",
+  "Canonical CardView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardView.properties.pan = { type: "string", pattern: "^[0-9]{16}$" };
+    openapi.components.schemas.CardView.required.push("pan");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a settled canonical card status",
+  "Canonical CardView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardView.properties.status.enum.push("settled");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical card limits",
+  "Canonical CardView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardView.properties.monthly_limit = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical card timestamps",
+  "Canonical CardView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.CardView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );
