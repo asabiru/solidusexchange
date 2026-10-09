@@ -88,8 +88,7 @@ export function buildApprovalPreview(
     ...(approval.completedApprovals >= approval.requiredApprovals ? [] : ["approvals_incomplete"]),
     "command_client_absent"
   ];
-  const anchor = audit.at(-1);
-  if (!anchor) throw new Error("Audit chain is empty");
+  const anchor = audit.at(-1) ?? { sequence: 0, hash: auditGenesisHash };
 
   return {
     approvalId: approval.id,

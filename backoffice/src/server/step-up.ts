@@ -81,7 +81,32 @@ export class SyntheticStepUpService {
     this.#grants = new ExpiringStore(clock);
   }
 
+  /** Binding indexes pruned to live records; reported for dev diagnostics. */
+  indexSizes(): { challenges: number; grants: number } {
+    return {
+      challenges: this.#challengeByBinding.size,
+      grants: this.#grantByBinding.size
+    };
+  }
+
+  // Index entries are keyed by bindingId, which changes whenever the audit head
+  // moves; expired challenges/grants would otherwise leave one stale entry per
+  // distinct binding forever.
+  #pruneIndexes(): void {
+    for (const [bindingId, challengeId] of this.#challengeByBinding) {
+      if (this.#challenges.get(challengeId) === undefined) {
+        this.#challengeByBinding.delete(bindingId);
+      }
+    }
+    for (const [bindingId, grant] of this.#grantByBinding) {
+      if (this.#grants.get(grant) === undefined) {
+        this.#grantByBinding.delete(bindingId);
+      }
+    }
+  }
+
   begin(binding: StepUpBinding): StepUpChallenge {
+    this.#pruneIndexes();
     const bindingId = this.bindingId(binding);
     const previousChallenge = this.#challengeByBinding.get(bindingId);
     if (previousChallenge) this.#challenges.delete(previousChallenge);
@@ -112,6 +137,7 @@ export class SyntheticStepUpService {
     code: string,
     binding: StepUpBinding
   ): StepUpVerification {
+    this.#pruneIndexes();
     const challenge = this.#challenges.get(challengeId);
     if (!challenge || challenge.challengeVersion !== 1) {
       throw new StepUpRejectedError("challenge_unavailable");
@@ -150,6 +176,7 @@ export class SyntheticStepUpService {
   }
 
   consume(grant: string, binding: StepUpBinding): void {
+    this.#pruneIndexes();
     const record = this.#grants.take(grant);
     if (!record || !sameBinding(record, binding)) {
       throw new StepUpRejectedError("grant_rejected");
