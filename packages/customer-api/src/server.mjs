@@ -5,6 +5,7 @@ import { createCustomerApiServer } from "./app.mjs";
 import { createDenyAllVerifier, createSyntheticTokenVerifier } from "./auth.mjs";
 import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
+import { createSyntheticCardDirectory } from "./cards.mjs";
 import { createSyntheticDepositDirectory } from "./deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "./exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "./kyc.mjs";
@@ -31,12 +32,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   quoteDirectory?: import("./quotes.mjs").QuoteDirectory,
  *   exchangeOrderDirectory?: import("./exchange-orders.mjs").ExchangeOrderDirectory,
  *   paymentDirectory?: import("./payments.mjs").PaymentDirectory,
+ *   cardDirectory?: import("./cards.mjs").CardDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -54,6 +56,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     quoteDirectory: quoteDirectory ?? createSyntheticQuoteDirectory(),
     exchangeOrderDirectory: exchangeOrderDirectory ?? createSyntheticExchangeOrderDirectory(),
     paymentDirectory: paymentDirectory ?? createSyntheticPaymentDirectory(),
+    cardDirectory: cardDirectory ?? createSyntheticCardDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
