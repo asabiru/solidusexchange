@@ -8,6 +8,7 @@ import type {
   ExchangeOrderType,
   KycVerificationState,
   NotificationTemplate,
+  PaymentStatus,
   QuotePair,
   QuoteRounding,
   QuoteSide,
@@ -27,6 +28,14 @@ import {
   isExchangeOrderType
 } from "./exchange-orders.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
+import {
+  isPaymentStatus,
+  paymentIdPattern,
+  paymentProviderReferencePattern,
+  paymentRailObservedStatuses,
+  paymentRecipientReferencePattern,
+  paymentRubScale
+} from "./payments.js";
 import {
   contractQuoteAmounts,
   contractQuotePair,
@@ -174,6 +183,27 @@ export type CustomerApiExchangeOrders =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiPayment {
+  payment_id: string;
+  asset: "RUB";
+  method: "sbp";
+  status: PaymentStatus;
+  amount: string;
+  fee_amount: string;
+  total_amount: string;
+  recipient_reference: string;
+  provider_reference: string | null;
+  created_at: string;
+  updated_at: string;
+  posting: "none";
+}
+
+export type CustomerApiPayments =
+  | { status: "ok"; payments: readonly CustomerApiPayment[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -282,6 +312,7 @@ export interface CustomerApiClient {
   withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals>;
   quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
+  payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -760,6 +791,104 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
   return Object.freeze(orders);
 }
 
+const paymentKeys = [
+  "payment_id",
+  "asset",
+  "method",
+  "status",
+  "amount",
+  "fee_amount",
+  "total_amount",
+  "recipient_reference",
+  "provider_reference",
+  "created_at",
+  "updated_at",
+  "posting"
+] as const;
+
+function parsePaymentsView(value: unknown): readonly CustomerApiPayment[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "payments"])
+    || value.mode !== "test"
+    || !Array.isArray(value.payments)
+  ) {
+    return undefined;
+  }
+  const payments: CustomerApiPayment[] = [];
+  for (const entry of value.payments) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, paymentKeys)
+      || typeof entry.payment_id !== "string"
+      || !paymentIdPattern.test(entry.payment_id)
+      // The SBP rail settles in RUB only: any other asset with method "sbp"
+      // is an impossible combination in this model (the upstream contract
+      // validator pins the same pair).
+      || entry.asset !== "RUB"
+      || entry.method !== "sbp"
+      || !isPaymentStatus(entry.status)
+      || !isScaledDecimal(entry.amount, paymentRubScale)
+      || !isScaledDecimal(entry.fee_amount, paymentRubScale)
+      || !isScaledDecimal(entry.total_amount, paymentRubScale)
+      || typeof entry.recipient_reference !== "string"
+      || !paymentRecipientReferencePattern.test(entry.recipient_reference)
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.updated_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    // The provider-side reference exists exactly when the rail observed
+    // the payment — like the simulator's null bank_transaction_id for
+    // instructions the bank never saw.
+    let providerReference: string | null;
+    if ((paymentRailObservedStatuses as readonly string[]).includes(entry.status)) {
+      if (
+        typeof entry.provider_reference !== "string"
+        || !paymentProviderReferencePattern.test(entry.provider_reference)
+      ) {
+        return undefined;
+      }
+      providerReference = entry.provider_reference;
+    } else {
+      if (entry.provider_reference !== null) return undefined;
+      providerReference = null;
+    }
+    // Fail closed unless the debited total recomputes exactly as principal
+    // plus rail fee and both carry a positive amount, like the upstream
+    // contract validator requires.
+    const amount = toUnits(entry.amount, paymentRubScale);
+    const fee = toUnits(entry.fee_amount, paymentRubScale);
+    const total = toUnits(entry.total_amount, paymentRubScale);
+    if (amount <= 0n || fee <= 0n || total !== amount + fee) {
+      return undefined;
+    }
+    const created = Date.parse(entry.created_at);
+    const updated = Date.parse(entry.updated_at);
+    // The contract lifecycle: updated never precedes created, and a
+    // resting created instruction has never changed.
+    if (updated < created || (entry.status === "created" && updated !== created)) {
+      return undefined;
+    }
+    payments.push(Object.freeze({
+      payment_id: entry.payment_id,
+      asset: "RUB",
+      method: "sbp",
+      status: entry.status,
+      amount: entry.amount,
+      fee_amount: entry.fee_amount,
+      total_amount: entry.total_amount,
+      recipient_reference: entry.recipient_reference,
+      provider_reference: providerReference,
+      created_at: entry.created_at,
+      updated_at: entry.updated_at,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(payments);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -1029,7 +1158,7 @@ class CustomerApiHttpError extends Error {
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session, capabilities, wallets, deposits, withdrawals, quotes,
- * exchange-orders, notifications, kyc, profile and support GETs, never sends
+ * exchange-orders, payments, notifications, kyc, profile and support GETs, never sends
  * X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
@@ -1050,6 +1179,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       withdrawals: async (): Promise<CustomerApiWithdrawals> => ({ status: "not-configured" }),
       quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
+      payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -1209,6 +1339,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/payments", token, nowMs);
+      const view = parsePaymentsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", payments: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -1285,5 +1434,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, notifications, kyc, profile, support });
 }
