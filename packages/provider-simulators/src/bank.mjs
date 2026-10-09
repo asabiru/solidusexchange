@@ -258,6 +258,12 @@ export function createBankSimulator(options) {
       if (scenario === "provider_outage") {
         throw outageError(120);
       }
+      if (scenario === "partial_payment" && expected < 2n) {
+        throw new ProviderError(
+          "invalid_request",
+          "a partial payment requires an amount of at least 0.02 RUB",
+        );
+      }
       return idempotency.run(key, input, () => {
         const now = clock.now();
         const expiresAt = now + intentTtlSeconds;

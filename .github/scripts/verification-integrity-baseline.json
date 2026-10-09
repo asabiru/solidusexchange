@@ -992,6 +992,10 @@
       "minLines": 91,
       "minCases": 4
     },
+    "packages/provider-simulators/tests/internals-audit.test.mjs": {
+      "minLines": 246,
+      "minCases": 12
+    },
     "packages/provider-simulators/tests/kyc.test.mjs": {
       "minLines": 149,
       "minCases": 14

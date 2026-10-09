@@ -1,4 +1,5 @@
-import { sha256Hex } from "./simulator-core.mjs";
+import { assertEpochSeconds } from "./deterministic.mjs";
+import { isPositiveSequence, sha256Hex } from "./simulator-core.mjs";
 
 /** @import { JsonValue } from "./canonical-json.mjs" */
 
@@ -50,7 +51,9 @@ import { sha256Hex } from "./simulator-core.mjs";
  *   then applied in sequence order (out-of-order delivery);
  * - sequence not newer than the applied one: `stale` (ignored);
  * - received after the subject deadline or local timeout: `late` (review);
- * - status change not in `transitions`: `invalid_transition` (review).
+ * - status change not in `transitions`, a sequence that is not a positive
+ *   integer, or event content that cannot be hashed for deduplication:
+ *   `invalid_transition` (review).
  *
  * @param {{ subjectField: string, initialStatus: string, transitions: Readonly<Record<string, readonly string[]>> }} options
  * @returns {CallbackInbox}
@@ -70,6 +73,9 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
 
   return Object.freeze({
     openSubject(subjectId, { deadline }) {
+      if (typeof subjectId !== "string" || subjectId.length === 0) {
+        throw new TypeError("subject id must be a non-empty string");
+      }
       if (subjects.has(subjectId)) {
         throw new TypeError("subject is already open");
       }
@@ -89,6 +95,10 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
     },
 
     accept(payload, { receivedAt }) {
+      assertEpochSeconds(receivedAt, "callback received time");
+      if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+        throw new TypeError("callback payload must be an object");
+      }
       const subjectId = payload[subjectField];
       const subject = typeof subjectId === "string" ? subjects.get(subjectId) : undefined;
       if (!subject) {
@@ -96,8 +106,22 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
       }
       /** @param {InboxAction} action @param {string[]} [appliedStatuses] */
       const result = (action, appliedStatuses = []) => ({ action, status: subject.status, appliedStatuses });
-      const eventId = String(payload.event_id);
-      const digest = sha256Hex(payload);
+      const rawSequence = payload.sequence;
+      if (!isPositiveSequence(rawSequence)) {
+        subject.reviewEvents += 1;
+        return result("invalid_transition");
+      }
+      let eventId;
+      let next;
+      let digest;
+      try {
+        eventId = String(payload.event_id);
+        next = String(payload.status);
+        digest = sha256Hex(payload);
+      } catch {
+        subject.reviewEvents += 1;
+        return result("invalid_transition");
+      }
       const seen = events.get(eventId);
       if (seen !== undefined) {
         if (seen !== digest) {
@@ -112,8 +136,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
         subject.lateEvents += 1;
         return result("late");
       }
-      const sequence = Number(payload.sequence);
-      const next = String(payload.status);
+      const sequence = /** @type {number} */ (rawSequence);
       if (sequence <= subject.sequence || subject.parked.has(sequence)) {
         return result("stale");
       }
@@ -149,6 +172,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
     },
 
     expire(now) {
+      assertEpochSeconds(now, "inbox expiry time");
       const expired = [];
       for (const [subjectId, subject] of subjects) {
         const terminal = !Object.hasOwn(transitions, subject.status) || transitions[subject.status].length === 0;

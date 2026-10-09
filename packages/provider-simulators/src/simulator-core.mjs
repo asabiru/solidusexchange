@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { canonicalStringify } from "./canonical-json.mjs";
+import { assertEpochSeconds } from "./deterministic.mjs";
 import { ProviderError, invalidRequest } from "./errors.mjs";
 
 /** @import { JsonValue } from "./canonical-json.mjs" */
@@ -213,6 +214,7 @@ export class DeliveryQueue {
    * @param {number} deliverAt
    */
   schedule(payload, deliverAt) {
+    assertEpochSeconds(deliverAt, "delivery time");
     const delivery = this.signer.sign(payload, deliverAt);
     this.pending.push({ deliverAt, order: this.order, delivery });
     this.order += 1;
@@ -225,6 +227,7 @@ export class DeliveryQueue {
    * @returns {ScheduledDelivery[]}
    */
   drain(now) {
+    assertEpochSeconds(now, "delivery time");
     const due = this.pending
       .filter((entry) => entry.deliverAt <= now)
       .sort((left, right) => left.deliverAt - right.deliverAt || left.order - right.order);
