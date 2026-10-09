@@ -89,12 +89,18 @@ function parseCookies(request: IncomingMessage): Readonly<Record<string, string>
   const cookies: Record<string, string> = {};
   for (const part of (request.headers.cookie ?? "").split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (name) cookies[name] = decodeURIComponent(value.join("="));
+    if (!name) continue;
+    try {
+      cookies[name] = decodeURIComponent(value.join("="));
+    } catch {
+      // A cookie pair with malformed percent-encoding is ignored, as if absent.
+    }
   }
   return cookies;
 }
 
 function isLoopback(host: string): boolean {
+  if (host === "::1") return true;
   const hostname = host.startsWith("[")
     ? host.slice(1, host.indexOf("]"))
     : host.split(":")[0];
@@ -353,7 +359,13 @@ export function createBackofficeServer(
   const server = createServer(async (request, response) => {
     observer.observe(request, response);
     try {
-      const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+      let url: URL;
+      try {
+        url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
+      } catch {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
       const path = url.pathname;
 
       if (path === "/bff/metrics") {
