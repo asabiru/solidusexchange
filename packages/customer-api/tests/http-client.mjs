@@ -8,6 +8,7 @@ import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
+import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticQuoteDirectory } from "../src/quotes.mjs";
 import { createSyntheticSupportDirectory } from "../src/support.mjs";
@@ -61,6 +62,7 @@ export async function startTestServer(options = {}) {
     withdrawalDirectory: createSyntheticWithdrawalDirectory(),
     quoteDirectory: createSyntheticQuoteDirectory(),
     exchangeOrderDirectory: createSyntheticExchangeOrderDirectory(),
+    paymentDirectory: createSyntheticPaymentDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options

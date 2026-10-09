@@ -152,6 +152,16 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-007",
     "D-014"
   ]),
+  // The served payments collection read is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications, quotes and exchange-orders reads:
+  // payments are an asset/activity collection (the outbound fiat payment
+  // instructions a subject issued through the bank rail), not an onboarding
+  // or identity surface — unlike profile/kyc/support it must stay gated on a
+  // verified KYC status. The read is synthetic and carries no ledger effect
+  // (posting stays "none"), so it needs no open money-movement decisions:
+  // the unserved payments.create command below keeps the financial denial
+  // with its decision reasons.
+  entry("customer.payments.read", "read", true, []),
   entry("customer.payments.create", "financial", true, [
     "D-001",
     "D-004",
