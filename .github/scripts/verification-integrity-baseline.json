@@ -779,6 +779,10 @@
       "minLines": 377,
       "minCases": 11
     },
+    "packages/financial-core/tests/ledger-posting-rules.test.mjs": {
+      "minLines": 482,
+      "minCases": 10
+    },
     "packages/financial-core/tests/ledger.test.mjs": {
       "minLines": 479,
       "minCases": 16

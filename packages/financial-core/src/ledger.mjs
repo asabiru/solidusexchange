@@ -471,6 +471,12 @@ function validateCommand(command, accounts, assets, postingRules) {
   if (!postingRule) {
     reject("LEDGER_POSTING_RULE_NOT_FOUND", "Posting rule is not registered.");
   }
+  if (postingRule.scope !== "synthetic-test-only") {
+    reject(
+      "LEDGER_POSTING_RULE_VIOLATION",
+      "Posting rule scope is restricted to synthetic tests."
+    );
+  }
 
   assertExactKeys(command.actor, ACTOR_KEYS, "Actor");
   if (!ACTOR_TYPES.has(command.actor.type)) {
