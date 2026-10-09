@@ -38,7 +38,9 @@ export const CAPABILITY_POLICY = Object.freeze([
   entry("customer.session.read", "read", false, []),
   entry("customer.capabilities.read", "read", false, []),
   entry("customer.kyc.submit", "onboarding", false, ["D-001", "D-008"]),
-  entry("customer.wallets.read", "financial", true, ["D-001", "D-002"]),
+  // The served wallet collection read is KYC-gated but synthetic: it needs no
+  // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).
+  entry("customer.wallets.read", "read", true, []),
   entry("customer.deposits.create", "financial", true, [
     "D-001",
     "D-002",

@@ -16,6 +16,7 @@ import {
   metricsRequestAllowed
 } from "./observability.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
+import { validWalletsView } from "./wallets.mjs";
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
 /** @typedef {import("node:http").ServerResponse} ServerResponse */
@@ -30,6 +31,7 @@ import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
  * @property {import("./auth.mjs").TokenVerifier} verifier
  * @property {import("./capabilities.mjs").KycDirectory} kycDirectory
  * @property {import("./rate-limit.mjs").RateLimiter} rateLimiter
+ * @property {import("./wallets.mjs").WalletDirectory} walletDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -197,6 +199,7 @@ export function createCustomerApiHandler({
   verifier,
   kycDirectory,
   rateLimiter,
+  walletDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -209,6 +212,9 @@ export function createCustomerApiHandler({
   }
   if (typeof rateLimiter?.consume !== "function") {
     throw new Error("A rate limiter is required");
+  }
+  if (typeof walletDirectory?.listFor !== "function") {
+    throw new Error("A wallet directory is required");
   }
 
   /**
@@ -312,6 +318,18 @@ export function createCustomerApiHandler({
 
     const kycStatus = await kycDirectory.statusFor(principal.subject);
     const evaluation = evaluateCapabilities({ kycStatus });
+    if (operation.operationId === "getCustomerWallets") {
+      if (!evaluation.granted.includes("customer.wallets.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await walletDirectory.listFor(principal.subject);
+      if (!validWalletsView(view)) {
+        throw new Error("Wallet directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
     send(
       response,
       200,

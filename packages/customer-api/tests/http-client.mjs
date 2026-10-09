@@ -4,6 +4,7 @@ import { connect } from "node:net";
 import { createCustomerApiServer } from "../src/app.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
+import { createSyntheticWalletDirectory } from "../src/wallets.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { conformanceErrors, createValidator, loadContract } from "./contract-validator.mjs";
 
@@ -11,6 +12,7 @@ export const TEST_KEY = "5".repeat(16) + "a".repeat(16) + "0123456789abcdef".rep
 export const REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55a";
 export const NOW_MS = Date.parse("2026-10-01T12:00:00.000Z");
 export const SUBJECT = "syn_cust_00000001";
+export const VERIFIED_SUBJECT = "syn_cust_verified01";
 
 export function token({ subject = SUBJECT, ttlSeconds = 900, key = TEST_KEY } = {}) {
   return mintSyntheticCustomerToken({
@@ -30,11 +32,19 @@ export function customerHeaders(overrides = {}) {
   return Object.entries({ ...base, ...overrides }).filter(([, value]) => value !== null);
 }
 
+export function verifiedCustomerHeaders(overrides = {}) {
+  return customerHeaders({
+    Authorization: `Bearer ${token({ subject: VERIFIED_SUBJECT })}`,
+    ...overrides
+  });
+}
+
 export async function startTestServer(options = {}) {
   const clock = () => NOW_MS;
   const server = createCustomerApiServer({
     verifier: createSyntheticTokenVerifier({ key: TEST_KEY, clock }),
-    kycDirectory: createSyntheticKycDirectory({ syn_cust_verified01: "verified" }),
+    kycDirectory: createSyntheticKycDirectory({ [VERIFIED_SUBJECT]: "verified" }),
+    walletDirectory: createSyntheticWalletDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options

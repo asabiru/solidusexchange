@@ -20,7 +20,8 @@ import {
   REQUEST_ID,
   startTestServer,
   stopServer,
-  validator
+  validator,
+  verifiedCustomerHeaders
 } from "./http-client.mjs";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
@@ -133,7 +134,7 @@ test("only served contract pairs answer; every other method on every declared pa
   }
   for (const [contractPath, target] of targets) {
     for (const method of METHODS) {
-      const response = await checkedRequest(port, { method, path: target, headers: customerHeaders() });
+      const response = await checkedRequest(port, { method, path: target, headers: verifiedCustomerHeaders() });
       const pair = `${method} ${contractPath}`;
       if (servedPairs.has(pair)) {
         assert.ok(
@@ -184,7 +185,8 @@ test("unknown paths under /api/v1/customer/** 404 rather than fall through", asy
     "/api/v1/customer/checks/",
     "/api/v1/customer/auth",
     "/api/v1/customer/kyc",
-    "/api/v1/customer/wallets",
+    "/api/v1/customer/wallets/",
+    "/api/v1/customer/wallets/syn_wal_0001",
     "/api/v1/customer/notifications",
     "/api/v1/customers/session",
     "/api/v1/customer//session",
@@ -251,7 +253,7 @@ test("seeded probe: no undeclared route answers inside the customer namespace", 
       continue;
     }
     tried.add(path);
-    const response = await checkedRequest(port, { path, headers: customerHeaders() });
+    const response = await checkedRequest(port, { path, headers: verifiedCustomerHeaders() });
     const pair = `GET ${path}`;
     if (servedPairs.has(pair)) {
       assert.ok(response.status >= 200 && response.status < 300, pair);
