@@ -928,6 +928,10 @@
       "minLines": 561,
       "minCases": 36
     },
+    "packages/provider-simulators/tests/conformance.test.mjs": {
+      "minLines": 556,
+      "minCases": 11
+    },
     "packages/provider-simulators/tests/decimal.test.mjs": {
       "minLines": 68,
       "minCases": 6
