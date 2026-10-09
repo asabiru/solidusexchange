@@ -724,8 +724,8 @@
       "minLines": 105
     },
     "packages/custody-core/tests/unsigned-intent-hardening.test.mjs": {
-      "minLines": 486,
-      "minCases": 15
+      "minLines": 690,
+      "minCases": 22
     },
     "packages/custody-core/tests/unsigned-intent.test.mjs": {
       "minLines": 295,

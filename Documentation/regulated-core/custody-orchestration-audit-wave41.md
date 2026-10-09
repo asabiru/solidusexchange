@@ -1,0 +1,40 @@
+# Custody Orchestration Audit — Wave 41 — Proposed
+
+- Status: Proposed
+- Scope: `packages/custody-core` orchestration internals (`src/unsigned-intent.mjs`, `src/custody-event.mjs`, `custody-policy.json`, `migrations/0001_custody_projection_outbox.sql`) beyond the wave 33 / PR #222 fixes
+- Production effect: none
+
+## Scope reviewed
+
+- `packages/custody-core/src/unsigned-intent.mjs` — maker/checker quorum construction and verification, the required grant and evidence-digest binding, intent timing windows, reference and correlation id validation, plain-data snapshotting.
+- `packages/custody-core/src/custody-event.mjs` — `WithdrawalApproved` evidence binding, prepared-event causation, projection registry replay and identity consumption.
+- `packages/custody-core/migrations/0001_custody_projection_outbox.sql` — the outbox CHECK, uniqueness and idempotent-replay contract that the JS evidence must match.
+
+Hunt list applied: whether no grant is replayed or reused across intents, checker==maker via different reference forms, no grant scope wider than its intent, transitions after terminal status, evidence digests colliding on different payloads, quorum evaluation on empty or duplicate approver sets, expiry races between the required grant TTL and the intent TTL, id/reference uniqueness across the intent store, state leaking between subjects' intents.
+
+## Defects found and fixed
+
+1. Evidence identities were never consumed by the projection registry. `createCustodyProjectionRegistry` pinned `event_id`, `causation_id`, `withdrawal_id`, `custody_intent_id` and the idempotency key, but nothing recorded the payload's required `approval_id`, each entry's required `approval_id`, the required grant identity or the required `evidence_digest`. The same required approval set, a single required entry, one required grant or one required evidence digest could therefore be re-cited under a different withdrawal and custody intent, so no grant or evidence attestation was bound to the intent it covered — replay across intents was possible. The registry now consumes all four identity families before admitting a projection; an exact canonical replay still returns the original event because the replay check runs first.
+2. An inverted maker/checker order sealed the intent. `assertApprovals` enforced distinct subjects, roles, the required grant identity and digest uniqueness plus the per-entry TTL window, but placed no ordering between the two required roles, so an intent where the checker's required `approved_at` predates the maker's sealed anyway. The required `approved_at` ordering between maker and checker is now enforced — the checker's cannot be earlier than the maker's.
+3. `snapshotPlainData` admitted leaves JSON cannot represent faithfully. `undefined` values and symbol values are silently dropped by `JSON.stringify` (colliding a payload containing the key with one that omits it), `NaN`/`Infinity` serialize as `null` (colliding a numeric leaf with a null leaf), and `bigint` throws mid-digest after partially walking the input. Evidence digests could therefore collide across different payloads. Leaf values are now restricted to `null`, booleans, strings and finite numbers.
+4. `correlation_id` admitted UUID versions 1-8 while the outbox `custody_projection_correlation_uuid_v7` CHECK requires UUIDv7. A v4 correlation id passed JS validation and could only fail inside `record_custody_projection` — the same JS-looser-than-SQL drift class wave 33 closed for reference lengths. `correlation_id` is now validated as UUIDv7 (`assertUuid` renamed `assertUuidV7`; the other event/identity ids already required v7).
+5. `WithdrawalApproved.causation_id` could equal the prepared event's `event_id`. Wave 33 documented "different from both its own `event_id` and the prepared event's" as verified clean, but only the self-causation check was actually enforced; an event could name the event it causes as its own cause. The verifier now rejects `causation_id === targetEventId` alongside the existing self-causation check.
+
+## Verified clean
+
+- Quorum binding: maker and checker must differ by canonical `subject_reference`, role, the required `approval_id`, the required grant identity and the required `evidence_digest`; each entry's `intent_digest` must equal the sealed command+policy digest and the required evidence digest must hash the exact entry multiset, so an entry cannot be re-bound to another intent or swapped between roles without failing the digest. `subject_reference` is a single canonical string (no alternate spellings), so checker==maker via a different reference form is not possible; ref-form ambiguity was closed in wave 33 by pinning the `operator_ref_`-style reference grammar.
+- Quorum sizing: the `required_approval_roles` list is required to be non-empty and enforced per role; extra entries must still carry unique identities and valid digests, and the `minimum_approvals` is required to bound the array length, so an empty or duplicate approver set cannot satisfy the quorum.
+- Timing windows: `verify`'s two `now.getTime()` reads provably collapse to one instant. The command window is `[created_at, expires_at)` and each entry's `now` window is `[required approved_at, required approved_at + ttl]`; every required `approved_at` is itself asserted to lie inside `[created_at, expires_at)`, so whenever both windows are individually satisfiable a single instant satisfying all checks always exists (the latest required `approved_at`). The multi-read cannot change the outcome and is retained as-is; `prepare` already reads the clock once.
+- Lifecycle: `prepare` emits exactly `unsigned_intent_ready` with every capability flag false; `verify` re-checks sealed digests, policy digest, the canonical required `approval_id` ordering and the required evidence digest before use. There is no state transition surface beyond sealed-envelope verification, so no path can skip states or reopen a consumed intent inside this package; the registry's idempotent replay returns the original event and a changed digest under a reused key fails closed.
+- Identity uniqueness: the registry pins `event_id`, `causation_id`, `withdrawal_id` and `custody_intent_id`, and the outbox migration mirrors that with UNIQUE constraints plus 15 CHECK constraints on the canonical event shape; no state leaks between subjects' intents because every projection validates the full sealed envelope independently.
+- Required grant scope: a step-up grant is not bound beyond its entry's `intent_digest` and the required evidence digest; a required grant citing evidence for a different command or policy fails the digest check, so no grant can cover more than its own intent.
+
+## Observations (recorded, not defects in this slice)
+
+- `verify` evaluates the command window and the required TTL against two separate `now.getTime()` reads. As proven above this cannot change the outcome under any policy values, so it is left unchanged; if a future revision adds a third window whose interval need not contain a required `approved_at`, the single-read anchoring already used by `prepare` should be adopted.
+- The registry is in-memory dev evidence; cross-process replay belongs to the future durable outbox and is already enforced at the SQL boundary by the UNIQUE constraints.
+
+## Test additions
+
+- `packages/custody-core/tests/unsigned-intent-hardening.test.mjs` (+7 cases): checker-before-maker rejection; non-JSON leaf rejection across `computeIntentDigest`, `prepare` and `snapshotPlainData` directly; non-v7 `correlation_id` rejection; prepared-event causation rejection; the required approval set is consumed once; each required `approval_id`, required grant identity and `evidence_digest` is consumed once across maker and checker legs; a distinct required approval set on a new withdrawal still projecting successfully (overreach guard).
+- `packages/custody-core/tests/unsigned-intent.test.mjs`: correlation message expectation updated to the UUIDv7 bound. All new tests fail on `origin/main` and pass on this branch.

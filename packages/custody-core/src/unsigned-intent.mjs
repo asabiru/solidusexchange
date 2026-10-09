@@ -61,7 +61,7 @@ const restrictedFields = new Set([
 ]);
 const referencePattern = /^[a-z][a-z0-9_]{2,127}$/u;
 const digestPattern = /^[0-9a-f]{64}$/u;
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
+const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const decimalPattern = /^(?:0|[1-9][0-9]*)(?:\.([0-9]+))?$/u;
 const intentKeys = [
   "approval_evidence_digest",
@@ -98,7 +98,16 @@ const arrayIndexPattern = /^(?:0|[1-9][0-9]*)$/u;
 
 export function snapshotPlainData(value, label = "input", ancestors = new Set()) {
   assert(typeof value !== "function", `${label} must be plain data`);
-  if (value === null || typeof value !== "object") return value;
+  if (value === null || typeof value !== "object") {
+    assert(
+      value === null ||
+        typeof value === "boolean" ||
+        typeof value === "string" ||
+        (typeof value === "number" && Number.isFinite(value)),
+      `${label} must be plain data`
+    );
+    return value;
+  }
   assert(!types.isProxy(value), `${label} must be plain data`);
   assert(!ancestors.has(value), `${label} must not be cyclic`);
   const isArray = Array.isArray(value);
@@ -197,8 +206,8 @@ function assertReference(value, label, prefix) {
   );
 }
 
-function assertUuid(value, label) {
-  assert(typeof value === "string" && uuidPattern.test(value), `${label} must be a canonical UUID`);
+function assertUuidV7(value, label) {
+  assert(typeof value === "string" && uuidV7Pattern.test(value), `${label} must be a UUIDv7`);
 }
 
 function assertPolicy(policy) {
@@ -251,7 +260,7 @@ function assertCommand(command, policy, now) {
   assertReference(command.legal_entity_id, "legal_entity_id", "legal_entity_");
   assertReference(command.destination_reference, "destination_reference", "destination_ref_");
   assertReference(command.idempotency_key, "idempotency_key", "custody_idempotency_");
-  assertUuid(command.correlation_id, "correlation_id");
+  assertUuidV7(command.correlation_id, "correlation_id");
   assert(command.policy_version === policy.policy_version, "command policy version mismatch");
 
   const assetPolicy = policy.allowed_assets.find(
@@ -291,6 +300,7 @@ function assertApprovals(approvals, intentDigest, policy, timing, now) {
   const roles = new Set();
   const stepUpGrantIds = new Set();
   const evidenceDigests = new Set();
+  const roleApprovedAt = new Map();
   for (const [index, approval] of approvals.entries()) {
     const label = `approvals[${index}]`;
     assertExactKeys(approval, approvalKeys, label);
@@ -320,10 +330,15 @@ function assertApprovals(approvals, intentDigest, policy, timing, now) {
     assert(approvedAt <= now, `${label} cannot be approved in the future`);
     assert(approvedAt < timing.expiresAt, `${label} must precede intent expiry`);
     assert(now - approvedAt <= policy.approval_ttl_seconds * 1000, `${label} approval has expired`);
+    roleApprovedAt.set(approval.role, approvedAt);
   }
   for (const requiredRole of policy.required_approval_roles) {
     assert(roles.has(requiredRole), `required approval role is missing: ${requiredRole}`);
   }
+  assert(
+    roleApprovedAt.get("custody_checker") >= roleApprovedAt.get("custody_maker"),
+    "custody checker approval must not predate the maker approval"
+  );
 }
 
 function deepFreeze(value) {

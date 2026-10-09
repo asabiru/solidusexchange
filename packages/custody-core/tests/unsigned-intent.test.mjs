@@ -199,7 +199,7 @@ test("rejects non-UUID correlation identifiers", () => {
         now,
         policy
       }),
-    /correlation_id must be a canonical UUID/u
+    /correlation_id must be a UUIDv7/u
   );
 });
 
