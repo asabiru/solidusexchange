@@ -62,7 +62,7 @@ describe("customer API client", () => {
       assert.equal(client.configured, true);
       assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), {
         status: "connected",
-        granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read"],
+        granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read"],
         commandsEnabled: false
       });
       const wrongKey = createCustomerApiClient({ baseUrl, devTokenKey: randomBytes(32).toString("hex") });

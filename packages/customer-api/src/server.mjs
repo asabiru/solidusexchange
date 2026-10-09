@@ -7,6 +7,7 @@ import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createSyntheticKycApplicationDirectory } from "./kyc.mjs";
 import { createSyntheticNotificationDirectory } from "./notifications.mjs";
+import { createSyntheticProfileDirectory } from "./profile.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
@@ -17,12 +18,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   walletDirectory?: import("./wallets.mjs").WalletDirectory,
  *   notificationDirectory?: import("./notifications.mjs").NotificationDirectory,
  *   kycApplicationDirectory?: import("./kyc.mjs").KycApplicationDirectory,
+ *   profileDirectory?: import("./profile.mjs").ProfileDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -33,6 +35,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     walletDirectory: walletDirectory ?? createSyntheticWalletDirectory(),
     notificationDirectory: notificationDirectory ?? createSyntheticNotificationDirectory(),
     kycApplicationDirectory: kycApplicationDirectory ?? createSyntheticKycApplicationDirectory(),
+    profileDirectory: profileDirectory ?? createSyntheticProfileDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
