@@ -762,6 +762,167 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.profile("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads the support tickets with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      delivery: "disabled",
+      tickets: [
+        {
+          ticket_id: "tck_0123456789abcdef01234567",
+          category: "complaint",
+          topic: "Тестовый режим. Жалоба на обслуживание.",
+          message: "Тестовый режим. Синтетическая жалоба, её никто не получит.",
+          status: "in_review",
+          timeline: [
+            { status: "received", at: "2026-10-01T12:00:00.000Z" },
+            { status: "in_review", at: "2026-10-01T13:00:00.000Z" }
+          ],
+          complaint_acknowledged: true,
+          created_at: "2026-10-01T12:00:00.000Z",
+          expires_at: "2026-10-02T12:00:00.000Z"
+        }
+      ]
+    };
+    await withFakeApi(
+      () => view,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.support("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", view });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps every support read failure to unavailable, including an upstream 403", async () => {
+    const key = randomBytes(32).toString("hex");
+    // customer.support.read is granted at every upstream session status, so
+    // even a 403 is contract drift, not a real capability denial: there is no
+    // denied arm and every non-200 outcome fails closed to "unavailable".
+    for (const status of [403, 401, 429, 500]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.support("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "unavailable", String(status));
+        assert.deepEqual(result, { status: "unavailable" });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed support bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const ticket = {
+      ticket_id: "tck_0123456789abcdef01234567",
+      category: "complaint",
+      topic: "Тестовый режим. Жалоба на обслуживание.",
+      message: "Тестовый режим. Синтетическая жалоба, её никто не получит.",
+      status: "in_review",
+      timeline: [
+        { status: "received", at: "2026-10-01T12:00:00.000Z" },
+        { status: "in_review", at: "2026-10-01T13:00:00.000Z" }
+      ],
+      complaint_acknowledged: true,
+      created_at: "2026-10-01T12:00:00.000Z",
+      expires_at: "2026-10-02T12:00:00.000Z"
+    };
+    const view = { mode: "test", delivery: "disabled", tickets: [ticket] };
+    for (const body of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, delivery: "telegram" },
+      { ...view, tickets: {} },
+      { mode: "test", delivery: "disabled" },
+      { ...view, tickets: [{ ...ticket, extra: true }] },
+      { ...view, tickets: [{ ...ticket, ticket_id: "sup_0123456789abcdef01234567" }] },
+      { ...view, tickets: [{ ...ticket, ticket_id: "tck_0123456789ABCDEF01234567" }] },
+      { ...view, tickets: [{ ...ticket, ticket_id: 42 }] },
+      { ...view, tickets: [{ ...ticket, category: "refund" }] },
+      { ...view, tickets: [{ ...ticket, category: 42 }] },
+      { ...view, tickets: [{ ...ticket, topic: "" }] },
+      { ...view, tickets: [{ ...ticket, topic: "a".repeat(121) }] },
+      { ...view, tickets: [{ ...ticket, topic: 42 }] },
+      { ...view, tickets: [{ ...ticket, message: "" }] },
+      { ...view, tickets: [{ ...ticket, message: "a".repeat(1_001) }] },
+      { ...view, tickets: [{ ...ticket, status: "escalated" }] },
+      { ...view, tickets: [{ ...ticket, status: "received" }] },
+      { ...view, tickets: [{ ...ticket, timeline: [] }] },
+      { ...view, tickets: [{ ...ticket, timeline: {} }] },
+      { ...view, tickets: [{ ...ticket, timeline: [{ status: "in_review", at: "2026-10-01T13:00:00.000Z", note: "x" }] }] },
+      { ...view, tickets: [{ ...ticket, timeline: [{ status: "escalated", at: "2026-10-01T13:00:00.000Z" }] }] },
+      { ...view, tickets: [{ ...ticket, timeline: [{ status: "in_review", at: "soon" }] }] },
+      { ...view, tickets: [{ ...ticket, complaint_acknowledged: "yes" }] },
+      { ...view, tickets: [{ ...ticket, created_at: "last week" }] },
+      { ...view, tickets: [{ ...ticket, created_at: "2026-10-01T12:00:00Z" }] },
+      { ...view, tickets: [{ ...ticket, expires_at: "2026-13-40T12:00:00.000Z" }] },
+      ["support"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.support("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.support("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("reads the support tickets from the dev customer-api without a KYC gate and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // customer.support.read is granted at every session status: the dev
+      // customer-api answers 200 with the deterministic synthetic ticket list
+      // even though its KYC directory marks every subject unverified.
+      const first = await client.support("tg-0123456789abcdef", Date.now());
+      assert.equal(first.status, "ok");
+      if (first.status !== "ok") return;
+      assert.equal(first.view.mode, "test");
+      assert.equal(first.view.delivery, "disabled");
+      assert.ok(first.view.tickets.length >= 1);
+      for (const ticket of first.view.tickets) {
+        assert.match(ticket.ticket_id, /^tck_[0-9a-f]{24}$/);
+        assert.match(ticket.category, /^(question|operation_problem|complaint|data_request)$/);
+        assert.match(ticket.status, /^(received|in_review|answered|closed)$/);
+        assert.equal(ticket.timeline.at(-1)?.status, ticket.status);
+        assert.equal(typeof ticket.complaint_acknowledged, "boolean");
+        assert.match(ticket.created_at, isoTimestamp);
+        assert.match(ticket.expires_at, isoTimestamp);
+      }
+      assert.deepEqual(await client.support("tg-0123456789abcdef", Date.now()), first);
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.support("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

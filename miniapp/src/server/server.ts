@@ -60,6 +60,7 @@ import {
   SupportInputError,
   SupportLimitError,
   SupportRateLimitError,
+  contractSupportRequestsView,
   createSupportDesk
 } from "./support.js";
 import { syntheticData, walletView } from "./synthetic.js";
@@ -820,6 +821,23 @@ export function createMiniappServer(
         return;
       }
       if (path === "/bff/support/requests") {
+        // Like /bff/profile and /bff/kyc/status — and unlike /bff/wallet and
+        // /bff/notifications — the support request list is not KYC-gated
+        // upstream: customer.support.read is granted at every session status,
+        // so a configured customer-api answers gated sessions too and only the
+        // standalone unconfigured dev BFF keeps the local desk view. Since the
+        // read is never denied, an upstream 403 signals contract drift and
+        // maps, like every other non-ok outcome, to the sibling *_unavailable
+        // shape.
+        if (customerApi.configured) {
+          const upstream = await customerApi.support(session.subject, clock());
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "support_unavailable" });
+            return;
+          }
+          json(response, 200, contractSupportRequestsView(upstream.view));
+          return;
+        }
         const view: SupportRequestsView = { mode: "test", delivery: "disabled", requests: support.list(session.subject) };
         json(response, 200, view);
         return;

@@ -50,7 +50,8 @@ function profileStub(
     profile: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
-    }
+    },
+    support: async () => ({ status: "not-configured" })
   };
   return stub;
 }

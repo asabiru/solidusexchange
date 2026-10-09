@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { startCustomerApi } from "@solidchange/customer-api/dev-server";
-import type { ProfileView, QuotePreview } from "../shared/api.js";
+import type { ProfileView, QuotePreview, SupportRequestsView } from "../shared/api.js";
 import { loadServerConfig } from "./config.js";
 import { createMiniappServer } from "./server.js";
 
@@ -58,6 +58,26 @@ describe("end-to-end dev flow: login → customer API → provider quote", () =>
     assert.match(profile.displayName, /^Customer [0-9a-f]{8}$/);
     assert.match(profile.customerRef, /^SC-DEV-[0-9A-Z]{5}$/);
     assert.equal(profile.limits.decision, "D-014");
+  });
+
+  it("serves the support request list through the customer-api contract", async () => {
+    // customer.support.read is granted at every session status upstream, so a
+    // kyc-gated session reaches the contract surface too: the adapted view
+    // carries tck_* ticket ids and millisecond timestamps.
+    const cookie = await login("kyc-gated");
+    const response = await fetch(`${base}/bff/support/requests`, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    const view = await response.json() as SupportRequestsView;
+    assert.deepEqual(Object.keys(view).sort(), ["delivery", "mode", "requests"]);
+    assert.equal(view.mode, "test");
+    assert.equal(view.delivery, "disabled");
+    assert.ok(view.requests.length >= 1);
+    for (const request of view.requests) {
+      assert.match(request.id, /^tck_[0-9a-f]{24}$/);
+      assert.equal(request.mode, "test");
+      assert.equal(request.delivery, "disabled");
+      assert.equal(request.status, request.timeline.at(-1)?.status);
+    }
   });
 
   it("previews a signed provider-simulator quote and keeps it non-executable", async () => {
