@@ -26,12 +26,12 @@ function decisionStatus(id) {
 }
 
 test("only served read operations are ever granted", () => {
-  // getCustomerWallets and getCustomerNotifications are the only KYC-gated
-  // served operations today.
+  // getCustomerWallets, getCustomerNotifications and getCustomerDeposits are
+  // the only KYC-gated served operations today.
   const gated = OPERATIONS.filter((operation) =>
-    ["getCustomerWallets", "getCustomerNotifications"].includes(operation.operationId)
+    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits"].includes(operation.operationId)
   ).length;
-  assert.equal(gated, 2);
+  assert.equal(gated, 3);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     // customer.kyc.read, customer.profile.read and customer.support.read are
@@ -40,7 +40,7 @@ test("only served read operations are ever granted", () => {
     // stay readable for unverified subjects.
     const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read"];
     if (kycStatus === "verified") {
-      expected.push("customer.wallets.read", "customer.notifications.read");
+      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read");
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
@@ -69,6 +69,11 @@ test("money-moving and balance capabilities reference limits and scope decisions
   const financial = CAPABILITY_POLICY.filter((item) => item.kind === "financial");
   for (const namespace of MONEY_NAMESPACES) {
     assert.ok(financial.some((item) => item.capability.startsWith(`customer.${namespace}.`)), namespace);
+  }
+  // Every money namespace except deposits — whose collection read is now
+  // served — stays a planned (unserved) contract namespace; the deposits
+  // create capability itself stays financial and unserved.
+  for (const namespace of MONEY_NAMESPACES.filter((name) => name !== "deposits")) {
     assert.ok(contract.openapi["x-solidchange-planned-namespaces"].customer.includes(`/api/v1/customer/${namespace}`));
   }
   for (const policy of financial.filter((item) => !item.capability.endsWith(".read"))) {
@@ -113,6 +118,14 @@ test("money-moving and balance capabilities reference limits and scope decisions
   assert.deepEqual(
     CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.support.")).map((item) => item.capability),
     ["customer.support.read"]
+  );
+  // The deposits namespace stays a money namespace: it now serves the
+  // KYC-gated synthetic collection read while deposits.create remains a
+  // denied financial capability under its open decisions.
+  assert.ok(MONEY_NAMESPACES.includes("deposits"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.deposits.")).map((item) => item.capability),
+    ["customer.deposits.read", "customer.deposits.create"]
   );
   const withdrawals = financial.find((item) => item.capability === "customer.withdrawals.create");
   assert.deepEqual([...withdrawals.decisions], ["D-001", "D-002", "D-003", "D-011", "D-014"]);

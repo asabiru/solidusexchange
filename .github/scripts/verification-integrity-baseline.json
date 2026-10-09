@@ -1,1047 +1,1051 @@
 {
- "scripts": {
-  "backoffice/package.json": {
-   "dev": "node scripts/dev.mjs",
-   "dev:web": "vite",
-   "dev:bff": "npm run build:bff && BACKOFFICE_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
-   "build": "tsc -b && npm run build:bff && vite build",
-   "build:bff": "tsc -p tsconfig.server.json",
-   "lint": "biome lint src scripts vite.config.ts",
-   "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-   "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js"
+  "scripts": {
+    "backoffice/package.json": {
+      "dev": "node scripts/dev.mjs",
+      "dev:web": "vite",
+      "dev:bff": "npm run build:bff && BACKOFFICE_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
+      "build": "tsc -b && npm run build:bff && vite build",
+      "build:bff": "tsc -p tsconfig.server.json",
+      "lint": "biome lint src scripts vite.config.ts",
+      "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js"
+    },
+    "miniapp/package.json": {
+      "dev": "node scripts/dev.mjs",
+      "dev:web": "vite",
+      "dev:bff": "npm run build:bff && MINIAPP_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
+      "build": "tsc -b && npm run build:bff && vite build",
+      "build:bff": "tsc -p tsconfig.server.json",
+      "lint": "biome lint src scripts vite.config.ts",
+      "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
+    },
+    "packages/api-contracts/package.json": {
+      "check": "node scripts/check-contracts.mjs",
+      "test": "npm run check && node --test tests/*.test.mjs"
+    },
+    "packages/custody-core/package.json": {
+      "check": "node scripts/check-boundary.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    },
+    "packages/customer-api/package.json": {
+      "check": "node scripts/check-boundary.mjs",
+      "dev": "node src/server.mjs",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/deposits.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/profile.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/support.mjs && node --check src/wallets.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/deposits.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/profile.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/support.test.mjs && node --check tests/wallets.test.mjs && npm run check",
+      "mint-dev-token": "node scripts/mint-dev-token.mjs",
+      "test": "npm run check && node --test tests/*.test.mjs",
+      "typecheck": "tsc -p tsconfig.json --pretty false"
+    },
+    "packages/e2e-dev/package.json": {
+      "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
+      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs",
+      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs",
+      "typecheck": "npm run lint"
+    },
+    "packages/financial-core/package.json": {
+      "check": "node scripts/check-foundation.mjs",
+      "test": "node --test tests/*.test.mjs",
+      "verify": "npm run check && npm run verify:migrations && npm test",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
+    },
+    "packages/provider-simulators/package.json": {
+      "build": "rm -rf dist && tsc -p tsconfig.build.json",
+      "check": "node scripts/check-boundary.mjs",
+      "lint": "biome lint src tests scripts",
+      "test": "node --test tests/*.test.mjs",
+      "typecheck": "tsc -p tsconfig.json --pretty false",
+      "verify": "npm run check && npm run lint && npm run typecheck && npm test && npm run build"
+    }
   },
-  "miniapp/package.json": {
-   "dev": "node scripts/dev.mjs",
-   "dev:web": "vite",
-   "dev:bff": "npm run build:bff && MINIAPP_ALLOW_DEV_LOGIN=true node .server-dist/server/index.js",
-   "build": "tsc -b && npm run build:bff && vite build",
-   "build:bff": "tsc -p tsconfig.server.json",
-   "lint": "biome lint src scripts vite.config.ts",
-   "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-   "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
+  "runSteps": {
+    ".github/workflows/backoffice-ci.yml": [
+      {
+        "run": "working-directory: backoffice"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      },
+      {
+        "run": "npm run build"
+      }
+    ],
+    ".github/workflows/contracts-ci.yml": [
+      {
+        "run": "working-directory: packages/api-contracts"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
+    ".github/workflows/custody-core-ci.yml": [
+      {
+        "run": "working-directory: packages/custody-core"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run verify"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-catalog.sh"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-policy.sh"
+      },
+      {
+        "run": "bash tests/postgres-outbox.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-migration-history.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-execution-surface-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-backup-restore.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-runtime-privileges.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/customer-api-ci.yml": [
+      {
+        "run": "working-directory: packages/customer-api"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
+    ".github/workflows/deploy.yml": [],
+    ".github/workflows/e2e-dev-ci.yml": [
+      {
+        "run": "working-directory: packages/e2e-dev"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm ci --prefix ../../miniapp"
+      },
+      {
+        "run": "npm ci --prefix ../../backoffice"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm test"
+      }
+    ],
+    ".github/workflows/financial-core-ci.yml": [
+      {
+        "run": "working-directory: packages/financial-core"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run verify"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-catalog.sh"
+      },
+      {
+        "run": "bash tests/postgres-migration-source-policy.sh"
+      },
+      {
+        "run": "| for migration in migrations/*.sql; do docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$migration\" done"
+      },
+      {
+        "run": "bash tests/postgres-migration-history.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-chart-of-accounts.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-owner-truncate-guard.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-immutability-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-trigger-function-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-execution-surface-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-posting-rule-registry.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -v \"command_vector_json=$(tr -d '\\n' < tests/command-digest-vector.json)\" -f tests/postgres-smoke.sql"
+      },
+      {
+        "run": "bash tests/postgres-acceptance-artifact-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-finite-timestamps.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-constraint-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-relation-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-access-control-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-invariant-trigger-catalog.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-replica-reference-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-concurrency.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-backup-restore.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-runtime-privileges.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f tests/postgres-precision-boundary.sql"
+      },
+      {
+        "run": "| while IFS='|' read -r fixture expected; do set +e output=\"$(docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$fixture\" 2>&1)\" status=$? set -e printf '%s\\n' \"$output\" if [ \"$status\" -eq 0 ]; then echo \"$fixture unexpectedly committed.\" exit 1 fi printf '%s\\n' \"$output\" | grep -F \"$expected\" done <<'EOF' tests/postgres-reject-incomplete.sql|requires at least two entries tests/postgres-reject-unbalanced.sql|is not balanced per asset tests/postgres-reject-late-entry.sql|is sealed tests/postgres-reject-unregistered-rule.sql|ledger_journals_posting_rule_fk tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule tests/postgres-reject-rule-pattern.sql|entries violate its posting rule tests/postgres-reject-precision.sql|amount exceeds ledger precision limit tests/postgres-reject-nonfinite.sql|amount must be finite EOF"
+      },
+      {
+        "run": "bash tests/postgres-ledger-integrity.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      },
+      {
+        "run": "bash tests/postgres-command-digest-uniqueness.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+      }
+    ],
+    ".github/workflows/local-dev-stack-ci.yml": [
+      {
+        "run": "node --test .github/scripts/check-dev-stack.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-dev-stack.mjs"
+      },
+      {
+        "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs"
+      },
+      {
+        "run": "docker compose -f infra/local/compose.yaml config --quiet"
+      }
+    ],
+    ".github/workflows/miniapp-ci.yml": [
+      {
+        "run": "working-directory: miniapp"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      },
+      {
+        "run": "npm run build"
+      }
+    ],
+    ".github/workflows/provider-simulators-ci.yml": [
+      {
+        "run": "working-directory: packages/provider-simulators"
+      },
+      {
+        "run": "npm ci"
+      },
+      {
+        "run": "npm audit --audit-level=moderate"
+      },
+      {
+        "run": "npm run check"
+      },
+      {
+        "run": "npm run lint"
+      },
+      {
+        "run": "npm run typecheck"
+      },
+      {
+        "run": "npm test"
+      },
+      {
+        "run": "npm run build"
+      }
+    ],
+    ".github/workflows/workflow-policy.yml": [
+      {
+        "run": "node --test .github/scripts/check-workflow-policy.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-workflow-policy.mjs"
+      },
+      {
+        "run": "node --test .github/scripts/check-regulated-core-status.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-regulated-core-status.mjs"
+      },
+      {
+        "run": "node --test .github/scripts/check-verification-integrity.test.mjs"
+      },
+      {
+        "run": "node .github/scripts/check-verification-integrity.mjs"
+      }
+    ]
   },
-  "packages/api-contracts/package.json": {
-   "check": "node scripts/check-contracts.mjs",
-   "test": "npm run check && node --test tests/*.test.mjs"
-  },
-  "packages/custody-core/package.json": {
-   "check": "node scripts/check-boundary.mjs",
-   "test": "node --test tests/*.test.mjs",
-   "verify": "npm run check && npm run verify:migrations && npm test",
-   "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
-  },
-  "packages/customer-api/package.json": {
-   "check": "node scripts/check-boundary.mjs",
-   "dev": "node src/server.mjs",
-   "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/profile.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/support.mjs && node --check src/wallets.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/profile.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/support.test.mjs && node --check tests/wallets.test.mjs && npm run check",
-   "mint-dev-token": "node scripts/mint-dev-token.mjs",
-   "test": "npm run check && node --test tests/*.test.mjs",
-   "typecheck": "tsc -p tsconfig.json --pretty false"
-  },
-  "packages/e2e-dev/package.json": {
-   "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
-   "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs",
-   "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs",
-   "typecheck": "npm run lint"
-  },
-  "packages/financial-core/package.json": {
-   "check": "node scripts/check-foundation.mjs",
-   "test": "node --test tests/*.test.mjs",
-   "verify": "npm run check && npm run verify:migrations && npm test",
-   "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
-  },
-  "packages/provider-simulators/package.json": {
-   "build": "rm -rf dist && tsc -p tsconfig.build.json",
-   "check": "node scripts/check-boundary.mjs",
-   "lint": "biome lint src tests scripts",
-   "test": "node --test tests/*.test.mjs",
-   "typecheck": "tsc -p tsconfig.json --pretty false",
-   "verify": "npm run check && npm run lint && npm run typecheck && npm test && npm run build"
+  "testFiles": {
+    ".github/scripts/check-dev-stack.test.mjs": {
+      "minLines": 286,
+      "minCases": 30
+    },
+    ".github/scripts/check-regulated-core-status.test.mjs": {
+      "minLines": 228,
+      "minCases": 15
+    },
+    ".github/scripts/check-verification-integrity.test.mjs": {
+      "minLines": 498,
+      "minCases": 27
+    },
+    ".github/scripts/check-workflow-policy.test.mjs": {
+      "minLines": 528,
+      "minCases": 44
+    },
+    "backoffice/src/app/a11y.test.ts": {
+      "minLines": 622,
+      "minCases": 29
+    },
+    "backoffice/src/app/checks.test.ts": {
+      "minLines": 51,
+      "minCases": 4
+    },
+    "backoffice/src/app/i18n.test.ts": {
+      "minLines": 427,
+      "minCases": 38
+    },
+    "backoffice/src/app/subjects.test.ts": {
+      "minLines": 89,
+      "minCases": 6
+    },
+    "backoffice/src/app/support.test.ts": {
+      "minLines": 50,
+      "minCases": 4
+    },
+    "backoffice/src/app/withdrawals.test.ts": {
+      "minLines": 69,
+      "minCases": 4
+    },
+    "backoffice/src/auth/access.test.ts": {
+      "minLines": 82,
+      "minCases": 9
+    },
+    "backoffice/src/data/client.test.ts": {
+      "minLines": 282,
+      "minCases": 10
+    },
+    "backoffice/src/data/demo.test.ts": {
+      "minLines": 49,
+      "minCases": 2
+    },
+    "backoffice/src/server/audit-store.test.ts": {
+      "minLines": 84,
+      "minCases": 5
+    },
+    "backoffice/src/server/bff-core.test.ts": {
+      "minLines": 207,
+      "minCases": 6
+    },
+    "backoffice/src/server/checks.test.ts": {
+      "minLines": 190,
+      "minCases": 9
+    },
+    "backoffice/src/server/config.test.ts": {
+      "minLines": 246,
+      "minCases": 16
+    },
+    "backoffice/src/server/controls.test.ts": {
+      "minLines": 65,
+      "minCases": 6
+    },
+    "backoffice/src/server/dev-server.test.ts": {
+      "minLines": 49,
+      "minCases": 1
+    },
+    "backoffice/src/server/observability.test.ts": {
+      "minLines": 330,
+      "minCases": 12
+    },
+    "backoffice/src/server/oidc-session.test.ts": {
+      "minLines": 286,
+      "minCases": 6
+    },
+    "backoffice/src/server/oidc.test.ts": {
+      "minLines": 693,
+      "minCases": 19
+    },
+    "backoffice/src/server/postgres-audit-store.test.ts": {
+      "minLines": 28,
+      "minCases": 2
+    },
+    "backoffice/src/server/provider-evidence.test.ts": {
+      "minLines": 316,
+      "minCases": 11
+    },
+    "backoffice/src/server/reports.test.ts": {
+      "minLines": 338,
+      "minCases": 14
+    },
+    "backoffice/src/server/security-headers.test.ts": {
+      "minLines": 547,
+      "minCases": 12
+    },
+    "backoffice/src/server/server.test.ts": {
+      "minLines": 1208,
+      "minCases": 26
+    },
+    "backoffice/src/server/signing.test.ts": {
+      "minLines": 62,
+      "minCases": 4
+    },
+    "backoffice/src/server/step-up.test.ts": {
+      "minLines": 167,
+      "minCases": 5
+    },
+    "backoffice/src/server/subjects.test.ts": {
+      "minLines": 359,
+      "minCases": 15
+    },
+    "backoffice/src/server/support.test.ts": {
+      "minLines": 192,
+      "minCases": 9
+    },
+    "backoffice/src/server/withdrawals.test.ts": {
+      "minLines": 209,
+      "minCases": 9
+    },
+    "backoffice/tsconfig.test.json": {
+      "minLines": 34
+    },
+    "infra/local/tests/dev-material.test.mjs": {
+      "minLines": 93,
+      "minCases": 5
+    },
+    "infra/local/tests/healthcheck.test.mjs": {
+      "minLines": 60,
+      "minCases": 5
+    },
+    "infra/local/tests/loopback-edge.test.mjs": {
+      "minLines": 70,
+      "minCases": 6
+    },
+    "infra/local/tests/x509.test.mjs": {
+      "minLines": 67,
+      "minCases": 5
+    },
+    "miniapp/src/app/a11y.test.ts": {
+      "minLines": 381,
+      "minCases": 28
+    },
+    "miniapp/src/app/checks-badges.test.ts": {
+      "minLines": 71,
+      "minCases": 6
+    },
+    "miniapp/src/app/i18n.test.ts": {
+      "minLines": 435,
+      "minCases": 38
+    },
+    "miniapp/src/app/notification-seen.test.ts": {
+      "minLines": 97,
+      "minCases": 6
+    },
+    "miniapp/src/server/activity-routes.test.ts": {
+      "minLines": 371,
+      "minCases": 15
+    },
+    "miniapp/src/server/activity.test.ts": {
+      "minLines": 241,
+      "minCases": 15
+    },
+    "miniapp/src/server/address-screening-routes.test.ts": {
+      "minLines": 361,
+      "minCases": 14
+    },
+    "miniapp/src/server/address-screening.test.ts": {
+      "minLines": 352,
+      "minCases": 18
+    },
+    "miniapp/src/server/bff-core.test.ts": {
+      "minLines": 181,
+      "minCases": 6
+    },
+    "miniapp/src/server/bff-security.test.ts": {
+      "minLines": 137,
+      "minCases": 5
+    },
+    "miniapp/src/server/checks-routes.test.ts": {
+      "minLines": 185,
+      "minCases": 8
+    },
+    "miniapp/src/server/checks.test.ts": {
+      "minLines": 112,
+      "minCases": 10
+    },
+    "miniapp/src/server/customer-api-client.test.ts": {
+      "minLines": 890,
+      "minCases": 28
+    },
+    "miniapp/src/server/dev-server.test.ts": {
+      "minLines": 51,
+      "minCases": 1
+    },
+    "miniapp/src/server/init-data.test.ts": {
+      "minLines": 150,
+      "minCases": 18
+    },
+    "miniapp/src/server/integration.test.ts": {
+      "minLines": 94,
+      "minCases": 4
+    },
+    "miniapp/src/server/kyc-routes.test.ts": {
+      "minLines": 230,
+      "minCases": 10
+    },
+    "miniapp/src/server/kyc-status-upstream.test.ts": {
+      "minLines": 242,
+      "minCases": 8
+    },
+    "miniapp/src/server/kyc.test.ts": {
+      "minLines": 177,
+      "minCases": 13
+    },
+    "miniapp/src/server/notifications-routes.test.ts": {
+      "minLines": 137,
+      "minCases": 4
+    },
+    "miniapp/src/server/notifications-upstream.test.ts": {
+      "minLines": 237,
+      "minCases": 7
+    },
+    "miniapp/src/server/notifications.test.ts": {
+      "minLines": 402,
+      "minCases": 17
+    },
+    "miniapp/src/server/observability.test.ts": {
+      "minLines": 366,
+      "minCases": 13
+    },
+    "miniapp/src/server/profile-upstream.test.ts": {
+      "minLines": 226,
+      "minCases": 7
+    },
+    "miniapp/src/server/provider-quotes.test.ts": {
+      "minLines": 114,
+      "minCases": 8
+    },
+    "miniapp/src/server/quotes.test.ts": {
+      "minLines": 83,
+      "minCases": 8
+    },
+    "miniapp/src/server/security-headers.test.ts": {
+      "minLines": 479,
+      "minCases": 12
+    },
+    "miniapp/src/server/server.test.ts": {
+      "minLines": 336,
+      "minCases": 22
+    },
+    "miniapp/src/server/sessions-routes.test.ts": {
+      "minLines": 342,
+      "minCases": 19
+    },
+    "miniapp/src/server/support-routes.test.ts": {
+      "minLines": 386,
+      "minCases": 14
+    },
+    "miniapp/src/server/support.test.ts": {
+      "minLines": 203,
+      "minCases": 15
+    },
+    "miniapp/src/server/wallet-routes.test.ts": {
+      "minLines": 201,
+      "minCases": 7
+    },
+    "miniapp/src/shared/decimal.test.ts": {
+      "minLines": 109,
+      "minCases": 13
+    },
+    "miniapp/src/shared/quote.test.ts": {
+      "minLines": 41,
+      "minCases": 4
+    },
+    "miniapp/tsconfig.test.json": {
+      "minLines": 35
+    },
+    "packages/api-contracts/tests/contract-boundary.test.mjs": {
+      "minLines": 1563,
+      "minCases": 5
+    },
+    "packages/custody-core/tests/custody-event.test.mjs": {
+      "minLines": 542,
+      "minCases": 11
+    },
+    "packages/custody-core/tests/postgres-backup-consistency.sql": {
+      "minLines": 43
+    },
+    "packages/custody-core/tests/postgres-backup-continuity.sql": {
+      "minLines": 57
+    },
+    "packages/custody-core/tests/postgres-backup-restore.sh": {
+      "minLines": 569
+    },
+    "packages/custody-core/tests/postgres-catalog.sh": {
+      "minLines": 74
+    },
+    "packages/custody-core/tests/postgres-catalog.sql": {
+      "minLines": 539
+    },
+    "packages/custody-core/tests/postgres-execution-surface-catalog.sh": {
+      "minLines": 178
+    },
+    "packages/custody-core/tests/postgres-execution-surface-catalog.sql": {
+      "minLines": 293
+    },
+    "packages/custody-core/tests/postgres-migration-history.sh": {
+      "minLines": 241
+    },
+    "packages/custody-core/tests/postgres-migration-history.sql": {
+      "minLines": 30
+    },
+    "packages/custody-core/tests/postgres-migration-source-catalog.sh": {
+      "minLines": 41
+    },
+    "packages/custody-core/tests/postgres-migration-source-policy.sh": {
+      "minLines": 151
+    },
+    "packages/custody-core/tests/postgres-outbox.sh": {
+      "minLines": 67
+    },
+    "packages/custody-core/tests/postgres-outbox.sql": {
+      "minLines": 355
+    },
+    "packages/custody-core/tests/postgres-runtime-privilege-catalog.sql": {
+      "minLines": 326
+    },
+    "packages/custody-core/tests/postgres-runtime-privileges.sh": {
+      "minLines": 288
+    },
+    "packages/custody-core/tests/postgres-state-snapshot.sql": {
+      "minLines": 37
+    },
+    "packages/custody-core/tests/runtime-writer-grants.sql": {
+      "minLines": 105
+    },
+    "packages/custody-core/tests/unsigned-intent-hardening.test.mjs": {
+      "minLines": 486,
+      "minCases": 15
+    },
+    "packages/custody-core/tests/unsigned-intent.test.mjs": {
+      "minLines": 295,
+      "minCases": 13
+    },
+    "packages/customer-api/tests/auth-config.test.mjs": {
+      "minLines": 137,
+      "minCases": 11
+    },
+    "packages/customer-api/tests/capabilities.test.mjs": {
+      "minLines": 141,
+      "minCases": 7
+    },
+    "packages/customer-api/tests/contract-conformance.test.mjs": {
+      "minLines": 341,
+      "minCases": 20
+    },
+    "packages/customer-api/tests/contract-coverage.test.mjs": {
+      "minLines": 251,
+      "minCases": 9
+    },
+    "packages/customer-api/tests/contract-validator.mjs": {
+      "minLines": 254
+    },
+    "packages/customer-api/tests/contract-validator.test.mjs": {
+      "minLines": 135,
+      "minCases": 11
+    },
+    "packages/customer-api/tests/deposits.test.mjs": {
+      "minLines": 256,
+      "minCases": 10
+    },
+    "packages/customer-api/tests/http-client.mjs": {
+      "minLines": 144,
+      "minCases": 0
+    },
+    "packages/customer-api/tests/kyc.test.mjs": {
+      "minLines": 281,
+      "minCases": 10
+    },
+    "packages/customer-api/tests/machinery-hardening.test.mjs": {
+      "minLines": 102,
+      "minCases": 7
+    },
+    "packages/customer-api/tests/notifications.test.mjs": {
+      "minLines": 217,
+      "minCases": 9
+    },
+    "packages/customer-api/tests/observability.test.mjs": {
+      "minLines": 248,
+      "minCases": 11
+    },
+    "packages/customer-api/tests/profile.test.mjs": {
+      "minLines": 199,
+      "minCases": 8
+    },
+    "packages/customer-api/tests/request-headers.test.mjs": {
+      "minLines": 205,
+      "minCases": 12
+    },
+    "packages/customer-api/tests/routing.test.mjs": {
+      "minLines": 176,
+      "minCases": 10
+    },
+    "packages/customer-api/tests/security-headers.test.mjs": {
+      "minLines": 126,
+      "minCases": 6
+    },
+    "packages/customer-api/tests/support.test.mjs": {
+      "minLines": 234,
+      "minCases": 8
+    },
+    "packages/customer-api/tests/wallets.test.mjs": {
+      "minLines": 193,
+      "minCases": 9
+    },
+    "packages/e2e-dev/tests/boundaries.test.mjs": {
+      "minLines": 108,
+      "minCases": 4
+    },
+    "packages/e2e-dev/tests/dev-stack.test.mjs": {
+      "minLines": 596,
+      "minCases": 18
+    },
+    "packages/e2e-dev/tests/load.test.mjs": {
+      "minLines": 370,
+      "minCases": 5
+    },
+    "packages/e2e-dev/tests/resilience.test.mjs": {
+      "minLines": 804,
+      "minCases": 19
+    },
+    "packages/e2e-dev/tests/stack.mjs": {
+      "minLines": 137
+    },
+    "packages/financial-core/tests/command-digest-vector.json": {
+      "minLines": 44
+    },
+    "packages/financial-core/tests/ledger-hardening.test.mjs": {
+      "minLines": 355,
+      "minCases": 11
+    },
+    "packages/financial-core/tests/ledger-posting-rules.test.mjs": {
+      "minLines": 449,
+      "minCases": 10
+    },
+    "packages/financial-core/tests/ledger.test.mjs": {
+      "minLines": 461,
+      "minCases": 16
+    },
+    "packages/financial-core/tests/postgres-acceptance-artifact-integrity.sh": {
+      "minLines": 205
+    },
+    "packages/financial-core/tests/postgres-access-control-catalog.sh": {
+      "minLines": 54
+    },
+    "packages/financial-core/tests/postgres-access-control-catalog.sql": {
+      "minLines": 281
+    },
+    "packages/financial-core/tests/postgres-backup-consistency.sql": {
+      "minLines": 117
+    },
+    "packages/financial-core/tests/postgres-backup-continuity.sql": {
+      "minLines": 201
+    },
+    "packages/financial-core/tests/postgres-backup-restore.sh": {
+      "minLines": 647
+    },
+    "packages/financial-core/tests/postgres-chart-of-accounts.sh": {
+      "minLines": 26
+    },
+    "packages/financial-core/tests/postgres-chart-of-accounts.sql": {
+      "minLines": 49
+    },
+    "packages/financial-core/tests/postgres-command-digest-uniqueness.sh": {
+      "minLines": 285
+    },
+    "packages/financial-core/tests/postgres-concurrency.sh": {
+      "minLines": 230
+    },
+    "packages/financial-core/tests/postgres-constraint-catalog.sh": {
+      "minLines": 254
+    },
+    "packages/financial-core/tests/postgres-constraint-catalog.sql": {
+      "minLines": 102
+    },
+    "packages/financial-core/tests/postgres-execution-surface-catalog.sh": {
+      "minLines": 168
+    },
+    "packages/financial-core/tests/postgres-execution-surface-catalog.sql": {
+      "minLines": 293
+    },
+    "packages/financial-core/tests/postgres-finite-timestamps.sh": {
+      "minLines": 431
+    },
+    "packages/financial-core/tests/postgres-immutability-catalog.sh": {
+      "minLines": 66
+    },
+    "packages/financial-core/tests/postgres-immutability-catalog.sql": {
+      "minLines": 44
+    },
+    "packages/financial-core/tests/postgres-invariant-trigger-catalog.sh": {
+      "minLines": 68
+    },
+    "packages/financial-core/tests/postgres-invariant-trigger-catalog.sql": {
+      "minLines": 47
+    },
+    "packages/financial-core/tests/postgres-ledger-integrity.sh": {
+      "minLines": 209
+    },
+    "packages/financial-core/tests/postgres-ledger-integrity.sql": {
+      "minLines": 192
+    },
+    "packages/financial-core/tests/postgres-migration-history.sh": {
+      "minLines": 242
+    },
+    "packages/financial-core/tests/postgres-migration-history.sql": {
+      "minLines": 30
+    },
+    "packages/financial-core/tests/postgres-migration-source-catalog.sh": {
+      "minLines": 43
+    },
+    "packages/financial-core/tests/postgres-migration-source-policy.sh": {
+      "minLines": 119
+    },
+    "packages/financial-core/tests/postgres-owner-truncate-guard.sh": {
+      "minLines": 67
+    },
+    "packages/financial-core/tests/postgres-posting-rule-registry.sh": {
+      "minLines": 24
+    },
+    "packages/financial-core/tests/postgres-posting-rule-registry.sql": {
+      "minLines": 21
+    },
+    "packages/financial-core/tests/postgres-precision-boundary.sql": {
+      "minLines": 117
+    },
+    "packages/financial-core/tests/postgres-reject-incomplete.sql": {
+      "minLines": 106
+    },
+    "packages/financial-core/tests/postgres-reject-late-entry.sql": {
+      "minLines": 36
+    },
+    "packages/financial-core/tests/postgres-reject-nonfinite.sql": {
+      "minLines": 101
+    },
+    "packages/financial-core/tests/postgres-reject-precision.sql": {
+      "minLines": 63
+    },
+    "packages/financial-core/tests/postgres-reject-rule-actor.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-rule-pattern.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-unbalanced.sql": {
+      "minLines": 118
+    },
+    "packages/financial-core/tests/postgres-reject-unregistered-rule.sql": {
+      "minLines": 40
+    },
+    "packages/financial-core/tests/postgres-relation-catalog.sh": {
+      "minLines": 200
+    },
+    "packages/financial-core/tests/postgres-relation-catalog.sql": {
+      "minLines": 156
+    },
+    "packages/financial-core/tests/postgres-replica-reference-integrity.sh": {
+      "minLines": 268
+    },
+    "packages/financial-core/tests/postgres-runtime-privilege-catalog.sql": {
+      "minLines": 332
+    },
+    "packages/financial-core/tests/postgres-runtime-privileges.sh": {
+      "minLines": 401
+    },
+    "packages/financial-core/tests/postgres-smoke.sql": {
+      "minLines": 302
+    },
+    "packages/financial-core/tests/postgres-state-snapshot.sql": {
+      "minLines": 153
+    },
+    "packages/financial-core/tests/postgres-trigger-function-catalog.sh": {
+      "minLines": 24
+    },
+    "packages/financial-core/tests/postgres-trigger-function-catalog.sql": {
+      "minLines": 54
+    },
+    "packages/financial-core/tests/runtime-writer-grants.sql": {
+      "minLines": 91
+    },
+    "packages/provider-simulators/tests/bank.test.mjs": {
+      "minLines": 148,
+      "minCases": 15
+    },
+    "packages/provider-simulators/tests/boundary.test.mjs": {
+      "minLines": 99,
+      "minCases": 8
+    },
+    "packages/provider-simulators/tests/canonical-json.test.mjs": {
+      "minLines": 88,
+      "minCases": 7
+    },
+    "packages/provider-simulators/tests/checks.test.mjs": {
+      "minLines": 561,
+      "minCases": 36
+    },
+    "packages/provider-simulators/tests/conformance.test.mjs": {
+      "minLines": 545,
+      "minCases": 11
+    },
+    "packages/provider-simulators/tests/decimal.test.mjs": {
+      "minLines": 68,
+      "minCases": 6
+    },
+    "packages/provider-simulators/tests/determinism.test.mjs": {
+      "minLines": 91,
+      "minCases": 4
+    },
+    "packages/provider-simulators/tests/internals-audit.test.mjs": {
+      "minLines": 246,
+      "minCases": 12
+    },
+    "packages/provider-simulators/tests/kyc.test.mjs": {
+      "minLines": 149,
+      "minCases": 14
+    },
+    "packages/provider-simulators/tests/kyt.test.mjs": {
+      "minLines": 138,
+      "minCases": 11
+    },
+    "packages/provider-simulators/tests/quotes.test.mjs": {
+      "minLines": 182,
+      "minCases": 13
+    },
+    "packages/provider-simulators/tests/signing.test.mjs": {
+      "minLines": 269,
+      "minCases": 14
+    },
+    "tests/CreatesApplication.php": {
+      "minLines": 16
+    },
+    "tests/Feature/ExampleTest.php": {
+      "minLines": 15
+    },
+    "tests/Feature/ExchangeReservationCleanupTest.php": {
+      "minLines": 60
+    },
+    "tests/Feature/ExchangeRoutingTest.php": {
+      "minLines": 129
+    },
+    "tests/TestCase.php": {
+      "minLines": 7
+    },
+    "tests/Unit/ExampleTest.php": {
+      "minLines": 13
+    },
+    "miniapp/src/server/support-requests-upstream.test.ts": {
+      "minLines": 251,
+      "minCases": 7
+    }
   }
- },
- "runSteps": {
-  ".github/workflows/backoffice-ci.yml": [
-   {
-    "run": "working-directory: backoffice"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run lint"
-   },
-   {
-    "run": "npm run typecheck"
-   },
-   {
-    "run": "npm test"
-   },
-   {
-    "run": "npm run build"
-   }
-  ],
-  ".github/workflows/contracts-ci.yml": [
-   {
-    "run": "working-directory: packages/api-contracts"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm test"
-   }
-  ],
-  ".github/workflows/custody-core-ci.yml": [
-   {
-    "run": "working-directory: packages/custody-core"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run verify"
-   },
-   {
-    "run": "bash tests/postgres-migration-source-catalog.sh"
-   },
-   {
-    "run": "bash tests/postgres-migration-source-policy.sh"
-   },
-   {
-    "run": "bash tests/postgres-outbox.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-migration-history.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-execution-surface-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-backup-restore.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-runtime-privileges.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   }
-  ],
-  ".github/workflows/customer-api-ci.yml": [
-   {
-    "run": "working-directory: packages/customer-api"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run lint"
-   },
-   {
-    "run": "npm run typecheck"
-   },
-   {
-    "run": "npm test"
-   }
-  ],
-  ".github/workflows/deploy.yml": [],
-  ".github/workflows/e2e-dev-ci.yml": [
-   {
-    "run": "working-directory: packages/e2e-dev"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm ci --prefix ../../miniapp"
-   },
-   {
-    "run": "npm ci --prefix ../../backoffice"
-   },
-   {
-    "run": "npm run lint"
-   },
-   {
-    "run": "npm test"
-   }
-  ],
-  ".github/workflows/financial-core-ci.yml": [
-   {
-    "run": "working-directory: packages/financial-core"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run verify"
-   },
-   {
-    "run": "bash tests/postgres-migration-source-catalog.sh"
-   },
-   {
-    "run": "bash tests/postgres-migration-source-policy.sh"
-   },
-   {
-    "run": "| for migration in migrations/*.sql; do docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$migration\" done"
-   },
-   {
-    "run": "bash tests/postgres-migration-history.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-chart-of-accounts.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-owner-truncate-guard.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-immutability-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-trigger-function-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-execution-surface-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-posting-rule-registry.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -v \"command_vector_json=$(tr -d '\\n' < tests/command-digest-vector.json)\" -f tests/postgres-smoke.sql"
-   },
-   {
-    "run": "bash tests/postgres-acceptance-artifact-integrity.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-finite-timestamps.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-constraint-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-relation-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-access-control-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-invariant-trigger-catalog.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-replica-reference-integrity.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-concurrency.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-backup-restore.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-runtime-privileges.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": ">- docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f tests/postgres-precision-boundary.sql"
-   },
-   {
-    "run": "| while IFS='|' read -r fixture expected; do set +e output=\"$(docker run --rm --network host -e PGPASSWORD=ledger_test -v \"$PWD:/workspace:ro\" -w /workspace postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 psql -h 127.0.0.1 -U ledger_test -d ledger_test -v ON_ERROR_STOP=1 -f \"$fixture\" 2>&1)\" status=$? set -e printf '%s\\n' \"$output\" if [ \"$status\" -eq 0 ]; then echo \"$fixture unexpectedly committed.\" exit 1 fi printf '%s\\n' \"$output\" | grep -F \"$expected\" done <<'EOF' tests/postgres-reject-incomplete.sql|requires at least two entries tests/postgres-reject-unbalanced.sql|is not balanced per asset tests/postgres-reject-late-entry.sql|is sealed tests/postgres-reject-unregistered-rule.sql|ledger_journals_posting_rule_fk tests/postgres-reject-rule-actor.sql|actor is not permitted by its posting rule tests/postgres-reject-rule-pattern.sql|entries violate its posting rule tests/postgres-reject-precision.sql|amount exceeds ledger precision limit tests/postgres-reject-nonfinite.sql|amount must be finite EOF"
-   },
-   {
-    "run": "bash tests/postgres-ledger-integrity.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   },
-   {
-    "run": "bash tests/postgres-command-digest-uniqueness.sh",
-    "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
-   }
-  ],
-  ".github/workflows/local-dev-stack-ci.yml": [
-   {
-    "run": "node --test .github/scripts/check-dev-stack.test.mjs"
-   },
-   {
-    "run": "node .github/scripts/check-dev-stack.mjs"
-   },
-   {
-    "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs"
-   },
-   {
-    "run": "docker compose -f infra/local/compose.yaml config --quiet"
-   }
-  ],
-  ".github/workflows/miniapp-ci.yml": [
-   {
-    "run": "working-directory: miniapp"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run lint"
-   },
-   {
-    "run": "npm run typecheck"
-   },
-   {
-    "run": "npm test"
-   },
-   {
-    "run": "npm run build"
-   }
-  ],
-  ".github/workflows/provider-simulators-ci.yml": [
-   {
-    "run": "working-directory: packages/provider-simulators"
-   },
-   {
-    "run": "npm ci"
-   },
-   {
-    "run": "npm audit --audit-level=moderate"
-   },
-   {
-    "run": "npm run check"
-   },
-   {
-    "run": "npm run lint"
-   },
-   {
-    "run": "npm run typecheck"
-   },
-   {
-    "run": "npm test"
-   },
-   {
-    "run": "npm run build"
-   }
-  ],
-  ".github/workflows/workflow-policy.yml": [
-   {
-    "run": "node --test .github/scripts/check-workflow-policy.test.mjs"
-   },
-   {
-    "run": "node .github/scripts/check-workflow-policy.mjs"
-   },
-   {
-    "run": "node --test .github/scripts/check-regulated-core-status.test.mjs"
-   },
-   {
-    "run": "node .github/scripts/check-regulated-core-status.mjs"
-   },
-   {
-    "run": "node --test .github/scripts/check-verification-integrity.test.mjs"
-   },
-   {
-    "run": "node .github/scripts/check-verification-integrity.mjs"
-   }
-  ]
- },
- "testFiles": {
-  ".github/scripts/check-dev-stack.test.mjs": {
-   "minLines": 286,
-   "minCases": 30
-  },
-  ".github/scripts/check-regulated-core-status.test.mjs": {
-   "minLines": 228,
-   "minCases": 15
-  },
-  ".github/scripts/check-verification-integrity.test.mjs": {
-   "minLines": 498,
-   "minCases": 27
-  },
-  ".github/scripts/check-workflow-policy.test.mjs": {
-   "minLines": 528,
-   "minCases": 44
-  },
-  "backoffice/src/app/a11y.test.ts": {
-   "minLines": 622,
-   "minCases": 29
-  },
-  "backoffice/src/app/checks.test.ts": {
-   "minLines": 51,
-   "minCases": 4
-  },
-  "backoffice/src/app/i18n.test.ts": {
-   "minLines": 427,
-   "minCases": 38
-  },
-  "backoffice/src/app/subjects.test.ts": {
-   "minLines": 89,
-   "minCases": 6
-  },
-  "backoffice/src/app/support.test.ts": {
-   "minLines": 50,
-   "minCases": 4
-  },
-  "backoffice/src/app/withdrawals.test.ts": {
-   "minLines": 69,
-   "minCases": 4
-  },
-  "backoffice/src/auth/access.test.ts": {
-   "minLines": 82,
-   "minCases": 9
-  },
-  "backoffice/src/data/client.test.ts": {
-   "minLines": 282,
-   "minCases": 10
-  },
-  "backoffice/src/data/demo.test.ts": {
-   "minLines": 49,
-   "minCases": 2
-  },
-  "backoffice/src/server/audit-store.test.ts": {
-   "minLines": 84,
-   "minCases": 5
-  },
-  "backoffice/src/server/bff-core.test.ts": {
-   "minLines": 207,
-   "minCases": 6
-  },
-  "backoffice/src/server/checks.test.ts": {
-   "minLines": 190,
-   "minCases": 9
-  },
-  "backoffice/src/server/config.test.ts": {
-   "minLines": 246,
-   "minCases": 16
-  },
-  "backoffice/src/server/controls.test.ts": {
-   "minLines": 65,
-   "minCases": 6
-  },
-  "backoffice/src/server/dev-server.test.ts": {
-   "minLines": 49,
-   "minCases": 1
-  },
-  "backoffice/src/server/observability.test.ts": {
-   "minLines": 330,
-   "minCases": 12
-  },
-  "backoffice/src/server/oidc-session.test.ts": {
-   "minLines": 286,
-   "minCases": 6
-  },
-  "backoffice/src/server/oidc.test.ts": {
-   "minLines": 693,
-   "minCases": 19
-  },
-  "backoffice/src/server/postgres-audit-store.test.ts": {
-   "minLines": 28,
-   "minCases": 2
-  },
-  "backoffice/src/server/provider-evidence.test.ts": {
-   "minLines": 316,
-   "minCases": 11
-  },
-  "backoffice/src/server/reports.test.ts": {
-   "minLines": 338,
-   "minCases": 14
-  },
-  "backoffice/src/server/security-headers.test.ts": {
-   "minLines": 547,
-   "minCases": 12
-  },
-  "backoffice/src/server/server.test.ts": {
-   "minLines": 1208,
-   "minCases": 26
-  },
-  "backoffice/src/server/signing.test.ts": {
-   "minLines": 62,
-   "minCases": 4
-  },
-  "backoffice/src/server/step-up.test.ts": {
-   "minLines": 167,
-   "minCases": 5
-  },
-  "backoffice/src/server/subjects.test.ts": {
-   "minLines": 359,
-   "minCases": 15
-  },
-  "backoffice/src/server/support.test.ts": {
-   "minLines": 192,
-   "minCases": 9
-  },
-  "backoffice/src/server/withdrawals.test.ts": {
-   "minLines": 209,
-   "minCases": 9
-  },
-  "backoffice/tsconfig.test.json": {
-   "minLines": 34
-  },
-  "infra/local/tests/dev-material.test.mjs": {
-   "minLines": 93,
-   "minCases": 5
-  },
-  "infra/local/tests/healthcheck.test.mjs": {
-   "minLines": 60,
-   "minCases": 5
-  },
-  "infra/local/tests/loopback-edge.test.mjs": {
-   "minLines": 70,
-   "minCases": 6
-  },
-  "infra/local/tests/x509.test.mjs": {
-   "minLines": 67,
-   "minCases": 5
-  },
-  "miniapp/src/app/a11y.test.ts": {
-   "minLines": 381,
-   "minCases": 28
-  },
-  "miniapp/src/app/checks-badges.test.ts": {
-   "minLines": 71,
-   "minCases": 6
-  },
-  "miniapp/src/app/i18n.test.ts": {
-   "minLines": 435,
-   "minCases": 38
-  },
-  "miniapp/src/app/notification-seen.test.ts": {
-   "minLines": 97,
-   "minCases": 6
-  },
-  "miniapp/src/server/activity-routes.test.ts": {
-   "minLines": 371,
-   "minCases": 15
-  },
-  "miniapp/src/server/activity.test.ts": {
-   "minLines": 241,
-   "minCases": 15
-  },
-  "miniapp/src/server/address-screening-routes.test.ts": {
-   "minLines": 361,
-   "minCases": 14
-  },
-  "miniapp/src/server/address-screening.test.ts": {
-   "minLines": 352,
-   "minCases": 18
-  },
-  "miniapp/src/server/bff-core.test.ts": {
-   "minLines": 181,
-   "minCases": 6
-  },
-  "miniapp/src/server/bff-security.test.ts": {
-   "minLines": 137,
-   "minCases": 5
-  },
-  "miniapp/src/server/checks-routes.test.ts": {
-   "minLines": 185,
-   "minCases": 8
-  },
-  "miniapp/src/server/checks.test.ts": {
-   "minLines": 112,
-   "minCases": 10
-  },
-  "miniapp/src/server/customer-api-client.test.ts": {
-   "minLines": 890,
-   "minCases": 28
-  },
-  "miniapp/src/server/dev-server.test.ts": {
-   "minLines": 51,
-   "minCases": 1
-  },
-  "miniapp/src/server/init-data.test.ts": {
-   "minLines": 150,
-   "minCases": 18
-  },
-  "miniapp/src/server/integration.test.ts": {
-   "minLines": 94,
-   "minCases": 4
-  },
-  "miniapp/src/server/kyc-routes.test.ts": {
-   "minLines": 230,
-   "minCases": 10
-  },
-  "miniapp/src/server/kyc-status-upstream.test.ts": {
-   "minLines": 242,
-   "minCases": 8
-  },
-  "miniapp/src/server/kyc.test.ts": {
-   "minLines": 177,
-   "minCases": 13
-  },
-  "miniapp/src/server/notifications-routes.test.ts": {
-   "minLines": 137,
-   "minCases": 4
-  },
-  "miniapp/src/server/notifications-upstream.test.ts": {
-   "minLines": 237,
-   "minCases": 7
-  },
-  "miniapp/src/server/notifications.test.ts": {
-   "minLines": 402,
-   "minCases": 17
-  },
-  "miniapp/src/server/observability.test.ts": {
-   "minLines": 366,
-   "minCases": 13
-  },
-  "miniapp/src/server/profile-upstream.test.ts": {
-   "minLines": 226,
-   "minCases": 7
-  },
-  "miniapp/src/server/provider-quotes.test.ts": {
-   "minLines": 114,
-   "minCases": 8
-  },
-  "miniapp/src/server/quotes.test.ts": {
-   "minLines": 83,
-   "minCases": 8
-  },
-  "miniapp/src/server/security-headers.test.ts": {
-   "minLines": 479,
-   "minCases": 12
-  },
-  "miniapp/src/server/server.test.ts": {
-   "minLines": 336,
-   "minCases": 22
-  },
-  "miniapp/src/server/sessions-routes.test.ts": {
-   "minLines": 342,
-   "minCases": 19
-  },
-  "miniapp/src/server/support-routes.test.ts": {
-   "minLines": 386,
-   "minCases": 14
-  },
-  "miniapp/src/server/support.test.ts": {
-   "minLines": 203,
-   "minCases": 15
-  },
-  "miniapp/src/server/wallet-routes.test.ts": {
-   "minLines": 201,
-   "minCases": 7
-  },
-  "miniapp/src/shared/decimal.test.ts": {
-   "minLines": 109,
-   "minCases": 13
-  },
-  "miniapp/src/shared/quote.test.ts": {
-   "minLines": 41,
-   "minCases": 4
-  },
-  "miniapp/tsconfig.test.json": {
-   "minLines": 35
-  },
-  "packages/api-contracts/tests/contract-boundary.test.mjs": {
-   "minLines": 1508,
-   "minCases": 5
-  },
-  "packages/custody-core/tests/custody-event.test.mjs": {
-   "minLines": 542,
-   "minCases": 11
-  },
-  "packages/custody-core/tests/postgres-backup-consistency.sql": {
-   "minLines": 43
-  },
-  "packages/custody-core/tests/postgres-backup-continuity.sql": {
-   "minLines": 57
-  },
-  "packages/custody-core/tests/postgres-backup-restore.sh": {
-   "minLines": 569
-  },
-  "packages/custody-core/tests/postgres-catalog.sh": {
-   "minLines": 74
-  },
-  "packages/custody-core/tests/postgres-catalog.sql": {
-   "minLines": 539
-  },
-  "packages/custody-core/tests/postgres-execution-surface-catalog.sh": {
-   "minLines": 178
-  },
-  "packages/custody-core/tests/postgres-execution-surface-catalog.sql": {
-   "minLines": 293
-  },
-  "packages/custody-core/tests/postgres-migration-history.sh": {
-   "minLines": 241
-  },
-  "packages/custody-core/tests/postgres-migration-history.sql": {
-   "minLines": 30
-  },
-  "packages/custody-core/tests/postgres-migration-source-catalog.sh": {
-   "minLines": 41
-  },
-  "packages/custody-core/tests/postgres-migration-source-policy.sh": {
-   "minLines": 151
-  },
-  "packages/custody-core/tests/postgres-outbox.sh": {
-   "minLines": 67
-  },
-  "packages/custody-core/tests/postgres-outbox.sql": {
-   "minLines": 355
-  },
-  "packages/custody-core/tests/postgres-runtime-privilege-catalog.sql": {
-   "minLines": 326
-  },
-  "packages/custody-core/tests/postgres-runtime-privileges.sh": {
-   "minLines": 288
-  },
-  "packages/custody-core/tests/postgres-state-snapshot.sql": {
-   "minLines": 37
-  },
-  "packages/custody-core/tests/runtime-writer-grants.sql": {
-   "minLines": 105
-  },
-  "packages/custody-core/tests/unsigned-intent-hardening.test.mjs": {
-   "minLines": 486,
-   "minCases": 15
-  },
-  "packages/custody-core/tests/unsigned-intent.test.mjs": {
-   "minLines": 295,
-   "minCases": 13
-  },
-  "packages/customer-api/tests/auth-config.test.mjs": {
-   "minLines": 137,
-   "minCases": 11
-  },
-  "packages/customer-api/tests/capabilities.test.mjs": {
-   "minLines": 134,
-   "minCases": 7
-  },
-  "packages/customer-api/tests/contract-conformance.test.mjs": {
-   "minLines": 323,
-   "minCases": 19
-  },
-  "packages/customer-api/tests/contract-coverage.test.mjs": {
-   "minLines": 248,
-   "minCases": 9
-  },
-  "packages/customer-api/tests/contract-validator.mjs": {
-   "minLines": 254
-  },
-  "packages/customer-api/tests/contract-validator.test.mjs": {
-   "minLines": 135,
-   "minCases": 11
-  },
-  "packages/customer-api/tests/http-client.mjs": {
-   "minLines": 142,
-   "minCases": 0
-  },
-  "packages/customer-api/tests/kyc.test.mjs": {
-   "minLines": 281,
-   "minCases": 10
-  },
-  "packages/customer-api/tests/machinery-hardening.test.mjs": {
-   "minLines": 102,
-   "minCases": 7
-  },
-  "packages/customer-api/tests/notifications.test.mjs": {
-   "minLines": 217,
-   "minCases": 9
-  },
-  "packages/customer-api/tests/observability.test.mjs": {
-   "minLines": 248,
-   "minCases": 11
-  },
-  "packages/customer-api/tests/profile.test.mjs": {
-   "minLines": 199,
-   "minCases": 8
-  },
-  "packages/customer-api/tests/request-headers.test.mjs": {
-   "minLines": 203,
-   "minCases": 12
-  },
-  "packages/customer-api/tests/routing.test.mjs": {
-   "minLines": 176,
-   "minCases": 10
-  },
-  "packages/customer-api/tests/security-headers.test.mjs": {
-   "minLines": 126,
-   "minCases": 6
-  },
-  "packages/customer-api/tests/support.test.mjs": {
-   "minLines": 234,
-   "minCases": 8
-  },
-  "packages/customer-api/tests/wallets.test.mjs": {
-   "minLines": 193,
-   "minCases": 9
-  },
-  "packages/e2e-dev/tests/boundaries.test.mjs": {
-   "minLines": 108,
-   "minCases": 4
-  },
-  "packages/e2e-dev/tests/dev-stack.test.mjs": {
-   "minLines": 596,
-   "minCases": 18
-  },
-  "packages/e2e-dev/tests/load.test.mjs": {
-   "minLines": 370,
-   "minCases": 5
-  },
-  "packages/e2e-dev/tests/resilience.test.mjs": {
-   "minLines": 804,
-   "minCases": 19
-  },
-  "packages/e2e-dev/tests/stack.mjs": {
-   "minLines": 137
-  },
-  "packages/financial-core/tests/command-digest-vector.json": {
-   "minLines": 44
-  },
-  "packages/financial-core/tests/ledger-hardening.test.mjs": {
-   "minLines": 355,
-   "minCases": 11
-  },
-  "packages/financial-core/tests/ledger-posting-rules.test.mjs": {
-   "minLines": 449,
-   "minCases": 10
-  },
-  "packages/financial-core/tests/ledger.test.mjs": {
-   "minLines": 461,
-   "minCases": 16
-  },
-  "packages/financial-core/tests/postgres-acceptance-artifact-integrity.sh": {
-   "minLines": 205
-  },
-  "packages/financial-core/tests/postgres-access-control-catalog.sh": {
-   "minLines": 54
-  },
-  "packages/financial-core/tests/postgres-access-control-catalog.sql": {
-   "minLines": 281
-  },
-  "packages/financial-core/tests/postgres-backup-consistency.sql": {
-   "minLines": 117
-  },
-  "packages/financial-core/tests/postgres-backup-continuity.sql": {
-   "minLines": 201
-  },
-  "packages/financial-core/tests/postgres-backup-restore.sh": {
-   "minLines": 647
-  },
-  "packages/financial-core/tests/postgres-chart-of-accounts.sh": {
-   "minLines": 26
-  },
-  "packages/financial-core/tests/postgres-chart-of-accounts.sql": {
-   "minLines": 49
-  },
-  "packages/financial-core/tests/postgres-command-digest-uniqueness.sh": {
-   "minLines": 285
-  },
-  "packages/financial-core/tests/postgres-concurrency.sh": {
-   "minLines": 230
-  },
-  "packages/financial-core/tests/postgres-constraint-catalog.sh": {
-   "minLines": 254
-  },
-  "packages/financial-core/tests/postgres-constraint-catalog.sql": {
-   "minLines": 102
-  },
-  "packages/financial-core/tests/postgres-execution-surface-catalog.sh": {
-   "minLines": 168
-  },
-  "packages/financial-core/tests/postgres-execution-surface-catalog.sql": {
-   "minLines": 293
-  },
-  "packages/financial-core/tests/postgres-finite-timestamps.sh": {
-   "minLines": 431
-  },
-  "packages/financial-core/tests/postgres-immutability-catalog.sh": {
-   "minLines": 66
-  },
-  "packages/financial-core/tests/postgres-immutability-catalog.sql": {
-   "minLines": 44
-  },
-  "packages/financial-core/tests/postgres-invariant-trigger-catalog.sh": {
-   "minLines": 68
-  },
-  "packages/financial-core/tests/postgres-invariant-trigger-catalog.sql": {
-   "minLines": 47
-  },
-  "packages/financial-core/tests/postgres-ledger-integrity.sh": {
-   "minLines": 209
-  },
-  "packages/financial-core/tests/postgres-ledger-integrity.sql": {
-   "minLines": 192
-  },
-  "packages/financial-core/tests/postgres-migration-history.sh": {
-   "minLines": 242
-  },
-  "packages/financial-core/tests/postgres-migration-history.sql": {
-   "minLines": 30
-  },
-  "packages/financial-core/tests/postgres-migration-source-catalog.sh": {
-   "minLines": 43
-  },
-  "packages/financial-core/tests/postgres-migration-source-policy.sh": {
-   "minLines": 119
-  },
-  "packages/financial-core/tests/postgres-owner-truncate-guard.sh": {
-   "minLines": 67
-  },
-  "packages/financial-core/tests/postgres-posting-rule-registry.sh": {
-   "minLines": 24
-  },
-  "packages/financial-core/tests/postgres-posting-rule-registry.sql": {
-   "minLines": 21
-  },
-  "packages/financial-core/tests/postgres-precision-boundary.sql": {
-   "minLines": 117
-  },
-  "packages/financial-core/tests/postgres-reject-incomplete.sql": {
-   "minLines": 106
-  },
-  "packages/financial-core/tests/postgres-reject-late-entry.sql": {
-   "minLines": 36
-  },
-  "packages/financial-core/tests/postgres-reject-nonfinite.sql": {
-   "minLines": 101
-  },
-  "packages/financial-core/tests/postgres-reject-precision.sql": {
-   "minLines": 63
-  },
-  "packages/financial-core/tests/postgres-reject-rule-actor.sql": {
-   "minLines": 118
-  },
-  "packages/financial-core/tests/postgres-reject-rule-pattern.sql": {
-   "minLines": 118
-  },
-  "packages/financial-core/tests/postgres-reject-unbalanced.sql": {
-   "minLines": 118
-  },
-  "packages/financial-core/tests/postgres-reject-unregistered-rule.sql": {
-   "minLines": 40
-  },
-  "packages/financial-core/tests/postgres-relation-catalog.sh": {
-   "minLines": 200
-  },
-  "packages/financial-core/tests/postgres-relation-catalog.sql": {
-   "minLines": 156
-  },
-  "packages/financial-core/tests/postgres-replica-reference-integrity.sh": {
-   "minLines": 268
-  },
-  "packages/financial-core/tests/postgres-runtime-privilege-catalog.sql": {
-   "minLines": 332
-  },
-  "packages/financial-core/tests/postgres-runtime-privileges.sh": {
-   "minLines": 401
-  },
-  "packages/financial-core/tests/postgres-smoke.sql": {
-   "minLines": 302
-  },
-  "packages/financial-core/tests/postgres-state-snapshot.sql": {
-   "minLines": 153
-  },
-  "packages/financial-core/tests/postgres-trigger-function-catalog.sh": {
-   "minLines": 24
-  },
-  "packages/financial-core/tests/postgres-trigger-function-catalog.sql": {
-   "minLines": 54
-  },
-  "packages/financial-core/tests/runtime-writer-grants.sql": {
-   "minLines": 91
-  },
-  "packages/provider-simulators/tests/bank.test.mjs": {
-   "minLines": 148,
-   "minCases": 15
-  },
-  "packages/provider-simulators/tests/boundary.test.mjs": {
-   "minLines": 99,
-   "minCases": 8
-  },
-  "packages/provider-simulators/tests/canonical-json.test.mjs": {
-   "minLines": 88,
-   "minCases": 7
-  },
-  "packages/provider-simulators/tests/checks.test.mjs": {
-   "minLines": 561,
-   "minCases": 36
-  },
-  "packages/provider-simulators/tests/conformance.test.mjs": {
-   "minLines": 545,
-   "minCases": 11
-  },
-  "packages/provider-simulators/tests/decimal.test.mjs": {
-   "minLines": 68,
-   "minCases": 6
-  },
-  "packages/provider-simulators/tests/determinism.test.mjs": {
-   "minLines": 91,
-   "minCases": 4
-  },
-  "packages/provider-simulators/tests/internals-audit.test.mjs": {
-   "minLines": 246,
-   "minCases": 12
-  },
-  "packages/provider-simulators/tests/kyc.test.mjs": {
-   "minLines": 149,
-   "minCases": 14
-  },
-  "packages/provider-simulators/tests/kyt.test.mjs": {
-   "minLines": 138,
-   "minCases": 11
-  },
-  "packages/provider-simulators/tests/quotes.test.mjs": {
-   "minLines": 182,
-   "minCases": 13
-  },
-  "packages/provider-simulators/tests/signing.test.mjs": {
-   "minLines": 269,
-   "minCases": 14
-  },
-  "tests/CreatesApplication.php": {
-   "minLines": 16
-  },
-  "tests/Feature/ExampleTest.php": {
-   "minLines": 15
-  },
-  "tests/Feature/ExchangeReservationCleanupTest.php": {
-   "minLines": 60
-  },
-  "tests/Feature/ExchangeRoutingTest.php": {
-   "minLines": 129
-  },
-  "tests/TestCase.php": {
-   "minLines": 7
-  },
-  "tests/Unit/ExampleTest.php": {
-   "minLines": 13
-  },
-  "miniapp/src/server/support-requests-upstream.test.ts": {
-   "minLines": 251,
-   "minCases": 7
-  }
- }
 }

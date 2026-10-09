@@ -132,6 +132,23 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The deposits collection read is KYC-gated like the wallets and
+  // notifications reads, so it declares a 403: deposits are an
+  // asset/activity collection, not an onboarding or identity surface (see
+  // capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerDeposits",
+    method: "GET",
+    path: "/api/v1/customer/deposits",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
   })
 ]);
 

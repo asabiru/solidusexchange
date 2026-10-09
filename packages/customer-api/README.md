@@ -48,6 +48,16 @@ dependency-free Node ESM `node:http` server for local development only.
     and the miniapp likewise serves `/bff/support/requests` to every
     authenticated session, kyc-gated included — support notifications
     (`support_received`/`complaint_received`) appear in unverified flows too.
+  - `GET /api/v1/customer/deposits` (`getCustomerDeposits`): a frozen
+    deterministic synthetic deposit list per subject (`dep_*` ids, `asset`
+    `RUB`/`method` `sbp`, `expected_amount`/`received_total`/`reversed_total`
+    decimal strings, `payment_reference`, `status` enum mirroring the bank
+    simulator's payment states, ISO `created_at`/`updated_at`,
+    `posting: "none"`, `mode: "test"`). KYC-gated exactly like the wallets
+    and notifications reads — deposits are an asset/activity collection, not
+    an onboarding or identity surface — `403 CAPABILITY_DENIED` without a
+    `verified` KYC status. The read is observational only: `deposits.create`
+    stays an unserved, denied financial capability.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -79,9 +89,10 @@ Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
 always granted — the KYC status, profile and support tickets reads must stay
 reachable for unverified customers or they could never see their own
 onboarding, identity and service-requests state;
-`customer.wallets.read` and `customer.notifications.read`
+`customer.wallets.read`, `customer.notifications.read` and
+`customer.deposits.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
-wallet and notification collection reads.
+wallet, notification and deposit collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,

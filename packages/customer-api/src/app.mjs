@@ -9,6 +9,7 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import { validDepositsView } from "./deposits.mjs";
 import { validKycStatusView } from "./kyc.mjs";
 import {
   createRequestObserver,
@@ -40,6 +41,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./kyc.mjs").KycApplicationDirectory} kycApplicationDirectory
  * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
  * @property {import("./support.mjs").SupportDirectory} supportDirectory
+ * @property {import("./deposits.mjs").DepositDirectory} depositDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -212,6 +214,7 @@ export function createCustomerApiHandler({
   kycApplicationDirectory,
   profileDirectory,
   supportDirectory,
+  depositDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -239,6 +242,9 @@ export function createCustomerApiHandler({
   }
   if (typeof supportDirectory?.listFor !== "function") {
     throw new Error("A support directory is required");
+  }
+  if (typeof depositDirectory?.listFor !== "function") {
+    throw new Error("A deposit directory is required");
   }
 
   /**
@@ -386,6 +392,21 @@ export function createCustomerApiHandler({
       const view = await supportDirectory.listFor(principal.subject);
       if (!validSupportTicketsView(view)) {
         throw new Error("Support directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerDeposits") {
+      // customer.deposits.read is KYC-gated like wallets/notifications:
+      // deposits are an asset/activity collection, so unverified and
+      // pending subjects are denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.deposits.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await depositDirectory.listFor(principal.subject);
+      if (!validDepositsView(view)) {
+        throw new Error("Deposit directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
