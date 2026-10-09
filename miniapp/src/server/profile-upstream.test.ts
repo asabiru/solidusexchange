@@ -46,6 +46,7 @@ function profileStub(
     },
     wallets: async () => ({ status: "unavailable" }),
     deposits: async () => ({ status: "not-configured" }),
+    withdrawals: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "unavailable" }),
     kyc: async () => ({ status: "unavailable" }),
     profile: async (subject) => {

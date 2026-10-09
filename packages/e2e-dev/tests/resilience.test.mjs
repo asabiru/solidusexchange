@@ -87,6 +87,9 @@ async function assertGated(app, cookie, label) {
   const deposits = await getJson(app, "/bff/deposits", cookie);
   assert.equal(deposits.kyc, "kyc-gated", label);
   assert.equal(deposits.deposits.length, 0, label);
+  const withdrawals = await getJson(app, "/bff/withdrawals", cookie);
+  assert.equal(withdrawals.kyc, "kyc-gated", label);
+  assert.equal(withdrawals.withdrawals.length, 0, label);
 }
 
 async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
@@ -143,6 +146,31 @@ describe("Mini App BFF with a failing customer-api", () => {
             payment_reference: "SIMSBP0123456789AB",
             created_at: "2026-10-04T12:10:00.000Z",
             updated_at: "2026-10-04T12:14:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/withdrawals")) {
+      return {
+        mode: "test",
+        withdrawals: [
+          {
+            withdrawal_id: "wdr_0123456789abcdef01234567",
+            asset: "USDT",
+            network: "TRON_TESTNET",
+            status: "confirmed",
+            amount: "25.000000",
+            fee_amount: "0.125000",
+            destination_reference: "destination_ref_0123456789abcd",
+            legs: [
+              { leg_id: "wdl_0123456789abcdef01234567", asset: "USDT", amount: "25.000000", direction: "out" },
+              { leg_id: "wdl_fedcba9876543210fedcba98", asset: "USDT", amount: "0.125000", direction: "out" }
+            ],
+            created_at: "2026-10-02T14:05:00.000Z",
+            updated_at: "2026-10-02T14:20:00.000Z",
+            expires_at: "2026-10-02T14:10:00.000Z",
             posting: "none"
           }
         ],
@@ -319,6 +347,24 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function withdrawalsFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/withdrawals", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("wdr_"), false, label);
+    assert.equal(text.includes("wdl_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "withdrawals_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
   async function notificationsFailClosed(label) {
     const hits = upstream.length;
     const startedAt = Date.now();
@@ -481,6 +527,39 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedDeposits = await getJson(app, "/bff/deposits", cookie);
     assert.equal(gatedDeposits.kyc, "kyc-gated");
     assert.equal(gatedDeposits.deposits.length, 0);
+    // The withdrawals list is KYC-gated the same way: only the verified
+    // session consults upstream, and the adapted view carries the custody
+    // lifecycle statuses and the two wdl_* out-legs (principal + fee).
+    const withdrawals = await getJson(app, "/bff/withdrawals", verifiedCookie);
+    assert.equal(withdrawals.mode, "test");
+    assert.equal(withdrawals.kyc, "verified");
+    assert.deepEqual(Object.keys(withdrawals).sort(), ["kyc", "mode", "withdrawals"]);
+    assert.equal(withdrawals.withdrawals.length, 1);
+    assert.deepEqual(Object.keys(withdrawals.withdrawals[0]).sort(), [
+      "amount",
+      "asset",
+      "createdAt",
+      "destinationReference",
+      "expiresAt",
+      "fee",
+      "id",
+      "legs",
+      "network",
+      "posting",
+      "status",
+      "updatedAt"
+    ]);
+    assert.equal(withdrawals.withdrawals[0].id, "wdr_0123456789abcdef01234567");
+    assert.equal(withdrawals.withdrawals[0].status, "confirmed");
+    assert.equal(withdrawals.withdrawals[0].amount, "25.000000");
+    assert.equal(withdrawals.withdrawals[0].posting, "none");
+    assert.deepEqual(withdrawals.withdrawals[0].legs.map((leg) => leg.id), [
+      "wdl_0123456789abcdef01234567",
+      "wdl_fedcba9876543210fedcba98"
+    ]);
+    const gatedWithdrawals = await getJson(app, "/bff/withdrawals", cookie);
+    assert.equal(gatedWithdrawals.kyc, "kyc-gated");
+    assert.equal(gatedWithdrawals.withdrawals.length, 0);
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -548,6 +627,17 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedDeposits = await getJson(app, "/bff/deposits", cookie);
     assert.deepEqual(JSON.parse(depositsText), gatedDeposits);
     assert.equal(gatedDeposits.kyc, "kyc-gated");
+    // A refused withdrawals read degrades the same way: the verified session
+    // falls back to the emptied list a gated session sees.
+    const withdrawalsResponse = await call(app.base, "/bff/withdrawals", { cookie: verifiedCookie });
+    assert.equal(withdrawalsResponse.status, 200);
+    const withdrawalsText = await withdrawalsResponse.text();
+    assert.equal(withdrawalsText.includes(marker), false);
+    assert.equal(withdrawalsText.includes(key), false);
+    assert.equal(withdrawalsText.includes("wdr_"), false);
+    const gatedWithdrawalsDenied = await getJson(app, "/bff/withdrawals", cookie);
+    assert.deepEqual(JSON.parse(withdrawalsText), gatedWithdrawalsDenied);
+    assert.equal(gatedWithdrawalsDenied.kyc, "kyc-gated");
     // A refused notifications read degrades in place to the same feed a gated
     // session sees: the local outbox drafts (a session_login per dev login).
     const feedResponse = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
@@ -605,6 +695,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await supportFailsClosed(`${name} gated`, cookie);
       await walletFailsClosed(name);
       await depositsFailsClosed(name);
+      await withdrawalsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -620,6 +711,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await supportFailsClosed(`${name} gated`, cookie);
       await walletFailsClosed(name);
       await depositsFailsClosed(name);
+      await withdrawalsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -635,6 +727,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(profile.displayName, "Customer ab12cd34");
     assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
     assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/withdrawals", verifiedCookie)).withdrawals[0].id, "wdr_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");

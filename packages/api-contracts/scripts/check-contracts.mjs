@@ -476,6 +476,68 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  QuotesView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "quotes"],
+    properties: {
+      mode: { const: "test" },
+      quotes: {
+        type: "array",
+        items: { $ref: "#/components/schemas/QuoteView" }
+      }
+    }
+  },
+  QuoteView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "quote_id",
+      "pair",
+      "base_asset",
+      "quote_asset",
+      "side",
+      "base_amount",
+      "mid_price",
+      "price",
+      "spread_bps",
+      "fee_bps",
+      "quote_amount",
+      "fee_amount",
+      "total_quote_amount",
+      "rounding",
+      "price_observed_at",
+      "issued_at",
+      "expires_at",
+      "ttl_seconds",
+      "status",
+      "execution",
+      "posting"
+    ],
+    properties: {
+      quote_id: { type: "string", pattern: "^qte_[0-9a-f]{24}$" },
+      pair: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      side: { type: "string", enum: ["buy", "sell"] },
+      base_amount: { $ref: "#/$defs/decimalAmount" },
+      mid_price: { $ref: "#/$defs/decimalAmount" },
+      price: { $ref: "#/$defs/decimalAmount" },
+      spread_bps: { type: "integer", minimum: 0, maximum: 1000 },
+      fee_bps: { type: "integer", minimum: 0, maximum: 1000 },
+      quote_amount: { $ref: "#/$defs/decimalAmount" },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      total_quote_amount: { $ref: "#/$defs/decimalAmount" },
+      rounding: { type: "string", enum: ["up", "down"] },
+      price_observed_at: { type: "string", format: "date-time" },
+      issued_at: { type: "string", format: "date-time" },
+      expires_at: { type: "string", format: "date-time" },
+      ttl_seconds: { type: "integer", minimum: 1, maximum: 300 },
+      status: { const: "indicative" },
+      execution: { const: "not_supported" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -694,7 +756,6 @@ function checkOpenApi() {
       "/api/v1/customer/cards",
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
-      "/api/v1/customer/quotes",
       "/api/v1/customer/users"
     ],
     "Planned customer namespaces"
@@ -728,6 +789,7 @@ function checkOpenApi() {
     ["getCustomerSupport", "/api/v1/customer/support"],
     ["getCustomerDeposits", "/api/v1/customer/deposits"],
     ["getCustomerWithdrawals", "/api/v1/customer/withdrawals"],
+    ["getCustomerQuotes", "/api/v1/customer/quotes"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -756,6 +818,7 @@ function checkOpenApi() {
     ["getCustomerSupport", "#/components/schemas/SupportTicketsView"],
     ["getCustomerDeposits", "#/components/schemas/DepositsView"],
     ["getCustomerWithdrawals", "#/components/schemas/WithdrawalsView"],
+    ["getCustomerQuotes", "#/components/schemas/QuotesView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

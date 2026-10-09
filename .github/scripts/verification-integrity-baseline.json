@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/withdrawals-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -33,7 +33,7 @@
     "packages/customer-api/package.json": {
       "check": "node scripts/check-boundary.mjs",
       "dev": "node src/server.mjs",
-      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/deposits.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/profile.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/support.mjs && node --check src/wallets.mjs && node --check src/withdrawals.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/deposits.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/profile.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/support.test.mjs && node --check tests/wallets.test.mjs && node --check tests/withdrawals.test.mjs && npm run check",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/deposits.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/profile.mjs && node --check src/quotes.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/support.mjs && node --check src/wallets.mjs && node --check src/withdrawals.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/deposits.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/profile.test.mjs && node --check tests/quotes.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/support.test.mjs && node --check tests/wallets.test.mjs && node --check tests/withdrawals.test.mjs && npm run check",
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
       "test": "npm run check && node --test tests/*.test.mjs",
       "typecheck": "tsc -p tsconfig.json --pretty false"
@@ -574,8 +574,8 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-client.test.ts": {
-      "minLines": 1021,
-      "minCases": 32
+      "minLines": 1174,
+      "minCases": 36
     },
     "miniapp/src/server/dev-server.test.ts": {
       "minLines": 51,
@@ -594,7 +594,7 @@
       "minCases": 10
     },
     "miniapp/src/server/kyc-status-upstream.test.ts": {
-      "minLines": 243,
+      "minLines": 244,
       "minCases": 8
     },
     "miniapp/src/server/kyc.test.ts": {
@@ -606,7 +606,7 @@
       "minCases": 4
     },
     "miniapp/src/server/notifications-upstream.test.ts": {
-      "minLines": 238,
+      "minLines": 239,
       "minCases": 7
     },
     "miniapp/src/server/notifications.test.ts": {
@@ -618,7 +618,7 @@
       "minCases": 13
     },
     "miniapp/src/server/profile-upstream.test.ts": {
-      "minLines": 227,
+      "minLines": 228,
       "minCases": 7
     },
     "miniapp/src/server/provider-quotes.test.ts": {
@@ -630,7 +630,7 @@
       "minCases": 8
     },
     "miniapp/src/server/security-headers.test.ts": {
-      "minLines": 481,
+      "minLines": 483,
       "minCases": 12
     },
     "miniapp/src/server/server.test.ts": {
@@ -650,7 +650,7 @@
       "minCases": 15
     },
     "miniapp/src/server/wallet-routes.test.ts": {
-      "minLines": 202,
+      "minLines": 203,
       "minCases": 7
     },
     "miniapp/src/shared/decimal.test.ts": {
@@ -665,7 +665,7 @@
       "minLines": 38
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 1618,
+      "minLines": 1682,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
@@ -736,19 +736,19 @@
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
-      "minLines": 146,
+      "minLines": 153,
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 359,
-      "minCases": 21
+      "minLines": 377,
+      "minCases": 22
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 254,
+      "minLines": 257,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
-      "minLines": 254
+      "minLines": 260
     },
     "packages/customer-api/tests/contract-validator.test.mjs": {
       "minLines": 135,
@@ -759,7 +759,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/http-client.mjs": {
-      "minLines": 146,
+      "minLines": 148,
       "minCases": 0
     },
     "packages/customer-api/tests/kyc.test.mjs": {
@@ -782,8 +782,12 @@
       "minLines": 199,
       "minCases": 8
     },
+    "packages/customer-api/tests/quotes.test.mjs": {
+      "minLines": 291,
+      "minCases": 10
+    },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 207,
+      "minLines": 209,
       "minCases": 12
     },
     "packages/customer-api/tests/routing.test.mjs": {
@@ -807,15 +811,15 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 600,
+      "minLines": 604,
       "minCases": 18
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 378,
+      "minLines": 386,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 880,
+      "minLines": 965,
       "minCases": 19
     },
     "packages/e2e-dev/tests/stack.mjs": {
@@ -1044,7 +1048,7 @@
       "minLines": 13
     },
     "miniapp/src/server/support-requests-upstream.test.ts": {
-      "minLines": 252,
+      "minLines": 253,
       "minCases": 7
     },
     "miniapp/src/app/server-fields.test.ts": {
@@ -1052,7 +1056,7 @@
       "minCases": 28
     },
     "miniapp/src/server/deposits-upstream.test.ts": {
-      "minLines": 254,
+      "minLines": 255,
       "minCases": 7
     },
     "packages/customer-api/tests/withdrawals.test.mjs": {
@@ -1062,6 +1066,10 @@
     "backoffice/src/server/authz.test.ts": {
       "minLines": 272,
       "minCases": 8
+    },
+    "miniapp/src/server/withdrawals-upstream.test.ts": {
+      "minLines": 278,
+      "minCases": 7
     }
   }
 }

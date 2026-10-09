@@ -19,7 +19,7 @@ import {
   token
 } from "./http-client.mjs";
 
-const ROUTES = new Set(["/api/v1/meta", "/api/v1/customer/session", "/api/v1/customer/capabilities", "/api/v1/customer/wallets", "/api/v1/customer/notifications", "/api/v1/customer/kyc", "/api/v1/customer/profile", "/api/v1/customer/support", "/api/v1/customer/deposits", "/api/v1/customer/withdrawals", "/metrics", "unmatched"]);
+const ROUTES = new Set(["/api/v1/meta", "/api/v1/customer/session", "/api/v1/customer/capabilities", "/api/v1/customer/wallets", "/api/v1/customer/notifications", "/api/v1/customer/kyc", "/api/v1/customer/profile", "/api/v1/customer/support", "/api/v1/customer/deposits", "/api/v1/customer/withdrawals", "/api/v1/customer/quotes", "/metrics", "unmatched"]);
 const LOG_KEYS = ["duration_ms", "method", "request_id", "route", "service", "status", "ts"];
 const QUERY_SECRET = "SyntheticQuerySecret000000";
 const ADDRESS = "kQBrcnmAh46VnKOqsbi_xs3U2-Lp8Pf-BQwTGiEoLzY9RCIT";

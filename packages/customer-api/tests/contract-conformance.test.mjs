@@ -31,6 +31,7 @@ const PROFILE = "/api/v1/customer/profile";
 const SUPPORT = "/api/v1/customer/support";
 const DEPOSITS = "/api/v1/customer/deposits";
 const WITHDRAWALS = "/api/v1/customer/withdrawals";
+const QUOTES = "/api/v1/customer/quotes";
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -151,7 +152,7 @@ test("GET /api/v1/customer/capabilities grants only read capabilities, even afte
       assert.equal(response.status, 200);
       assert.deepEqual(JSON.parse(response.body), {
         capabilities: subject === "syn_cust_verified01"
-          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read"]
+          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read"]
           : ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read"],
         commands_enabled: false
       });
@@ -170,7 +171,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -183,7 +184,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES]) {
       now += 61_000;
       assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
@@ -266,6 +267,12 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
   });
   await withServer({ withdrawalDirectory: { async listFor() { throw new Error("withdrawal store exploded: secret=abc"); } } }, async (port) => {
     const response = await observe(port, { path: WITHDRAWALS, headers: verifiedCustomerHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
+  await withServer({ quoteDirectory: { async listFor() { throw new Error("quote store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: QUOTES, headers: verifiedCustomerHeaders() });
     assert.equal(response.status, 500);
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
@@ -358,6 +365,18 @@ test("GET /api/v1/customer/withdrawals serves verified customers and gates the r
     assert.equal(granted.status, 200);
     for (const headers of [customerHeaders()]) {
       const denied = await observe(port, { path: WITHDRAWALS, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/quotes serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: QUOTES, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: QUOTES, headers });
       assert.equal(denied.status, 403);
       assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
     }

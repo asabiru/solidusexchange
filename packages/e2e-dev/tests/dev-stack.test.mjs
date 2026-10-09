@@ -303,6 +303,12 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(deposits.mode, "test");
     assert.equal(deposits.kyc, "kyc-gated");
     assert.equal(deposits.deposits.length, 0);
+    // customer.withdrawals.read carries the same upstream KYC gate, so
+    // /bff/withdrawals degrades in place to the emptied gated list too.
+    const withdrawals = await getMiniapp("/bff/withdrawals", cookie);
+    assert.equal(withdrawals.mode, "test");
+    assert.equal(withdrawals.kyc, "kyc-gated");
+    assert.equal(withdrawals.withdrawals.length, 0);
     // customer.notifications.read is refused upstream too, so the
     // notifications feed degrades in place to the local outbox drafts this
     // session's KYC journey recorded (newest first: kyc_approved).

@@ -71,6 +71,19 @@ dependency-free Node ESM `node:http` server for local development only.
     CAPABILITY_DENIED` without a `verified` KYC status. The read is
     observational only: `withdrawals.create` stays an unserved, denied
     financial capability.
+  - `GET /api/v1/customer/quotes` (`getCustomerQuotes`): a frozen
+    deterministic synthetic indicative-quote list per subject (`qte_*` ids,
+    the quote simulator's `pair` enum, `buy`/`sell` `side`, `base_amount`/
+    `mid_price`/`price`/`quote_amount`/`fee_amount`/`total_quote_amount`
+    decimal strings that recompute exactly, `spread_bps`/`fee_bps`/`rounding`
+    side semantics, ISO `price_observed_at`/`issued_at`/`expires_at` with a
+    coherent `ttl_seconds`, `status: "indicative"`, `execution:
+    "not_supported"`, `posting: "none"`, `mode: "test"`). KYC-gated exactly
+    like the deposits, withdrawals, wallets and notifications reads — quotes
+    are an asset/activity collection, not an onboarding or identity surface —
+    `403 CAPABILITY_DENIED` without a `verified` KYC status. The read is
+    observational only: `quotes.preview` and `quotes.accept` stay unserved,
+    denied financial capabilities.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -103,9 +116,10 @@ always granted — the KYC status, profile and support tickets reads must stay
 reachable for unverified customers or they could never see their own
 onboarding, identity and service-requests state;
 `customer.wallets.read`, `customer.notifications.read`,
-`customer.deposits.read` and `customer.withdrawals.read`
+`customer.deposits.read`, `customer.withdrawals.read` and
+`customer.quotes.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
-wallet, notification, deposit and withdrawal collection reads.
+wallet, notification, deposit, withdrawal and quote collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,
