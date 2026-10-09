@@ -57,6 +57,11 @@ function canonical(value) {
 }
 
 function typeMatches(type, value) {
+  // The contract may declare a nullable field as a list of types
+  // (["string", "null"]); the value matches when any arm does.
+  if (Array.isArray(type)) {
+    return type.some((entry) => typeMatches(entry, value));
+  }
   switch (type) {
     case "object":
       return isObject(value);

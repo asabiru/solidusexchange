@@ -327,6 +327,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/withdrawals", "getCustomerWithdrawals"],
   ["/api/v1/customer/quotes", "getCustomerQuotes"],
   ["/api/v1/customer/exchange-orders", "getCustomerExchangeOrders"],
+  ["/api/v1/customer/payments", "getCustomerPayments"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -990,6 +991,76 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.ExchangeOrderView.properties.updated_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical payments views",
+  "Canonical PaymentsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical payments views",
+  "Canonical PaymentsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentsView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical payment views",
+  "Canonical PaymentView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a second canonical payment method",
+  "Canonical PaymentView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentView.properties.method = { type: "string", enum: ["sbp", "card"] };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a settled canonical payment status",
+  "Canonical PaymentView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentView.properties.status.enum.push("settled");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical payment amounts",
+  "Canonical PaymentView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentView.properties.total_amount = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical payment timestamps",
+  "Canonical PaymentView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.PaymentView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

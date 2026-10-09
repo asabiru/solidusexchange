@@ -12,6 +12,7 @@ import {
 import { validDepositsView } from "./deposits.mjs";
 import { validExchangeOrdersView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
+import { validPaymentsView } from "./payments.mjs";
 import {
   createRequestObserver,
   METRICS_CONTENT_TYPE,
@@ -48,6 +49,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./withdrawals.mjs").WithdrawalDirectory} withdrawalDirectory
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
  * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
+ * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -224,6 +226,7 @@ export function createCustomerApiHandler({
   withdrawalDirectory,
   quoteDirectory,
   exchangeOrderDirectory,
+  paymentDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -263,6 +266,9 @@ export function createCustomerApiHandler({
   }
   if (typeof exchangeOrderDirectory?.listFor !== "function") {
     throw new Error("An exchange order directory is required");
+  }
+  if (typeof paymentDirectory?.listFor !== "function") {
+    throw new Error("A payment directory is required");
   }
 
   /**
@@ -475,6 +481,24 @@ export function createCustomerApiHandler({
       const view = await exchangeOrderDirectory.listFor(principal.subject);
       if (!validExchangeOrdersView(view)) {
         throw new Error("Exchange order directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerPayments") {
+      // customer.payments.read is KYC-gated like
+      // deposits/withdrawals/quotes/exchange-orders: payments are an
+      // asset/activity collection (the outbound fiat payment instructions
+      // the subject issued through the bank rail), so unverified and pending
+      // subjects are denied with the 403 envelope. The payload is synthetic
+      // and execution-free (posting "none") — it authorizes nothing.
+      if (!evaluation.granted.includes("customer.payments.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await paymentDirectory.listFor(principal.subject);
+      if (!validPaymentsView(view)) {
+        throw new Error("Payment directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
