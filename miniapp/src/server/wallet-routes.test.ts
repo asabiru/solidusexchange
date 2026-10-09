@@ -39,6 +39,7 @@ function walletStub(result: CustomerApiWallets | (() => Promise<CustomerApiWalle
     },
     deposits: async () => ({ status: "not-configured" }),
     withdrawals: async () => ({ status: "not-configured" }),
+    quotes: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

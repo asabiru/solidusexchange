@@ -45,7 +45,7 @@ import {
 } from "./notifications.js";
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { contractProfileView } from "./profile.js";
-import { QuoteError } from "./quotes.js";
+import { QuoteError, contractQuotesView, quotesView } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { apiSecurityHeaders, guardRawResponses, requestHostname } from "./security-headers.js";
 import {
@@ -90,6 +90,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/operations" },
   { method: "GET", path: "/bff/operations/:id" },
   { method: "GET", path: "/bff/profile" },
+  { method: "GET", path: "/bff/quotes" },
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "GET", path: "/bff/checks" },
   { method: "GET", path: "/bff/checks/preview" },
@@ -915,6 +916,30 @@ export function createMiniappServer(
         return;
       }
       json(response, 200, screening);
+      return;
+    }
+    if (path === "/bff/quotes") {
+      // Same gating as /bff/deposits and /bff/withdrawals: the local KYC gate
+      // and the standalone (unconfigured) dev BFF keep the synthetic quotes
+      // list; only a verified session with customer-api access reads the
+      // contract view. An upstream refusal degrades to the same emptied list
+      // a gated session sees (in place); any other upstream failure answers
+      // the sibling *_unavailable error shape. The preview route below stays
+      // local — quote preview/accept are not wired to any upstream command.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, quotesView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.quotes(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractQuotesView(upstream.quotes, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, quotesView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "quotes_unavailable" });
       return;
     }
     if (path === "/bff/quotes/preview") {

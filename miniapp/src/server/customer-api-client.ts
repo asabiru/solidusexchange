@@ -6,14 +6,26 @@ import type {
   DepositStatus,
   KycVerificationState,
   NotificationTemplate,
+  QuotePair,
+  QuoteRounding,
+  QuoteSide,
   WithdrawalStatus
 } from "../shared/api.js";
 import type { ScreeningNetwork } from "../shared/address-screening.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
-import { isDecimalString } from "../shared/decimal.js";
+import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
 import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
+import {
+  contractQuoteAmounts,
+  contractQuotePair,
+  isQuoteSide,
+  quoteIdPattern,
+  quoteMaxBps,
+  quoteMaxTtlSeconds,
+  quotePriceScale
+} from "./quotes.js";
 import {
   destinationReferencePattern,
   isWithdrawalNetwork,
@@ -92,6 +104,36 @@ export interface CustomerApiWithdrawal {
 
 export type CustomerApiWithdrawals =
   | { status: "ok"; withdrawals: readonly CustomerApiWithdrawal[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+export interface CustomerApiQuote {
+  quote_id: string;
+  pair: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  side: QuoteSide;
+  base_amount: string;
+  mid_price: string;
+  price: string;
+  spread_bps: number;
+  fee_bps: number;
+  quote_amount: string;
+  fee_amount: string;
+  total_quote_amount: string;
+  rounding: QuoteRounding;
+  price_observed_at: string;
+  issued_at: string;
+  expires_at: string;
+  ttl_seconds: number;
+  status: "indicative";
+  execution: "not_supported";
+  posting: "none";
+}
+
+export type CustomerApiQuotes =
+  | { status: "ok"; quotes: readonly CustomerApiQuote[] }
   | { status: "denied" }
   | { status: "unavailable" }
   | { status: "not-configured" };
@@ -202,6 +244,7 @@ export interface CustomerApiClient {
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
   deposits(bffSubject: string, nowMs: number): Promise<CustomerApiDeposits>;
   withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals>;
+  quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -440,6 +483,137 @@ function parseWithdrawalsView(value: unknown): readonly CustomerApiWithdrawal[] 
     }));
   }
   return Object.freeze(withdrawals);
+}
+
+const quoteKeys = [
+  "quote_id",
+  "pair",
+  "base_asset",
+  "quote_asset",
+  "side",
+  "base_amount",
+  "mid_price",
+  "price",
+  "spread_bps",
+  "fee_bps",
+  "quote_amount",
+  "fee_amount",
+  "total_quote_amount",
+  "rounding",
+  "price_observed_at",
+  "issued_at",
+  "expires_at",
+  "ttl_seconds",
+  "status",
+  "execution",
+  "posting"
+] as const;
+
+/** Canonical non-negative decimal string with exactly `scale` fraction digits (mirrors the contract's isScaledDecimal). */
+function isScaledDecimal(value: unknown, scale: number): value is string {
+  return typeof value === "string" && new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(value);
+}
+
+function parseQuotesView(value: unknown): readonly CustomerApiQuote[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "quotes"])
+    || value.mode !== "test"
+    || !Array.isArray(value.quotes)
+  ) {
+    return undefined;
+  }
+  const quotes: CustomerApiQuote[] = [];
+  for (const entry of value.quotes) {
+    const pairDef = isRecord(entry) ? contractQuotePair(entry.pair) : undefined;
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, quoteKeys)
+      || pairDef === undefined
+      || entry.base_asset !== pairDef.base
+      || entry.quote_asset !== pairDef.quote
+      || !isQuoteSide(entry.side)
+      || entry.rounding !== (entry.side === "buy" ? "up" : "down")
+      || typeof entry.quote_id !== "string"
+      || !quoteIdPattern.test(entry.quote_id)
+      || typeof entry.spread_bps !== "number"
+      || !Number.isSafeInteger(entry.spread_bps)
+      || entry.spread_bps < 0
+      || entry.spread_bps > quoteMaxBps
+      || typeof entry.fee_bps !== "number"
+      || !Number.isSafeInteger(entry.fee_bps)
+      || entry.fee_bps < 0
+      || entry.fee_bps > quoteMaxBps
+      || typeof entry.ttl_seconds !== "number"
+      || !Number.isSafeInteger(entry.ttl_seconds)
+      || entry.ttl_seconds < 1
+      || entry.ttl_seconds > quoteMaxTtlSeconds
+      || !isScaledDecimal(entry.base_amount, pairDef.baseScale)
+      || !isScaledDecimal(entry.mid_price, quotePriceScale)
+      || !isScaledDecimal(entry.price, quotePriceScale)
+      || !isScaledDecimal(entry.quote_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.fee_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.total_quote_amount, pairDef.quoteScale)
+      || !isIsoTimestamp(entry.price_observed_at)
+      || !isIsoTimestamp(entry.issued_at)
+      || !isIsoTimestamp(entry.expires_at)
+      || entry.status !== "indicative"
+      || entry.execution !== "not_supported"
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    const issued = Date.parse(entry.issued_at);
+    const expires = Date.parse(entry.expires_at);
+    const observed = Date.parse(entry.price_observed_at);
+    if (expires - issued !== entry.ttl_seconds * 1_000 || observed > issued) {
+      return undefined;
+    }
+    // Fail closed unless every derived amount recomputes exactly like the
+    // upstream contract validator requires.
+    const recomputed = contractQuoteAmounts(
+      pairDef,
+      entry.side,
+      toUnits(entry.base_amount, pairDef.baseScale),
+      toUnits(entry.mid_price, quotePriceScale),
+      entry.spread_bps,
+      entry.fee_bps
+    );
+    if (
+      fromUnits(recomputed.price, quotePriceScale) !== entry.price
+      || fromUnits(recomputed.quoteUnits, pairDef.quoteScale) !== entry.quote_amount
+      || fromUnits(recomputed.fee, pairDef.quoteScale) !== entry.fee_amount
+      || fromUnits(recomputed.total, pairDef.quoteScale) !== entry.total_quote_amount
+      || recomputed.quoteUnits <= 0n
+      || recomputed.total <= 0n
+    ) {
+      return undefined;
+    }
+    quotes.push(Object.freeze({
+      quote_id: entry.quote_id,
+      pair: pairDef.pair,
+      base_asset: pairDef.base,
+      quote_asset: pairDef.quote,
+      side: entry.side,
+      base_amount: entry.base_amount,
+      mid_price: entry.mid_price,
+      price: entry.price,
+      spread_bps: entry.spread_bps,
+      fee_bps: entry.fee_bps,
+      quote_amount: entry.quote_amount,
+      fee_amount: entry.fee_amount,
+      total_quote_amount: entry.total_quote_amount,
+      rounding: entry.side === "buy" ? "up" : "down",
+      price_observed_at: entry.price_observed_at,
+      issued_at: entry.issued_at,
+      expires_at: entry.expires_at,
+      ttl_seconds: entry.ttl_seconds,
+      status: "indicative",
+      execution: "not_supported",
+      posting: "none"
+    }));
+  }
+  return Object.freeze(quotes);
 }
 
 function parseNotificationsView(
@@ -710,7 +884,7 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets, deposits, withdrawals,
+ * customer session, capabilities, wallets, deposits, withdrawals, quotes,
  * notifications, kyc, profile and support GETs, never sends X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
@@ -729,6 +903,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
       deposits: async (): Promise<CustomerApiDeposits> => ({ status: "not-configured" }),
       withdrawals: async (): Promise<CustomerApiWithdrawals> => ({ status: "not-configured" }),
+      quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -850,6 +1025,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/quotes", token, nowMs);
+      const view = parseQuotesView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", quotes: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -926,5 +1120,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, notifications, kyc, profile, support });
 }

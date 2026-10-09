@@ -645,6 +645,166 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.withdrawals("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads quotes with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const quotes = [
+      {
+        quote_id: "qte_0123456789abcdef01234567",
+        pair: "USDT/RUB",
+        base_asset: "USDT",
+        quote_asset: "RUB",
+        side: "sell",
+        base_amount: "25.000000",
+        mid_price: "90.00000000",
+        price: "89.77500000",
+        spread_bps: 50,
+        fee_bps: 30,
+        quote_amount: "2244.37",
+        fee_amount: "6.74",
+        total_quote_amount: "2237.63",
+        rounding: "down",
+        price_observed_at: "2026-10-02T14:04:57.000Z",
+        issued_at: "2026-10-02T14:05:00.000Z",
+        expires_at: "2026-10-02T14:05:30.000Z",
+        ttl_seconds: 30,
+        status: "indicative",
+        execution: "not_supported",
+        posting: "none"
+      }
+    ];
+    await withFakeApi(
+      (request) => ({ mode: "test", quotes }),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.quotes("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result.quotes, quotes);
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream quotes refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const quotes = JSON.stringify({ mode: "test", quotes: [] });
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER", quotes }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.quotes("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed quotes bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = {
+      quote_id: "qte_0123456789abcdef01234567",
+      pair: "USDT/RUB",
+      base_asset: "USDT",
+      quote_asset: "RUB",
+      side: "sell",
+      base_amount: "25.000000",
+      mid_price: "90.00000000",
+      price: "89.77500000",
+      spread_bps: 50,
+      fee_bps: 30,
+      quote_amount: "2244.37",
+      fee_amount: "6.74",
+      total_quote_amount: "2237.63",
+      rounding: "down",
+      price_observed_at: "2026-10-02T14:04:57.000Z",
+      issued_at: "2026-10-02T14:05:00.000Z",
+      expires_at: "2026-10-02T14:05:30.000Z",
+      ttl_seconds: 30,
+      status: "indicative",
+      execution: "not_supported",
+      posting: "none"
+    };
+    for (const body of [
+      { mode: "test", quotes: "oops" },
+      { mode: "test", quotes: [{ ...entry, extra: true }] },
+      { mode: "test", quotes: [{ ...entry, quote_id: "qte_bad" }] },
+      { mode: "test", quotes: [{ ...entry, pair: "USDT/EUR" }] },
+      { mode: "test", quotes: [{ ...entry, base_asset: "TON" }] },
+      { mode: "test", quotes: [{ ...entry, quote_asset: "USDT" }] },
+      { mode: "test", quotes: [{ ...entry, side: "hold" }] },
+      { mode: "test", quotes: [{ ...entry, side: "buy" }] },
+      { mode: "test", quotes: [{ ...entry, rounding: "up" }] },
+      { mode: "test", quotes: [{ ...entry, base_amount: "25.0000000" }] },
+      { mode: "test", quotes: [{ ...entry, price: "89.775000000" }] },
+      { mode: "test", quotes: [{ ...entry, quote_amount: "-2244.37" }] },
+      { mode: "test", quotes: [{ ...entry, total_quote_amount: "2237.630" }] },
+      { mode: "test", quotes: [{ ...entry, spread_bps: 50.5 }] },
+      { mode: "test", quotes: [{ ...entry, fee_bps: 1001 }] },
+      { mode: "test", quotes: [{ ...entry, ttl_seconds: 0 }] },
+      { mode: "test", quotes: [{ ...entry, ttl_seconds: 301 }] },
+      { mode: "test", quotes: [{ ...entry, price: "89.77499999" }] },
+      { mode: "test", quotes: [{ ...entry, fee_amount: "6.73" }] },
+      { mode: "test", quotes: [{ ...entry, total_quote_amount: "2237.64" }] },
+      { mode: "test", quotes: [{ ...entry, price_observed_at: "not-a-date" }] },
+      { mode: "test", quotes: [{ ...entry, expires_at: "2026-10-02" }] },
+      { mode: "test", quotes: [{ ...entry, expires_at: "2026-10-02T14:05:31.000Z" }] },
+      { mode: "test", quotes: [{ ...entry, price_observed_at: "2026-10-02T14:05:01.000Z" }] },
+      { mode: "test", quotes: [{ ...entry, status: "executed" }] },
+      { mode: "test", quotes: [{ ...entry, execution: "supported" }] },
+      { mode: "test", quotes: [{ ...entry, posting: "queued" }] },
+      { mode: "test", quotes: [], extra: true },
+      { quotes: [entry] },
+      { mode: "live", quotes: [entry] },
+      ["quotes"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.quotes("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.quotes("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api quotes KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.quotes.read is refused with 403.
+      assert.deepEqual(await client.quotes("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.quotes("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("reads notifications with the canonical headers through the contract seam", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
