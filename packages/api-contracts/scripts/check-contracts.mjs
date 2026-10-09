@@ -943,6 +943,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", gatedReadStatuses],
     ["getCustomerQuotes", gatedReadStatuses],
     ["getCustomerExchangeOrders", gatedReadStatuses],
+    ["getCustomerPayments", gatedReadStatuses],
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
