@@ -280,10 +280,13 @@ describe("customer journey through the Mini App BFF", () => {
     );
     assert.equal(upstreamView.session_kyc, "unverified");
     const statusView = await getMiniapp("/bff/kyc/status", cookie);
-    const statusKeys = ["canSubmit", "mode", "provider", "sessionKyc", "state"];
-    if (upstreamView.submitted_at !== undefined) statusKeys.push("submittedAt");
-    if (upstreamView.review_deadline !== undefined) statusKeys.push("reviewDeadline");
-    assert.deepEqual(Object.keys(statusView).sort(), statusKeys.sort());
+    // The upstream directory is deterministic for this subject: its "rejected"
+    // application always carries submitted_at and never a review_deadline, so
+    // the adapted key set is pinned exactly — an upstream view that drops
+    // submitted_at or adds an unexpected field must fail here.
+    assert.deepEqual(Object.keys(statusView).sort(), [
+      "canSubmit", "mode", "provider", "sessionKyc", "state", "submittedAt"
+    ]);
     assert.equal(statusView.mode, "test");
     assert.equal(statusView.provider, "simulator");
     assert.equal(statusView.sessionKyc, "kyc-gated");
@@ -341,7 +344,17 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(profile.customerRef, upstreamView.customer_ref);
     assert.equal(profile.kyc.state, "verified");
     assert.equal(profile.apiAccess.status, "connected");
-    assert.ok(Array.isArray(profile.apiAccess.granted));
+    // The upstream's synthetic KYC directory reports every subject
+    // "unverified", so the granted set is exactly the five never-denied reads
+    // in CAPABILITY_POLICY order — a customer-api that over-granted
+    // KYC-gated or financial capabilities here must fail this pin.
+    assert.deepEqual(profile.apiAccess.granted, [
+      "customer.session.read",
+      "customer.capabilities.read",
+      "customer.kyc.read",
+      "customer.profile.read",
+      "customer.support.read"
+    ]);
     assert.equal(profile.apiAccess.commandsEnabled, false);
   });
 
