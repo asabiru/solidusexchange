@@ -33,6 +33,7 @@ import {
 import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
 import {
   type NotificationOutbox,
+  contractNotificationsView,
   createNotificationOutbox,
   defaultMaxPerSubject,
   notificationIdPattern
@@ -730,7 +731,26 @@ export function createMiniappServer(
         json(response, 400, { error: "invalid_request" });
         return;
       }
-      json(response, 200, notificationsView(session.subject));
+      // The local KYC gate and the standalone (unconfigured) dev BFF keep the
+      // synthetic outbox feed; only a verified session with customer-api access
+      // reads the contract feed. An upstream refusal degrades the surface to the
+      // same feed a gated session sees (in place, like /bff/wallet's gated
+      // view); any other upstream failure answers the sibling *_unavailable
+      // error shape.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, notificationsView(session.subject));
+        return;
+      }
+      const upstream = await customerApi.notifications(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractNotificationsView(upstream));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, notificationsView(session.subject));
+        return;
+      }
+      json(response, 503, { error: "notifications_unavailable" });
       return;
     }
     if (path === "/bff/activity") {

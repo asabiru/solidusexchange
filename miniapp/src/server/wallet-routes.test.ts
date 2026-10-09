@@ -36,7 +36,8 @@ function walletStub(result: CustomerApiWallets | (() => Promise<CustomerApiWalle
     wallets: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
-    }
+    },
+    notifications: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }

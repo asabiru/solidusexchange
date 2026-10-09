@@ -348,6 +348,152 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.wallets("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads notifications with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const feed = {
+      mode: "test",
+      delivery: "disabled",
+      unread: 1,
+      notifications: [
+        {
+          notification_id: "ntf_0123456789abcdef01234567",
+          created_at: "2026-10-01T12:00:00.000Z",
+          channel: "telegram-draft",
+          template: "kyc_approved",
+          locale: "ru",
+          text: "Тестовый режим. Проверка личности пройдена.",
+          mode: "test",
+          delivered: false,
+          read: false
+        },
+        {
+          notification_id: "ntf_fedcba9876543210fedcba98",
+          created_at: "2026-09-30T12:00:00.000Z",
+          channel: "telegram-draft",
+          template: "session_login",
+          locale: "ru",
+          text: "Тестовый режим. Выполнен вход в SOLID.",
+          mode: "test",
+          delivered: false,
+          read: true
+        }
+      ]
+    };
+    await withFakeApi(
+      () => feed,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.notifications("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", unread: feed.unread, notifications: feed.notifications });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream notifications refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.notifications("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed notifications bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = {
+      notification_id: "ntf_0123456789abcdef01234567",
+      created_at: "2026-10-01T12:00:00.000Z",
+      channel: "telegram-draft",
+      template: "session_login",
+      locale: "ru",
+      text: "Тестовый режим. Выполнен вход в SOLID.",
+      mode: "test",
+      delivered: false,
+      read: false
+    };
+    const view = { mode: "test", delivery: "disabled", unread: 1, notifications: [entry] };
+    for (const body of [
+      { notifications: [] },
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, delivery: "enabled" },
+      { ...view, unread: -1 },
+      { ...view, unread: 1.5 },
+      { ...view, unread: "1" },
+      { ...view, notifications: "oops" },
+      { ...view, notifications: [{ ...entry, extra: true }] },
+      { ...view, notifications: [{ ...entry, notification_id: "syn_cust_0123456789abcdef" }] },
+      { ...view, notifications: [{ ...entry, notification_id: 42 }] },
+      { ...view, notifications: [{ ...entry, created_at: "tomorrow" }] },
+      { ...view, notifications: [{ ...entry, created_at: "2026-10-01T12:00:00Z" }] },
+      { ...view, notifications: [{ ...entry, created_at: "2026-13-40T12:00:00.000Z" }] },
+      { ...view, notifications: [{ ...entry, channel: "telegram" }] },
+      { ...view, notifications: [{ ...entry, template: "made_up" }] },
+      { ...view, notifications: [{ ...entry, locale: "en" }] },
+      { ...view, notifications: [{ ...entry, text: "" }] },
+      { ...view, notifications: [{ ...entry, text: "x".repeat(129) }] },
+      { ...view, notifications: [{ ...entry, mode: "live" }] },
+      { ...view, notifications: [{ ...entry, delivered: true }] },
+      { ...view, notifications: [{ ...entry, read: "yes" }] },
+      { ...view, notifications: [{ notification_id: entry.notification_id }] },
+      { ...view, notifications: [] , unread: 0, extra: true },
+      ["notifications"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.notifications("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.notifications("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api notifications KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.notifications.read is refused with 403.
+      assert.deepEqual(await client.notifications("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.notifications("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);
