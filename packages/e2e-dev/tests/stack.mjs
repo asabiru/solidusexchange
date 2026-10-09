@@ -136,7 +136,16 @@ export function verifyEnvelope(envelope, keyset) {
   const key = keyset.keys.find(
     (candidate) => candidate.keyId === envelope.keyId && candidate.version === envelope.keyVersion
   );
-  if (!key) return false;
+  if (!key || key.algorithm !== "Ed25519") return false;
+  // Same key lifecycle the consumers enforce: a retired key may only attest
+  // envelopes issued before its retirement.
+  if (key.status === "retired") {
+    const issuedAt = Date.parse(envelope.issuedAt);
+    const retiredAt = Date.parse(key.retiredAt);
+    if (!Number.isFinite(issuedAt) || !Number.isFinite(retiredAt) || issuedAt > retiredAt) {
+      return false;
+    }
+  }
   const message = JSON.stringify({
     signatureVersion: envelope.signatureVersion,
     keyId: envelope.keyId,

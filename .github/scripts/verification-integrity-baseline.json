@@ -487,8 +487,8 @@
       "minCases": 26
     },
     "backoffice/src/server/signing.test.ts": {
-      "minLines": 62,
-      "minCases": 4
+      "minLines": 131,
+      "minCases": 8
     },
     "backoffice/src/server/step-up.test.ts": {
       "minLines": 167,
@@ -810,8 +810,8 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 616,
-      "minCases": 18
+      "minLines": 638,
+      "minCases": 19
     },
     "packages/e2e-dev/tests/load.test.mjs": {
       "minLines": 409,
@@ -822,7 +822,7 @@
       "minCases": 19
     },
     "packages/e2e-dev/tests/stack.mjs": {
-      "minLines": 137
+      "minLines": 144
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44
