@@ -84,6 +84,20 @@ dependency-free Node ESM `node:http` server for local development only.
     `403 CAPABILITY_DENIED` without a `verified` KYC status. The read is
     observational only: `quotes.preview` and `quotes.accept` stay unserved,
     denied financial capabilities.
+  - `GET /api/v1/customer/exchange-orders` (`getCustomerExchangeOrders`): a
+    frozen deterministic synthetic order list per subject (`ord_*` ids, the
+    quote simulator's `pair` enum, `buy`/`sell` `side`, `market`/`limit`
+    `order_type`, `base_amount`/`price`/`quote_amount`/`fee_amount`/
+    `total_quote_amount` decimal strings that recompute exactly at the
+    order's fixed price, `fee_bps`, the non-executed `open`/`cancelled`/
+    `expired`/`rejected` `status` enum, coherent ISO `created_at`/
+    `updated_at`, `execution: "not_supported"`, `posting: "none"`, `mode:
+    "test"`). KYC-gated exactly like the deposits, withdrawals, wallets,
+    notifications and quotes reads — exchange orders are an asset/activity
+    collection, not an onboarding or identity surface — `403
+    CAPABILITY_DENIED` without a `verified` KYC status. The read is
+    observational only: `exchange-orders.create` and
+    `exchange-orders.cancel` stay unserved, denied financial capabilities.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -116,10 +130,11 @@ always granted — the KYC status, profile and support tickets reads must stay
 reachable for unverified customers or they could never see their own
 onboarding, identity and service-requests state;
 `customer.wallets.read`, `customer.notifications.read`,
-`customer.deposits.read`, `customer.withdrawals.read` and
-`customer.quotes.read`
+`customer.deposits.read`, `customer.withdrawals.read`,
+`customer.quotes.read` and `customer.exchange-orders.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
-wallet, notification, deposit, withdrawal and quote collection reads.
+wallet, notification, deposit, withdrawal, quote and exchange-order
+collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,

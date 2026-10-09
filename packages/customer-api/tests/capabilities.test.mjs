@@ -27,12 +27,12 @@ function decisionStatus(id) {
 
 test("only served read operations are ever granted", () => {
   // getCustomerWallets, getCustomerNotifications, getCustomerDeposits,
-  // getCustomerWithdrawals and getCustomerQuotes are the only KYC-gated
-  // served operations today.
+  // getCustomerWithdrawals, getCustomerQuotes and getCustomerExchangeOrders
+  // are the only KYC-gated served operations today.
   const gated = OPERATIONS.filter((operation) =>
-    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes"].includes(operation.operationId)
+    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders"].includes(operation.operationId)
   ).length;
-  assert.equal(gated, 5);
+  assert.equal(gated, 6);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     // customer.kyc.read, customer.profile.read and customer.support.read are
@@ -41,7 +41,7 @@ test("only served read operations are ever granted", () => {
     // stay readable for unverified subjects.
     const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read"];
     if (kycStatus === "verified") {
-      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read");
+      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read");
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
@@ -71,11 +71,11 @@ test("money-moving and balance capabilities reference limits and scope decisions
   for (const namespace of MONEY_NAMESPACES) {
     assert.ok(financial.some((item) => item.capability.startsWith(`customer.${namespace}.`)), namespace);
   }
-  // Every money namespace except deposits, withdrawals and quotes — whose
-  // collection reads are now served — stays a planned (unserved) contract
-  // namespace; the deposits, withdrawals and quotes financial capabilities
+  // Every money namespace except deposits, withdrawals, quotes and
+  // exchange-orders — whose collection reads are now served — stays a
+  // planned (unserved) contract namespace; their financial capabilities
   // themselves stay financial and unserved.
-  for (const namespace of MONEY_NAMESPACES.filter((name) => name !== "deposits" && name !== "withdrawals" && name !== "quotes")) {
+  for (const namespace of MONEY_NAMESPACES.filter((name) => name !== "deposits" && name !== "withdrawals" && name !== "quotes" && name !== "exchange-orders")) {
     assert.ok(contract.openapi["x-solidchange-planned-namespaces"].customer.includes(`/api/v1/customer/${namespace}`));
   }
   for (const policy of financial.filter((item) => !item.capability.endsWith(".read"))) {
@@ -150,6 +150,20 @@ test("money-moving and balance capabilities reference limits and scope decisions
   );
   const quoteAccept = financial.find((item) => item.capability === "customer.quotes.accept");
   assert.deepEqual([...quoteAccept.decisions], ["D-001", "D-007", "D-011", "D-014"]);
+  // The exchange-orders namespace likewise stays a money namespace: it now
+  // serves the KYC-gated synthetic collection read while the order commands
+  // — create (placing liquidity demand, KYT-screened like quotes.accept) and
+  // cancel (withdrawing a resting order) — remain denied financial
+  // capabilities under their open decisions.
+  assert.ok(MONEY_NAMESPACES.includes("exchange-orders"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.exchange-orders.")).map((item) => item.capability),
+    ["customer.exchange-orders.read", "customer.exchange-orders.create", "customer.exchange-orders.cancel"]
+  );
+  const orderCreate = financial.find((item) => item.capability === "customer.exchange-orders.create");
+  assert.deepEqual([...orderCreate.decisions], ["D-001", "D-007", "D-011", "D-014"]);
+  const orderCancel = financial.find((item) => item.capability === "customer.exchange-orders.cancel");
+  assert.deepEqual([...orderCancel.decisions], ["D-001", "D-007", "D-014"]);
 });
 
 test("referenced decisions exist in the register and are still Open", () => {

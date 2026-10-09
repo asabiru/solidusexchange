@@ -126,10 +126,30 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-011",
     "D-014"
   ]),
+  // The served exchange-orders collection read is KYC-gated like the
+  // deposits, withdrawals, wallets, notifications and quotes reads:
+  // exchange orders are an asset/activity collection (the order records a
+  // subject placed on the synthetic book — the miniapp gates the exchange
+  // surface to verified sessions), not an onboarding or identity surface —
+  // unlike profile/kyc/support it must stay gated on a verified KYC status.
+  // The read is synthetic and carries no ledger effect (posting stays
+  // "none", execution stays "not_supported"), so it needs no open
+  // money-movement decisions: the unserved order commands below keep the
+  // financial denial with their decision reasons.
+  entry("customer.exchange-orders.read", "read", true, []),
   entry("customer.exchange-orders.create", "financial", true, [
     "D-001",
     "D-007",
     "D-011",
+    "D-014"
+  ]),
+  // Cancelling a resting order is still a financial command on the order
+  // book (it withdraws a placed commitment under the liquidity decision):
+  // it stays denied like the create command, minus the KYT screening
+  // decision that only executing fresh flow needs.
+  entry("customer.exchange-orders.cancel", "financial", true, [
+    "D-001",
+    "D-007",
     "D-014"
   ]),
   entry("customer.payments.create", "financial", true, [

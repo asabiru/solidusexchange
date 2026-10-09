@@ -5,6 +5,7 @@ import { createCustomerApiServer } from "../src/app.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
+import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
@@ -59,6 +60,7 @@ export async function startTestServer(options = {}) {
     depositDirectory: createSyntheticDepositDirectory(),
     withdrawalDirectory: createSyntheticWithdrawalDirectory(),
     quoteDirectory: createSyntheticQuoteDirectory(),
+    exchangeOrderDirectory: createSyntheticExchangeOrderDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options
