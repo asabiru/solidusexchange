@@ -13,6 +13,7 @@ import {
 } from "./customer-api-client.js";
 
 const uuidV7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const isoTimestamp = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
 
 async function withCustomerApi<T>(key: string, run: (baseUrl: string) => Promise<T>): Promise<T> {
   const { server, address } = await startCustomerApi({
@@ -492,6 +493,148 @@ describe("customer API client", () => {
     });
     const unconfigured = createCustomerApiClient({});
     assert.deepEqual(await unconfigured.notifications("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
+  it("reads the kyc status with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      provider: "simulator",
+      session_kyc: "unverified",
+      status: "rejected",
+      application_id: "kyc_0123456789abcdef01234567",
+      submitted_at: "2026-10-01T12:00:00.000Z",
+      updated_at: "2026-10-02T12:00:00.000Z",
+      reason_codes: ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"],
+      can_submit: true
+    };
+    await withFakeApi(
+      () => view,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.kyc("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", view });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps every kyc read failure to unavailable, including an upstream 403", async () => {
+    const key = randomBytes(32).toString("hex");
+    // customer.kyc.read is granted at every upstream session status, so even a
+    // 403 is contract drift, not a real capability denial: there is no denied
+    // arm and every non-200 outcome fails closed to "unavailable".
+    for (const status of [403, 401, 429, 500]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.kyc("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "unavailable", String(status));
+        assert.deepEqual(result, { status: "unavailable" });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed kyc bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const view = {
+      mode: "test",
+      provider: "simulator",
+      session_kyc: "unverified",
+      status: "rejected",
+      application_id: "kyc_0123456789abcdef01234567",
+      submitted_at: "2026-10-01T12:00:00.000Z",
+      updated_at: "2026-10-02T12:00:00.000Z",
+      reason_codes: ["SIM_DOCUMENT_UNREADABLE"],
+      can_submit: true
+    };
+    for (const body of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, provider: "live" },
+      { ...view, session_kyc: "kyc-gated" },
+      { ...view, session_kyc: 42 },
+      { ...view, status: "needs_review" },
+      { ...view, status: 42 },
+      { ...view, updated_at: "tomorrow" },
+      { ...view, updated_at: "2026-10-02T12:00:00Z" },
+      { ...view, updated_at: "2026-13-40T12:00:00.000Z" },
+      { ...view, can_submit: "yes" },
+      { mode: "test", provider: "simulator", session_kyc: "unverified", status: "not_started", updated_at: "2026-10-02T12:00:00.000Z" },
+      { ...view, application_id: "syn_cust_0123456789abcdef" },
+      { ...view, application_id: 42 },
+      { ...view, submitted_at: "last week" },
+      { mode: "test", provider: "simulator", session_kyc: "unverified", status: "rejected", updated_at: "2026-10-02T12:00:00.000Z", can_submit: true, submitted_at: "2026-10-01T12:00:00.000Z" },
+      { mode: "test", provider: "simulator", session_kyc: "unverified", status: "rejected", updated_at: "2026-10-02T12:00:00.000Z", can_submit: true, application_id: "kyc_0123456789abcdef01234567" },
+      { ...view, review_deadline: "soon" },
+      { ...view, reason_codes: [] },
+      { ...view, reason_codes: ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH", "SIM_DOCUMENT_UNREADABLE"] },
+      { ...view, reason_codes: ["SIM_DOCUMENT_UNREADABLE", "SIM_DOCUMENT_UNREADABLE"] },
+      { ...view, reason_codes: ["REAL_CODE"] },
+      { ...view, reason_codes: "SIM_DOCUMENT_UNREADABLE" },
+      { ...view, requested_items: [] },
+      { ...view, requested_items: ["proof_of_address", "selfie_retake", "proof_of_address"] },
+      { ...view, requested_items: ["proof_of_address", "proof_of_address"] },
+      { ...view, requested_items: ["passport"] },
+      ["kyc"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.kyc("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.kyc("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("reads the kyc status from the dev customer-api without a KYC gate and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // customer.kyc.read is granted at every session status: the dev
+      // customer-api's synthetic KYC directory marks every subject unverified
+      // yet still answers 200 with the deterministic unverified-bucket view.
+      const first = await client.kyc("tg-0123456789abcdef", Date.now());
+      assert.equal(first.status, "ok");
+      if (first.status !== "ok") return;
+      assert.equal(first.view.mode, "test");
+      assert.equal(first.view.provider, "simulator");
+      assert.equal(first.view.session_kyc, "unverified");
+      assert.match(first.view.status, /^(not_started|rejected|needs_more_data|timed_out|unavailable)$/);
+      assert.match(first.view.updated_at, isoTimestamp);
+      assert.equal(typeof first.view.can_submit, "boolean");
+      assert.deepEqual(await client.kyc("tg-0123456789abcdef", Date.now()), first);
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.kyc("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {

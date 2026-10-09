@@ -157,6 +157,20 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/kyc")) {
+      return {
+        mode: "test",
+        provider: "simulator",
+        session_kyc: "unverified",
+        status: "rejected",
+        application_id: "kyc_0123456789abcdef01234567",
+        submitted_at: "2026-10-01T12:00:00.000Z",
+        updated_at: "2026-10-02T12:00:00.000Z",
+        reason_codes: ["SIM_DOCUMENT_UNREADABLE"],
+        can_submit: true,
+        ...extra
+      };
+    }
     return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
   }
 
@@ -248,6 +262,23 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function kycFailsClosed(label, sessionCookie) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/kyc/status", { cookie: sessionCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(/kyc_[0-9a-f]{24}/.test(text), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "kyc_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
   async function profileFailsClosed(label) {
     const hits = upstream.length;
     const startedAt = Date.now();
@@ -316,6 +347,18 @@ describe("Mini App BFF with a failing customer-api", () => {
       Date.parse("2026-09-30T12:00:00.000Z")
     ]);
     assert.deepEqual(feed.notifications.map((draft) => draft.read), [false, true]);
+    // The KYC status surface consults upstream for gated sessions too (the
+    // read is never KYC-gated): the adapted view carries the upstream verdict
+    // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
+    const kyc = await getJson(app, "/bff/kyc/status", verifiedCookie);
+    assert.equal(kyc.mode, "test");
+    assert.equal(kyc.provider, "simulator");
+    assert.equal(kyc.sessionKyc, "kyc-gated");
+    assert.equal(kyc.state, "rejected");
+    assert.equal(kyc.canSubmit, true);
+    assert.equal(kyc.submittedAt, Date.parse("2026-10-01T12:00:00.000Z"));
+    assert.equal(kyc.reviewDeadline, undefined);
+    assert.deepEqual(await getJson(app, "/bff/kyc/status", cookie), kyc);
   });
 
   it("degrades verified sessions' wallet and notifications on an upstream capability denial", async () => {
@@ -344,6 +387,14 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedFeed = await getJson(app, "/bff/notifications", cookie);
     assert.deepEqual(feed, gatedFeed);
     assert.ok(upstream.length > hits, "upstream was never called");
+    // A refused KYC status read is upstream contract drift (customer.kyc.read
+    // is granted at every session status), so it fails closed for gated and
+    // verified sessions alike rather than degrading in place.
+    for (const sessionCookie of [verifiedCookie, cookie]) {
+      const kycResponse = await call(app.base, "/bff/kyc/status", { cookie: sessionCookie });
+      assert.equal(kycResponse.status, 503);
+      assert.deepEqual(await readJson(kycResponse), { error: "kyc_unavailable" });
+    }
     assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
   });
 
@@ -369,6 +420,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await profileFailsClosed(name);
       await walletFailsClosed(name);
       await notificationsFailClosed(name);
+      await kycFailsClosed(`${name} verified`, verifiedCookie);
+      await kycFailsClosed(`${name} gated`, cookie);
       await assertGated(app, cookie, name);
     }
   });
@@ -380,6 +433,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
       await walletFailsClosed(name);
       await notificationsFailClosed(name);
+      await kycFailsClosed(`${name} verified`, verifiedCookie);
+      await kycFailsClosed(`${name} gated`, cookie);
       await upstreamReleased(name);
       await assertGated(app, cookie, name);
     }
@@ -390,6 +445,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/profile", cookie)).apiAccess.status, "connected");
     assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
+    assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
   });
 });
 
