@@ -479,6 +479,60 @@
         }
       }
     },
+    "/api/v1/customer/withdrawals": {
+      "get": {
+        "operationId": "getCustomerWithdrawals",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's synthetic withdrawals",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer withdrawals in test mode mirroring the custody withdrawal-intent lifecycle",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WithdrawalsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -1511,6 +1565,124 @@
           }
         }
       },
+      "WithdrawalsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "withdrawals"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "withdrawals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WithdrawalView"
+            }
+          }
+        }
+      },
+      "WithdrawalView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "withdrawal_id",
+          "asset",
+          "network",
+          "status",
+          "amount",
+          "fee_amount",
+          "destination_reference",
+          "legs",
+          "created_at",
+          "updated_at",
+          "expires_at",
+          "posting"
+        ],
+        "properties": {
+          "withdrawal_id": {
+            "type": "string",
+            "pattern": "^wdr_[0-9a-f]{24}$"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "network": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+_TESTNET$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "screened",
+              "pending_maker_approval",
+              "pending_checker_approval",
+              "unsigned_intent_ready",
+              "broadcast",
+              "confirmed",
+              "rejected",
+              "cancelled",
+              "expired"
+            ]
+          },
+          "amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "fee_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "destination_reference": {
+            "type": "string",
+            "pattern": "^destination_ref_[a-z0-9_]{2,32}$"
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "leg_id",
+                "asset",
+                "amount",
+                "direction"
+              ],
+              "properties": {
+                "leg_id": {
+                  "type": "string",
+                  "pattern": "^wdl_[0-9a-f]{24}$"
+                },
+                "asset": {
+                  "$ref": "#/$defs/assetCode"
+                },
+                "amount": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "direction": {
+                  "const": "out"
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1799,7 +1971,6 @@
     "customer": [
       "/api/v1/customer/auth",
       "/api/v1/customer/users",
-      "/api/v1/customer/withdrawals",
       "/api/v1/customer/quotes",
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",

@@ -11,6 +11,7 @@ import { createSyntheticNotificationDirectory } from "./notifications.mjs";
 import { createSyntheticProfileDirectory } from "./profile.mjs";
 import { createSyntheticSupportDirectory } from "./support.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
+import { createSyntheticWithdrawalDirectory } from "./withdrawals.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
 /**
@@ -23,12 +24,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   profileDirectory?: import("./profile.mjs").ProfileDirectory,
  *   supportDirectory?: import("./support.mjs").SupportDirectory,
  *   depositDirectory?: import("./deposits.mjs").DepositDirectory,
+ *   withdrawalDirectory?: import("./withdrawals.mjs").WithdrawalDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -42,6 +44,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     profileDirectory: profileDirectory ?? createSyntheticProfileDirectory(),
     supportDirectory: supportDirectory ?? createSyntheticSupportDirectory(),
     depositDirectory: depositDirectory ?? createSyntheticDepositDirectory(),
+    withdrawalDirectory: withdrawalDirectory ?? createSyntheticWithdrawalDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },

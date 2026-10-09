@@ -22,6 +22,7 @@ import { validProfileView } from "./profile.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
 import { validSupportTicketsView } from "./support.mjs";
 import { validWalletsView } from "./wallets.mjs";
+import { validWithdrawalsView } from "./withdrawals.mjs";
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
 /** @typedef {import("node:http").ServerResponse} ServerResponse */
@@ -42,6 +43,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
  * @property {import("./support.mjs").SupportDirectory} supportDirectory
  * @property {import("./deposits.mjs").DepositDirectory} depositDirectory
+ * @property {import("./withdrawals.mjs").WithdrawalDirectory} withdrawalDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -215,6 +217,7 @@ export function createCustomerApiHandler({
   profileDirectory,
   supportDirectory,
   depositDirectory,
+  withdrawalDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -245,6 +248,9 @@ export function createCustomerApiHandler({
   }
   if (typeof depositDirectory?.listFor !== "function") {
     throw new Error("A deposit directory is required");
+  }
+  if (typeof withdrawalDirectory?.listFor !== "function") {
+    throw new Error("A withdrawal directory is required");
   }
 
   /**
@@ -407,6 +413,21 @@ export function createCustomerApiHandler({
       const view = await depositDirectory.listFor(principal.subject);
       if (!validDepositsView(view)) {
         throw new Error("Deposit directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerWithdrawals") {
+      // customer.withdrawals.read is KYC-gated like deposits/wallets:
+      // withdrawals are an asset/activity collection, so unverified and
+      // pending subjects are denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.withdrawals.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await withdrawalDirectory.listFor(principal.subject);
+      if (!validWithdrawalsView(view)) {
+        throw new Error("Withdrawal directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

@@ -324,6 +324,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/profile", "getCustomerProfile"],
   ["/api/v1/customer/support", "getCustomerSupport"],
   ["/api/v1/customer/deposits", "getCustomerDeposits"],
+  ["/api/v1/customer/withdrawals", "getCustomerWithdrawals"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -777,6 +778,66 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.DepositView.properties.updated_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical withdrawals views",
+  "Canonical WithdrawalsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical withdrawals views",
+  "Canonical WithdrawalsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalsView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical withdrawal views",
+  "Canonical WithdrawalView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical withdrawal statuses",
+  "Canonical WithdrawalView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalView.properties.status.enum.push("paid");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical withdrawal amounts",
+  "Canonical WithdrawalView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalView.properties.amount = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical withdrawal timestamps",
+  "Canonical WithdrawalView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WithdrawalView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

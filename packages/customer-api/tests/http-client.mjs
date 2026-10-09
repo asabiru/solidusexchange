@@ -10,6 +10,7 @@ import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticSupportDirectory } from "../src/support.mjs";
 import { createSyntheticWalletDirectory } from "../src/wallets.mjs";
+import { createSyntheticWithdrawalDirectory } from "../src/withdrawals.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { conformanceErrors, createValidator, loadContract } from "./contract-validator.mjs";
 
@@ -55,6 +56,7 @@ export async function startTestServer(options = {}) {
     profileDirectory: createSyntheticProfileDirectory(),
     supportDirectory: createSyntheticSupportDirectory(),
     depositDirectory: createSyntheticDepositDirectory(),
+    withdrawalDirectory: createSyntheticWithdrawalDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options

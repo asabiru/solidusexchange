@@ -58,6 +58,19 @@ dependency-free Node ESM `node:http` server for local development only.
     an onboarding or identity surface — `403 CAPABILITY_DENIED` without a
     `verified` KYC status. The read is observational only: `deposits.create`
     stays an unserved, denied financial capability.
+  - `GET /api/v1/customer/withdrawals` (`getCustomerWithdrawals`): a frozen
+    deterministic synthetic withdrawal list per subject (`wdr_*` ids,
+    custody-allowlisted `asset`/`network` testnet pairs, `status` enum
+    mirroring the custody withdrawal-intent lifecycle incl. maker-checker
+    steps and the sealed `unsigned_intent_ready` state, `amount`/`fee_amount`
+    decimal strings, `destination_reference`, two `wdl_*` out-legs for the
+    principal and the fee, ISO `created_at`/`updated_at`/`expires_at`,
+    `posting: "none"`, `mode: "test"`). KYC-gated exactly like the deposits,
+    wallets and notifications reads — withdrawals are an asset/activity
+    collection, not an onboarding or identity surface — `403
+    CAPABILITY_DENIED` without a `verified` KYC status. The read is
+    observational only: `withdrawals.create` stays an unserved, denied
+    financial capability.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -89,10 +102,10 @@ Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
 always granted — the KYC status, profile and support tickets reads must stay
 reachable for unverified customers or they could never see their own
 onboarding, identity and service-requests state;
-`customer.wallets.read`, `customer.notifications.read` and
-`customer.deposits.read`
+`customer.wallets.read`, `customer.notifications.read`,
+`customer.deposits.read` and `customer.withdrawals.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
-wallet, notification and deposit collection reads.
+wallet, notification, deposit and withdrawal collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,

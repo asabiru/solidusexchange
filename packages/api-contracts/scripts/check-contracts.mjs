@@ -402,6 +402,80 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  WithdrawalsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "withdrawals"],
+    properties: {
+      mode: { const: "test" },
+      withdrawals: {
+        type: "array",
+        items: { $ref: "#/components/schemas/WithdrawalView" }
+      }
+    }
+  },
+  WithdrawalView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "withdrawal_id",
+      "asset",
+      "network",
+      "status",
+      "amount",
+      "fee_amount",
+      "destination_reference",
+      "legs",
+      "created_at",
+      "updated_at",
+      "expires_at",
+      "posting"
+    ],
+    properties: {
+      withdrawal_id: { type: "string", pattern: "^wdr_[0-9a-f]{24}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      network: { type: "string", pattern: "^[A-Z0-9]+_TESTNET$" },
+      status: {
+        type: "string",
+        enum: [
+          "draft",
+          "screened",
+          "pending_maker_approval",
+          "pending_checker_approval",
+          "unsigned_intent_ready",
+          "broadcast",
+          "confirmed",
+          "rejected",
+          "cancelled",
+          "expired"
+        ]
+      },
+      amount: { $ref: "#/$defs/decimalAmount" },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      destination_reference: {
+        type: "string",
+        pattern: "^destination_ref_[a-z0-9_]{2,32}$"
+      },
+      legs: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["leg_id", "asset", "amount", "direction"],
+          properties: {
+            leg_id: { type: "string", pattern: "^wdl_[0-9a-f]{24}$" },
+            asset: { $ref: "#/$defs/assetCode" },
+            amount: { $ref: "#/$defs/decimalAmount" },
+            direction: { const: "out" }
+          }
+        }
+      },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      expires_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -621,8 +695,7 @@ function checkOpenApi() {
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
       "/api/v1/customer/quotes",
-      "/api/v1/customer/users",
-      "/api/v1/customer/withdrawals"
+      "/api/v1/customer/users"
     ],
     "Planned customer namespaces"
   );
@@ -654,6 +727,7 @@ function checkOpenApi() {
     ["getCustomerProfile", "/api/v1/customer/profile"],
     ["getCustomerSupport", "/api/v1/customer/support"],
     ["getCustomerDeposits", "/api/v1/customer/deposits"],
+    ["getCustomerWithdrawals", "/api/v1/customer/withdrawals"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -681,6 +755,7 @@ function checkOpenApi() {
     ["getCustomerProfile", "#/components/schemas/ProfileView"],
     ["getCustomerSupport", "#/components/schemas/SupportTicketsView"],
     ["getCustomerDeposits", "#/components/schemas/DepositsView"],
+    ["getCustomerWithdrawals", "#/components/schemas/WithdrawalsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
