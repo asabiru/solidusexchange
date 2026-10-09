@@ -93,6 +93,9 @@ async function assertGated(app, cookie, label) {
   const quotes = await getJson(app, "/bff/quotes", cookie);
   assert.equal(quotes.kyc, "kyc-gated", label);
   assert.equal(quotes.quotes.length, 0, label);
+  const orders = await getJson(app, "/bff/exchange-orders", cookie);
+  assert.equal(orders.kyc, "kyc-gated", label);
+  assert.equal(orders.orders.length, 0, label);
 }
 
 async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
@@ -218,6 +221,33 @@ describe("Mini App BFF with a failing customer-api", () => {
             expires_at: "2026-10-02T14:05:30.000Z",
             ttl_seconds: 30,
             status: "indicative",
+            execution: "not_supported",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/exchange-orders")) {
+      return {
+        mode: "test",
+        orders: [
+          {
+            order_id: "ord_0123456789abcdef01234567",
+            pair: "USDT/RUB",
+            base_asset: "USDT",
+            quote_asset: "RUB",
+            side: "sell",
+            order_type: "limit",
+            base_amount: "25.000000",
+            price: "89.77500000",
+            quote_amount: "2244.37",
+            fee_bps: 30,
+            fee_amount: "6.74",
+            total_quote_amount: "2237.63",
+            status: "open",
+            created_at: "2026-10-02T14:05:00.000Z",
+            updated_at: "2026-10-02T14:05:00.000Z",
             execution: "not_supported",
             posting: "none"
           }
@@ -432,6 +462,23 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("qte_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "quotes_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
+  async function exchangeOrdersFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/exchange-orders", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("ord_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "exchange_orders_unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
@@ -689,6 +736,43 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedQuotes = await getJson(app, "/bff/quotes", cookie);
     assert.equal(gatedQuotes.kyc, "kyc-gated");
     assert.equal(gatedQuotes.quotes.length, 0);
+    // The exchange-orders list is KYC-gated like quotes: only the verified
+    // session consults upstream, and the adapted view keeps the
+    // non-executed not_supported orders read-only (posting stays "none").
+    const orders = await getJson(app, "/bff/exchange-orders", verifiedCookie);
+    assert.equal(orders.mode, "test");
+    assert.equal(orders.kyc, "verified");
+    assert.deepEqual(Object.keys(orders).sort(), ["kyc", "mode", "orders"]);
+    assert.equal(orders.orders.length, 1);
+    assert.deepEqual(Object.keys(orders.orders[0]).sort(), [
+      "base",
+      "baseAmount",
+      "createdAt",
+      "execution",
+      "feeAmount",
+      "feeBps",
+      "id",
+      "orderType",
+      "pair",
+      "posting",
+      "price",
+      "quote",
+      "quoteAmount",
+      "side",
+      "status",
+      "totalQuoteAmount",
+      "updatedAt"
+    ]);
+    assert.equal(orders.orders[0].id, "ord_0123456789abcdef01234567");
+    assert.equal(orders.orders[0].pair, "USDT/RUB");
+    assert.equal(orders.orders[0].side, "sell");
+    assert.equal(orders.orders[0].orderType, "limit");
+    assert.equal(orders.orders[0].status, "open");
+    assert.equal(orders.orders[0].execution, "not_supported");
+    assert.equal(orders.orders[0].posting, "none");
+    const gatedOrders = await getJson(app, "/bff/exchange-orders", cookie);
+    assert.equal(gatedOrders.kyc, "kyc-gated");
+    assert.equal(gatedOrders.orders.length, 0);
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -767,6 +851,17 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedWithdrawalsDenied = await getJson(app, "/bff/withdrawals", cookie);
     assert.deepEqual(JSON.parse(withdrawalsText), gatedWithdrawalsDenied);
     assert.equal(gatedWithdrawalsDenied.kyc, "kyc-gated");
+    // A refused exchange-orders read degrades the same way: the verified
+    // session falls back to the emptied list a gated session sees.
+    const ordersResponse = await call(app.base, "/bff/exchange-orders", { cookie: verifiedCookie });
+    assert.equal(ordersResponse.status, 200);
+    const ordersText = await ordersResponse.text();
+    assert.equal(ordersText.includes(marker), false);
+    assert.equal(ordersText.includes(key), false);
+    assert.equal(ordersText.includes("ord_"), false);
+    const gatedOrdersDenied = await getJson(app, "/bff/exchange-orders", cookie);
+    assert.deepEqual(JSON.parse(ordersText), gatedOrdersDenied);
+    assert.equal(gatedOrdersDenied.kyc, "kyc-gated");
     // A refused notifications read degrades in place to the same feed a gated
     // session sees: the local outbox drafts (a session_login per dev login).
     const feedResponse = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
@@ -826,6 +921,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await depositsFailsClosed(name);
       await withdrawalsFailsClosed(name);
       await quotesFailsClosed(name);
+      await exchangeOrdersFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -843,6 +939,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await depositsFailsClosed(name);
       await withdrawalsFailsClosed(name);
       await quotesFailsClosed(name);
+      await exchangeOrdersFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -860,6 +957,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/withdrawals", verifiedCookie)).withdrawals[0].id, "wdr_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/quotes", verifiedCookie)).quotes[0].id, "qte_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/exchange-orders", verifiedCookie)).orders[0].id, "ord_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");

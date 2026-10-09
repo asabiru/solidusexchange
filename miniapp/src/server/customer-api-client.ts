@@ -4,6 +4,8 @@ import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-
 import type {
   CustomerApiAccess,
   DepositStatus,
+  ExchangeOrderStatus,
+  ExchangeOrderType,
   KycVerificationState,
   NotificationTemplate,
   QuotePair,
@@ -16,6 +18,14 @@ import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
 import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
+import {
+  contractExchangeOrderAmounts,
+  exchangeOrderIdPattern,
+  exchangeOrderMaxBps,
+  exchangeOrderPriceScale,
+  isExchangeOrderStatus,
+  isExchangeOrderType
+} from "./exchange-orders.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
 import {
   contractQuoteAmounts,
@@ -138,6 +148,32 @@ export type CustomerApiQuotes =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiExchangeOrder {
+  order_id: string;
+  pair: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  side: QuoteSide;
+  order_type: ExchangeOrderType;
+  base_amount: string;
+  price: string;
+  quote_amount: string;
+  fee_bps: number;
+  fee_amount: string;
+  total_quote_amount: string;
+  status: ExchangeOrderStatus;
+  created_at: string;
+  updated_at: string;
+  execution: "not_supported";
+  posting: "none";
+}
+
+export type CustomerApiExchangeOrders =
+  | { status: "ok"; orders: readonly CustomerApiExchangeOrder[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -245,6 +281,7 @@ export interface CustomerApiClient {
   deposits(bffSubject: string, nowMs: number): Promise<CustomerApiDeposits>;
   withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals>;
   quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
+  exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -616,6 +653,113 @@ function parseQuotesView(value: unknown): readonly CustomerApiQuote[] | undefine
   return Object.freeze(quotes);
 }
 
+const exchangeOrderKeys = [
+  "order_id",
+  "pair",
+  "base_asset",
+  "quote_asset",
+  "side",
+  "order_type",
+  "base_amount",
+  "price",
+  "quote_amount",
+  "fee_bps",
+  "fee_amount",
+  "total_quote_amount",
+  "status",
+  "created_at",
+  "updated_at",
+  "execution",
+  "posting"
+] as const;
+
+function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOrder[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "orders"])
+    || value.mode !== "test"
+    || !Array.isArray(value.orders)
+  ) {
+    return undefined;
+  }
+  const orders: CustomerApiExchangeOrder[] = [];
+  for (const entry of value.orders) {
+    const pairDef = isRecord(entry) ? contractQuotePair(entry.pair) : undefined;
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, exchangeOrderKeys)
+      || pairDef === undefined
+      || entry.base_asset !== pairDef.base
+      || entry.quote_asset !== pairDef.quote
+      || !isQuoteSide(entry.side)
+      || !isExchangeOrderType(entry.order_type)
+      || typeof entry.order_id !== "string"
+      || !exchangeOrderIdPattern.test(entry.order_id)
+      || typeof entry.fee_bps !== "number"
+      || !Number.isSafeInteger(entry.fee_bps)
+      || entry.fee_bps < 0
+      || entry.fee_bps > exchangeOrderMaxBps
+      || !isScaledDecimal(entry.base_amount, pairDef.baseScale)
+      || !isScaledDecimal(entry.price, exchangeOrderPriceScale)
+      || !isScaledDecimal(entry.quote_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.fee_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.total_quote_amount, pairDef.quoteScale)
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.updated_at)
+      || !isExchangeOrderStatus(entry.status)
+      || entry.execution !== "not_supported"
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    const created = Date.parse(entry.created_at);
+    const updated = Date.parse(entry.updated_at);
+    // The contract lifecycle: updated never precedes created, and an order
+    // still open has seen no update yet.
+    if (updated < created || (entry.status === "open" && updated !== created)) {
+      return undefined;
+    }
+    // Fail closed unless every derived amount recomputes exactly like the
+    // upstream contract validator requires.
+    const recomputed = contractExchangeOrderAmounts(
+      pairDef,
+      entry.side,
+      toUnits(entry.base_amount, pairDef.baseScale),
+      toUnits(entry.price, exchangeOrderPriceScale),
+      entry.fee_bps
+    );
+    if (
+      fromUnits(recomputed.quoteUnits, pairDef.quoteScale) !== entry.quote_amount
+      || fromUnits(recomputed.fee, pairDef.quoteScale) !== entry.fee_amount
+      || fromUnits(recomputed.total, pairDef.quoteScale) !== entry.total_quote_amount
+      || recomputed.quoteUnits <= 0n
+      || recomputed.total <= 0n
+    ) {
+      return undefined;
+    }
+    orders.push(Object.freeze({
+      order_id: entry.order_id,
+      pair: pairDef.pair,
+      base_asset: pairDef.base,
+      quote_asset: pairDef.quote,
+      side: entry.side,
+      order_type: entry.order_type,
+      base_amount: entry.base_amount,
+      price: entry.price,
+      quote_amount: entry.quote_amount,
+      fee_bps: entry.fee_bps,
+      fee_amount: entry.fee_amount,
+      total_quote_amount: entry.total_quote_amount,
+      status: entry.status,
+      created_at: entry.created_at,
+      updated_at: entry.updated_at,
+      execution: "not_supported",
+      posting: "none"
+    }));
+  }
+  return Object.freeze(orders);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -885,7 +1029,8 @@ class CustomerApiHttpError extends Error {
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session, capabilities, wallets, deposits, withdrawals, quotes,
- * notifications, kyc, profile and support GETs, never sends X-Device-Id and
+ * exchange-orders, notifications, kyc, profile and support GETs, never sends
+ * X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
@@ -904,6 +1049,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       deposits: async (): Promise<CustomerApiDeposits> => ({ status: "not-configured" }),
       withdrawals: async (): Promise<CustomerApiWithdrawals> => ({ status: "not-configured" }),
       quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
+      exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -1044,6 +1190,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/exchange-orders", token, nowMs);
+      const view = parseExchangeOrdersView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", orders: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -1120,5 +1285,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, notifications, kyc, profile, support });
 }

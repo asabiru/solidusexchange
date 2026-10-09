@@ -64,6 +64,7 @@ import {
   createSupportDesk
 } from "./support.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
+import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
 import { contractWithdrawalsView, withdrawalsView } from "./withdrawals.js";
 import { syntheticData, walletView } from "./synthetic.js";
 
@@ -92,6 +93,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/profile" },
   { method: "GET", path: "/bff/quotes" },
   { method: "GET", path: "/bff/quotes/preview" },
+  { method: "GET", path: "/bff/exchange-orders" },
   { method: "GET", path: "/bff/checks" },
   { method: "GET", path: "/bff/checks/preview" },
   { method: "GET", path: "/bff/checks/:id" },
@@ -940,6 +942,30 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "quotes_unavailable" });
+      return;
+    }
+    if (path === "/bff/exchange-orders") {
+      // Same gating as /bff/quotes: the local KYC gate and the standalone
+      // (unconfigured) dev BFF keep the synthetic orders list; only a
+      // verified session with customer-api access reads the contract view.
+      // An upstream refusal degrades to the same emptied list a gated
+      // session sees (in place); any other upstream failure answers the
+      // sibling *_unavailable error shape. Order create/cancel stay
+      // unserved — nothing here wires an upstream command.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, exchangeOrdersView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.exchangeOrders(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractExchangeOrdersView(upstream.orders, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, exchangeOrdersView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "exchange_orders_unavailable" });
       return;
     }
     if (path === "/bff/quotes/preview") {

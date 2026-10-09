@@ -467,6 +467,30 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      exchangeOrderDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          orders: ReadonlyArray<{
+            order_id: string;
+            pair: "USDT/RUB" | "TON/RUB" | "TON/USDT";
+            base_asset: string;
+            quote_asset: string;
+            side: "buy" | "sell";
+            order_type: "market" | "limit";
+            base_amount: string;
+            price: string;
+            quote_amount: string;
+            fee_bps: number;
+            fee_amount: string;
+            total_quote_amount: string;
+            status: "open" | "cancelled" | "expired" | "rejected";
+            created_at: string;
+            updated_at: string;
+            execution: "not_supported";
+            posting: "none";
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

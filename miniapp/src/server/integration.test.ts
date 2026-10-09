@@ -96,7 +96,7 @@ describe("end-to-end dev flow: login → customer API → provider quote", () =>
 
   it("exposes no quote acceptance or money-moving route", async () => {
     const cookie = await login("verified");
-    for (const path of ["/bff/quotes/accept", "/bff/quotes/execute", "/bff/exchange", "/bff/orders", "/bff/withdrawals", "/bff/deposits", "/bff/quotes", "/bff/payments"]) {
+    for (const path of ["/bff/quotes/accept", "/bff/quotes/execute", "/bff/exchange", "/bff/orders", "/bff/exchange-orders", "/bff/withdrawals", "/bff/deposits", "/bff/quotes", "/bff/payments"]) {
       const response = await fetch(`${base}${path}`, {
         method: "POST",
         headers: { "content-type": "application/json", origin, cookie },
