@@ -1,12 +1,27 @@
 import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
-import type { CustomerApiAccess, DepositStatus, KycVerificationState, NotificationTemplate } from "../shared/api.js";
+import type {
+  CustomerApiAccess,
+  DepositStatus,
+  KycVerificationState,
+  NotificationTemplate,
+  WithdrawalStatus
+} from "../shared/api.js";
+import type { ScreeningNetwork } from "../shared/address-screening.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { isDecimalString } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
 import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
+import {
+  destinationReferencePattern,
+  isWithdrawalNetwork,
+  isWithdrawalPair,
+  isWithdrawalStatus,
+  withdrawalIdPattern,
+  withdrawalLegIdPattern
+} from "./withdrawals.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
 export const customerApiPlatform = "telegram-mini-app";
@@ -49,6 +64,34 @@ export interface CustomerApiDeposit {
 
 export type CustomerApiDeposits =
   | { status: "ok"; deposits: readonly CustomerApiDeposit[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+export interface CustomerApiWithdrawalLeg {
+  leg_id: string;
+  asset: AssetCode;
+  amount: string;
+  direction: "out";
+}
+
+export interface CustomerApiWithdrawal {
+  withdrawal_id: string;
+  asset: AssetCode;
+  network: ScreeningNetwork;
+  status: WithdrawalStatus;
+  amount: string;
+  fee_amount: string;
+  destination_reference: string;
+  legs: readonly CustomerApiWithdrawalLeg[];
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  posting: "none";
+}
+
+export type CustomerApiWithdrawals =
+  | { status: "ok"; withdrawals: readonly CustomerApiWithdrawal[] }
   | { status: "denied" }
   | { status: "unavailable" }
   | { status: "not-configured" };
@@ -158,6 +201,7 @@ export interface CustomerApiClient {
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
   deposits(bffSubject: string, nowMs: number): Promise<CustomerApiDeposits>;
+  withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -302,6 +346,100 @@ function parseDepositsView(value: unknown): readonly CustomerApiDeposit[] | unde
     }));
   }
   return Object.freeze(deposits);
+}
+
+const withdrawalKeys = [
+  "withdrawal_id",
+  "asset",
+  "network",
+  "status",
+  "amount",
+  "fee_amount",
+  "destination_reference",
+  "legs",
+  "created_at",
+  "updated_at",
+  "expires_at",
+  "posting"
+] as const;
+const withdrawalLegKeys = ["leg_id", "asset", "amount", "direction"] as const;
+
+function parseWithdrawalsView(value: unknown): readonly CustomerApiWithdrawal[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["withdrawals", "mode"])
+    || value.mode !== "test"
+    || !Array.isArray(value.withdrawals)
+  ) {
+    return undefined;
+  }
+  const withdrawals: CustomerApiWithdrawal[] = [];
+  for (const entry of value.withdrawals) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, withdrawalKeys)
+      || typeof entry.withdrawal_id !== "string"
+      || !withdrawalIdPattern.test(entry.withdrawal_id)
+      || !isWithdrawalNetwork(entry.network)
+      || !isWithdrawalPair(entry.asset, entry.network)
+      || !isWithdrawalStatus(entry.status)
+      || typeof entry.amount !== "string"
+      || typeof entry.fee_amount !== "string"
+      || !isDecimalString(entry.amount, assets[entry.asset].scale)
+      || !isDecimalString(entry.fee_amount, assets[entry.asset].scale)
+      || typeof entry.destination_reference !== "string"
+      || !destinationReferencePattern.test(entry.destination_reference)
+      || !Array.isArray(entry.legs)
+      // The contract's two out-legs are principal first, fee second.
+      || entry.legs.length !== 2
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.updated_at)
+      || !isIsoTimestamp(entry.expires_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    const legs: CustomerApiWithdrawalLeg[] = [];
+    let legsOk = true;
+    for (const [index, leg] of entry.legs.entries()) {
+      if (
+        !isRecord(leg)
+        || !hasExactKeys(leg, withdrawalLegKeys)
+        || typeof leg.leg_id !== "string"
+        || !withdrawalLegIdPattern.test(leg.leg_id)
+        || leg.asset !== entry.asset
+        || typeof leg.amount !== "string"
+        || !isDecimalString(leg.amount, assets[entry.asset].scale)
+        || leg.direction !== "out"
+        || leg.amount !== (index === 0 ? entry.amount : entry.fee_amount)
+      ) {
+        legsOk = false;
+        break;
+      }
+      legs.push(Object.freeze({
+        leg_id: leg.leg_id,
+        asset: entry.asset,
+        amount: leg.amount,
+        direction: leg.direction
+      }));
+    }
+    if (!legsOk) return undefined;
+    withdrawals.push(Object.freeze({
+      withdrawal_id: entry.withdrawal_id,
+      asset: entry.asset,
+      network: entry.network,
+      status: entry.status,
+      amount: entry.amount,
+      fee_amount: entry.fee_amount,
+      destination_reference: entry.destination_reference,
+      legs: Object.freeze(legs),
+      created_at: entry.created_at,
+      updated_at: entry.updated_at,
+      expires_at: entry.expires_at,
+      posting: entry.posting
+    }));
+  }
+  return Object.freeze(withdrawals);
 }
 
 function parseNotificationsView(
@@ -572,9 +710,9 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets, deposits, notifications, kyc,
- * profile and support GETs, never sends X-Device-Id and fails closed to
- * "unavailable" on
+ * customer session, capabilities, wallets, deposits, withdrawals,
+ * notifications, kyc, profile and support GETs, never sends X-Device-Id and
+ * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
  * capability gate) surfaces as "denied"; the KYC status, profile and support
@@ -590,6 +728,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
       deposits: async (): Promise<CustomerApiDeposits> => ({ status: "not-configured" }),
+      withdrawals: async (): Promise<CustomerApiWithdrawals> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -692,6 +831,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/withdrawals", token, nowMs);
+      const view = parseWithdrawalsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", withdrawals: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -768,5 +926,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, notifications, kyc, profile, support });
 }

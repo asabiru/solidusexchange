@@ -17,7 +17,8 @@ import type {
   SessionView,
   SupportRequestView,
   SupportRequestsView,
-  WalletView
+  WalletView,
+  WithdrawalsView
 } from "../shared/api";
 import type { ScreeningAsset, ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
@@ -59,6 +60,7 @@ export const api = {
   logout: () => call<{ ok: true }>("/bff/auth/logout", {}),
   wallet: () => call<WalletView>("/bff/wallet"),
   deposits: () => call<DepositsView>("/bff/deposits"),
+  withdrawals: () => call<WithdrawalsView>("/bff/withdrawals"),
   operations: () => call<{ operations: OperationSummary[] }>("/bff/operations"),
   operation: (id: string) => call<OperationDetail>(`/bff/operations/${encodeURIComponent(id)}`),
   profile: () => call<ProfileView>("/bff/profile"),

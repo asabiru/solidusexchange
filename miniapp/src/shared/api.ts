@@ -344,6 +344,47 @@ export interface DepositsView {
   deposits: readonly DepositView[];
 }
 
+/** Mirrors the custody withdrawal-intent lifecycle exactly. */
+export type WithdrawalStatus =
+  | "draft"
+  | "screened"
+  | "pending_maker_approval"
+  | "pending_checker_approval"
+  | "unsigned_intent_ready"
+  | "broadcast"
+  | "confirmed"
+  | "rejected"
+  | "cancelled"
+  | "expired";
+
+export interface WithdrawalLegView {
+  id: string;
+  asset: AssetCode;
+  amount: string;
+  direction: "out";
+}
+
+export interface WithdrawalView {
+  id: string;
+  asset: AssetCode;
+  network: ScreeningNetwork;
+  status: WithdrawalStatus;
+  amount: string;
+  fee: string;
+  destinationReference: string;
+  legs: readonly WithdrawalLegView[];
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  posting: "none";
+}
+
+export interface WithdrawalsView {
+  mode: "test";
+  kyc: KycStatus;
+  withdrawals: readonly WithdrawalView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;

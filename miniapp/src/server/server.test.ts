@@ -331,11 +331,12 @@ describe("money movement is absent", () => {
     const postPaths = routeTable.filter((route) => route.method === "POST").map((route) => route.path);
     assert.deepEqual(postPaths.sort(), ["/bff/address-screening", "/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram", "/bff/sessions/revoke", "/bff/sessions/revoke-others", "/bff/support/requests"]);
     for (const route of routeTable) {
-      // /bff/deposits is the one exempted path: it is a read-only observation
-      // of the customer-api deposits contract (posting stays "none"), not a
-      // money-moving route — every write path above stays absent, POST
-      // /bff/deposits included.
-      if (route.path === "/bff/deposits") continue;
+      // /bff/deposits and /bff/withdrawals are the two exempted paths: they
+      // are read-only observations of the customer-api deposits/withdrawals
+      // contracts (posting stays "none"), not money-moving routes — every
+      // write path above stays absent, POST /bff/deposits and POST
+      // /bff/withdrawals included.
+      if (route.path === "/bff/deposits" || route.path === "/bff/withdrawals") continue;
       assert.doesNotMatch(route.path, moneyWords, route.path);
     }
   });
