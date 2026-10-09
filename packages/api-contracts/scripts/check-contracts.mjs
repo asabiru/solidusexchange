@@ -274,6 +274,23 @@ const pinnedResponseSchemas = {
       can_submit: { type: "boolean" }
     }
   },
+  ProfileView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "customer_ref", "display_name", "locale", "registered_at"],
+    properties: {
+      mode: { const: "test" },
+      customer_ref: { type: "string", pattern: "^SC-DEV-[0-9A-Z]{5}$" },
+      display_name: {
+        type: "string",
+        minLength: 1,
+        maxLength: 64,
+        pattern: "^Customer [0-9a-f]{8}$"
+      },
+      locale: { type: "string", enum: ["en", "ky", "ru"] },
+      registered_at: { type: "string", format: "date-time" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -525,6 +542,7 @@ function checkOpenApi() {
     ["getCustomerWallets", "/api/v1/customer/wallets"],
     ["getCustomerNotifications", "/api/v1/customer/notifications"],
     ["getCustomerKyc", "/api/v1/customer/kyc"],
+    ["getCustomerProfile", "/api/v1/customer/profile"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -549,6 +567,7 @@ function checkOpenApi() {
     ["getCustomerWallets", "#/components/schemas/WalletsView"],
     ["getCustomerNotifications", "#/components/schemas/NotificationsView"],
     ["getCustomerKyc", "#/components/schemas/KycStatusView"],
+    ["getCustomerProfile", "#/components/schemas/ProfileView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

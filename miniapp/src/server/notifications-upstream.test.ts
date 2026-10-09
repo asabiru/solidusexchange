@@ -37,7 +37,8 @@ function notificationsStub(result: CustomerApiNotifications | (() => Promise<Cus
     notifications: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
-    }
+    },
+    kyc: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }

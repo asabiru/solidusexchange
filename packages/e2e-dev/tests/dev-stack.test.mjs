@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { randomBytes, randomInt } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
+import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
+import { customerApiSubject } from "../../../miniapp/.server-dist/server/customer-api-client.js";
 import { signInitData } from "../../../miniapp/.server-dist/server/init-data.js";
 import { createMiniappServer } from "../../../miniapp/.server-dist/server/server.js";
 import {
@@ -253,16 +255,38 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(application.canSubmit, false);
     assert.equal((await getMiniapp("/bff/session", cookie)).kyc, "kyc-gated");
 
+    // The local simulator journey still promotes the session flag — every
+    // authed request drains pending callbacks, so poll /bff/session until it
+    // reports verified (advance the clock between polls).
     const seen = [];
-    for (let step = 0; step < 120 && seen.at(-1) !== "approved"; step += 1) {
+    for (let step = 0; step < 120 && seen.at(-1) !== "verified"; step += 1) {
       now += 10_000;
-      const view = await getMiniapp("/bff/kyc/status", cookie);
-      if (seen.at(-1) !== view.state) seen.push(view.state);
+      const session = await getMiniapp("/bff/session", cookie);
+      if (seen.at(-1) !== session.kyc) seen.push(session.kyc);
     }
-    assert.equal(seen.at(-1), "approved", seen.join(" -> "));
-    assert.equal(seen.includes("in_review"), true, seen.join(" -> "));
-    const session = await getMiniapp("/bff/session", cookie);
-    assert.equal(session.kyc, "verified");
+    assert.deepEqual(seen, ["kyc-gated", "verified"], seen.join(" -> "));
+    // /bff/kyc/status answers through the customer-api contract for gated and
+    // verified sessions alike (customer.kyc.read is never denied upstream).
+    // The upstream's synthetic directory marks every subject unverified, so the
+    // adapted view reports that deterministic application status with
+    // sessionKyc "kyc-gated" — the upstream verdict — even though the local
+    // session flag just promoted to verified.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticKycApplicationDirectory().viewFor(
+      customerApiSubject(devSubject),
+      "unverified"
+    );
+    assert.equal(upstreamView.session_kyc, "unverified");
+    const statusView = await getMiniapp("/bff/kyc/status", cookie);
+    const statusKeys = ["canSubmit", "mode", "provider", "sessionKyc", "state"];
+    if (upstreamView.submitted_at !== undefined) statusKeys.push("submittedAt");
+    if (upstreamView.review_deadline !== undefined) statusKeys.push("reviewDeadline");
+    assert.deepEqual(Object.keys(statusView).sort(), statusKeys.sort());
+    assert.equal(statusView.mode, "test");
+    assert.equal(statusView.provider, "simulator");
+    assert.equal(statusView.sessionKyc, "kyc-gated");
+    assert.equal(statusView.state, upstreamView.status);
+    assert.equal(statusView.canSubmit, upstreamView.can_submit);
     // The BFF session is verified, but the customer-api's own synthetic KYC
     // directory marks every subject unverified, so customer.wallets.read is
     // refused upstream and the wallet surface degrades to its gated form.

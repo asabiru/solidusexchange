@@ -22,6 +22,43 @@ export interface KycServiceOptions {
   clock: () => number;
 }
 
+/** The customer-api KYC status contract shape (snake_case field names). */
+export interface ContractKycStatusView {
+  mode: "test";
+  provider: "simulator";
+  session_kyc: "unverified" | "pending" | "verified";
+  status: KycVerificationState;
+  application_id?: string;
+  submitted_at?: string;
+  updated_at: string;
+  review_deadline?: string;
+  reason_codes?: readonly string[];
+  requested_items?: readonly string[];
+  can_submit: boolean;
+}
+
+/**
+ * Adapts a validated customer-api KycStatusView into the app's
+ * KycVerificationView: status becomes state, can_submit becomes canSubmit, and
+ * the upstream session-level status maps onto the app's verified/kyc-gated
+ * pair — only upstream "verified" satisfies the app's verified gate, while
+ * "pending" and "unverified" are still gated. submitted_at/review_deadline
+ * parse to milliseconds; application_id, updated_at, reason_codes and
+ * requested_items have no app-shape counterpart and are dropped.
+ */
+export function contractKycVerificationView(view: ContractKycStatusView): KycVerificationView {
+  const adapted: KycVerificationView = {
+    mode: "test",
+    provider: "simulator",
+    state: view.status,
+    sessionKyc: view.session_kyc === "verified" ? "verified" : "kyc-gated",
+    canSubmit: view.can_submit
+  };
+  if (view.submitted_at !== undefined) adapted.submittedAt = Date.parse(view.submitted_at);
+  if (view.review_deadline !== undefined) adapted.reviewDeadline = Date.parse(view.review_deadline);
+  return adapted;
+}
+
 export interface KycDelivery {
   headers: unknown;
   body: unknown;

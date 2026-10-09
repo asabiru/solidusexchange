@@ -30,6 +30,14 @@ dependency-free Node ESM `node:http` server for local development only.
     deadlock onboarding, and the miniapp likewise serves `/bff/kyc/status` to
     kyc-gated sessions. The derived application `status` is always coherent
     with the session-level `session_kyc` the capability gate evaluated.
+  - `GET /api/v1/customer/profile` (`getCustomerProfile`): a frozen
+    deterministic synthetic profile per subject (`SC-DEV-*` customer
+    reference, `Customer <hex>` display name, `en`/`ky`/`ru` locale, ISO
+    `registered_at`, `mode: "test"`). Synthetic identity fields only — never
+    real PII. **Not** KYC-gated: like the KYC status read it carries the
+    subject's own identity surface, and the miniapp likewise serves
+    `/bff/profile` to every authenticated session, kyc-gated included
+    (degrading `apiAccess` in place rather than refusing).
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -56,10 +64,11 @@ Only `customer` principals are accepted.
 
 ## Capabilities
 
-Deny-by-default. `customer.session.read`, `customer.capabilities.read` and
-`customer.kyc.read` are always granted — the KYC status read must stay
-reachable for unverified customers or they could never see their own
-onboarding state; `customer.wallets.read` and `customer.notifications.read`
+Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
+`customer.kyc.read` and `customer.profile.read` are always granted — the KYC
+status and profile reads must stay reachable for unverified customers or
+they could never see their own onboarding and identity state;
+`customer.wallets.read` and `customer.notifications.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
 wallet and notification collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
