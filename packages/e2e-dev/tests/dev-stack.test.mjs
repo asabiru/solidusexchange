@@ -449,9 +449,11 @@ describe("customer negative paths", () => {
     assert.equal(screening.status, 400);
     assert.deepEqual(await readJson(screening), { error: "invalid_request" });
 
-    // The BFF never forwards the header: customer-api would refuse the call.
-    const profile = await getMiniapp("/bff/profile", cookie, deviceId);
-    assert.equal(profile.apiAccess.status, "connected");
+    // Every customer route rejects the operator header at the edge, so the
+    // BFF never forwards it; customer-api refuses a direct call either way.
+    const profile = await fetch(`${miniappBase}/bff/profile`, { headers: { cookie, ...deviceId } });
+    assert.equal(profile.status, 400);
+    assert.deepEqual(await readJson(profile), { error: "invalid_request" });
 
     const token = mintSyntheticCustomerToken({
       key: devTokenKey,
@@ -580,8 +582,10 @@ describe("operator journey through the backoffice BFF", () => {
   it("exposes no POST money routes to operators", async () => {
     for (const path of moneyRoutes.map((route) => route.replace("/bff/", "/bff/api/"))) {
       const response = await postBackoffice(path, {}, lead);
-      assert.equal(response.status, 404, path);
-      assert.deepEqual(await readJson(response), { error: "not_found" });
+      // /bff/api/withdrawals is a real GET-only route; the rest are fabricated.
+      const expected = path === "/bff/api/withdrawals" ? [405, "method_not_allowed"] : [404, "not_found"];
+      assert.equal(response.status, expected[0], path);
+      assert.deepEqual(await readJson(response), { error: expected[1] });
     }
     const reportPost = await postBackoffice("/bff/api/reports", {}, lead);
     assert.equal(reportPost.status, 405);
