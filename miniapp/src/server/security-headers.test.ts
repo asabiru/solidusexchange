@@ -241,7 +241,8 @@ describe("Mini App BFF security headers on every route", () => {
         access: async () => {
           if (customerApiFails) throw new Error("synthetic customer-api failure");
           return access;
-        }
+        },
+        wallets: async () => ({ status: "not-configured" })
       }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

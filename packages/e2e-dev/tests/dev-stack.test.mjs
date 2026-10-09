@@ -263,7 +263,13 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(seen.includes("in_review"), true, seen.join(" -> "));
     const session = await getMiniapp("/bff/session", cookie);
     assert.equal(session.kyc, "verified");
-    assert.equal((await getMiniapp("/bff/wallet", cookie)).kyc, "verified");
+    // The BFF session is verified, but the customer-api's own synthetic KYC
+    // directory marks every subject unverified, so customer.wallets.read is
+    // refused upstream and the wallet surface degrades to its gated form.
+    const wallet = await getMiniapp("/bff/wallet", cookie);
+    assert.equal(wallet.kyc, "kyc-gated");
+    assert.equal(wallet.availableRub, "0.00");
+    assert.equal(wallet.holdRub, "0.00");
   });
 
   it("serves the profile through customer-api synthetic auth", async () => {

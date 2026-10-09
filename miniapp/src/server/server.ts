@@ -55,7 +55,7 @@ import {
   SupportRateLimitError,
   createSupportDesk
 } from "./support.js";
-import { syntheticData } from "./synthetic.js";
+import { syntheticData, walletView } from "./synthetic.js";
 
 export const sessionCookie = "solidchange_ma_session";
 const displayName = "Тестовый клиент";
@@ -678,7 +678,29 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/wallet") {
-      json(response, 200, syntheticData.wallet(session.kyc));
+      // The local KYC gate and the standalone (unconfigured) dev BFF keep the
+      // synthetic wallet surface; only a verified session with customer-api
+      // access reads balances through the contract. An upstream refusal maps to
+      // the KYC-gated view (degraded in place, like /bff/profile's apiAccess),
+      // any other upstream failure to the sibling *_unavailable error shape.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, syntheticData.wallet(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.wallets(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, walletView(session.kyc, upstream.wallets.map((wallet) => ({
+          code: wallet.asset,
+          available: wallet.available,
+          hold: wallet.hold
+        }))));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, syntheticData.wallet("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "wallet_unavailable" });
       return;
     }
     if (path === "/bff/operations") {
