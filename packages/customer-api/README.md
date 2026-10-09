@@ -38,6 +38,16 @@ dependency-free Node ESM `node:http` server for local development only.
     subject's own identity surface, and the miniapp likewise serves
     `/bff/profile` to every authenticated session, kyc-gated included
     (degrading `apiAccess` in place rather than refusing).
+  - `GET /api/v1/customer/support` (`getCustomerSupport`): a frozen
+    deterministic synthetic support-ticket list per subject (`tck_*` ids,
+    `question`/`operation_problem`/`complaint`/`data_request` categories
+    mirroring the miniapp support surface, `received`/`in_review`/`answered`/
+    `closed` statuses with a coherent ISO `timeline`, `complaint_acknowledged`,
+    ISO `created_at`/`expires_at`, `mode: "test"`, `delivery: "disabled"`).
+    **Not** KYC-gated: tickets are the subject's own service-requests surface
+    and the miniapp likewise serves `/bff/support/requests` to every
+    authenticated session, kyc-gated included — support notifications
+    (`support_received`/`complaint_received`) appear in unverified flows too.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -65,9 +75,10 @@ Only `customer` principals are accepted.
 ## Capabilities
 
 Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
-`customer.kyc.read` and `customer.profile.read` are always granted — the KYC
-status and profile reads must stay reachable for unverified customers or
-they could never see their own onboarding and identity state;
+`customer.kyc.read`, `customer.profile.read` and `customer.support.read` are
+always granted — the KYC status, profile and support tickets reads must stay
+reachable for unverified customers or they could never see their own
+onboarding, identity and service-requests state;
 `customer.wallets.read` and `customer.notifications.read`
 are granted only to a `verified` KYC status so they can serve the synthetic
 wallet and notification collection reads.

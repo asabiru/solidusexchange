@@ -291,6 +291,65 @@ const pinnedResponseSchemas = {
       registered_at: { type: "string", format: "date-time" }
     }
   },
+  SupportTicketsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "delivery", "tickets"],
+    properties: {
+      mode: { const: "test" },
+      delivery: { const: "disabled" },
+      tickets: {
+        type: "array",
+        items: { $ref: "#/components/schemas/TicketView" }
+      }
+    }
+  },
+  TicketView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "ticket_id",
+      "category",
+      "topic",
+      "message",
+      "status",
+      "timeline",
+      "complaint_acknowledged",
+      "created_at",
+      "expires_at"
+    ],
+    properties: {
+      ticket_id: { type: "string", pattern: "^tck_[0-9a-f]{24}$" },
+      category: {
+        type: "string",
+        enum: ["question", "operation_problem", "complaint", "data_request"]
+      },
+      topic: { type: "string", minLength: 1, maxLength: 120 },
+      message: { type: "string", minLength: 1, maxLength: 1000 },
+      status: {
+        type: "string",
+        enum: ["received", "in_review", "answered", "closed"]
+      },
+      timeline: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["status", "at"],
+          properties: {
+            status: {
+              type: "string",
+              enum: ["received", "in_review", "answered", "closed"]
+            },
+            at: { type: "string", format: "date-time" }
+          }
+        }
+      },
+      complaint_acknowledged: { type: "boolean" },
+      created_at: { type: "string", format: "date-time" },
+      expires_at: { type: "string", format: "date-time" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -511,7 +570,6 @@ function checkOpenApi() {
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
       "/api/v1/customer/quotes",
-      "/api/v1/customer/support",
       "/api/v1/customer/users",
       "/api/v1/customer/withdrawals"
     ],
@@ -543,6 +601,7 @@ function checkOpenApi() {
     ["getCustomerNotifications", "/api/v1/customer/notifications"],
     ["getCustomerKyc", "/api/v1/customer/kyc"],
     ["getCustomerProfile", "/api/v1/customer/profile"],
+    ["getCustomerSupport", "/api/v1/customer/support"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -568,6 +627,7 @@ function checkOpenApi() {
     ["getCustomerNotifications", "#/components/schemas/NotificationsView"],
     ["getCustomerKyc", "#/components/schemas/KycStatusView"],
     ["getCustomerProfile", "#/components/schemas/ProfileView"],
+    ["getCustomerSupport", "#/components/schemas/SupportTicketsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

@@ -8,6 +8,7 @@ import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createSyntheticKycApplicationDirectory } from "./kyc.mjs";
 import { createSyntheticNotificationDirectory } from "./notifications.mjs";
 import { createSyntheticProfileDirectory } from "./profile.mjs";
+import { createSyntheticSupportDirectory } from "./support.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
@@ -19,12 +20,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   notificationDirectory?: import("./notifications.mjs").NotificationDirectory,
  *   kycApplicationDirectory?: import("./kyc.mjs").KycApplicationDirectory,
  *   profileDirectory?: import("./profile.mjs").ProfileDirectory,
+ *   supportDirectory?: import("./support.mjs").SupportDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -36,6 +38,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     notificationDirectory: notificationDirectory ?? createSyntheticNotificationDirectory(),
     kycApplicationDirectory: kycApplicationDirectory ?? createSyntheticKycApplicationDirectory(),
     profileDirectory: profileDirectory ?? createSyntheticProfileDirectory(),
+    supportDirectory: supportDirectory ?? createSyntheticSupportDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },

@@ -22,7 +22,8 @@ const WALLETS = "/api/v1/customer/wallets";
 const NOTIFICATIONS = "/api/v1/customer/notifications";
 const KYC = "/api/v1/customer/kyc";
 const PROFILE = "/api/v1/customer/profile";
-const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE];
+const SUPPORT = "/api/v1/customer/support";
+const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
 let port;
@@ -106,7 +107,8 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [WALLETS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [NOTIFICATIONS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [KYC, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
-    [PROFILE, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
+    [PROFILE, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [SUPPORT, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);
