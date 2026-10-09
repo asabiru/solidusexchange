@@ -148,3 +148,151 @@ test("Retry-After is validated as a positive integer header", () => {
   assert.notDeepEqual(check("0"), []);
   assert.notDeepEqual(check("soon"), []);
 });
+
+// Wave 44 audit regressions: constructs that previously drifted through the
+// dependency-free validator untouched — nullable type arrays, malformed
+// keyword values that silently disable a constraint, templated contract
+// paths that never resolved, and schema-free declared bodies.
+
+test("supports the contract's nullable type arrays", () => {
+  assert.deepEqual(validator.validate({ type: ["string", "null"] }, null), []);
+  assert.deepEqual(validator.validate({ type: ["string", "null"] }, "x"), []);
+  assert.notDeepEqual(validator.validate({ type: ["string", "null"] }, 5), []);
+  assert.throws(() => validator.validate({ type: ["string", "integer"] }, 1), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ type: [] }, 1), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ type: [5] }, "x"), /Malformed schema keyword/u);
+});
+
+test("validates the canonical CheckView including nullable resolved_at", () => {
+  const check = {
+    check_id: "syn_check_0001",
+    check_type: "personal",
+    status: "created",
+    sender_ref: "syn_cust_00000001",
+    recipient_ref: "syn_cust_00000002",
+    amount: "10.00",
+    asset: "USDT",
+    fee_amount: "0.10",
+    outstanding_amount: "9.90",
+    created_at: "2026-10-01T12:00:00.000Z",
+    expires_at: "2026-10-01T12:15:00.000Z",
+    resolved_at: null,
+    posting: "none"
+  };
+  assert.deepEqual(validator.validate(schema("CheckView"), check), []);
+  assert.deepEqual(
+    validator.validate(schema("CheckView"), { ...check, resolved_at: "2026-10-05T00:00:00.000Z" }),
+    []
+  );
+  assert.notDeepEqual(validator.validate(schema("CheckView"), { ...check, resolved_at: 5 }), []);
+  assert.notDeepEqual(validator.validate(schema("CheckView"), { ...check, resolved_at: "soon" }), []);
+});
+
+test("fails closed on malformed keyword values instead of silently unenforcing them", () => {
+  assert.throws(() => validator.validate({ minLength: "abc" }, "x"), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ maxLength: null }, "x"), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ maximum: {} }, 5), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ maxItems: 1.5 }, []), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ pattern: 5 }, "5"), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ enum: "x" }, "x"), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ required: "field" }, {}), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ properties: 5 }, { a: 1 }), /Malformed schema keyword/u);
+  assert.throws(() => validator.validate({ items: "x" }, ["a"]), /Malformed schema keyword/u);
+  assert.throws(
+    () => validator.validate({ type: "object", properties: {}, additionalProperties: "no" }, { a: 1 }),
+    /Malformed schema keyword/u
+  );
+  assert.throws(() => validator.validate({ uniqueItems: "yes" }, ["a", "a"]), /Malformed schema keyword/u);
+});
+
+test("rejects non-finite numbers even under bounds-only schemas", () => {
+  assert.notDeepEqual(validator.validate({ minimum: 0 }, Number.NaN), []);
+  assert.notDeepEqual(validator.validate({ maximum: 0 }, Number.POSITIVE_INFINITY), []);
+});
+
+test("conformance resolves templated contract paths and enforces path parameters", () => {
+  const check = {
+    check_id: "syn_check_0001",
+    check_type: "personal",
+    status: "created",
+    sender_ref: "syn_cust_00000001",
+    recipient_ref: "syn_cust_00000002",
+    amount: "10.00",
+    asset: "USDT",
+    fee_amount: "0.10",
+    outstanding_amount: "9.90",
+    created_at: "2026-10-01T12:00:00.000Z",
+    expires_at: "2026-10-01T12:15:00.000Z",
+    resolved_at: null,
+    posting: "none"
+  };
+  const path = "/api/v1/customer/checks/syn_check_0001";
+  assert.deepEqual(
+    conformanceErrors(contract, validator, { method: "GET", path, response: response(200, check) }),
+    []
+  );
+  assert.match(
+    conformanceErrors(contract, validator, { method: "GET", path, response: response(200, { ...check, status: "draft" }) }).join(),
+    /enum/u
+  );
+  assert.match(
+    conformanceErrors(contract, validator, {
+      method: "GET",
+      path: "/api/v1/customer/checks/ABC",
+      response: response(200, check)
+    }).join(),
+    /undeclared status 200/u
+  );
+});
+
+test("conformance flags a declared json response without a schema", () => {
+  const fakeContract = {
+    openapi: {
+      paths: {
+        "/x": {
+          get: {
+            responses: {
+              "200": {
+                headers: { "X-Request-Id": { required: true, schema: { type: "string" } } },
+                content: { "application/json": {} }
+              }
+            }
+          }
+        }
+      }
+    },
+    documents: {}
+  };
+  const fakeValidator = createValidator(fakeContract);
+  assert.match(
+    conformanceErrors(fakeContract, fakeValidator, {
+      method: "GET",
+      path: "/x",
+      response: response(200, { anything: true })
+    }).join(),
+    /must declare a schema/u
+  );
+});
+
+test("conformance reports a non-object error body without crashing", () => {
+  const check = (body) =>
+    conformanceErrors(contract, validator, {
+      method: "GET",
+      path: "/api/v1/customer/session",
+      response: response(500, body)
+    });
+  assert.match(check("null").join(), /expected object/u);
+  assert.match(check("[1]").join(), /expected object/u);
+});
+
+test("conformance requires Retry-After on 429", () => {
+  const path = "/api/v1/customer/capabilities";
+  const check = (headers) =>
+    conformanceErrors(contract, validator, {
+      method: "GET",
+      path,
+      response: response(429, errorEnvelope("RATE_LIMITED"), headers)
+    });
+  assert.match(check({}).join(), /missing required header Retry-After/u);
+  assert.deepEqual(check({ "retry-after": "30" }), []);
+});

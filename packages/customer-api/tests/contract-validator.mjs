@@ -77,6 +77,67 @@ function typeMatches(type, value) {
   }
 }
 
+function declaredTypes(schema, path) {
+  if (schema.type === undefined) {
+    return [];
+  }
+  const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+  if (
+    types.length === 0 ||
+    types.length > 2 ||
+    types.some((type) => typeof type !== "string") ||
+    new Set(types).size !== types.length ||
+    (types.length === 2 && !types.includes("null"))
+  ) {
+    throw new Error(`Malformed schema keyword at ${path}: type`);
+  }
+  return types;
+}
+
+function assertKeywordShapes(schema, path) {
+  for (const keyword of ["minLength", "maxLength", "maxItems"]) {
+    if (
+      Object.hasOwn(schema, keyword) &&
+      (!Number.isInteger(schema[keyword]) || schema[keyword] < 0)
+    ) {
+      throw new Error(`Malformed schema keyword at ${path}: ${keyword}`);
+    }
+  }
+  for (const keyword of ["minimum", "maximum"]) {
+    if (
+      Object.hasOwn(schema, keyword) &&
+      (typeof schema[keyword] !== "number" || !Number.isFinite(schema[keyword]))
+    ) {
+      throw new Error(`Malformed schema keyword at ${path}: ${keyword}`);
+    }
+  }
+  for (const keyword of ["pattern", "format", "$ref"]) {
+    if (Object.hasOwn(schema, keyword) && typeof schema[keyword] !== "string") {
+      throw new Error(`Malformed schema keyword at ${path}: ${keyword}`);
+    }
+  }
+  for (const keyword of ["enum", "required"]) {
+    if (Object.hasOwn(schema, keyword) && !Array.isArray(schema[keyword])) {
+      throw new Error(`Malformed schema keyword at ${path}: ${keyword}`);
+    }
+  }
+  for (const keyword of ["properties", "items"]) {
+    if (Object.hasOwn(schema, keyword) && !isObject(schema[keyword])) {
+      throw new Error(`Malformed schema keyword at ${path}: ${keyword}`);
+    }
+  }
+  if (
+    Object.hasOwn(schema, "additionalProperties") &&
+    typeof schema.additionalProperties !== "boolean" &&
+    !isObject(schema.additionalProperties)
+  ) {
+    throw new Error(`Malformed schema keyword at ${path}: additionalProperties`);
+  }
+  if (Object.hasOwn(schema, "uniqueItems") && typeof schema.uniqueItems !== "boolean") {
+    throw new Error(`Malformed schema keyword at ${path}: uniqueItems`);
+  }
+}
+
 function formatMatches(format, value) {
   if (format === "uuid") {
     return UUID.test(value);
@@ -114,12 +175,18 @@ export function createValidator(contract) {
         throw new Error(`Unsupported schema keyword at ${path}: ${keyword}`);
       }
     }
+    assertKeywordShapes(schema, path);
     if (schema.$ref !== undefined) {
       const target = resolve(schema.$ref, document);
       validate(target.schema, value, target.document, path, errors);
     }
-    if (schema.type !== undefined && !typeMatches(schema.type, value)) {
-      errors.push(`${path}: expected ${schema.type}`);
+    const types = declaredTypes(schema, path);
+    if (types.length > 0 && !types.some((type) => typeMatches(type, value))) {
+      errors.push(`${path}: expected ${types.join(" or ")}`);
+      return;
+    }
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      errors.push(`${path}: non-finite number`);
       return;
     }
     if (Object.hasOwn(schema, "const") && canonical(schema.const) !== canonical(value)) {
@@ -213,11 +280,60 @@ function headerValue(schema, text) {
 // for them; they must still carry the contract error envelope.
 export const CONTRACT_GAP_STATUSES = Object.freeze([400, 404]);
 
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+// Resolve the operation a concrete request path belongs to. Exact paths win;
+// templated contract paths then match per segment and every captured path
+// parameter must satisfy its declared schema, otherwise the path is treated
+// as undeclared (a stray "/api/v1/customer/checks/ABC" never becomes a check).
+function operationFor(contract, validator, method, path) {
+  const paths = contract.openapi.paths ?? {};
+  if (Object.hasOwn(paths, path)) {
+    return paths[path][method.toLowerCase()];
+  }
+  for (const [template, item] of Object.entries(paths)) {
+    if (!template.includes("{")) {
+      continue;
+    }
+    const names = [];
+    const pattern = `^${template
+      .split("/")
+      .map((segment) => {
+        if (segment.startsWith("{") && segment.endsWith("}")) {
+          names.push(segment.slice(1, -1));
+          return "([^/]+)";
+        }
+        return escapeRegExp(segment);
+      })
+      .join("/")}$`;
+    const match = new RegExp(pattern, "u").exec(path);
+    if (!match) {
+      continue;
+    }
+    const operation = item[method.toLowerCase()];
+    const declared = new Map();
+    for (const reference of [...(item.parameters ?? []), ...(operation?.parameters ?? [])]) {
+      const parameter = reference?.$ref ? validator.resolve(reference.$ref) : reference;
+      if (parameter?.in === "path") {
+        declared.set(parameter.name, parameter.schema);
+      }
+    }
+    const satisfied = names.every((name, index) => {
+      const schema = declared.get(name);
+      return schema !== undefined && validator.validate(schema, match[index + 1], `path ${name}`).length === 0;
+    });
+    if (satisfied) {
+      return operation;
+    }
+  }
+  return undefined;
+}
+
 export function conformanceErrors(contract, validator, { method, path, response }) {
   const errors = [];
-  const operation = Object.hasOwn(contract.openapi.paths, path)
-    ? contract.openapi.paths[path][method.toLowerCase()]
-    : undefined;
+  const operation = operationFor(contract, validator, method, path);
   let declared = operation?.responses?.[String(response.status)];
   if (declared?.$ref) {
     declared = validator.resolve(declared.$ref);
@@ -267,10 +383,12 @@ export function conformanceErrors(contract, validator, { method, path, response 
     return errors;
   }
   const schema = declared.content?.["application/json"]?.schema;
-  if (schema) {
+  if (!isObject(schema)) {
+    errors.push("declared application/json response must declare a schema");
+  } else {
     errors.push(...validator.validate(schema, parsed.value, "body"));
   }
-  if (response.status >= 400) {
+  if (response.status >= 400 && isObject(parsed.value)) {
     const requestId = headerValues(response, "x-request-id")[0];
     if (parsed.value.request_id !== requestId) {
       errors.push("error request_id must equal the X-Request-Id response header");

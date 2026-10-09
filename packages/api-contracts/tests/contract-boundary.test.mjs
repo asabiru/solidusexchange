@@ -1006,7 +1006,7 @@ assertRejected(
 
 assertRejected(
   "rejects prohibited event fields",
-  "prohibited field wallet_address",
+  "PII-like property wallet_address is prohibited",
   (scratch) => {
     const schema = readJson(
       scratch,
@@ -1525,7 +1525,7 @@ assertRejected(
 
 assertRejected(
   "rejects a nested optional floating-point amount field",
-  "properties.fee.amount must use exactly #/$defs/decimalAmount",
+  "fee must use exactly #/$defs/decimalAmount",
   (scratch) => mutateEventSchema(scratch, (schema) => {
     schema.$defs.withdrawalRequested.properties.fee = {
       type: "object",
@@ -1937,4 +1937,141 @@ assertRejected(
     rmSync(join(scratch, "schemas", "error.schema.json"));
     symlinkSync("/etc/hostname", join(scratch, "schemas", "error.schema.json"));
   }
+);
+
+// Wave 44: contract-validation internals audit. Each fixture below encodes a
+// previously-passing drift: a schema looking strict but enforced as `any`, a
+// money or sensitive field dodging its naming convention, or a response
+// contract whose status set or headers were never pinned.
+
+assertRejected(
+  "rejects a prohibited field hiding behind a suffix",
+  "prohibited field client_secret",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.$defs.leaky = { properties: { client_secret: { type: "string" } } };
+  })
+);
+
+assertRejected(
+  "rejects a prohibited field hiding behind a prefix",
+  "prohibited field access_token_id",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.$defs.leaky = { properties: { access_token_id: { type: "string" } } };
+  })
+);
+
+assertRejected(
+  "rejects a price field that dodges the amount naming convention",
+  "unit_price must use exactly",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.$defs.sneaky = { properties: { unit_price: { type: "string" } } };
+  })
+);
+
+assertRejected(
+  "rejects a total field that dodges the amount naming convention",
+  "grand_total must use exactly",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.$defs.sneaky = { properties: { grand_total: { type: "number" } } };
+  })
+);
+
+assertRejected(
+  "rejects a fee field that dodges the amount naming convention",
+  "network_fee must use exactly",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.$defs.sneaky = { properties: { network_fee: { type: "string", pattern: "^[0-9]+$" } } };
+  })
+);
+
+assertRejected(
+  "rejects an extra error status on a read operation",
+  "Response statuses for getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.responses["503"] = {
+      $ref: "#/components/responses/InternalError"
+    };
+  })
+);
+
+assertRejected(
+  "rejects a dropped error status on a read operation",
+  "Response statuses for getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.paths["/api/v1/customer/session"].get.responses["429"];
+  })
+);
+
+assertRejected(
+  "rejects a non-canonical error response reference",
+  "Error response 401 must reference the canonical component",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.responses["401"] = {
+      $ref: "#/components/responses/InternalError"
+    };
+  })
+);
+
+assertRejected(
+  "rejects an authenticated metadata operation",
+  "Metadata operation must stay unauthenticated: getApiMetadata",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/meta"].get.security = [{ CustomerBearer: [] }];
+  })
+);
+
+assertRejected(
+  "rejects a metadata operation without explicit security",
+  "Metadata operation must stay unauthenticated: getApiMetadata",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.paths["/api/v1/meta"].get.security;
+  })
+);
+
+assertRejected(
+  "rejects a rate-limit response without Retry-After",
+  "RateLimited response headers",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.components.responses.RateLimited.headers["Retry-After"];
+  })
+);
+
+assertRejected(
+  "rejects an optional Retry-After header",
+  "RetryAfter response header must remain required",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.headers.RetryAfter.required = false;
+  })
+);
+
+assertRejected(
+  "rejects an extra component schema outside the pinned set",
+  "OpenAPI components.schemas",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.schemas.SneakyView = { type: "object" };
+  })
+);
+
+assertRejected(
+  "rejects a non-boolean required flag on an extra parameter",
+  "Non-canonical parameters must be explicitly optional",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.parameters.push({
+      name: "cursor",
+      in: "query",
+      required: "yes",
+      schema: { type: "string" }
+    });
+  })
+);
+
+assertAccepted("accepts an explicitly optional extra query parameter", (scratch) =>
+  mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.parameters.push({
+      name: "cursor",
+      in: "query",
+      required: false,
+      schema: { type: "string", maxLength: 128 }
+    });
+  })
 );

@@ -1117,7 +1117,7 @@
         }
       },
       "RetryAfter": {
-        "required": false,
+        "required": true,
         "description": "Seconds until the caller may retry.",
         "schema": {
           "type": "integer",
