@@ -14,7 +14,7 @@ export function Icon({ name, size }: { name: IconName; size?: "xs" | "sm" | "lg"
       aria-hidden="true"
       focusable="false"
     >
-      {iconShapes[name].map((shape) => {
+      {(iconShapes[name] ?? []).map((shape) => {
         switch (shape.tag) {
           case "path":
             return <path key={shapeKey(shape)} d={shape.d} />;

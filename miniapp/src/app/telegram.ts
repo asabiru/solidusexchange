@@ -54,7 +54,8 @@ export function onTelegramThemeChange(handler: (scheme: ColorScheme) => void): (
   const webApp = telegramWebApp();
   if (!webApp?.onEvent) return () => undefined;
   const listener = () => {
-    if (webApp.colorScheme) handler(webApp.colorScheme);
+    // colorScheme is live SDK state: only known schemes drive the theme.
+    if (webApp.colorScheme === "light" || webApp.colorScheme === "dark") handler(webApp.colorScheme);
   };
   webApp.onEvent("themeChanged", listener);
   return () => webApp.offEvent?.("themeChanged", listener);

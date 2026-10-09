@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { OperationSummary, SessionView, WalletView } from "../../shared/api";
-import { assetNameKeys, assetNetworkKeys } from "../format";
+import { assetNameKey, assetNetworkKey } from "../format";
 import { useI18n } from "../i18n-context";
 import { Icon } from "../Icon";
 import type { SheetRequest, Tab } from "../navigation";
@@ -27,9 +27,9 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
     <section className="screen" aria-label={t("tab.home")}>
       <ScreenTitle>{t("tab.home")}</ScreenTitle>
       <div className="greeting">
-        <span className="avatar" aria-hidden="true">{session.displayName.slice(0, 1).toUpperCase()}</span>
+        <span className="avatar" aria-hidden="true">{String(session.displayName ?? "—").slice(0, 1).toUpperCase()}</span>
         <div>
-          <strong>{t("home.greeting", { name: session.displayName })}</strong>
+          <strong>{t("home.greeting", { name: session.displayName ?? "—" })}</strong>
           <span className="num">{t("home.customerId", { ref: session.customerRef })}</span>
         </div>
         <button
@@ -136,27 +136,31 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         <h2>{t("home.assets")}</h2>
       </div>
       <div className="list">
-        {wallet.assets.map((balance) => (
-          <button
-            type="button"
-            key={balance.code}
-            className="row"
-            onClick={() => openSheet({ kind: "asset", asset: balance.code })}
-          >
-            <Coin asset={balance.code} />
-            <span className="row__main">
-              <strong>{t(assetNameKeys[balance.code])}</strong>
-              <span>{balance.code} · {t(assetNetworkKeys[balance.code])}</span>
-            </span>
-            <span className="row__amount">
-              <strong className="num">{hidden ? "••••" : money(balance.code, balance.available)}</strong>
-              <span className="num">
-                {t("home.assetHold", { amount: hidden ? "••" : amount(balance.code, balance.hold) })}
-                {balance.code === "RUB" ? "" : ` · ≈ ${hidden ? "••" : money("RUB", balance.valueRub)}`}
+        {wallet.assets.map((balance, index) => {
+          const nameKey = assetNameKey(balance.code);
+          const networkKey = assetNetworkKey(balance.code);
+          return (
+            <button
+              type="button"
+              key={`${balance.code}:${index}`}
+              className="row"
+              onClick={() => openSheet({ kind: "asset", asset: balance.code })}
+            >
+              <Coin asset={balance.code} />
+              <span className="row__main">
+                <strong>{nameKey ? t(nameKey) : balance.code}</strong>
+                <span>{balance.code} · {networkKey ? t(networkKey) : "—"}</span>
               </span>
-            </span>
-          </button>
-        ))}
+              <span className="row__amount">
+                <strong className="num">{hidden ? "••••" : money(balance.code, balance.available)}</strong>
+                <span className="num">
+                  {t("home.assetHold", { amount: hidden ? "••" : amount(balance.code, balance.hold) })}
+                  {balance.code === "RUB" ? "" : ` · ≈ ${hidden ? "••" : money("RUB", balance.valueRub)}`}
+                </span>
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       <div className="heading">
@@ -167,9 +171,9 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
         <EmptyState title={t("home.emptyTitle")}>{t("home.emptyDetail")}</EmptyState>
       ) : (
         <div className="list">
-          {operations.slice(0, 3).map((operation) => (
+          {operations.slice(0, 3).map((operation, index) => (
             <OperationRow
-              key={operation.id}
+              key={`${operation.id}:${index}`}
               operation={operation}
               onOpen={(id) => openSheet({ kind: "operation", id })}
             />

@@ -1,9 +1,9 @@
 import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
 import type { OperationStatus, OperationSummary } from "../shared/api";
-import { type AssetCode, assets } from "../shared/assets";
-import { statusLabelKeys } from "./format";
+import { assetMetaOf } from "../shared/assets";
 import { useI18n } from "./i18n-context";
-import { Icon, type IconName } from "./Icon";
+import { Icon } from "./Icon";
+import { operationStatusOf } from "./server-fields";
 
 export function Unavailable({ title, children }: { title?: string; children: ReactNode }) {
   const { t } = useI18n();
@@ -93,36 +93,25 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   );
 }
 
-const statusIcons: Readonly<Record<OperationStatus, IconName>> = {
-  completed: "check",
-  "in-review": "clock",
-  "needs-action": "alert",
-  failed: "close"
-};
-
-const statusTones: Readonly<Record<OperationStatus, string>> = {
-  completed: "success",
-  "in-review": "warning",
-  "needs-action": "risk",
-  failed: "risk"
-};
-
 export function StatusPill({ status }: { status: OperationStatus }) {
   const { t } = useI18n();
-  return <span className={`pill pill--${statusTones[status]}`}>{t(statusLabelKeys[status])}</span>;
+  const meta = operationStatusOf(status);
+  return <span className={`pill pill--${meta?.tone ?? "muted"}`}>{meta ? t(meta.label) : status}</span>;
 }
 
-export function Coin({ asset }: { asset: AssetCode }) {
-  return <span className={`coin coin--${asset.toLowerCase()}`} aria-hidden="true">{assets[asset].symbol}</span>;
+export function Coin({ asset }: { asset: string }) {
+  const meta = assetMetaOf(asset);
+  return <span className={`coin coin--${meta ? meta.code.toLowerCase() : "unknown"}`} aria-hidden="true">{meta?.symbol ?? asset}</span>;
 }
 
 export function OperationRow({ operation, onOpen }: { operation: OperationSummary; onOpen: (id: string) => void }) {
   const [primary, secondary] = operation.legs;
+  const meta = operationStatusOf(operation.status);
   const { format } = useI18n();
   return (
     <button type="button" className="row" onClick={() => onOpen(operation.id)}>
-      <span className={`coin coin--status coin--${statusTones[operation.status]}`} aria-hidden="true">
-        <Icon name={statusIcons[operation.status]} size="sm" />
+      <span className={`coin coin--status coin--${meta?.tone ?? "muted"}`} aria-hidden="true">
+        <Icon name={meta?.icon ?? "info"} size="sm" />
       </span>
       <span className="row__main">
         <strong>{operation.title}</strong>
@@ -130,7 +119,7 @@ export function OperationRow({ operation, onOpen }: { operation: OperationSummar
         <StatusPill status={operation.status} />
       </span>
       <span className="row__amount">
-        <strong className={`num${primary.direction === "in" ? " is-credit" : ""}`}>{format.signedLeg(primary)}</strong>
+        <strong className={`num${primary?.direction === "in" ? " is-credit" : ""}`}>{primary ? format.signedLeg(primary) : "—"}</strong>
         <span className="num">{secondary ? format.signedLeg(secondary) : operation.channel}</span>
       </span>
     </button>

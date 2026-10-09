@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ActivityItem, ActivityKind, KycActivity, SessionSource } from "../../shared/api";
+import type { ActivityItem, ActivityKind } from "../../shared/api";
 import { screeningTargetOf } from "../../shared/address-screening";
 import { api } from "../api";
 import type { MessageKey } from "../i18n";
 import { useI18n } from "../i18n-context";
-import { Icon, type IconName } from "../Icon";
-import { screeningBadges, screeningNetworkKeys } from "../sheets";
-import { supportCategoryKeys } from "../SupportSheet";
+import { Icon } from "../Icon";
+import {
+  activitySourceKeyOf,
+  arrayOf,
+  kycActivityOf,
+  screeningBadgeOf,
+  screeningNetworkKeyOf,
+  supportCategoryKeyOf
+} from "../server-fields";
 import { EmptyState, ScreenTitle } from "../ui";
 
 type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening" | "support";
@@ -20,21 +26,6 @@ const groupFilters: readonly { value: ActivityGroup; label: MessageKey }[] = [
   { value: "support", label: "activity.filterSupport" }
 ];
 
-const sourceLabels: Readonly<Record<SessionSource, MessageKey>> = {
-  telegram: "activity.sourceTelegram",
-  "dev-synthetic": "activity.sourceDev"
-};
-
-const kycTexts: Readonly<Record<KycActivity["kind"], { title: MessageKey; tone: string; icon: IconName }>> = {
-  kyc_submitted: { title: "activity.kycSubmitted", tone: "warning", icon: "id-card" },
-  kyc_in_review: { title: "activity.kycInReview", tone: "warning", icon: "clock" },
-  kyc_approved: { title: "activity.kycApproved", tone: "success", icon: "shield-check" },
-  kyc_rejected: { title: "activity.kycRejected", tone: "risk", icon: "close" },
-  kyc_needs_more_data: { title: "activity.kycNeedsMoreData", tone: "risk", icon: "alert" },
-  kyc_timed_out: { title: "activity.kycTimedOut", tone: "risk", icon: "clock" },
-  kyc_unavailable: { title: "activity.kycUnavailable", tone: "risk", icon: "alert" }
-};
-
 function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
   if (kind === "session_login" || kind === "session_revoked") return "login";
   if (kind === "quote_previewed") return "quote";
@@ -45,14 +36,15 @@ function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
 
 function ActivityRow({ item }: { item: ActivityItem }) {
   const { t, format } = useI18n();
-  const when = (at: number) => format.dateTime(new Date(at).toISOString());
+  const when = (at: number) => format.epochMs(at);
   if (item.kind === "session_login") {
+    const source = activitySourceKeyOf(item.source);
     return (
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="user" size="sm" /></span>
         <span className="row__main">
           <strong>{t("activity.login")}</strong>
-          <span className="num">{when(item.at)} · {t(sourceLabels[item.source])}</span>
+          <span className="num">{when(item.at)} · {source ? t(source) : item.source}</span>
         </span>
       </li>
     );
@@ -74,15 +66,16 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     );
   }
   if (item.kind === "address_screened") {
-    const badge = screeningBadges[item.status];
+    const badge = screeningBadgeOf(item.status);
     const target = screeningTargetOf(item.asset, item.network);
+    const network = screeningNetworkKeyOf(item.network);
     return (
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="shield" size="sm" /></span>
         <span className="row__main">
           <strong>{t("activity.screeningTitle", { target: target?.label ?? item.asset })}</strong>
-          <span className="num">{when(item.at)} · {t(screeningNetworkKeys[item.network])}</span>
-          <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
+          <span className="num">{when(item.at)} · {network ? t(network) : item.network}</span>
+          <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : item.status}</span>
         </span>
       </li>
     );
@@ -99,18 +92,30 @@ function ActivityRow({ item }: { item: ActivityItem }) {
     );
   }
   if (item.kind === "support_requested") {
+    const category = supportCategoryKeyOf(item.category);
     return (
       <li className="row">
         <span className="coin coin--menu" aria-hidden="true"><Icon name="help" size="sm" /></span>
         <span className="row__main">
-          <strong>{t("activity.supportTitle", { category: t(supportCategoryKeys[item.category]) })}</strong>
+          <strong>{t("activity.supportTitle", { category: category ? t(category) : item.category })}</strong>
           <span className="num">{when(item.at)}</span>
           <span className="pill pill--muted">{t("activity.supportOnly")}</span>
         </span>
       </li>
     );
   }
-  const kyc = kycTexts[item.kind];
+  const kyc = kycActivityOf(item.kind);
+  if (!kyc) {
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="info" size="sm" /></span>
+        <span className="row__main">
+          <strong>{item.kind}</strong>
+          <span className="num">{when(item.at)}</span>
+        </span>
+      </li>
+    );
+  }
   return (
     <li className="row">
       <span className={`coin coin--status coin--${kyc.tone}`} aria-hidden="true"><Icon name={kyc.icon} size="sm" /></span>
@@ -131,7 +136,7 @@ export function OperationsScreen() {
   useEffect(() => {
     let active = true;
     api.activity()
-      .then((view) => { if (active) setItems(view.items); })
+      .then((view) => { if (active) setItems(arrayOf(view.items)); })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, []);
@@ -176,7 +181,7 @@ export function OperationsScreen() {
         />
       ) : filtered.length > 0 ? (
         <ul className="list activity" aria-label={t("activity.listLabel")}>
-          {filtered.map((item) => <ActivityRow key={item.id} item={item} />)}
+          {filtered.map((item, index) => <ActivityRow key={`${item.id}:${index}`} item={item} />)}
         </ul>
       ) : null}
       <p className="note">{t("activity.note")}</p>

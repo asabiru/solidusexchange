@@ -8,6 +8,7 @@ import { checkDirectionKey, checkStatusBadge } from "./checks-badges";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
+import { arrayOf } from "./server-fields";
 import { Coin, DisabledCta, Sheet } from "./ui";
 
 type CheckAsset = Exclude<AssetCode, "RUB">;
@@ -47,7 +48,7 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
   useEffect(() => {
     let active = true;
     api.checks()
-      .then((view) => { if (active) setChecks(view.checks); })
+      .then((view) => { if (active) setChecks(arrayOf(view.checks)); })
       .catch(() => { if (active) setListFailed(true); });
     return () => { active = false; };
   }, []);
@@ -164,7 +165,7 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
                 <div><dt>{t("common.fee")}</dt><dd className="num">{money(preview.feeAsset, preview.fee)}</dd></div>
                 <div><dt>{t("checks.total")}</dt><dd className="num">{money(preview.asset, preview.total)}</dd></div>
                 <div><dt>{t("checks.claimRule")}</dt><dd>{t("checks.claimRulePersonal")}</dd></div>
-                <div><dt>{t("checks.expires")}</dt><dd className="num">{format.dateTime(new Date(preview.expiresAt).toISOString())} · {t("checks.ttl", { hours: preview.ttlSeconds / 3600 })}</dd></div>
+                <div><dt>{t("checks.expires")}</dt><dd className="num">{format.epochMs(preview.expiresAt)} · {t("checks.ttl", { hours: preview.ttlSeconds / 3600 })}</dd></div>
               </dl>
               {preview.kycRequired ? <p className="sheet__note">{t("checks.kycRequired")}</p> : null}
               {preview.insufficientBalance ? <p className="form-error">{t("checks.insufficientBalance")}</p> : null}
@@ -179,16 +180,16 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
           {checks?.length === 0 ? <p className="sheet__note">{t("checks.empty")}</p> : null}
           {checks && checks.length > 0 ? (
             <ul className="list" aria-label={t("checks.listLabel")}>
-              {checks.map((check) => {
+              {checks.map((check, index) => {
                 const badge = checkStatusBadge(check.status);
                 const direction = checkDirectionKey(check.direction);
                 return (
-                  <li key={check.reference}>
+                  <li key={`${check.reference}:${index}`}>
                     <button type="button" className="row" onClick={() => show({ kind: "detail", reference: check.reference })}>
                       <Coin asset={check.asset} />
                       <span className="row__main">
                         <strong className="num">{money(check.asset, check.amount)}</strong>
-                        <span className="num">{direction ? t(direction) : check.direction} · {format.dateTime(new Date(check.createdAt).toISOString())}</span>
+                        <span className="num">{direction ? t(direction) : check.direction} · {format.epochMs(check.createdAt)}</span>
                       </span>
                       <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : check.status}</span>
                     </button>
@@ -256,7 +257,7 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
             <span className="sheet__eyebrow">{direction ? t(direction) : check.direction}</span>
             <span className="sheet__amount num">{money(check.asset, check.amount)}</span>
             <span className="sheet__summary-meta">
-              <span className="num">{format.dateTime(new Date(check.createdAt).toISOString())}</span>
+              <span className="num">{format.epochMs(check.createdAt)}</span>
               <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : check.status}</span>
             </span>
           </div>
@@ -264,21 +265,21 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
             <div><dt>{t("common.fee")}</dt><dd className="num">{money(check.asset, check.fee)}</dd></div>
             <div><dt>{t("checks.total")}</dt><dd className="num">{money(check.asset, check.total)}</dd></div>
             <div><dt>{t("checks.claimRule")}</dt><dd>{t("checks.claimRulePersonal")}</dd></div>
-            <div><dt>{t("checks.created")}</dt><dd className="num">{format.dateTime(new Date(check.createdAt).toISOString())}</dd></div>
-            <div><dt>{t("checks.expires")}</dt><dd className="num">{format.dateTime(new Date(check.expiresAt).toISOString())}</dd></div>
+            <div><dt>{t("checks.created")}</dt><dd className="num">{format.epochMs(check.createdAt)}</dd></div>
+            <div><dt>{t("checks.expires")}</dt><dd className="num">{format.epochMs(check.expiresAt)}</dd></div>
             {check.comment ? <div><dt>{t("checks.comment")}</dt><dd>{check.comment}</dd></div> : null}
             <div><dt>{t("checks.reference")}</dt><dd className="num">{check.reference}</dd></div>
           </dl>
           <p className="sheet__note">{t("checks.linkNote")}</p>
           <ol className="timeline" aria-label={t("checks.timelineLabel")}>
-            {check.timeline.map((entry) => {
+            {arrayOf<CheckView["timeline"][number]>(check.timeline).map((entry, index) => {
               const step = checkStatusBadge(entry.status);
               return (
-                <li key={entry.status} className="timeline__step is-done">
+                <li key={`${entry.status}:${index}`} className="timeline__step is-done">
                   <span className="timeline__mark"><Icon name="check" size="xs" /></span>
                   <span>
                     <strong>{step ? t(step.label) : entry.status}</strong>
-                    <span className="num">{format.dateTime(new Date(entry.at).toISOString())}</span>
+                    <span className="num">{format.epochMs(entry.at)}</span>
                   </span>
                 </li>
               );

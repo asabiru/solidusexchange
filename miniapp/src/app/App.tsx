@@ -19,6 +19,7 @@ import { HomeScreen } from "./screens/HomeScreen";
 import { OperationsScreen } from "./screens/OperationsScreen";
 import { ProfileScreen } from "./screens/ProfileScreen";
 import { QrScreen } from "./screens/QrScreen";
+import { arrayOf } from "./server-fields";
 import { SheetHost } from "./sheets";
 import { onTelegramThemeChange, readInitData, telegramColorScheme, telegramLanguageCode, telegramWebApp } from "./telegram";
 
@@ -78,10 +79,11 @@ async function loadCustomerData(): Promise<CustomerData> {
     api.notifications()
   ]);
   return {
-    wallet,
-    operations: operations.operations,
+    // Server list fields are untrusted: a non-array payload degrades to an empty list.
+    wallet: { ...wallet, assets: arrayOf(wallet.assets) },
+    operations: arrayOf<OperationSummary>(operations.operations),
     profile,
-    notifications: withLocalUnread(notifications, notificationSeenStorage())
+    notifications: withLocalUnread({ ...notifications, notifications: arrayOf(notifications.notifications) }, notificationSeenStorage())
   };
 }
 

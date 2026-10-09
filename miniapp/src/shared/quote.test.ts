@@ -43,4 +43,18 @@ describe("quote TTL helpers", () => {
     assert.equal(formatCountdown(0), "00:00");
     assert.equal(formatCountdown(-4), "00:00");
   });
+
+  it("fails closed as expired on non-finite server timings", () => {
+    const undated = { issuedAt, expiresAt: Number.NaN };
+    assert.equal(isQuoteExpired(undated, issuedAt), true);
+    assert.equal(quoteState(undated, issuedAt), "expired");
+    assert.equal(quoteSecondsRemaining(undated, issuedAt), 0);
+    assert.equal(formatCountdown(quoteSecondsRemaining(undated, issuedAt)), "00:00");
+    const infinite = { issuedAt, expiresAt: Number.POSITIVE_INFINITY };
+    assert.equal(isQuoteExpired(infinite, issuedAt), true);
+    assert.equal(quoteSecondsRemaining(infinite, issuedAt), 0);
+    assert.equal(quoteState(infinite, issuedAt), "expired");
+    assert.equal(formatCountdown(Number.NaN), "00:00");
+    assert.equal(formatCountdown(Number.POSITIVE_INFINITY), "00:00");
+  });
 });

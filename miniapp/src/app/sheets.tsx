@@ -4,21 +4,20 @@ import type {
   AddressScreeningView,
   DeviceSessionView,
   DeviceSessionsView,
-  KycVerificationState,
   KycVerificationView,
   NotificationDraft,
   NotificationTemplate,
   NotificationsView,
   OperationDetail,
   ProfileView,
-  SessionClient,
   WalletView
 } from "../shared/api";
-import { type ScreeningNetwork, screeningTargets } from "../shared/address-screening";
+import { screeningTargets } from "../shared/address-screening";
+import type { ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { ChecksSheet } from "./ChecksSheet";
-import { assetNameKeys, assetNetworkKeys } from "./format";
+import { assetNameKey, assetNetworkKey } from "./format";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import {
@@ -29,6 +28,16 @@ import {
 } from "./notification-seen";
 import { Icon } from "./Icon";
 import type { SheetRequest } from "./navigation";
+import {
+  arrayOf,
+  kycDecisionStepOf,
+  kycOutcomeOf,
+  kycStateOf,
+  screeningBadgeOf,
+  screeningNetworkKeyOf,
+  sessionClientKeyOf,
+  timelineStepState
+} from "./server-fields";
 import { SupportSheet } from "./SupportSheet";
 import { Coin, DisabledCta, Sheet, StatusPill, Unavailable } from "./ui";
 
@@ -91,13 +100,15 @@ function AssetSheet({ asset, wallet, close, open }: { asset: AssetCode; wallet: 
   const { money } = format;
   if (!balance) return null;
   const verified = wallet.kyc === "verified";
+  const nameKey = assetNameKey(asset);
+  const networkKey = assetNetworkKey(asset);
   return (
-    <Sheet title={t(assetNameKeys[asset])} onClose={close}>
+    <Sheet title={nameKey ? t(nameKey) : asset} onClose={close}>
       <div className="sheet__summary">
         <span className="sheet__eyebrow">{t("asset.availableBalance")}</span>
         <span className="sheet__amount num">{money(asset, balance.available, true)}</span>
         <span className="sheet__summary-meta">
-          <span>{t(assetNetworkKeys[asset])}</span>
+          <span>{networkKey ? t(networkKey) : "—"}</span>
           <span className="sheet__status num">{t("asset.holdSuffix", { amount: money(asset, balance.hold) })}</span>
         </span>
       </div>
@@ -105,7 +116,7 @@ function AssetSheet({ asset, wallet, close, open }: { asset: AssetCode; wallet: 
         <div><dt>{t("common.available")}</dt><dd className="num">{money(asset, balance.available, true)}</dd></div>
         <div><dt>{t("common.hold")}</dt><dd className="num">{money(asset, balance.hold, true)}</dd></div>
         <div><dt>{t("asset.estimate")}</dt><dd className="num">≈ {money("RUB", balance.valueRub)}</dd></div>
-        <div><dt>{t("common.network")}</dt><dd>{t(assetNetworkKeys[asset])}</dd></div>
+        <div><dt>{t("common.network")}</dt><dd>{networkKey ? t(networkKey) : "—"}</dd></div>
       </dl>
       <p className="sheet__note">{t("asset.holdNote")}</p>
       <div className="sheet__actions sheet__actions--split">
@@ -195,25 +206,8 @@ interface KycText {
   detail: MessageKey;
 }
 
-const kycOutcomes: Readonly<Record<KycVerificationState, KycText>> = {
-  not_started: { title: "kyc.notStartedTitle", detail: "kyc.notStartedDetail" },
-  submitted: { title: "kyc.submittedTitle", detail: "kyc.submittedDetail" },
-  in_review: { title: "kyc.inReviewTitle", detail: "kyc.inReviewDetail" },
-  approved: { title: "kyc.approvedTitle", detail: "kyc.approvedDetail" },
-  rejected: { title: "kyc.rejectedTitle", detail: "kyc.rejectedDetail" },
-  needs_more_data: { title: "kyc.needsMoreDataTitle", detail: "kyc.needsMoreDataDetail" },
-  timed_out: { title: "kyc.timedOutTitle", detail: "kyc.timedOutDetail" },
-  unavailable: { title: "kyc.unavailableTitle", detail: "kyc.unavailableDetail" }
-};
-
-const decisionSteps: Readonly<Partial<Record<KycVerificationState, KycText & { state: StepState }>>> = {
-  approved: { title: "kyc.stepApprovedTitle", detail: "kyc.stepApprovedDetail", state: "done" },
-  rejected: { title: "kyc.stepRejectedTitle", detail: "kyc.stepRejectedDetail", state: "blocked" },
-  needs_more_data: { title: "kyc.stepNeedsMoreDataTitle", detail: "kyc.stepNeedsMoreDataDetail", state: "blocked" },
-  timed_out: { title: "kyc.stepTimedOutTitle", detail: "kyc.stepTimedOutDetail", state: "blocked" }
-};
-
-function kycSteps(state: KycVerificationState): (KycText & { state: StepState })[] {
+function kycSteps(rawState: string): (KycText & { state: StepState })[] {
+  const state = kycStateOf(rawState);
   const started = state !== "not_started" && state !== "unavailable";
   const reviewing = state === "in_review";
   return [
@@ -223,7 +217,7 @@ function kycSteps(state: KycVerificationState): (KycText & { state: StepState })
       detail: "kyc.stepReviewDetail",
       state: reviewing ? "current" : started && state !== "submitted" ? "done" : "pending"
     },
-    decisionSteps[state] ?? { title: "kyc.stepDecisionTitle", detail: "kyc.stepDecisionDetail", state: "pending" }
+    kycDecisionStepOf(state) ?? { title: "kyc.stepDecisionTitle", detail: "kyc.stepDecisionDetail", state: "pending" }
   ];
 }
 
@@ -269,7 +263,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
     }
   }
 
-  const outcome = kycOutcomes[state ?? "not_started"];
+  const outcome = kycOutcomeOf(state ?? "not_started");
   return (
     <Sheet title={t("kyc.title")} onClose={close}>
       <div className="sheet__summary" aria-live="polite" aria-atomic="true">
@@ -282,7 +276,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
       </div>
       <ol className="timeline" aria-label={t("kyc.stepsLabel")}>
         {kycSteps(state ?? "not_started").map((step, index) => (
-          <li key={step.title} className={`timeline__step is-${step.state}`}>
+          <li key={`${step.title}:${index}`} className={`timeline__step is-${step.state}`}>
             <span className="timeline__mark num">
               {step.state === "done" ? <Icon name="check" size="xs" /> : step.state === "blocked" ? <Icon name="alert" size="xs" /> : index + 1}
             </span>
@@ -310,13 +304,13 @@ function KycSheet({ profile, close }: { profile: ProfileView; close: () => void 
   return (
     <Sheet title={t("kyc.title")} onClose={close}>
       <div className="sheet__summary">
-        <span className="sheet__eyebrow">{profile.kyc.level}</span>
+        <span className="sheet__eyebrow">{profile.kyc?.level ?? "—"}</span>
         <span className="sheet__amount">{t("kyc.identityConfirmed")}</span>
-        <span className="sheet__summary-meta">{profile.kyc.detail}</span>
+        <span className="sheet__summary-meta">{profile.kyc?.detail ?? "—"}</span>
       </div>
       <ol className="timeline">
-        {profile.kyc.steps.map((step) => (
-          <li key={step.title} className={`timeline__step is-${step.state === "done" ? "done" : "pending"}`}>
+        {arrayOf<NonNullable<ProfileView["kyc"]>["steps"][number]>(profile.kyc?.steps).map((step, index) => (
+          <li key={`${step.title}:${index}`} className={`timeline__step is-${step.state === "done" ? "done" : "pending"}`}>
             <span className="timeline__mark"><Icon name={step.state === "done" ? "check" : "clock"} size="xs" /></span>
             <span><strong>{step.title}</strong><span>{step.detail}</span></span>
           </li>
@@ -335,14 +329,14 @@ function LimitsSheet({ profile, close }: { profile: ProfileView; close: () => vo
         <span className="limits-state__mark"><Icon name="sliders" size="sm" /></span>
         <div>
           <strong>{t("limits.notConfigured")}</strong>
-          <span>{profile.limits.message}</span>
-          <span className="pill pill--muted num">{t("limits.decision", { decision: profile.limits.decision })}</span>
+          <span>{profile.limits?.message ?? "—"}</span>
+          <span className="pill pill--muted num">{t("limits.decision", { decision: profile.limits?.decision ?? "—" })}</span>
         </div>
       </div>
       <h3 className="section-label">{t("limits.fees")}</h3>
       <dl className="meta-list">
-        {profile.fees.map((fee) => (
-          <div key={fee.title}><dt>{fee.title}</dt><dd>{fee.value}</dd></div>
+        {arrayOf<ProfileView["fees"][number]>(profile.fees).map((fee, index) => (
+          <div key={`${fee.title}:${index}`}><dt>{fee.title}</dt><dd>{fee.value}</dd></div>
         ))}
       </dl>
       <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
@@ -356,8 +350,8 @@ function SecuritySheet({ profile, close }: { profile: ProfileView; close: () => 
     <Sheet title={t("security.title")} onClose={close}>
       <p className="sheet__note">{t("security.note")}</p>
       <div className="list">
-        {profile.security.map((item) => (
-          <div key={item.title} className="row">
+        {arrayOf<ProfileView["security"][number]>(profile.security).map((item, index) => (
+          <div key={`${item.title}:${index}`} className="row">
             <span className="coin coin--menu" aria-hidden="true"><Icon name="lock" size="sm" /></span>
             <span className="row__main"><strong>{item.title}</strong><span>{item.detail}</span></span>
             <span className="pill pill--muted">{t("common.soon")}</span>
@@ -387,7 +381,14 @@ function OperationSheet({ id, close }: { id: string; close: () => void }) {
   if (!detail) {
     return <Sheet title={t("operation.title")} onClose={close}><p className="sheet__note">{t("common.loading")}</p></Sheet>;
   }
-  const [primary, secondary] = detail.legs;
+  const [primary, secondary] = arrayOf<OperationDetail["legs"][number]>(detail.legs);
+  if (!primary) {
+    return (
+      <Sheet title={detail.title} onClose={close}>
+        <p className="sheet__note">{t("operation.loadFailed")}</p>
+      </Sheet>
+    );
+  }
   return (
     <Sheet title={detail.title} onClose={close}>
       <div className="sheet__summary">
@@ -406,17 +407,20 @@ function OperationSheet({ id, close }: { id: string; close: () => void }) {
       </dl>
       <h3 className="section-label">{t("operation.progress")}</h3>
       <ol className="timeline">
-        {detail.timeline.map((step) => (
-          <li key={step.title} className={`timeline__step is-${step.state}`}>
-            <span className="timeline__mark">
-              <Icon name={step.state === "done" ? "check" : step.state === "blocked" ? "alert" : "clock"} size="xs" />
+        {arrayOf<OperationDetail["timeline"][number]>(detail.timeline).map((step, index) => {
+          const state = timelineStepState(step.state);
+          return (
+            <li key={`${step.title}:${index}`} className={`timeline__step is-${state}`}>
+              <span className="timeline__mark">
+                <Icon name={state === "done" ? "check" : state === "blocked" ? "alert" : "clock"} size="xs" />
             </span>
-            <span>
-              <strong>{step.title}</strong>
-              <span>{step.detail}{step.at ? ` · ${format.dateTime(step.at)}` : ""}</span>
-            </span>
-          </li>
-        ))}
+              <span>
+                <strong>{step.title}</strong>
+                <span>{step.detail}{step.at ? ` · ${format.dateTime(step.at)}` : ""}</span>
+              </span>
+            </li>
+          );
+        })}
       </ol>
       <p className="sheet__note">{detail.note}</p>
     </Sheet>
@@ -451,21 +455,6 @@ function QrManualSheet({ close }: { close: () => void }) {
     </Sheet>
   );
 }
-
-export const screeningBadges: Readonly<Record<AddressScreeningStatus, { label: MessageKey; tone: string; detail: MessageKey }>> = {
-  pending: { label: "screening.pendingLabel", tone: "muted", detail: "screening.pendingDetail" },
-  low: { label: "screening.lowLabel", tone: "success", detail: "screening.lowDetail" },
-  medium: { label: "screening.mediumLabel", tone: "warning", detail: "screening.mediumDetail" },
-  high: { label: "screening.highLabel", tone: "risk", detail: "screening.highDetail" },
-  severe: { label: "screening.severeLabel", tone: "risk", detail: "screening.severeDetail" },
-  unavailable: { label: "screening.unavailableLabel", tone: "muted", detail: "screening.unavailableDetail" },
-  timed_out: { label: "screening.timedOutLabel", tone: "muted", detail: "screening.timedOutDetail" }
-};
-
-export const screeningNetworkKeys: Readonly<Record<ScreeningNetwork, MessageKey>> = {
-  TON_TESTNET: "network.TON_TESTNET",
-  TRON_TESTNET: "network.TRON_TESTNET"
-};
 
 const screeningPlaceholderKeys: Readonly<Record<ScreeningNetwork, MessageKey>> = {
   TON_TESTNET: "screening.placeholderTon",
@@ -523,7 +512,8 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
   };
 
   const status: AddressScreeningStatus | undefined = unavailable ? "unavailable" : result?.status;
-  const badge = status ? screeningBadges[status] : undefined;
+  // The result status is server-supplied: only declared members resolve to a badge.
+  const badge = status ? screeningBadgeOf(status) : undefined;
 
   return (
     <Sheet title={t("screening.title")} onClose={close}>
@@ -548,7 +538,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
         ))}
       </fieldset>
       <label className="form-control" htmlFor={inputId}>
-        <span>{t("screening.addressLabel", { network: target ? t(screeningNetworkKeys[target.network]) : "" })}</span>
+        <span>{t("screening.addressLabel", { network: target ? t(screeningNetworkKeyOf(target.network) ?? "network.TON_TESTNET") : "" })}</span>
         <input
           id={inputId}
           value={address}
@@ -582,11 +572,6 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
   );
 }
 
-const sessionClientKeys: Readonly<Record<SessionClient, MessageKey>> = {
-  telegram: "activity.sourceTelegram",
-  "dev-login": "activity.sourceDev"
-};
-
 type SessionRevocation = { scope: "single"; session: DeviceSessionView } | { scope: "others"; count: number };
 
 function SessionsSheet({ close }: { close: () => void }) {
@@ -600,7 +585,7 @@ function SessionsSheet({ close }: { close: () => void }) {
   const status = useRef<HTMLParagraphElement>(null);
   const confirmId = useId();
   const { t, format } = useI18n();
-  const when = (at: number) => format.dateTime(new Date(at).toISOString());
+  const when = (at: number) => format.epochMs(at);
 
   useEffect(() => {
     let active = true;
@@ -641,8 +626,12 @@ function SessionsSheet({ close }: { close: () => void }) {
     }
   };
 
-  const others = view?.sessions.filter((session) => !session.current).length ?? 0;
-  const clientOf = (session: DeviceSessionView) => t(sessionClientKeys[session.client]);
+  const sessions = arrayOf<DeviceSessionView>(view?.sessions);
+  const others = sessions.filter((session) => !session.current).length;
+  const clientOf = (session: DeviceSessionView) => {
+    const key = sessionClientKeyOf(session.client);
+    return key ? t(key) : session.client;
+  };
 
   return (
     <Sheet title={t("sessions.title")} onClose={close}>
@@ -651,8 +640,8 @@ function SessionsSheet({ close }: { close: () => void }) {
       {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
       {view ? (
         <ul className="list sessions" aria-label={t("sessions.listLabel")}>
-          {view.sessions.map((session) => (
-            <li key={session.handle} className="row">
+          {sessions.map((session, index) => (
+            <li key={`${session.handle}:${index}`} className="row">
               <span className="coin coin--menu" aria-hidden="true"><Icon name="device" size="sm" /></span>
               <span className="row__main">
                 <strong>{clientOf(session)}</strong>
@@ -726,10 +715,11 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
       if (!active) return;
       const storage = notificationSeenStorage();
       setSeenAtOpen(loadSeenIds(storage));
-      setDrafts(view.notifications);
+      const notifications = arrayOf<NotificationDraft>(view.notifications);
+      setDrafts(notifications);
       // Seen state is a cosmetic per-browser marker kept in web storage.
-      const seen = rememberSeenIds(storage, view.notifications.map((draft) => draft.id));
-      if (active) onRead({ ...view, unread: unseenNotifications(view, seen) });
+      const seen = rememberSeenIds(storage, notifications.map((draft) => draft.id));
+      if (active) onRead({ ...view, notifications, unread: unseenNotifications({ ...view, notifications }, seen) });
     }
     load().catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
@@ -746,18 +736,18 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
       {drafts?.length === 0 ? <p className="sheet__note">{t("notifications.empty")}</p> : null}
       {drafts && drafts.length > 0 ? (
         <ul className="list notifications" aria-label={t("notifications.listLabel")}>
-          {drafts.map((draft) => {
+          {drafts.map((draft, index) => {
             const copy = Object.hasOwn(notificationTemplateKeys, draft.template)
               ? notificationTemplateKeys[draft.template]
               : undefined;
             const unseen = !draft.read && !seenAtOpen.has(draft.id);
             return (
-              <li key={draft.id} className={`row row--static${unseen ? " is-unread" : " is-seen"}`}>
+              <li key={`${draft.id}:${index}`} className={`row row--static${unseen ? " is-unread" : " is-seen"}`}>
                 <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
                 <span className="row__main">
                   <strong>{copy ? t(copy.title) : draft.text}</strong>
                   {copy ? <span>{t(copy.body)}</span> : null}
-                  <span className="num">{t("notifications.draftMeta", { when: format.dateTime(new Date(draft.createdAt).toISOString()) })}</span>
+                  <span className="num">{t("notifications.draftMeta", { when: format.epochMs(draft.createdAt) })}</span>
                 </span>
                 {unseen ? <span className="unread-dot"><span className="visually-hidden">{t("notifications.new")}</span></span> : null}
               </li>

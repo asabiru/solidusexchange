@@ -58,7 +58,7 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
   const serverNow = now + (quote?.offset ?? 0);
   const state = quote ? quoteState(quote.value, serverNow) : undefined;
   const remaining = quote ? quoteSecondsRemaining(quote.value, serverNow) : 0;
-  const ttlFraction = quote
+  const ttlFraction = quote && Number.isFinite(quote.value.ttlSeconds) && quote.value.ttlSeconds > 0
     ? Math.min(1, Math.max(0, (quote.value.expiresAt - serverNow) / (quote.value.ttlSeconds * 1_000)))
     : 0;
 
@@ -219,7 +219,9 @@ export function ExchangeScreen({ wallet, openSheet }: Props) {
           </div>
           <div>
             <dt>{t("exchange.spread")}</dt>
-            <dd className="num">{quote ? t("exchange.spreadInRate", { value: format.decimal(fromUnits(BigInt(quote.value.spreadBps), 2), { fractionDigits: 2 }) }) : "—"}</dd>
+            <dd className="num">{quote && Number.isSafeInteger(quote.value.spreadBps)
+              ? t("exchange.spreadInRate", { value: format.decimal(fromUnits(BigInt(quote.value.spreadBps), 2), { fractionDigits: 2 }) })
+              : "—"}</dd>
           </div>
           <div>
             <dt>{t("exchange.totalDebit")}</dt>

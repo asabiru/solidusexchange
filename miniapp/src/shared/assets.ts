@@ -41,3 +41,8 @@ export const assets: Readonly<Record<AssetCode, AssetMeta>> = Object.freeze({
 export function isAssetCode(value: string): value is AssetCode {
   return value === "RUB" || value === "USDT" || value === "TON";
 }
+
+/** Server-provided asset codes are untrusted input: only declared members resolve to metadata. */
+export function assetMetaOf(code: string): AssetMeta | undefined {
+  return isAssetCode(code) ? assets[code] : undefined;
+}
