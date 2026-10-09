@@ -67,6 +67,15 @@ export const CAPABILITY_POLICY = Object.freeze([
   // data (mirrors the miniapp's KYC-gated notifications feed), not a financial
   // capability: notifications is not a money namespace.
   entry("customer.notifications.read", "read", true, []),
+  // The served deposits collection read is KYC-gated like the wallets and
+  // notifications reads: deposits are an asset/activity collection (the
+  // miniapp shows deposit activity only to verified sessions), not an
+  // onboarding or identity surface — unlike profile/kyc/support it must stay
+  // gated on a verified KYC status. The read is synthetic and carries no
+  // ledger effect (posting stays "none"), so it needs no open
+  // money-movement decisions: the unserved deposits.create below keeps the
+  // financial denial with its decision reasons.
+  entry("customer.deposits.read", "read", true, []),
   entry("customer.deposits.create", "financial", true, [
     "D-001",
     "D-002",

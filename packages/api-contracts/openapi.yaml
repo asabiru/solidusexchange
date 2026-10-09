@@ -425,6 +425,60 @@
         }
       }
     },
+    "/api/v1/customer/deposits": {
+      "get": {
+        "operationId": "getCustomerDeposits",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's synthetic deposits",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer deposits in test mode mirroring the bank simulator's payment states",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -1374,6 +1428,89 @@
           }
         }
       },
+      "DepositsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "deposits"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "deposits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositView"
+            }
+          }
+        }
+      },
+      "DepositView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deposit_id",
+          "asset",
+          "method",
+          "status",
+          "expected_amount",
+          "received_total",
+          "reversed_total",
+          "payment_reference",
+          "created_at",
+          "updated_at",
+          "posting"
+        ],
+        "properties": {
+          "deposit_id": {
+            "type": "string",
+            "pattern": "^dep_[0-9a-f]{24}$"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "method": {
+            "const": "sbp"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "awaiting_payment",
+              "payment_received",
+              "partial_payment",
+              "duplicate_payment",
+              "payment_reversed",
+              "expired_no_payment"
+            ]
+          },
+          "expected_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "received_total": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "reversed_total": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "payment_reference": {
+            "type": "string",
+            "pattern": "^SIMSBP[0-9A-F]{12}$"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1662,7 +1799,6 @@
     "customer": [
       "/api/v1/customer/auth",
       "/api/v1/customer/users",
-      "/api/v1/customer/deposits",
       "/api/v1/customer/withdrawals",
       "/api/v1/customer/quotes",
       "/api/v1/customer/exchange-orders",
