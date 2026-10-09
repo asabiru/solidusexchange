@@ -16,7 +16,8 @@ async function main(): Promise<void> {
   });
 }
 
-main().catch(() => {
-  console.error("Backoffice BFF refused to start because audit storage is not ready");
+main().catch((error) => {
+  const reason = error instanceof Error ? error.message || error.name : "unknown startup failure";
+  console.error(`Backoffice BFF refused to start: ${reason}`);
   process.exitCode = 1;
 });

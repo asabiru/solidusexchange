@@ -322,6 +322,7 @@ describe("bounded load on the dev stack", () => {
     // the documented 503 kyc_unavailable instead of 200.
     const kycStatuses = countBy(results, "kyc-status");
     assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 13);
+    assert.ok((kycStatuses[200] ?? 0) > 0, "customer-api answered at least one kyc status read");
     assert.ok((kycStatuses[503] ?? 0) > 0, "customer-api rate limit applies to kyc status");
     for (const result of results.filter((entry) => entry.kind === "kyc-status" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "kyc_unavailable" });
@@ -335,6 +336,7 @@ describe("bounded load on the dev stack", () => {
     // profile_unavailable instead of 200.
     const profiles = countBy(results, "profile");
     assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 13);
+    assert.ok((profiles[200] ?? 0) > 0, "customer-api answered at least one profile read");
     assert.ok((profiles[503] ?? 0) > 0, "customer-api rate limit applies to profile");
     for (const result of results.filter((entry) => entry.kind === "profile" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "profile_unavailable" });
@@ -345,6 +347,7 @@ describe("bounded load on the dev stack", () => {
     // support_unavailable instead of 200.
     const supports = countBy(results, "support");
     assert.equal((supports[200] ?? 0) + (supports[503] ?? 0), total / 13);
+    assert.ok((supports[200] ?? 0) > 0, "customer-api answered at least one support read");
     assert.ok((supports[503] ?? 0) > 0, "customer-api rate limit applies to support");
     for (const result of results.filter((entry) => entry.kind === "support" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "support_unavailable" });
@@ -356,6 +359,7 @@ describe("bounded load on the dev stack", () => {
     // deposits_unavailable.
     const deposits = countBy(results, "deposits");
     assert.equal((deposits[200] ?? 0) + (deposits[503] ?? 0), total / 13);
+    assert.ok((deposits[200] ?? 0) > 0, "customer-api answered at least one deposits read");
     assert.ok((deposits[503] ?? 0) > 0, "customer-api rate limit applies to deposits");
     for (const result of results.filter((entry) => entry.kind === "deposits" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "deposits_unavailable" });
@@ -365,6 +369,7 @@ describe("bounded load on the dev stack", () => {
     // like deposits.
     const withdrawals = countBy(results, "withdrawals");
     assert.equal((withdrawals[200] ?? 0) + (withdrawals[503] ?? 0), total / 13);
+    assert.ok((withdrawals[200] ?? 0) > 0, "customer-api answered at least one withdrawals read");
     assert.ok((withdrawals[503] ?? 0) > 0, "customer-api rate limit applies to withdrawals");
     for (const result of results.filter((entry) => entry.kind === "withdrawals" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "withdrawals_unavailable" });
@@ -373,6 +378,7 @@ describe("bounded load on the dev stack", () => {
     // so it degrades and rate-limits exactly like deposits and withdrawals.
     const quotes = countBy(results, "quotes");
     assert.equal((quotes[200] ?? 0) + (quotes[503] ?? 0), total / 13);
+    assert.ok((quotes[200] ?? 0) > 0, "customer-api answered at least one quotes read");
     assert.ok((quotes[503] ?? 0) > 0, "customer-api rate limit applies to quotes");
     for (const result of results.filter((entry) => entry.kind === "quotes" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "quotes_unavailable" });
@@ -380,6 +386,10 @@ describe("bounded load on the dev stack", () => {
     assert.deepEqual(countBy(results, "activity"), { 200: total / 13 });
     const submits = countBy(results, "kyc-submit");
     assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 13);
+    // The burst drives 25 distinct telegram subjects through two submissions
+    // each: the first must create (202), so at least 25 creates must appear —
+    // a submit path that silently never creates would report all 200s.
+    assert.ok((submits[202] ?? 0) >= 25, `kyc submits must create: ${JSON.stringify(submits)}`);
 
     for (const result of results) {
       if (result.kind === "quote") assert.equal(result.body.kycRequired, true);
@@ -409,9 +419,10 @@ describe("bounded load on the dev stack", () => {
     assert.equal(activity.size(devSubject), maxActivityPerSubject);
     assert.ok(activity.subjects() <= maxActivitySubjects);
 
+    // The audit store is in-memory here, so every operator report read must
+    // succeed — a single 503 means the audited route failed closed.
     const reports = countBy(results, "report");
-    assert.ok((reports[200] ?? 0) >= 1, JSON.stringify(reports));
-    assert.equal((reports[200] ?? 0) + (reports[503] ?? 0), total / 13);
+    assert.deepEqual(reports, { 200: total / 13 });
     assert.equal((await auditStore.snapshot()).status.length - auditBefore, reports[200] ?? 0);
     assert.ok(outbox.size() <= defaultMaxTotal);
   });

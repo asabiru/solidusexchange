@@ -51,8 +51,8 @@ async function services() {
       env: { BACKOFFICE_BFF_PORT: String(await freePort()) },
       hostVariable: "BACKOFFICE_BFF_HOST",
       ready: /Backoffice BFF listening on http:\/\/127\.0\.0\.1:\d+/,
-      production: /Backoffice BFF refused to start/,
-      exposed: /Backoffice BFF refused to start/
+      production: /Backoffice BFF refused to start: Backoffice BFF is dev-only and refuses NODE_ENV=production/,
+      exposed: /Backoffice BFF refused to start: BACKOFFICE_BFF_HOST must be a loopback address/
     }
   ];
 }

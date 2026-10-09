@@ -113,6 +113,7 @@ describe("Mini App BFF with a failing customer-api", () => {
   const upstream = [];
   let mode = "valid";
   let stub;
+  let stubBase;
   let app;
   let cookie;
   let verifiedCookie;
@@ -121,9 +122,22 @@ describe("Mini App BFF with a failing customer-api", () => {
     return (request.headers.authorization ?? "").split(".")[1] ?? "";
   }
 
+  // The real customer-api echoes the presented token's expiry; the stub does
+  // the same so it cannot answer with a session the real server never emits.
+  function expiresAtOf(request) {
+    const seconds = Number((request.headers.authorization ?? "").split(".")[2]);
+    return Number.isFinite(seconds) ? new Date(seconds * 1_000).toISOString() : "1970-01-01T00:00:00.000Z";
+  }
+
+  // Every customer-api operation the BFF calls must have an explicit arm here;
+  // an unmatched path means harness drift and answers 404 like the real
+  // router — never a successful default body.
   function validBody(request, extra = {}) {
     if (request.url.endsWith("/session")) {
-      return { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z", ...extra };
+      return { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: expiresAtOf(request), ...extra };
+    }
+    if (request.url.endsWith("/capabilities")) {
+      return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
     }
     if (request.url.endsWith("/wallets")) {
       return {
@@ -290,7 +304,7 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
-    return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
+    return undefined;
   }
 
   function send(response, status, contentType, text) {
@@ -300,7 +314,14 @@ describe("Mini App BFF with a failing customer-api", () => {
   }
 
   const modes = {
-    valid: (request, response) => send(response, 200, "application/json", JSON.stringify(validBody(request))),
+    valid: (request, response) => {
+      const body = validBody(request);
+      if (body === undefined) {
+        send(response, 404, "application/json", JSON.stringify({ code: "NOT_FOUND", detail: marker }));
+        return;
+      }
+      send(response, 200, "application/json", JSON.stringify(body));
+    },
     server_error: (_, response) => send(response, 500, "application/json", JSON.stringify({ error: marker })),
     unauthorized: (_, response) => send(response, 401, "application/json", JSON.stringify({ code: marker })),
     redirect: (_, response) => {
@@ -493,9 +514,16 @@ describe("Mini App BFF with a failing customer-api", () => {
         entry.closed = true;
       });
       upstream.push(entry);
+      // The real customer-api routes by method and path: the BFF only issues
+      // GETs, so anything else is harness drift and answers 404 like the real
+      // router rather than a fallback success body.
+      if (request.method !== "GET") {
+        send(response, 404, "application/json", JSON.stringify({ code: "NOT_FOUND", detail: marker }));
+        return;
+      }
       modes[mode](request, response);
     });
-    const stubBase = await listen(stub);
+    stubBase = await listen(stub);
     app = await startMiniapp({ MINIAPP_CUSTOMER_API_URL: stubBase, MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key });
     cookie = await devLogin(app, "kyc-gated");
     verifiedCookie = await devLogin(app, "verified");
@@ -523,6 +551,15 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(profile.kyc.state, "kyc-gated");
     assert.equal("locale" in profile, false);
     assert.equal("registeredAt" in profile, false);
+    // Stub self-check: an unmatched path or a non-GET method must not receive
+    // a success body — it answers 404 like the real router, so a BFF that
+    // drifts to the wrong upstream route fails closed instead of passing.
+    const unknownPath = await fetch(`${stubBase}/api/v1/customer/no-such-operation`);
+    assert.equal(unknownPath.status, 404);
+    assert.deepEqual(await unknownPath.json(), { code: "NOT_FOUND", detail: marker });
+    const wrongMethod = await fetch(`${stubBase}/api/v1/customer/wallets`, { method: "POST" });
+    assert.equal(wrongMethod.status, 404);
+    await wrongMethod.body?.cancel();
     // A verified session reads the same upstream identity fields; only the
     // app-local kyc section follows its own session flag.
     const verifiedProfile = await getJson(app, "/bff/profile", verifiedCookie);
@@ -1089,7 +1126,7 @@ describe("backoffice BFF with an unreachable PostgreSQL audit store", () => {
       BACKOFFICE_AUDIT_DATABASE_URL: databaseUrl
     });
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /refused to start because audit storage is not ready/);
+    assert.match(result.stderr, /refused to start: Audit storage is unavailable/);
     assert.doesNotMatch(result.stdout, /listening/);
     assert.equal(`${result.stdout}${result.stderr}`.includes(password), false);
     await assert.rejects(fetch(`http://127.0.0.1:${port}/bff/healthz`, { signal: AbortSignal.timeout(2_000) }));

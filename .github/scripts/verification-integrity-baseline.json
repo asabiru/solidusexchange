@@ -810,15 +810,15 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 608,
+      "minLines": 612,
       "minCases": 18
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 394,
+      "minLines": 400,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 1055,
+      "minLines": 1080,
       "minCases": 19
     },
     "packages/e2e-dev/tests/stack.mjs": {
