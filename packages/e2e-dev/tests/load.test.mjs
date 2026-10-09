@@ -43,7 +43,7 @@ const rssGrowthBudgetBytes = 256 * 1024 * 1024;
 const customerApiRateLimit = 40;
 const maxSessionsPerSubject = 5;
 const documentedStatuses = new Set([200, 201, 202, 429, 503]);
-const documented503 = new Set(["audit_integrity_unavailable", "kyc_unavailable", "quote_unavailable", "screening_unavailable"]);
+const documented503 = new Set(["audit_integrity_unavailable", "kyc_unavailable", "profile_unavailable", "quote_unavailable", "screening_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 let startedAt;
@@ -321,7 +321,16 @@ describe("bounded load on the dev stack", () => {
     assert.deepEqual(countBy(results, "quote"), { 200: total / 9 });
     assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 9 });
     assert.deepEqual(countBy(results, "notifications"), { 200: total / 9 });
-    assert.deepEqual(countBy(results, "profile"), { 200: total / 9 });
+    // /bff/profile consults upstream for gated sessions too
+    // (customer.profile.read is never denied), so under the saturated
+    // customer-api rate limit some reads degrade to the documented 503
+    // profile_unavailable instead of 200.
+    const profiles = countBy(results, "profile");
+    assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 9);
+    assert.ok((profiles[503] ?? 0) > 0, "customer-api rate limit applies to profile");
+    for (const result of results.filter((entry) => entry.kind === "profile" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "profile_unavailable" });
+    }
     assert.deepEqual(countBy(results, "activity"), { 200: total / 9 });
     const submits = countBy(results, "kyc-submit");
     assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 9);
@@ -334,10 +343,10 @@ describe("bounded load on the dev stack", () => {
         assert.ok(result.body.items.length <= maxActivityPerSubject);
         assert.equal(result.body.executable, false);
       }
-      if (result.kind === "profile") assert.ok(["connected", "unavailable"].includes(result.body.apiAccess.status));
+      if (result.kind === "profile" && result.status === 200) {
+        assert.ok(["connected", "unavailable"].includes(result.body.apiAccess.status));
+      }
     }
-    const profiles = results.filter((result) => result.kind === "profile");
-    assert.ok(profiles.some((result) => result.body.apiAccess.status === "unavailable"), "customer-api rate limit applies");
 
     assert.deepEqual(countBy(results, "screening"), {
       202: maxNewScreeningsPerWindow,

@@ -637,6 +637,131 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.kyc("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads the profile with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      customer_ref: "SC-DEV-PRF01",
+      display_name: "Customer 0123abcd",
+      locale: "ru",
+      registered_at: "2026-09-01T12:00:00.000Z"
+    };
+    await withFakeApi(
+      () => view,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.profile("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", view });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps every profile read failure to unavailable, including an upstream 403", async () => {
+    const key = randomBytes(32).toString("hex");
+    // customer.profile.read is granted at every upstream session status, so
+    // even a 403 is contract drift, not a real capability denial: there is no
+    // denied arm and every non-200 outcome fails closed to "unavailable".
+    for (const status of [403, 401, 429, 500]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.profile("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "unavailable", String(status));
+        assert.deepEqual(result, { status: "unavailable" });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed profile bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const view = {
+      mode: "test",
+      customer_ref: "SC-DEV-PRF01",
+      display_name: "Customer 0123abcd",
+      locale: "ru",
+      registered_at: "2026-09-01T12:00:00.000Z"
+    };
+    for (const body of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, customer_ref: "SC-PROD-PRF01" },
+      { ...view, customer_ref: "SC-DEV-prf01" },
+      { ...view, customer_ref: "SC-DEV-PRF011" },
+      { ...view, customer_ref: 42 },
+      { ...view, display_name: "" },
+      { ...view, display_name: "Тестовый клиент" },
+      { ...view, display_name: "Customer 0123ABCD" },
+      { ...view, display_name: "Customer 0123abc" },
+      { ...view, display_name: 42 },
+      { ...view, locale: "de" },
+      { ...view, locale: "RU" },
+      { ...view, locale: 42 },
+      { ...view, registered_at: "tomorrow" },
+      { ...view, registered_at: "2026-09-01T12:00:00Z" },
+      { ...view, registered_at: "2026-13-40T12:00:00.000Z" },
+      { ...view, registered_at: 42 },
+      { mode: "test", customer_ref: "SC-DEV-PRF01", display_name: "Customer 0123abcd", locale: "ru" },
+      ["profile"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.profile("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.profile("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("reads the profile from the dev customer-api without a KYC gate and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // customer.profile.read is granted at every session status: the dev
+      // customer-api answers 200 with the deterministic synthetic identity
+      // view even though its KYC directory marks every subject unverified.
+      const first = await client.profile("tg-0123456789abcdef", Date.now());
+      assert.equal(first.status, "ok");
+      if (first.status !== "ok") return;
+      assert.equal(first.view.mode, "test");
+      assert.match(first.view.customer_ref, /^SC-DEV-[0-9A-Z]{5}$/);
+      assert.match(first.view.display_name, /^Customer [0-9a-f]{8}$/);
+      assert.match(first.view.locale, /^(en|ky|ru)$/);
+      assert.match(first.view.registered_at, isoTimestamp);
+      assert.deepEqual(await client.profile("tg-0123456789abcdef", Date.now()), first);
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.profile("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

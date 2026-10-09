@@ -78,12 +78,32 @@ export type CustomerApiKyc =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiProfileView {
+  mode: "test";
+  customer_ref: string;
+  display_name: string;
+  locale: "en" | "ky" | "ru";
+  registered_at: string;
+}
+
+/**
+ * The profile read has no "denied" arm either: customer.profile.read is
+ * granted at every session KYC status upstream (like customer.kyc.read), so
+ * a 403 can only mean contract drift — it maps to "unavailable" with every
+ * other non-200 outcome.
+ */
+export type CustomerApiProfile =
+  | { status: "ok"; view: CustomerApiProfileView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
+  profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -267,6 +287,34 @@ function isCodeList(value: unknown, allowed: readonly string[]): boolean {
   );
 }
 
+const profileLocales: readonly CustomerApiProfileView["locale"][] = ["en", "ky", "ru"];
+const profileCustomerRefPattern = /^SC-DEV-[0-9A-Z]{5}$/;
+const profileDisplayNamePattern = /^Customer [0-9a-f]{8}$/;
+
+function parseProfileView(value: unknown): CustomerApiProfileView | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["customer_ref", "display_name", "locale", "mode", "registered_at"])
+    || value.mode !== "test"
+    || typeof value.customer_ref !== "string"
+    || !profileCustomerRefPattern.test(value.customer_ref)
+    || typeof value.display_name !== "string"
+    || !profileDisplayNamePattern.test(value.display_name)
+    || typeof value.locale !== "string"
+    || !profileLocales.includes(value.locale as CustomerApiProfileView["locale"])
+    || !isIsoTimestamp(value.registered_at)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    mode: "test",
+    customer_ref: value.customer_ref,
+    display_name: value.display_name,
+    locale: value.locale as CustomerApiProfileView["locale"],
+    registered_at: value.registered_at
+  });
+}
+
 function parseKycStatusView(value: unknown): CustomerApiKycStatusView | undefined {
   if (
     !isRecord(value)
@@ -324,12 +372,13 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets, notifications and kyc GETs, never
- * sends X-Device-Id and fails closed to "unavailable" on any unexpected
- * response, including a non-JSON content type or a body above
+ * customer session, capabilities, wallets, notifications, kyc and profile
+ * GETs, never sends X-Device-Id and fails closed to "unavailable" on any
+ * unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
- * capability gate) surfaces as "denied"; the KYC status read is never gated
- * upstream, so it reports every non-200 outcome as "unavailable".
+ * capability gate) surfaces as "denied"; the KYC status and profile reads
+ * are never gated upstream, so they report every non-200 outcome as
+ * "unavailable".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -340,7 +389,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
-      kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" })
+      kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
+      profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" })
     });
   }
 
@@ -459,5 +509,23 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, notifications, kyc });
+  async function profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/profile", token, nowMs);
+      const view = parseProfileView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      // No 403 carve-out, like kyc(): the read is granted at every upstream
+      // session status, so a refusal is contract drift, not a real denial.
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets, notifications, kyc, profile });
 }
