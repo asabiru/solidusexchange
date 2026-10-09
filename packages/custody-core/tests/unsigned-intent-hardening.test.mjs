@@ -12,6 +12,7 @@ import {
 import {
   computeIntentDigest,
   prepareUnsignedTransactionIntent,
+  snapshotPlainData,
   verifyUnsignedTransactionIntent
 } from "../src/unsigned-intent.mjs";
 
@@ -469,6 +470,220 @@ test("withdrawal approval event cannot cause itself or reuse the prepared event 
         })
       }),
     /cannot cause itself/u
+  );
+});
+
+test("checker approval must not predate the maker approval", () => {
+  const custodyCommand = command();
+  const intentDigest = computeIntentDigest(custodyCommand, policy);
+  assert.throws(
+    () =>
+      prepareUnsignedTransactionIntent({
+        approvals: [
+          approval(intentDigest, { approved_at: "2026-10-01T12:01:30.000Z" }),
+          approval(intentDigest, {
+            approval_id: "approval_002",
+            approved_at: "2026-10-01T12:01:00.000Z",
+            evidence_digest: "b".repeat(64),
+            role: "custody_checker",
+            step_up_grant_id: "step_up_grant_002",
+            subject_reference: "operator_ref_002"
+          })
+        ],
+        command: custodyCommand,
+        now,
+        policy
+      }),
+    /checker approval must not predate the maker approval/u
+  );
+});
+
+test("custody inputs admit only JSON-representable plain data", () => {
+  for (const leaf of [
+    undefined,
+    Number.NaN,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    Symbol("leaf"),
+    10n
+  ]) {
+    assert.throws(
+      () => computeIntentDigest(command({ amount: leaf }), policy),
+      /must be plain data/u,
+      `leaf=${String(leaf)}`
+    );
+    assert.throws(
+      () => prepareUnsignedTransactionIntent({
+        approvals: approvals("0".repeat(64), { subject_reference: "operator_ref_002", approval_id: "approval_002", evidence_digest: "b".repeat(64), step_up_grant_id: "step_up_grant_002", role: "custody_checker" }),
+        command: command({ amount: leaf }),
+        now,
+        policy
+      }),
+      /must be plain data/u,
+      `prepare leaf=${String(leaf)}`
+    );
+  }
+  assert.throws(
+    () => snapshotPlainData({ nested: [{ gone: undefined }] }),
+    /must be plain data/u
+  );
+});
+
+test("command correlation id must match the UUIDv7 outbox evidence bound", () => {
+  assert.throws(
+    () => prepare({ correlation_id: "123e4567-e89b-42d3-a456-426614174000" }),
+    /correlation_id must be a UUIDv7/u
+  );
+});
+
+test("withdrawal approval causation cannot reference the prepared event", () => {
+  const intent = prepare();
+  assert.throws(
+    () =>
+      createCustodyIntentPreparedEvent({
+        context: context(),
+        intent,
+        policy,
+        withdrawalApprovedEvent: withdrawalApprovedEvent(intent, {
+          causation_id: "018f3f8a-0017-7000-8000-000000000017"
+        })
+      }),
+    /causation cannot reference the prepared event/u
+  );
+});
+
+function distinctSecondCommand(overrides = {}) {
+  return {
+    correlation_id: "018f3f8a-4000-7000-8000-000000000014",
+    idempotency_key: "custody_idempotency_002",
+    intent_id: "custody_intent_002",
+    withdrawal_id: "withdrawal_002",
+    ...overrides
+  };
+}
+
+function distinctSecondIntent(makerOverrides = {}, checkerOverrides = {}) {
+  const custodyCommand = command(distinctSecondCommand());
+  const intentDigest = computeIntentDigest(custodyCommand, policy);
+  return prepareUnsignedTransactionIntent({
+    approvals: [
+      approval(intentDigest, {
+        approval_id: "approval_101",
+        evidence_digest: "c".repeat(64),
+        step_up_grant_id: "step_up_grant_101",
+        subject_reference: "operator_ref_101",
+        ...makerOverrides
+      }),
+      approval(intentDigest, {
+        approval_id: "approval_102",
+        approved_at: "2026-10-01T12:01:30.000Z",
+        evidence_digest: "d".repeat(64),
+        role: "custody_checker",
+        step_up_grant_id: "step_up_grant_102",
+        subject_reference: "operator_ref_102",
+        ...checkerOverrides
+      })
+    ],
+    command: custodyCommand,
+    now,
+    policy
+  });
+}
+
+function secondProjection(intent, eventOverrides = {}) {
+  return {
+    context: context({ event_id: "018f3f8a-0018-7000-8000-000000000018" }),
+    intent,
+    policy,
+    withdrawalApprovedEvent: withdrawalApprovedEvent(intent, {
+      event_id: "018f3f8a-0019-7000-8000-000000000019",
+      ...eventOverrides
+    })
+  };
+}
+
+function seededRegistry() {
+  const registry = createCustodyProjectionRegistry();
+  const firstIntent = prepare();
+  registry.project({
+    context: context(),
+    intent: firstIntent,
+    policy,
+    withdrawalApprovedEvent: withdrawalApprovedEvent(firstIntent)
+  });
+  return registry;
+}
+
+test("projection registry consumes the withdrawal approval set once", () => {
+  const registry = seededRegistry();
+  const secondIntent = distinctSecondIntent();
+  assert.throws(
+    () => registry.project(secondProjection(secondIntent)),
+    /withdrawal approval set has already been consumed/u
+  );
+});
+
+test("projection registry consumes each approval identity once", () => {
+  for (const [makerOverrides, expected] of [
+    [{ approval_id: "approval_001" }, /custody approval has already been consumed/u],
+    [{ step_up_grant_id: "step_up_grant_001" }, /custody step-up grant has already been consumed/u],
+    [{ evidence_digest: "a".repeat(64) }, /custody approval evidence digest has already been consumed/u]
+  ]) {
+    const registry = seededRegistry();
+    const secondIntent = distinctSecondIntent(makerOverrides);
+    assert.throws(
+      () =>
+        registry.project(
+          secondProjection(secondIntent, {
+            payload: {
+              approval_id: "approval_set_002",
+              approver_count: secondIntent.approvals.length,
+              evidence_digest: secondIntent.approval_evidence_digest,
+              withdrawal_id: secondIntent.command.withdrawal_id
+            }
+          })
+        ),
+      expected
+    );
+  }
+  for (const [checkerOverrides, expected] of [
+    [{ approval_id: "approval_002" }, /custody approval has already been consumed/u],
+    [{ step_up_grant_id: "step_up_grant_002" }, /custody step-up grant has already been consumed/u],
+    [{ evidence_digest: "b".repeat(64) }, /custody approval evidence digest has already been consumed/u]
+  ]) {
+    const registry = seededRegistry();
+    const secondIntent = distinctSecondIntent({}, checkerOverrides);
+    assert.throws(
+      () =>
+        registry.project(
+          secondProjection(secondIntent, {
+            payload: {
+              approval_id: "approval_set_002",
+              approver_count: secondIntent.approvals.length,
+              evidence_digest: secondIntent.approval_evidence_digest,
+              withdrawal_id: secondIntent.command.withdrawal_id
+            }
+          })
+        ),
+      expected
+    );
+  }
+});
+
+test("projection registry accepts a distinct approval set for a new withdrawal", () => {
+  const registry = seededRegistry();
+  const secondIntent = distinctSecondIntent();
+  assert.doesNotThrow(() =>
+    registry.project(
+      secondProjection(secondIntent, {
+        payload: {
+          approval_id: "approval_set_002",
+          approver_count: secondIntent.approvals.length,
+          evidence_digest: secondIntent.approval_evidence_digest,
+          withdrawal_id: secondIntent.command.withdrawal_id
+        }
+      })
+    )
   );
 });
 

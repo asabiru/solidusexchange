@@ -115,6 +115,10 @@ function verifyWithdrawalApprovedEvent({ event, intent, targetEventId, targetOcc
     event.causation_id !== event.event_id,
     "withdrawal approval event cannot cause itself"
   );
+  assert(
+    event.causation_id !== targetEventId,
+    "withdrawal approval causation cannot reference the prepared event"
+  );
   assert(event.event_id !== targetEventId, "custody event must not reuse approval event_id");
   assert(event.event_type === "WithdrawalApproved", "source event must be WithdrawalApproved");
   assert(event.event_version === 1, "withdrawal approval event version must be 1");
@@ -250,6 +254,10 @@ export function createCustodyProjectionRegistry() {
   const approvalEventIds = new Map();
   const withdrawalIds = new Map();
   const custodyIntentIds = new Map();
+  const approvalSetIds = new Map();
+  const approvalIds = new Map();
+  const stepUpGrantIds = new Map();
+  const evidenceDigests = new Map();
 
   function project(requestInput) {
     const request = snapshotPlainData(requestInput, "custody projection request");
@@ -278,9 +286,31 @@ export function createCustodyProjectionRegistry() {
         custodyIntentIds,
         event.payload.custody_intent_id,
         "custody intent already has a projection"
+      ],
+      [
+        approvalSetIds,
+        request.withdrawalApprovedEvent.payload.approval_id,
+        "withdrawal approval set has already been consumed"
       ]
     ]) {
       assert(!registry.has(identity), message);
+    }
+    for (const approval of request.intent.approvals) {
+      for (const [registry, identity, message] of [
+        [approvalIds, approval.approval_id, "custody approval has already been consumed"],
+        [
+          stepUpGrantIds,
+          approval.step_up_grant_id,
+          "custody step-up grant has already been consumed"
+        ],
+        [
+          evidenceDigests,
+          approval.evidence_digest,
+          "custody approval evidence digest has already been consumed"
+        ]
+      ]) {
+        assert(!registry.has(identity), message);
+      }
     }
 
     const record = deepFreeze({
@@ -292,6 +322,15 @@ export function createCustodyProjectionRegistry() {
     approvalEventIds.set(event.causation_id, idempotencyKey);
     withdrawalIds.set(event.aggregate_id, idempotencyKey);
     custodyIntentIds.set(event.payload.custody_intent_id, idempotencyKey);
+    approvalSetIds.set(
+      request.withdrawalApprovedEvent.payload.approval_id,
+      idempotencyKey
+    );
+    for (const approval of request.intent.approvals) {
+      approvalIds.set(approval.approval_id, idempotencyKey);
+      stepUpGrantIds.set(approval.step_up_grant_id, idempotencyKey);
+      evidenceDigests.set(approval.evidence_digest, idempotencyKey);
+    }
     return event;
   }
 
