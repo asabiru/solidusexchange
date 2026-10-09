@@ -77,7 +77,7 @@ Mutation: synthetic result set — every upstream-backed read 503, every submit 
 
 - The BFF `access()` check validates session shape (exact keys, subject match, `actor_type === "customer"`) but does not re-check `expires_at` freshness — the upstream is the authority on session validity; the stale-expiry fixture (defect 3) was the only place this gap could hide, and it is now fixed.
 - The load burst's `503 > 0` expectations for upstream-backed kinds assume the customer-api rate limit saturates under the burst — they now additionally require `200 > 0`, so both directions of the mix are pinned.
-- `validBody` still returns the same canned shapes for `/session`+`/capabilities`+7 collection arms; a future upstream path must add an explicit arm — that is now enforced by the 404 default (fail closed on drift rather than silently succeeding).
+- `validBody` still returns the same canned shapes for `/session`+`/capabilities`+8 collection arms (including `/quotes` after the main merge); a future upstream path the BFF learns to call must add an explicit arm — that is now enforced by the 404 default (fail closed on drift rather than silently succeeding). Upstream paths the BFF does not call (e.g. `/exchange-orders`) stay 404 by design.
 
 ## Test changes
 
