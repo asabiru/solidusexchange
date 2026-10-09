@@ -592,6 +592,53 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  PaymentsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "payments"],
+    properties: {
+      mode: { const: "test" },
+      payments: {
+        type: "array",
+        items: { $ref: "#/components/schemas/PaymentView" }
+      }
+    }
+  },
+  PaymentView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "payment_id",
+      "asset",
+      "method",
+      "status",
+      "amount",
+      "fee_amount",
+      "total_amount",
+      "recipient_reference",
+      "provider_reference",
+      "created_at",
+      "updated_at",
+      "posting"
+    ],
+    properties: {
+      payment_id: { type: "string", pattern: "^pay_[0-9a-f]{24}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      method: { const: "sbp" },
+      status: {
+        type: "string",
+        enum: ["created", "processing", "completed", "failed", "reversed", "cancelled", "expired"]
+      },
+      amount: { $ref: "#/$defs/decimalAmount" },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      total_amount: { $ref: "#/$defs/decimalAmount" },
+      recipient_reference: { type: "string", pattern: "^recipient_ref_[a-z0-9_]{2,32}$" },
+      provider_reference: { type: ["string", "null"], pattern: "^SIMBANK[0-9A-F]{16}$" },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -808,7 +855,6 @@ function checkOpenApi() {
     [
       "/api/v1/customer/auth",
       "/api/v1/customer/cards",
-      "/api/v1/customer/payments",
       "/api/v1/customer/users"
     ],
     "Planned customer namespaces"
@@ -844,6 +890,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", "/api/v1/customer/withdrawals"],
     ["getCustomerQuotes", "/api/v1/customer/quotes"],
     ["getCustomerExchangeOrders", "/api/v1/customer/exchange-orders"],
+    ["getCustomerPayments", "/api/v1/customer/payments"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -874,6 +921,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", "#/components/schemas/WithdrawalsView"],
     ["getCustomerQuotes", "#/components/schemas/QuotesView"],
     ["getCustomerExchangeOrders", "#/components/schemas/ExchangeOrdersView"],
+    ["getCustomerPayments", "#/components/schemas/PaymentsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

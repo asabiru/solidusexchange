@@ -201,6 +201,24 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The payments collection read is KYC-gated like the deposits, withdrawals,
+  // wallets, notifications, quotes and exchange-orders reads, so it declares
+  // a 403: payments are an asset/activity collection (the outbound fiat
+  // payment instructions a subject issued), not an onboarding or identity
+  // surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerPayments",
+    method: "GET",
+    path: "/api/v1/customer/payments",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
   })
 ]);
 
