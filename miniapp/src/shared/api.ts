@@ -315,6 +315,35 @@ export interface SupportRequestsView {
   requests: readonly SupportRequestView[];
 }
 
+/** Mirrors the bank simulator's PaymentStatusName set exactly. */
+export type DepositStatus =
+  | "awaiting_payment"
+  | "payment_received"
+  | "partial_payment"
+  | "duplicate_payment"
+  | "payment_reversed"
+  | "expired_no_payment";
+
+export interface DepositView {
+  id: string;
+  asset: AssetCode;
+  method: "sbp";
+  status: DepositStatus;
+  expected: string;
+  received: string;
+  reversed: string;
+  paymentReference: string;
+  createdAt: number;
+  updatedAt: number;
+  posting: "none";
+}
+
+export interface DepositsView {
+  mode: "test";
+  kyc: KycStatus;
+  deposits: readonly DepositView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;

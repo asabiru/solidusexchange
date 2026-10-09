@@ -243,6 +243,7 @@ describe("Mini App BFF security headers on every route", () => {
           return access;
         },
         wallets: async () => ({ status: "not-configured" }),
+        deposits: async () => ({ status: "not-configured" }),
         notifications: async () => ({ status: "not-configured" }),
         kyc: async () => ({ status: "not-configured" }),
         profile: async () => ({ status: "not-configured" }),
@@ -294,6 +295,7 @@ describe("Mini App BFF security headers on every route", () => {
       "POST /bff/auth/dev-session": () => postJson(port, "/bff/auth/dev-session", { kyc: "verified" }),
       "POST /bff/auth/logout": async () => postJson(port, "/bff/auth/logout", {}, { cookie: await devLogin("verified") }),
       "GET /bff/wallet": () => get("/bff/wallet"),
+      "GET /bff/deposits": () => get("/bff/deposits"),
       "GET /bff/operations": () => get("/bff/operations"),
       "GET /bff/operations/:id": async () => {
         const list = JSON.parse((await get("/bff/operations")).body) as { operations: { id: string }[] };
