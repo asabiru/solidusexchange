@@ -38,7 +38,8 @@ function walletStub(result: CustomerApiWallets | (() => Promise<CustomerApiWalle
       return typeof result === "function" ? result() : result;
     },
     notifications: async () => ({ status: "not-configured" }),
-    kyc: async () => ({ status: "not-configured" })
+    kyc: async () => ({ status: "not-configured" }),
+    profile: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }

@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -574,8 +574,8 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-client.test.ts": {
-      "minLines": 624,
-      "minCases": 20
+      "minLines": 739,
+      "minCases": 24
     },
     "miniapp/src/server/dev-server.test.ts": {
       "minLines": 51,
@@ -586,7 +586,7 @@
       "minCases": 18
     },
     "miniapp/src/server/integration.test.ts": {
-      "minLines": 76,
+      "minLines": 78,
       "minCases": 3
     },
     "miniapp/src/server/kyc-routes.test.ts": {
@@ -594,7 +594,7 @@
       "minCases": 10
     },
     "miniapp/src/server/kyc-status-upstream.test.ts": {
-      "minLines": 240,
+      "minLines": 241,
       "minCases": 8
     },
     "miniapp/src/server/kyc.test.ts": {
@@ -606,7 +606,7 @@
       "minCases": 4
     },
     "miniapp/src/server/notifications-upstream.test.ts": {
-      "minLines": 235,
+      "minLines": 236,
       "minCases": 7
     },
     "miniapp/src/server/notifications.test.ts": {
@@ -617,6 +617,10 @@
       "minLines": 366,
       "minCases": 13
     },
+    "miniapp/src/server/profile-upstream.test.ts": {
+      "minLines": 225,
+      "minCases": 7
+    },
     "miniapp/src/server/provider-quotes.test.ts": {
       "minLines": 114,
       "minCases": 8
@@ -626,7 +630,7 @@
       "minCases": 8
     },
     "miniapp/src/server/security-headers.test.ts": {
-      "minLines": 477,
+      "minLines": 478,
       "minCases": 12
     },
     "miniapp/src/server/server.test.ts": {
@@ -646,7 +650,7 @@
       "minCases": 15
     },
     "miniapp/src/server/wallet-routes.test.ts": {
-      "minLines": 199,
+      "minLines": 200,
       "minCases": 7
     },
     "miniapp/src/shared/decimal.test.ts": {
@@ -794,15 +798,15 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 563,
+      "minLines": 571,
       "minCases": 17
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 350,
+      "minLines": 355,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 704,
+      "minLines": 729,
       "minCases": 19
     },
     "packages/e2e-dev/tests/stack.mjs": {

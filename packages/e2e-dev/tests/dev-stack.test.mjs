@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
+import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
 import { customerApiSubject } from "../../../miniapp/.server-dist/server/customer-api-client.js";
 import { signInitData } from "../../../miniapp/.server-dist/server/init-data.js";
@@ -312,7 +313,18 @@ describe("customer journey through the Mini App BFF", () => {
   });
 
   it("serves the profile through customer-api synthetic auth", async () => {
+    // /bff/profile consults the customer-api contract for every session
+    // (customer.profile.read is never denied upstream): the synthetic
+    // directory's display_name and customer_ref overlay the app view, while
+    // locale and registered_at have no app counterpart and are dropped.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticProfileDirectory().viewFor(customerApiSubject(devSubject));
     const profile = await getMiniapp("/bff/profile", cookie);
+    assert.deepEqual(Object.keys(profile).sort(), [
+      "apiAccess", "customerRef", "displayName", "fees", "kyc", "limits", "security"
+    ]);
+    assert.equal(profile.displayName, upstreamView.display_name);
+    assert.equal(profile.customerRef, upstreamView.customer_ref);
     assert.equal(profile.kyc.state, "verified");
     assert.equal(profile.apiAccess.status, "connected");
     assert.ok(Array.isArray(profile.apiAccess.granted));
