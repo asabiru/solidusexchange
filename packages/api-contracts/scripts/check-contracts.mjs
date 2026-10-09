@@ -538,6 +538,60 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  ExchangeOrdersView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "orders"],
+    properties: {
+      mode: { const: "test" },
+      orders: {
+        type: "array",
+        items: { $ref: "#/components/schemas/ExchangeOrderView" }
+      }
+    }
+  },
+  ExchangeOrderView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "order_id",
+      "pair",
+      "base_asset",
+      "quote_asset",
+      "side",
+      "order_type",
+      "base_amount",
+      "price",
+      "quote_amount",
+      "fee_bps",
+      "fee_amount",
+      "total_quote_amount",
+      "status",
+      "created_at",
+      "updated_at",
+      "execution",
+      "posting"
+    ],
+    properties: {
+      order_id: { type: "string", pattern: "^ord_[0-9a-f]{24}$" },
+      pair: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      side: { type: "string", enum: ["buy", "sell"] },
+      order_type: { type: "string", enum: ["market", "limit"] },
+      base_amount: { $ref: "#/$defs/decimalAmount" },
+      price: { $ref: "#/$defs/decimalAmount" },
+      quote_amount: { $ref: "#/$defs/decimalAmount" },
+      fee_bps: { type: "integer", minimum: 0, maximum: 1000 },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      total_quote_amount: { $ref: "#/$defs/decimalAmount" },
+      status: { type: "string", enum: ["open", "cancelled", "expired", "rejected"] },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      execution: { const: "not_supported" },
+      posting: { const: "none" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -754,7 +808,6 @@ function checkOpenApi() {
     [
       "/api/v1/customer/auth",
       "/api/v1/customer/cards",
-      "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
       "/api/v1/customer/users"
     ],
@@ -790,6 +843,7 @@ function checkOpenApi() {
     ["getCustomerDeposits", "/api/v1/customer/deposits"],
     ["getCustomerWithdrawals", "/api/v1/customer/withdrawals"],
     ["getCustomerQuotes", "/api/v1/customer/quotes"],
+    ["getCustomerExchangeOrders", "/api/v1/customer/exchange-orders"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -819,6 +873,7 @@ function checkOpenApi() {
     ["getCustomerDeposits", "#/components/schemas/DepositsView"],
     ["getCustomerWithdrawals", "#/components/schemas/WithdrawalsView"],
     ["getCustomerQuotes", "#/components/schemas/QuotesView"],
+    ["getCustomerExchangeOrders", "#/components/schemas/ExchangeOrdersView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

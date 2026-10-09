@@ -10,6 +10,7 @@ import {
   PLATFORMS
 } from "./contract.mjs";
 import { validDepositsView } from "./deposits.mjs";
+import { validExchangeOrdersView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
 import {
   createRequestObserver,
@@ -46,6 +47,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./deposits.mjs").DepositDirectory} depositDirectory
  * @property {import("./withdrawals.mjs").WithdrawalDirectory} withdrawalDirectory
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
+ * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -221,6 +223,7 @@ export function createCustomerApiHandler({
   depositDirectory,
   withdrawalDirectory,
   quoteDirectory,
+  exchangeOrderDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -257,6 +260,9 @@ export function createCustomerApiHandler({
   }
   if (typeof quoteDirectory?.listFor !== "function") {
     throw new Error("A quote directory is required");
+  }
+  if (typeof exchangeOrderDirectory?.listFor !== "function") {
+    throw new Error("An exchange order directory is required");
   }
 
   /**
@@ -451,6 +457,24 @@ export function createCustomerApiHandler({
       const view = await quoteDirectory.listFor(principal.subject);
       if (!validQuotesView(view)) {
         throw new Error("Quote directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerExchangeOrders") {
+      // customer.exchange-orders.read is KYC-gated like
+      // deposits/withdrawals/quotes: exchange orders are an asset/activity
+      // collection (the order records the subject placed), so unverified
+      // and pending subjects are denied with the 403 envelope. The payload
+      // is synthetic and execution-free (posting "none", execution
+      // "not_supported") — it authorizes nothing.
+      if (!evaluation.granted.includes("customer.exchange-orders.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await exchangeOrderDirectory.listFor(principal.subject);
+      if (!validExchangeOrdersView(view)) {
+        throw new Error("Exchange order directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
