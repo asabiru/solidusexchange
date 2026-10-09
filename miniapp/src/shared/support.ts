@@ -7,6 +7,12 @@ export const supportCategories: readonly SupportCategory[] = Object.freeze([
   "complaint",
   "data_request"
 ]);
+export const supportStatuses: readonly SupportStatus[] = Object.freeze([
+  "received",
+  "in_review",
+  "answered",
+  "closed"
+]);
 
 export const maxSupportTopicLength = 120;
 export const maxSupportMessageLength = 1_000;
@@ -16,6 +22,10 @@ const messageForbidden = /[\p{Cs}\u2028\u2029\u202a-\u202e\u2066-\u2069]|(?!\n)\
 
 export function isSupportCategory(value: unknown): value is SupportCategory {
   return typeof value === "string" && (supportCategories as readonly string[]).includes(value);
+}
+
+export function isSupportStatus(value: unknown): value is SupportStatus {
+  return typeof value === "string" && (supportStatuses as readonly string[]).includes(value);
 }
 
 /** Plain single-line text: no control, bidi-override or unpaired surrogate characters. */

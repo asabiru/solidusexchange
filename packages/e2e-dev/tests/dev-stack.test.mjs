@@ -5,6 +5,7 @@ import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
+import { createSyntheticSupportDirectory } from "../../customer-api/src/support.mjs";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
 import { customerApiSubject } from "../../../miniapp/.server-dist/server/customer-api-client.js";
 import { signInitData } from "../../../miniapp/.server-dist/server/init-data.js";
@@ -329,6 +330,35 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(profile.apiAccess.status, "connected");
     assert.ok(Array.isArray(profile.apiAccess.granted));
     assert.equal(profile.apiAccess.commandsEnabled, false);
+  });
+
+  it("serves the support request list through customer-api synthetic auth", async () => {
+    // /bff/support/requests consults the customer-api contract for every
+    // session (customer.support.read is never denied upstream): the synthetic
+    // directory's tickets adapt onto the app's request shape — tck_* ids,
+    // camelCase fields, ISO times parsed to milliseconds.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticSupportDirectory().listFor(customerApiSubject(devSubject));
+    const requests = await getMiniapp("/bff/support/requests", cookie);
+    assert.deepEqual(Object.keys(requests).sort(), ["delivery", "mode", "requests"]);
+    assert.equal(requests.mode, "test");
+    assert.equal(requests.delivery, "disabled");
+    assert.deepEqual(
+      requests.requests,
+      upstreamView.tickets.map((ticket) => ({
+        id: ticket.ticket_id,
+        mode: "test",
+        delivery: "disabled",
+        category: ticket.category,
+        topic: ticket.topic,
+        message: ticket.message,
+        status: ticket.status,
+        timeline: ticket.timeline.map((entry) => ({ status: entry.status, at: Date.parse(entry.at) })),
+        complaintAcknowledged: ticket.complaint_acknowledged,
+        createdAt: Date.parse(ticket.created_at),
+        expiresAt: Date.parse(ticket.expires_at)
+      }))
+    );
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {

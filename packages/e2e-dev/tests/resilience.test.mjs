@@ -167,6 +167,29 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/support")) {
+      return {
+        mode: "test",
+        delivery: "disabled",
+        tickets: [
+          {
+            ticket_id: "tck_0123456789abcdef01234567",
+            category: "complaint",
+            topic: "Тестовый режим. Жалоба на обслуживание.",
+            message: "Тестовый режим. Синтетическая жалоба, её никто не получит.",
+            status: "in_review",
+            timeline: [
+              { status: "received", at: "2026-10-01T12:00:00.000Z" },
+              { status: "in_review", at: "2026-10-01T13:00:00.000Z" }
+            ],
+            complaint_acknowledged: true,
+            created_at: "2026-10-01T12:00:00.000Z",
+            expires_at: "2026-10-02T12:00:00.000Z"
+          }
+        ],
+        ...extra
+      };
+    }
     if (request.url.endsWith("/kyc")) {
       return {
         mode: "test",
@@ -307,6 +330,24 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function supportFailsClosed(label, sessionCookie) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/support/requests", { cookie: sessionCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("tck_"), false, label);
+    assert.equal(text.includes("ticket_id"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "support_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
   before(async () => {
     stub = createServer((request, response) => {
       const entry = { mode, closed: false };
@@ -384,6 +425,35 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(kyc.submittedAt, Date.parse("2026-10-01T12:00:00.000Z"));
     assert.equal(kyc.reviewDeadline, undefined);
     assert.deepEqual(await getJson(app, "/bff/kyc/status", cookie), kyc);
+    // The support request list consults upstream for gated sessions too
+    // (customer.support.read is never denied): the adapted view maps the
+    // contract snake_case ticket fields onto the app's request shape.
+    const requests = await getJson(app, "/bff/support/requests", cookie);
+    assert.equal(requests.mode, "test");
+    assert.equal(requests.delivery, "disabled");
+    assert.equal(requests.requests.length, 1);
+    assert.deepEqual(Object.keys(requests.requests[0]).sort(), [
+      "category",
+      "complaintAcknowledged",
+      "createdAt",
+      "delivery",
+      "expiresAt",
+      "id",
+      "message",
+      "mode",
+      "status",
+      "timeline",
+      "topic"
+    ]);
+    assert.equal(requests.requests[0].id, "tck_0123456789abcdef01234567");
+    assert.equal(requests.requests[0].status, "in_review");
+    assert.equal(requests.requests[0].complaintAcknowledged, true);
+    assert.equal(requests.requests[0].createdAt, Date.parse("2026-10-01T12:00:00.000Z"));
+    assert.deepEqual(requests.requests[0].timeline, [
+      { status: "received", at: Date.parse("2026-10-01T12:00:00.000Z") },
+      { status: "in_review", at: Date.parse("2026-10-01T13:00:00.000Z") }
+    ]);
+    assert.deepEqual(await getJson(app, "/bff/support/requests", verifiedCookie), requests);
   });
 
   it("degrades verified sessions' wallet and notifications on an upstream capability denial", async () => {
@@ -415,7 +485,8 @@ describe("Mini App BFF with a failing customer-api", () => {
     // A refused KYC status read is upstream contract drift (customer.kyc.read
     // is granted at every session status), so it fails closed for gated and
     // verified sessions alike rather than degrading in place. The same holds
-    // for the profile read (customer.profile.read is never denied either).
+    // for the profile and support reads (customer.profile.read and
+    // customer.support.read are never denied either).
     for (const sessionCookie of [verifiedCookie, cookie]) {
       const kycResponse = await call(app.base, "/bff/kyc/status", { cookie: sessionCookie });
       assert.equal(kycResponse.status, 503);
@@ -423,6 +494,9 @@ describe("Mini App BFF with a failing customer-api", () => {
       const profileResponse = await call(app.base, "/bff/profile", { cookie: sessionCookie });
       assert.equal(profileResponse.status, 503);
       assert.deepEqual(await readJson(profileResponse), { error: "profile_unavailable" });
+      const supportResponse = await call(app.base, "/bff/support/requests", { cookie: sessionCookie });
+      assert.equal(supportResponse.status, 503);
+      assert.deepEqual(await readJson(supportResponse), { error: "support_unavailable" });
     }
     assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
   });
@@ -448,6 +522,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       mode = name;
       await profileFailsClosed(`${name} gated`, cookie);
       await profileFailsClosed(`${name} verified`, verifiedCookie);
+      await supportFailsClosed(`${name} verified`, verifiedCookie);
+      await supportFailsClosed(`${name} gated`, cookie);
       await walletFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
@@ -461,6 +537,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       mode = name;
       const elapsed = await profileFailsClosed(`${name} gated`, cookie);
       assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
+      await supportFailsClosed(`${name} gated`, cookie);
       await walletFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
@@ -478,6 +555,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
+    assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");
   });
 });
 
@@ -485,11 +563,14 @@ describe("Mini App BFF with an unreachable customer-api", () => {
   const key = randomBytes(32).toString("hex");
 
   async function assertUnavailable(app, cookie, label) {
-    // The profile surface consults upstream for gated sessions too, so an
-    // unreachable customer-api fails it closed outright.
+    // The profile and support surfaces consult upstream for gated sessions
+    // too, so an unreachable customer-api fails them closed outright.
     const response = await call(app.base, "/bff/profile", { cookie });
     assert.equal(response.status, 503, label);
     assert.deepEqual(await readJson(response), { error: "profile_unavailable" }, label);
+    const support = await call(app.base, "/bff/support/requests", { cookie });
+    assert.equal(support.status, 503, label);
+    assert.deepEqual(await readJson(support), { error: "support_unavailable" }, label);
     await assertGated(app, cookie, label);
   }
 

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { ActivityKind, SupportRequestView, SupportTimelineEntry } from "../shared/api.js";
+import type { ActivityKind, SupportRequestView, SupportRequestsView, SupportTimelineEntry } from "../shared/api.js";
 import {
   type SupportCategory,
   type SupportStatus,
@@ -9,6 +9,53 @@ import {
 } from "../shared/support.js";
 
 export const supportIdPattern = /^sup_[0-9a-f]{24}$/;
+
+/** The customer-api support tickets contract shape (snake_case field names). */
+export interface ContractSupportTicket {
+  ticket_id: string;
+  category: SupportCategory;
+  topic: string;
+  message: string;
+  status: SupportStatus;
+  timeline: readonly { status: SupportStatus; at: string }[];
+  complaint_acknowledged: boolean;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ContractSupportTicketsView {
+  mode: "test";
+  delivery: "disabled";
+  tickets: readonly ContractSupportTicket[];
+}
+
+/**
+ * Adapts a validated customer-api SupportTicketsView into the app's requests
+ * view: ticket_id becomes the draft id (tck_* upstream), complaint_acknowledged
+ * becomes complaintAcknowledged, created_at/expires_at and each timeline entry's
+ * ISO `at` parse to milliseconds. The app's optional activityRef has no contract
+ * counterpart and stays absent.
+ */
+export function contractSupportRequestsView(view: ContractSupportTicketsView): SupportRequestsView {
+  return {
+    mode: "test",
+    delivery: "disabled",
+    requests: view.tickets.map((ticket) => ({
+      id: ticket.ticket_id,
+      mode: "test",
+      delivery: "disabled",
+      category: ticket.category,
+      topic: ticket.topic,
+      message: ticket.message,
+      status: ticket.status,
+      timeline: ticket.timeline.map((entry) => ({ status: entry.status, at: Date.parse(entry.at) })),
+      complaintAcknowledged: ticket.complaint_acknowledged,
+      createdAt: Date.parse(ticket.created_at),
+      expiresAt: Date.parse(ticket.expires_at)
+    }))
+  };
+}
+
 export const defaultMaxSupportPerSubject = 10;
 export const defaultMaxSupportTotal = 1_000;
 export const defaultSupportTtlMs = 24 * 60 * 60 * 1_000;
