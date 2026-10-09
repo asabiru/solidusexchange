@@ -34,10 +34,11 @@ test("only served read operations are ever granted", () => {
   assert.equal(gated, 2);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
-    // customer.kyc.read and customer.profile.read are granted at every KYC
-    // status: the status and profile reads are the onboarding/identity
-    // surface and must stay readable for unverified subjects.
-    const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read"];
+    // customer.kyc.read, customer.profile.read and customer.support.read are
+    // granted at every KYC status: the status, profile and support tickets
+    // reads are the onboarding/identity/service-requests surface and must
+    // stay readable for unverified subjects.
+    const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read"];
     if (kycStatus === "verified") {
       expected.push("customer.wallets.read", "customer.notifications.read");
     }
@@ -105,6 +106,13 @@ test("money-moving and balance capabilities reference limits and scope decisions
   assert.deepEqual(
     CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.profile.")).map((item) => item.capability),
     ["customer.profile.read"]
+  );
+  // The support namespace holds only the always-granted tickets read: it is
+  // not a money namespace and no financial capability exists for it.
+  assert.ok(!MONEY_NAMESPACES.includes("support"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.support.")).map((item) => item.capability),
+    ["customer.support.read"]
   );
   const withdrawals = financial.find((item) => item.capability === "customer.withdrawals.create");
   assert.deepEqual([...withdrawals.decisions], ["D-001", "D-002", "D-003", "D-011", "D-014"]);

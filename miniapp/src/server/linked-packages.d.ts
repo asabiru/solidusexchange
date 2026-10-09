@@ -361,6 +361,26 @@ declare module "@solidchange/customer-api/dev-server" {
           registered_at: string;
         }>;
       };
+      supportDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          delivery: "disabled";
+          tickets: ReadonlyArray<{
+            ticket_id: string;
+            category: "question" | "operation_problem" | "complaint" | "data_request";
+            topic: string;
+            message: string;
+            status: "received" | "in_review" | "answered" | "closed";
+            timeline: ReadonlyArray<{
+              status: "received" | "in_review" | "answered" | "closed";
+              at: string;
+            }>;
+            complaint_acknowledged: boolean;
+            created_at: string;
+            expires_at: string;
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

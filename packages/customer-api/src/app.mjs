@@ -19,6 +19,7 @@ import {
 import { validNotificationsView } from "./notifications.mjs";
 import { validProfileView } from "./profile.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
+import { validSupportTicketsView } from "./support.mjs";
 import { validWalletsView } from "./wallets.mjs";
 
 /** @typedef {import("node:http").IncomingMessage} IncomingMessage */
@@ -38,6 +39,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./notifications.mjs").NotificationDirectory} notificationDirectory
  * @property {import("./kyc.mjs").KycApplicationDirectory} kycApplicationDirectory
  * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
+ * @property {import("./support.mjs").SupportDirectory} supportDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -209,6 +211,7 @@ export function createCustomerApiHandler({
   notificationDirectory,
   kycApplicationDirectory,
   profileDirectory,
+  supportDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -233,6 +236,9 @@ export function createCustomerApiHandler({
   }
   if (typeof profileDirectory?.viewFor !== "function") {
     throw new Error("A profile directory is required");
+  }
+  if (typeof supportDirectory?.listFor !== "function") {
+    throw new Error("A support directory is required");
   }
 
   /**
@@ -364,6 +370,22 @@ export function createCustomerApiHandler({
       const view = await profileDirectory.viewFor(principal.subject);
       if (!validProfileView(view)) {
         throw new Error("Profile directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerSupport") {
+      // customer.support.read is granted for every KYC status: the tickets
+      // surface is the subject's own service-requests state and the miniapp
+      // serves it to kyc-gated sessions too. The check stays so a served
+      // route can never drift from the exposed capabilities.
+      if (!evaluation.granted.includes("customer.support.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await supportDirectory.listFor(principal.subject);
+      if (!validSupportTicketsView(view)) {
+        throw new Error("Support directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
