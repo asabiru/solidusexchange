@@ -64,6 +64,7 @@ import {
   createSupportDesk
 } from "./support.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
+import { contractWithdrawalsView, withdrawalsView } from "./withdrawals.js";
 import { syntheticData, walletView } from "./synthetic.js";
 
 export const sessionCookie = "solidchange_ma_session";
@@ -85,6 +86,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "POST", path: "/bff/auth/logout" },
   { method: "GET", path: "/bff/wallet" },
   { method: "GET", path: "/bff/deposits" },
+  { method: "GET", path: "/bff/withdrawals" },
   { method: "GET", path: "/bff/operations" },
   { method: "GET", path: "/bff/operations/:id" },
   { method: "GET", path: "/bff/profile" },
@@ -734,6 +736,29 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "deposits_unavailable" });
+      return;
+    }
+    if (path === "/bff/withdrawals") {
+      // Same gating as /bff/deposits: the local KYC gate and the standalone
+      // (unconfigured) dev BFF keep the synthetic withdrawals list; only a
+      // verified session with customer-api access reads the contract view. An
+      // upstream refusal degrades to the same emptied list a gated session
+      // sees (in place); any other upstream failure answers the sibling
+      // *_unavailable error shape.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, withdrawalsView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.withdrawals(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractWithdrawalsView(upstream.withdrawals, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, withdrawalsView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "withdrawals_unavailable" });
       return;
     }
     if (path === "/bff/operations") {
