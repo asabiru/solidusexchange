@@ -326,6 +326,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/deposits", "getCustomerDeposits"],
   ["/api/v1/customer/withdrawals", "getCustomerWithdrawals"],
   ["/api/v1/customer/quotes", "getCustomerQuotes"],
+  ["/api/v1/customer/exchange-orders", "getCustomerExchangeOrders"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -909,6 +910,86 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.QuoteView.properties.expires_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical exchange-orders views",
+  "Canonical ExchangeOrdersView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrdersView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical exchange-orders views",
+  "Canonical ExchangeOrdersView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrdersView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical exchange-order views",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical exchange-order pairs",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.properties.pair.enum.push("USDT/EUR");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects an executed canonical exchange-order status",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.properties.status.enum.push("filled");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects an executable canonical exchange-order",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.properties.execution.const = "supported";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical exchange-order amounts",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.properties.total_quote_amount = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical exchange-order timestamps",
+  "Canonical ExchangeOrderView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.ExchangeOrderView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

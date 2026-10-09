@@ -183,6 +183,24 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The exchange-orders collection read is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications and quotes reads, so it declares a
+  // 403: exchange orders are an asset/activity collection (the order records
+  // a subject placed), not an onboarding or identity surface (see
+  // capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerExchangeOrders",
+    method: "GET",
+    path: "/api/v1/customer/exchange-orders",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
   })
 ]);
 
