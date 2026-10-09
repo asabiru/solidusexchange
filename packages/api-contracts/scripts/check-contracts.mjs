@@ -164,6 +164,60 @@ const pinnedResponseSchemas = {
       hold: { $ref: "#/$defs/decimalAmount" }
     }
   },
+  NotificationsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "delivery", "unread", "notifications"],
+    properties: {
+      mode: { const: "test" },
+      delivery: { const: "disabled" },
+      unread: { type: "integer", minimum: 0 },
+      notifications: {
+        type: "array",
+        items: { $ref: "#/components/schemas/NotificationView" }
+      }
+    }
+  },
+  NotificationView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "notification_id",
+      "created_at",
+      "channel",
+      "template",
+      "locale",
+      "text",
+      "mode",
+      "delivered",
+      "read"
+    ],
+    properties: {
+      notification_id: { type: "string", pattern: "^ntf_[0-9a-f]{24}$" },
+      created_at: { type: "string", format: "date-time" },
+      channel: { const: "telegram-draft" },
+      template: {
+        type: "string",
+        enum: [
+          "session_login",
+          "kyc_submitted",
+          "kyc_in_review",
+          "kyc_approved",
+          "kyc_rejected",
+          "kyc_needs_more_data",
+          "kyc_timed_out",
+          "kyc_unavailable",
+          "support_received",
+          "complaint_received"
+        ]
+      },
+      locale: { const: "ru" },
+      text: boundedString,
+      mode: { const: "test" },
+      delivered: { const: false },
+      read: { type: "boolean" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -335,7 +389,6 @@ function checkOpenApi() {
       "/api/v1/customer/deposits",
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/kyc",
-      "/api/v1/customer/notifications",
       "/api/v1/customer/payments",
       "/api/v1/customer/quotes",
       "/api/v1/customer/support",
@@ -367,6 +420,7 @@ function checkOpenApi() {
     ["getCustomerSession", "/api/v1/customer/session"],
     ["getCustomerCapabilities", "/api/v1/customer/capabilities"],
     ["getCustomerWallets", "/api/v1/customer/wallets"],
+    ["getCustomerNotifications", "/api/v1/customer/notifications"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -389,6 +443,7 @@ function checkOpenApi() {
     ["getCustomerSession", "#/components/schemas/SessionView"],
     ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getCustomerWallets", "#/components/schemas/WalletsView"],
+    ["getCustomerNotifications", "#/components/schemas/NotificationsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

@@ -4,6 +4,7 @@ import { connect } from "node:net";
 import { createCustomerApiServer } from "../src/app.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
+import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticWalletDirectory } from "../src/wallets.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { conformanceErrors, createValidator, loadContract } from "./contract-validator.mjs";
@@ -45,6 +46,7 @@ export async function startTestServer(options = {}) {
     verifier: createSyntheticTokenVerifier({ key: TEST_KEY, clock }),
     kycDirectory: createSyntheticKycDirectory({ [VERIFIED_SUBJECT]: "verified" }),
     walletDirectory: createSyntheticWalletDirectory(),
+    notificationDirectory: createSyntheticNotificationDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options
