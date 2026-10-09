@@ -805,6 +805,156 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.quotes("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads exchange orders with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const orders = [
+      {
+        order_id: "ord_0123456789abcdef01234567",
+        pair: "USDT/RUB",
+        base_asset: "USDT",
+        quote_asset: "RUB",
+        side: "sell",
+        order_type: "limit",
+        base_amount: "25.000000",
+        price: "89.77500000",
+        quote_amount: "2244.37",
+        fee_bps: 30,
+        fee_amount: "6.74",
+        total_quote_amount: "2237.63",
+        status: "open",
+        created_at: "2026-10-02T14:05:00.000Z",
+        updated_at: "2026-10-02T14:05:00.000Z",
+        execution: "not_supported",
+        posting: "none"
+      }
+    ];
+    await withFakeApi(
+      (request) => ({ mode: "test", orders }),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.exchangeOrders("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result.orders, orders);
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream exchange-orders refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const orders = JSON.stringify({ mode: "test", orders: [] });
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER", orders }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.exchangeOrders("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed exchange-orders bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = {
+      order_id: "ord_0123456789abcdef01234567",
+      pair: "USDT/RUB",
+      base_asset: "USDT",
+      quote_asset: "RUB",
+      side: "sell",
+      order_type: "limit",
+      base_amount: "25.000000",
+      price: "89.77500000",
+      quote_amount: "2244.37",
+      fee_bps: 30,
+      fee_amount: "6.74",
+      total_quote_amount: "2237.63",
+      status: "open",
+      created_at: "2026-10-02T14:05:00.000Z",
+      updated_at: "2026-10-02T14:05:00.000Z",
+      execution: "not_supported",
+      posting: "none"
+    };
+    for (const body of [
+      { mode: "test", orders: "oops" },
+      { mode: "test", orders: [{ ...entry, extra: true }] },
+      { mode: "test", orders: [{ ...entry, order_id: "ord_bad" }] },
+      { mode: "test", orders: [{ ...entry, pair: "USDT/EUR" }] },
+      { mode: "test", orders: [{ ...entry, base_asset: "TON" }] },
+      { mode: "test", orders: [{ ...entry, quote_asset: "USDT" }] },
+      { mode: "test", orders: [{ ...entry, side: "hold" }] },
+      { mode: "test", orders: [{ ...entry, order_type: "stop" }] },
+      { mode: "test", orders: [{ ...entry, base_amount: "25.0000000" }] },
+      { mode: "test", orders: [{ ...entry, price: "89.775000000" }] },
+      { mode: "test", orders: [{ ...entry, quote_amount: "-2244.37" }] },
+      { mode: "test", orders: [{ ...entry, total_quote_amount: "2237.630" }] },
+      { mode: "test", orders: [{ ...entry, fee_bps: 30.5 }] },
+      { mode: "test", orders: [{ ...entry, fee_bps: 1001 }] },
+      { mode: "test", orders: [{ ...entry, quote_amount: "2244.38" }] },
+      { mode: "test", orders: [{ ...entry, fee_amount: "6.73" }] },
+      { mode: "test", orders: [{ ...entry, total_quote_amount: "2237.64" }] },
+      { mode: "test", orders: [{ ...entry, created_at: "not-a-date" }] },
+      { mode: "test", orders: [{ ...entry, updated_at: "2026-10-02" }] },
+      { mode: "test", orders: [{ ...entry, updated_at: "2026-10-02T14:04:00.000Z" }] },
+      { mode: "test", orders: [{ ...entry, status: "open", updated_at: "2026-10-02T14:06:00.000Z" }] },
+      { mode: "test", orders: [{ ...entry, status: "executed" }] },
+      { mode: "test", orders: [{ ...entry, status: "filled" }] },
+      { mode: "test", orders: [{ ...entry, execution: "supported" }] },
+      { mode: "test", orders: [{ ...entry, posting: "queued" }] },
+      { mode: "test", orders: [], extra: true },
+      { orders: [entry] },
+      { mode: "live", orders: [entry] },
+      ["orders"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.exchangeOrders("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.exchangeOrders("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api exchange-orders KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.exchange-orders.read is refused with 403.
+      assert.deepEqual(await client.exchangeOrders("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.exchangeOrders("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("reads notifications with the canonical headers through the contract seam", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");

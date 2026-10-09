@@ -40,6 +40,7 @@ function withdrawalsStub(result: CustomerApiWithdrawals | (() => Promise<Custome
       return typeof result === "function" ? result() : result;
     },
     quotes: async () => ({ status: "not-configured" }),
+    exchangeOrders: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

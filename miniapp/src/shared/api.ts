@@ -420,6 +420,36 @@ export interface QuotesView {
   quotes: readonly QuoteView[];
 }
 
+/** Mirrors the customer-api exchange-orders contract: non-executed orders only. */
+export type ExchangeOrderType = "market" | "limit";
+export type ExchangeOrderStatus = "open" | "cancelled" | "expired" | "rejected";
+
+export interface ExchangeOrderView {
+  id: string;
+  pair: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  side: QuoteSide;
+  orderType: ExchangeOrderType;
+  baseAmount: string;
+  price: string;
+  quoteAmount: string;
+  feeBps: number;
+  feeAmount: string;
+  totalQuoteAmount: string;
+  status: ExchangeOrderStatus;
+  createdAt: number;
+  updatedAt: number;
+  execution: "not_supported";
+  posting: "none";
+}
+
+export interface ExchangeOrdersView {
+  mode: "test";
+  kyc: KycStatus;
+  orders: readonly ExchangeOrderView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;
