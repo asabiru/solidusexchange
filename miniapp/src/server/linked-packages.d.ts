@@ -405,6 +405,40 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      withdrawalDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          withdrawals: ReadonlyArray<{
+            withdrawal_id: string;
+            asset: string;
+            network: string;
+            status:
+              | "draft"
+              | "screened"
+              | "pending_maker_approval"
+              | "pending_checker_approval"
+              | "unsigned_intent_ready"
+              | "broadcast"
+              | "confirmed"
+              | "rejected"
+              | "cancelled"
+              | "expired";
+            amount: string;
+            fee_amount: string;
+            destination_reference: string;
+            legs: ReadonlyArray<{
+              leg_id: string;
+              asset: string;
+              amount: string;
+              direction: "out";
+            }>;
+            created_at: string;
+            updated_at: string;
+            expires_at: string;
+            posting: "none";
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

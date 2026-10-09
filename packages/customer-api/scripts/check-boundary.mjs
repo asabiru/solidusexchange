@@ -67,7 +67,7 @@ for (const flag of ["financial_commands_enabled: false", "production_providers_e
   }
 }
 const paths = [...contractSource.matchAll(/path: "([^"]+)"/gu)].map((match) => match[1]).sort();
-const expected = ["/api/v1/customer/capabilities", "/api/v1/customer/deposits", "/api/v1/customer/kyc", "/api/v1/customer/notifications", "/api/v1/customer/profile", "/api/v1/customer/session", "/api/v1/customer/support", "/api/v1/customer/wallets", "/api/v1/meta"];
+const expected = ["/api/v1/customer/capabilities", "/api/v1/customer/deposits", "/api/v1/customer/kyc", "/api/v1/customer/notifications", "/api/v1/customer/profile", "/api/v1/customer/session", "/api/v1/customer/support", "/api/v1/customer/wallets", "/api/v1/customer/withdrawals", "/api/v1/meta"];
 if (JSON.stringify(paths) !== JSON.stringify(expected)) {
   errors.push(`src/contract.mjs must serve exactly ${expected.join(", ")}`);
 }

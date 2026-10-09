@@ -82,6 +82,16 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-011",
     "D-014"
   ]),
+  // The served withdrawals collection read is KYC-gated like the deposits,
+  // wallets and notifications reads: withdrawals are an asset/activity
+  // collection (the miniapp shows withdrawal activity only to verified
+  // sessions), not an onboarding or identity surface — unlike
+  // profile/kyc/support it must stay gated on a verified KYC status. The
+  // read is synthetic and carries no ledger effect (posting stays "none"),
+  // so it needs no open money-movement decisions: the unserved
+  // withdrawals.create below keeps the financial denial with its decision
+  // reasons.
+  entry("customer.withdrawals.read", "read", true, []),
   entry("customer.withdrawals.create", "financial", true, [
     "D-001",
     "D-002",
