@@ -404,7 +404,7 @@ export interface ReadonlyBackofficeRepository {
   fraudAlerts(): readonly FraudAlert[];
   approvals(): readonly ApprovalRow[];
   auditSource(): readonly AuditSourceEvent[];
-  subjectTimeline(ref: string): SubjectTimeline | undefined;
+  subjectTimeline(ref: string, allowedKinds: ReadonlySet<SubjectTimelineKind>): SubjectTimeline | undefined;
 }
 
 function deepFreeze<T>(value: T): T {
@@ -416,11 +416,20 @@ function deepFreeze<T>(value: T): T {
 }
 
 // Resolves a synthetic subject or customer reference (`sim-*`, `cust_*`,
-// `CUS-*`/`ORG-*`) to the customer ids it names, then aggregates every entity
-// row bound to those ids into one frozen, reverse-chronological feed. Returns
-// undefined when nothing matches, without revealing which collections were
-// searched. Read-only: no writes, no money movement, no status changes.
-function buildSubjectTimeline(ref: string): SubjectTimeline | undefined {
+// `CUS-*`/`ORG-*`) to the customer ids it names, then aggregates the entity
+// rows bound to those ids into one frozen, reverse-chronological feed. Entry
+// kinds are filtered by `allowedKinds` so a role sees only the domains its
+// capabilities already expose. Audit entries join only through the subject's
+// own resolved entity refs and customer ids — a bare entity id, ledger ref or
+// operator/service handle passed as `ref` resolves to nothing rather than
+// surfacing another subject's audit trail. Returns undefined when the ref
+// resolves to no customer and names no audit subject, without revealing which
+// collections were searched. Read-only: no writes, no money movement, no
+// status changes.
+function buildSubjectTimeline(
+  ref: string,
+  allowedKinds: ReadonlySet<SubjectTimelineKind>
+): SubjectTimeline | undefined {
   const allChecks: readonly ChatCheck[] = data.chatChecks;
   const allTickets: readonly SupportTicket[] = data.supportTickets;
   const allIntents: readonly WithdrawalIntent[] = data.withdrawalIntents;
@@ -430,26 +439,35 @@ function buildSubjectTimeline(ref: string): SubjectTimeline | undefined {
   const allAlerts: readonly FraudAlert[] = data.fraudAlerts;
   const allAudit: readonly AuditSourceEvent[] = data.auditSource;
 
-  const customerIds = new Set<string>([ref]);
+  const customerIds = new Set<string>();
   for (const row of [...allTickets, ...allIntents, ...allKyc, ...allAml, ...allInvestigations, ...allAlerts]) {
     if (row.subject === ref) customerIds.add(row.customerId);
+    if (row.customerId === ref) customerIds.add(ref);
   }
-  const byCustomer = (row: { subject: string; customerId: string }): boolean =>
-    row.subject === ref || customerIds.has(row.customerId);
+  for (const check of allChecks) {
+    if (check.senderCustomerId === ref || check.recipientCustomerId === ref) customerIds.add(ref);
+  }
+  for (const customer of data.customers) {
+    if (customer.id === ref) customerIds.add(ref);
+  }
 
-  const checks = allChecks.filter(
+  const byCustomer = (row: { subject: string; customerId: string }): boolean =>
+    customerIds.has(row.customerId);
+
+  const allowed = (kind: SubjectTimelineKind): boolean => allowedKinds.has(kind);
+  const checks = allowed("check") ? allChecks.filter(
     (check) =>
       customerIds.has(check.senderCustomerId)
       || (check.recipientCustomerId !== undefined && customerIds.has(check.recipientCustomerId))
-  );
-  const tickets = allTickets.filter(byCustomer);
-  const intents = allIntents.filter(byCustomer);
-  const kycCases = allKyc.filter(byCustomer);
-  const amlCases = allAml.filter(byCustomer);
-  const investigations = allInvestigations.filter(byCustomer);
-  const alerts = allAlerts.filter(byCustomer);
+  ) : [];
+  const tickets = allowed("support") ? allTickets.filter(byCustomer) : [];
+  const intents = allowed("withdrawal") ? allIntents.filter(byCustomer) : [];
+  const kycCases = allowed("kyc") ? allKyc.filter(byCustomer) : [];
+  const amlCases = allowed("aml") ? allAml.filter(byCustomer) : [];
+  const investigations = allowed("investigation") ? allInvestigations.filter(byCustomer) : [];
+  const alerts = allowed("fraud-alert") ? allAlerts.filter(byCustomer) : [];
 
-  const touched = new Set<string>([ref, ...customerIds]);
+  const entityRefs = new Set<string>(customerIds);
   for (const id of [
     ...checks.map((row) => row.id),
     ...tickets.map((row) => row.id),
@@ -459,12 +477,13 @@ function buildSubjectTimeline(ref: string): SubjectTimeline | undefined {
     ...investigations.map((row) => row.id),
     ...alerts.map((row) => row.id)
   ]) {
-    touched.add(id);
+    entityRefs.add(id);
   }
-  const audit = allAudit.filter((event) =>
-    touched.has(event.resource.split(":").pop() ?? "")
-    || touched.has(event.actor.split(":").pop() ?? "")
-  );
+  const audit = allowed("audit") ? allAudit.filter((event) =>
+    entityRefs.has(event.resource.split(":").pop() ?? "")
+    || event.resource === `subject:${ref}`
+    || (event.actor.startsWith("customer:") && customerIds.has(event.actor.split(":").pop() ?? ""))
+  ) : [];
 
   const entries: SubjectTimelineEntry[] = [
     ...checks.map((check) => ({
@@ -516,7 +535,7 @@ function buildSubjectTimeline(ref: string): SubjectTimeline | undefined {
       summary: `${event.action} · ${event.outcome}`
     }))
   ];
-  if (!entries.length) return undefined;
+  if (!entries.length && customerIds.size === 0) return undefined;
   entries.sort((a, b) =>
     b.at.localeCompare(a.at) || a.kind.localeCompare(b.kind) || a.ref.localeCompare(b.ref)
   );
@@ -1777,7 +1796,7 @@ const data = deepFreeze({
       occurredAt: "2026-09-28T12:46:10.000Z",
       actor: "service:payments-orchestration",
       action: "approval.requested",
-      resource: "withdrawal:WDL-991804",
+      resource: "withdrawal:WDR-991804",
       outcome: "recorded",
       evidenceDigest: "sha256:f07fd061c671"
     },
@@ -1786,7 +1805,7 @@ const data = deepFreeze({
       occurredAt: "2026-09-28T12:53:31.000Z",
       actor: "operator:aml-08",
       action: "evidence.reviewed",
-      resource: "withdrawal:WDL-991804",
+      resource: "withdrawal:WDR-991804",
       outcome: "reviewed",
       evidenceDigest: "sha256:96ff7d30da42"
     },

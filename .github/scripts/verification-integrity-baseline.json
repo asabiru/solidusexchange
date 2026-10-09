@@ -431,8 +431,8 @@
       "minCases": 2
     },
     "backoffice/src/server/audit-store.test.ts": {
-      "minLines": 47,
-      "minCases": 3
+      "minLines": 84,
+      "minCases": 5
     },
     "backoffice/src/server/bff-core.test.ts": {
       "minLines": 207,
@@ -487,16 +487,16 @@
       "minCases": 26
     },
     "backoffice/src/server/signing.test.ts": {
-      "minLines": 41,
-      "minCases": 2
+      "minLines": 62,
+      "minCases": 4
     },
     "backoffice/src/server/step-up.test.ts": {
       "minLines": 167,
       "minCases": 5
     },
     "backoffice/src/server/subjects.test.ts": {
-      "minLines": 256,
-      "minCases": 11
+      "minLines": 359,
+      "minCases": 15
     },
     "backoffice/src/server/support.test.ts": {
       "minLines": 192,

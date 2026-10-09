@@ -28,7 +28,7 @@ import {
 import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
 import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from "./support.js";
 import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
-import { isSubjectRef, subjectTimelineAccessEvent } from "./subjects.js";
+import { isSubjectRef, readableSubjectKinds, subjectTimelineAccessEvent } from "./subjects.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
 import {
   buildReport,
@@ -768,7 +768,7 @@ export function createBackofficeServer(
           json(response, 400, { error: "invalid_subject_ref" });
           return;
         }
-        const timeline = demoRepository.subjectTimeline(ref);
+        const timeline = demoRepository.subjectTimeline(ref, readableSubjectKinds(session.role));
         if (!timeline) {
           json(response, 404, { error: "subject_not_found" });
           return;

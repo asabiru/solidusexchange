@@ -6,6 +6,19 @@ import {
   verify
 } from "node:crypto";
 
+// The complete signed field set, sorted; an envelope with any extra or
+// missing top-level member is malformed.
+const ENVELOPE_FIELDS = [
+  "issuedAt",
+  "keyId",
+  "keyVersion",
+  "payload",
+  "requestId",
+  "resource",
+  "signature",
+  "signatureVersion"
+].sort().join(",");
+
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
   keyId: string;
@@ -157,8 +170,19 @@ export class EphemeralSigningKeyProvider {
   }
 
   verify<T>(envelope: SignedEnvelope<T>): boolean {
+    // Same strict shape the browser verifier enforces: exactly the eight
+    // signed fields, so unsigned extras can never ride inside a valid
+    // envelope.
+    const fields = Object.keys(envelope).sort().join(",");
+    if (fields !== ENVELOPE_FIELDS) return false;
     const key = this.#keys.find((candidate) => candidate.keyId === envelope.keyId);
-    if (!key || key.version !== envelope.keyVersion || envelope.signatureVersion !== 1) {
+    if (
+      !key
+      || !Number.isSafeInteger(envelope.keyVersion)
+      || envelope.keyVersion < 1
+      || key.version !== envelope.keyVersion
+      || envelope.signatureVersion !== 1
+    ) {
       return false;
     }
     return verify(
