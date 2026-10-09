@@ -381,6 +381,30 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      depositDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          deposits: ReadonlyArray<{
+            deposit_id: string;
+            asset: string;
+            method: "sbp";
+            status:
+              | "awaiting_payment"
+              | "payment_received"
+              | "partial_payment"
+              | "duplicate_payment"
+              | "payment_reversed"
+              | "expired_no_payment";
+            expected_amount: string;
+            received_total: string;
+            reversed_total: string;
+            payment_reference: string;
+            created_at: string;
+            updated_at: string;
+            posting: "none";
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

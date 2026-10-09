@@ -323,6 +323,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/kyc", "getCustomerKyc"],
   ["/api/v1/customer/profile", "getCustomerProfile"],
   ["/api/v1/customer/support", "getCustomerSupport"],
+  ["/api/v1/customer/deposits", "getCustomerDeposits"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -716,6 +717,66 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.TicketView.properties.created_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical deposits views",
+  "Canonical DepositsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical deposits views",
+  "Canonical DepositsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositsView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical deposit views",
+  "Canonical DepositView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical deposit statuses",
+  "Canonical DepositView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositView.properties.status.enum.push("confirmed");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical deposit amounts",
+  "Canonical DepositView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositView.properties.expected_amount = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical deposit timestamps",
+  "Canonical DepositView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.DepositView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );
