@@ -8,6 +8,7 @@ export type Capability =
   | "aml:read"
   | "investigations:read"
   | "fraud:read"
+  | "subjects:read"
   | "approvals:read"
   | "approvals:review"
   | "approvals:preview"
@@ -47,6 +48,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "aml:read",
       "investigations:read",
       "fraud:read",
+      "subjects:read",
       "approvals:read",
       "approvals:review",
       "approvals:preview",
@@ -61,7 +63,7 @@ export const roleProfiles: readonly RoleProfile[] = [
     label: "Support L1",
     operator: "Илья Нуров",
     initials: "ИН",
-    capabilities: ["dashboard:read", "customers:read", "checks:read", "support:read"]
+    capabilities: ["dashboard:read", "customers:read", "checks:read", "support:read", "subjects:read"]
   },
   {
     id: "aml-investigator",
@@ -78,6 +80,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "aml:read",
       "investigations:read",
       "fraud:read",
+      "subjects:read",
       "approvals:read"
     ]
   },
@@ -109,6 +112,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "aml:read",
       "investigations:read",
       "fraud:read",
+      "subjects:read",
       "approvals:read",
       "audit:read",
       "audit:export",

@@ -7,6 +7,7 @@ export type ScreenId =
   | "aml"
   | "investigations"
   | "fraud"
+  | "subjects"
   | "operations"
   | "withdrawal"
   | "payments"
@@ -45,6 +46,7 @@ export const navigation: readonly NavigationItem[] = [
   { id: "aml", group: "customer-risk", capability: "aml:read", implemented: true },
   { id: "investigations", group: "customer-risk", capability: "investigations:read", implemented: true },
   { id: "fraud", group: "customer-risk", capability: "fraud:read", implemented: true },
+  { id: "subjects", group: "customer-risk", capability: "subjects:read", implemented: true },
   { id: "operations", group: "money-movement", implemented: false },
   { id: "withdrawal", group: "money-movement", capability: "custody:read", implemented: true },
   { id: "payments", group: "money-movement", implemented: false },

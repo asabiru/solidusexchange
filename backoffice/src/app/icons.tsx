@@ -7,6 +7,7 @@ const screenPaths: Readonly<Record<ScreenId, string>> = {
   aml: "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6zM9 12l2 2 4-4",
   investigations: "M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.5 15.5L21 21",
   fraud: "M12 3l9.5 17h-19zM12 10v4M12 17h.01",
+  subjects: "M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01",
   operations: "M4 7h13M13 3l4 4-4 4M20 17H7M11 13l-4 4 4 4",
   withdrawal: "M12 4v11M7.5 10.5L12 15l4.5-4.5M4 20h16",
   payments: "M3 6h18v12H3zM3 10h18M7 15h3",

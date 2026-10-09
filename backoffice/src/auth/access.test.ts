@@ -41,6 +41,14 @@ describe("operator access", () => {
     assert.equal(can("aml-investigator", "audit:export"), false);
   });
 
+  it("limits the subject timeline lookup to investigation-capable roles", () => {
+    assert.equal(can("compliance-lead", "subjects:read"), true);
+    assert.equal(can("support-l1", "subjects:read"), true);
+    assert.equal(can("aml-investigator", "subjects:read"), true);
+    assert.equal(can("auditor", "subjects:read"), true);
+    assert.equal(can("fraud-investigator", "subjects:read"), false);
+  });
+
   it("gives fraud investigators only their customer-risk workspace", () => {
     assert.equal(can("fraud-investigator", "customers:read"), true);
     assert.equal(can("fraud-investigator", "kyc:read"), false);

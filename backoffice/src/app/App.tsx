@@ -21,6 +21,7 @@ import {
   getReportExport,
   getReports,
   getSession,
+  getSubjectTimeline,
   getSupportTicket,
   getSupportTickets,
   getWithdrawal,
@@ -40,6 +41,7 @@ import {
   type KycPayload,
   type SessionPayload,
   type StepUpChallengePayload,
+  type SubjectTimelinePayload,
   type SupportTicketsPayload,
   type WithdrawalsPayload
 } from "../data/client";
@@ -57,6 +59,7 @@ import type {
   QueueRow,
   SupportTicket,
   SupportTicketStatus,
+  SubjectTimelineEntry,
   Tone,
   WithdrawalIntent,
   WithdrawalIntentStatus,
@@ -1456,12 +1459,12 @@ function CheckDetail({ item }: { item: ChatCheck }) {
   );
 }
 
-function ChecksView({ query, data }: { query: string; data: ChecksPayload }) {
+function ChecksView({ query, data, focusRef }: { query: string; data: ChecksPayload; focusRef?: string }) {
   const { t, count } = useI18n();
   const [statusFilter, setStatusFilter] = useState<CheckStatusFilter>("all");
   const [checks, setChecks] = useState<readonly ChatCheck[]>(data.checks);
   const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
-  const [selectedId, setSelectedId] = useState(data.checks[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(focusRef ?? data.checks[0]?.id ?? "");
   const [detail, setDetail] = useState<ChatCheck | undefined>();
   const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
 
@@ -1648,12 +1651,12 @@ function TicketDetail({ item }: { item: SupportTicket }) {
   );
 }
 
-function SupportView({ query, data }: { query: string; data: SupportTicketsPayload }) {
+function SupportView({ query, data, focusRef }: { query: string; data: SupportTicketsPayload; focusRef?: string }) {
   const { t, count } = useI18n();
   const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>("all");
   const [tickets, setTickets] = useState<readonly SupportTicket[]>(data.tickets);
   const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
-  const [selectedId, setSelectedId] = useState(data.tickets[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(focusRef ?? data.tickets[0]?.id ?? "");
   const [detail, setDetail] = useState<SupportTicket | undefined>();
   const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
 
@@ -1854,12 +1857,12 @@ function WithdrawalDetail({ item }: { item: WithdrawalIntent }) {
   );
 }
 
-function WithdrawalsView({ query, data }: { query: string; data: WithdrawalsPayload }) {
+function WithdrawalsView({ query, data, focusRef }: { query: string; data: WithdrawalsPayload; focusRef?: string }) {
   const { t, count } = useI18n();
   const [statusFilter, setStatusFilter] = useState<WithdrawalStatusFilter>("all");
   const [intents, setIntents] = useState<readonly WithdrawalIntent[]>(data.intents);
   const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
-  const [selectedId, setSelectedId] = useState(data.intents[0]?.id ?? "");
+  const [selectedId, setSelectedId] = useState(focusRef ?? data.intents[0]?.id ?? "");
   const [detail, setDetail] = useState<WithdrawalIntent | undefined>();
   const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
 
@@ -1976,6 +1979,146 @@ function WithdrawalsView({ query, data }: { query: string; data: WithdrawalsPayl
           )}
           {detail && <WithdrawalDetail item={detail} />}
         </aside>
+      </section>
+    </>
+  );
+}
+
+// Timeline entries link into the detail views only where that entity kind has
+// a dedicated screen and the operator can read it; everything else renders as
+// a plain reference so the feed stays read-only and permission-aware.
+const subjectEntryLinks: Partial<
+  Record<SubjectTimelineEntry["kind"], { screen: ScreenId; capability: Capability }>
+> = {
+  check: { screen: "checks", capability: "checks:read" },
+  support: { screen: "support", capability: "support:read" },
+  withdrawal: { screen: "withdrawal", capability: "custody:read" }
+};
+
+function SubjectsView({
+  session,
+  onOpen
+}: {
+  session: SessionPayload;
+  onOpen: (screen: ScreenId, ref: string) => void;
+}) {
+  const { t, count, date, time } = useI18n();
+  const [refInput, setRefInput] = useState("");
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed" | "invalid" | "not-found">("idle");
+  const [timeline, setTimeline] = useState<SubjectTimelinePayload | undefined>();
+
+  const groups = useMemo(() => {
+    const byDay = new Map<string, SubjectTimelineEntry[]>();
+    for (const entry of timeline?.entries ?? []) {
+      const day = entry.at.slice(0, 10);
+      const bucket = byDay.get(day);
+      if (bucket) bucket.push(entry);
+      else byDay.set(day, [entry]);
+    }
+    return [...byDay.entries()];
+  }, [timeline]);
+
+  function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const ref = refInput.trim();
+    if (!ref || detailState === "loading") return;
+    setDetailState("loading");
+    setTimeline(undefined);
+    getSubjectTimeline(ref)
+      .then((payload) => {
+        setTimeline(payload);
+        setDetailState("idle");
+      })
+      .catch((error: unknown) => {
+        setTimeline(undefined);
+        if (error instanceof ApiError && error.status === 404) setDetailState("not-found");
+        else if (error instanceof ApiError && error.status === 400) setDetailState("invalid");
+        else setDetailState("failed");
+      });
+  }
+
+  function linkTarget(entry: SubjectTimelineEntry): ScreenId | undefined {
+    const target = subjectEntryLinks[entry.kind];
+    return target && hasCapability(session, target.capability) ? target.screen : undefined;
+  }
+
+  return (
+    <>
+      <PageHeading title={t("screen.subjects")} description={t("subjects.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("subjects.lookupTitle")}</h2><p>{t("subjects.lookupHint")}</p></div>
+            <Status tone="info">{t("common.readOnly")}</Status>
+          </header>
+          <form className="subject-lookup" onSubmit={submit}>
+            <input
+              type="text"
+              value={refInput}
+              onChange={(event) => setRefInput(event.target.value)}
+              placeholder={t("subjects.refPlaceholder")}
+              aria-label={t("subjects.refLabel")}
+              autoComplete="off"
+            />
+            <button
+              className="button primary"
+              type="submit"
+              disabled={detailState === "loading" || !refInput.trim()}
+            >
+              {detailState === "loading" ? t("subjects.searching") : t("subjects.submit")}
+            </button>
+          </form>
+          <LiveStatus message={detailState === "loading" ? t("subjects.searching") : ""} />
+          {detailState === "invalid" && <div className="preview-error" role="alert">{t("subjects.invalidRef")}</div>}
+          {detailState === "not-found" && <div className="preview-error" role="alert">{t("subjects.notFound")}</div>}
+          {detailState === "failed" && <div className="preview-error" role="alert">{t("subjects.failed")}</div>}
+          {!timeline && detailState === "idle" && <p className="cell-note">{t("subjects.empty")}</p>}
+          {timeline && (
+            <>
+              <dl className="detail-list">
+                <div><dt>{t("subjects.subject")}</dt><dd className="hash-value">{timeline.subject}</dd></div>
+                <div><dt>{t("subjects.entriesLabel")}</dt><dd>{t("subjects.count", { count: count(timeline.entries.length) })}</dd></div>
+              </dl>
+              {groups.map(([day, entries]) => (
+                <section key={day} className="subject-day">
+                  <h3>{date(entries[0]?.at ?? day)}</h3>
+                  <div className="timeline-list">
+                    {entries.map((entry) => {
+                      const target = linkTarget(entry);
+                      return (
+                        <div key={`${entry.kind}:${entry.ref}`}>
+                          <span />
+                          <div>
+                            <strong>
+                              <Status tone="info">{t(`subjects.kind.${entry.kind}`)}</Status>{" "}
+                              {target ? (
+                                <button
+                                  type="button"
+                                  className="table-link"
+                                  onClick={() => onOpen(target, entry.ref)}
+                                >
+                                  {entry.ref}
+                                </button>
+                              ) : (
+                                <code>{entry.ref}</code>
+                              )}
+                            </strong>
+                            <small>{time(entry.at)}</small>
+                            <p>{entry.summary}</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </section>
+              ))}
+            </>
+          )}
+          <div className="safe-action">
+            <strong>{t("subjects.readOnlyTitle")}</strong>
+            <p>{t("subjects.readOnlyNote")}</p>
+          </div>
+        </article>
       </section>
     </>
   );
@@ -2130,6 +2273,7 @@ export function App() {
   const { t, locale, setLocale, longDate } = useI18n();
   const [access, setAccess] = useState<AccessState>({ status: "loading" });
   const [screen, setScreen] = useState<ScreenId>(initialScreen);
+  const [entityFocus, setEntityFocus] = useState<{ screen: ScreenId; ref: string } | undefined>();
   const [query, setQuery] = useState("");
   const [theme, setTheme] = useState<Theme>(() =>
     window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
@@ -2253,8 +2397,15 @@ export function App() {
 
   function selectScreen(item: NavigationItem) {
     if (item.capability && !hasCapability(session, item.capability)) return;
+    setEntityFocus(undefined);
     setScreen(item.id);
     window.history.replaceState(null, "", `#${item.id}`);
+  }
+
+  function openEntityDetail(target: ScreenId, ref: string) {
+    setEntityFocus({ screen: target, ref });
+    setScreen(target);
+    window.history.replaceState(null, "", `#${target}`);
   }
 
   const activeItem = navigation.find((item) => item.id === screen) ?? navigation[0];
@@ -2434,13 +2585,28 @@ export function App() {
             <CustomersView query={query} data={access.data.customers} />
           )}
           {screen === "checks" && access.data.checks && (
-            <ChecksView query={query} data={access.data.checks} />
+            <ChecksView
+              query={query}
+              data={access.data.checks}
+              focusRef={entityFocus?.screen === "checks" ? entityFocus.ref : undefined}
+            />
           )}
           {screen === "support" && access.data.support && (
-            <SupportView query={query} data={access.data.support} />
+            <SupportView
+              query={query}
+              data={access.data.support}
+              focusRef={entityFocus?.screen === "support" ? entityFocus.ref : undefined}
+            />
           )}
           {screen === "withdrawal" && access.data.withdrawals && (
-            <WithdrawalsView query={query} data={access.data.withdrawals} />
+            <WithdrawalsView
+              query={query}
+              data={access.data.withdrawals}
+              focusRef={entityFocus?.screen === "withdrawal" ? entityFocus.ref : undefined}
+            />
+          )}
+          {screen === "subjects" && (
+            <SubjectsView session={access.data.session} onOpen={openEntityDetail} />
           )}
           {screen === "kyc" && access.data.kyc && (
             <KycView query={query} data={access.data.kyc} />

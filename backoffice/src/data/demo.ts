@@ -367,6 +367,30 @@ export interface ApprovalPreview {
   };
 }
 
+export type SubjectTimelineKind =
+  | "check"
+  | "support"
+  | "withdrawal"
+  | "kyc"
+  | "aml"
+  | "investigation"
+  | "fraud-alert"
+  | "audit";
+
+// One unified activity row for the cross-entity subject feed: the entity
+// reference, its kind and a short neutral summary — never a command surface.
+export interface SubjectTimelineEntry {
+  at: string;
+  kind: SubjectTimelineKind;
+  ref: string;
+  summary: string;
+}
+
+export interface SubjectTimeline {
+  subject: string;
+  entries: readonly SubjectTimelineEntry[];
+}
+
 export interface ReadonlyBackofficeRepository {
   metrics(): readonly Metric[];
   queues(): readonly QueueRow[];
@@ -380,6 +404,7 @@ export interface ReadonlyBackofficeRepository {
   fraudAlerts(): readonly FraudAlert[];
   approvals(): readonly ApprovalRow[];
   auditSource(): readonly AuditSourceEvent[];
+  subjectTimeline(ref: string): SubjectTimeline | undefined;
 }
 
 function deepFreeze<T>(value: T): T {
@@ -388,6 +413,114 @@ function deepFreeze<T>(value: T): T {
     Object.freeze(value);
   }
   return value;
+}
+
+// Resolves a synthetic subject or customer reference (`sim-*`, `cust_*`,
+// `CUS-*`/`ORG-*`) to the customer ids it names, then aggregates every entity
+// row bound to those ids into one frozen, reverse-chronological feed. Returns
+// undefined when nothing matches, without revealing which collections were
+// searched. Read-only: no writes, no money movement, no status changes.
+function buildSubjectTimeline(ref: string): SubjectTimeline | undefined {
+  const allChecks: readonly ChatCheck[] = data.chatChecks;
+  const allTickets: readonly SupportTicket[] = data.supportTickets;
+  const allIntents: readonly WithdrawalIntent[] = data.withdrawalIntents;
+  const allKyc: readonly KycCase[] = data.kycCases;
+  const allAml: readonly AmlCase[] = data.amlCases;
+  const allInvestigations: readonly InvestigationCase[] = data.investigationCases;
+  const allAlerts: readonly FraudAlert[] = data.fraudAlerts;
+  const allAudit: readonly AuditSourceEvent[] = data.auditSource;
+
+  const customerIds = new Set<string>([ref]);
+  for (const row of [...allTickets, ...allIntents, ...allKyc, ...allAml, ...allInvestigations, ...allAlerts]) {
+    if (row.subject === ref) customerIds.add(row.customerId);
+  }
+  const byCustomer = (row: { subject: string; customerId: string }): boolean =>
+    row.subject === ref || customerIds.has(row.customerId);
+
+  const checks = allChecks.filter(
+    (check) =>
+      customerIds.has(check.senderCustomerId)
+      || (check.recipientCustomerId !== undefined && customerIds.has(check.recipientCustomerId))
+  );
+  const tickets = allTickets.filter(byCustomer);
+  const intents = allIntents.filter(byCustomer);
+  const kycCases = allKyc.filter(byCustomer);
+  const amlCases = allAml.filter(byCustomer);
+  const investigations = allInvestigations.filter(byCustomer);
+  const alerts = allAlerts.filter(byCustomer);
+
+  const touched = new Set<string>([ref, ...customerIds]);
+  for (const id of [
+    ...checks.map((row) => row.id),
+    ...tickets.map((row) => row.id),
+    ...intents.map((row) => row.id),
+    ...kycCases.map((row) => row.id),
+    ...amlCases.map((row) => row.id),
+    ...investigations.map((row) => row.id),
+    ...alerts.map((row) => row.id)
+  ]) {
+    touched.add(id);
+  }
+  const audit = allAudit.filter((event) =>
+    touched.has(event.resource.split(":").pop() ?? "")
+    || touched.has(event.actor.split(":").pop() ?? "")
+  );
+
+  const entries: SubjectTimelineEntry[] = [
+    ...checks.map((check) => ({
+      at: check.resolvedAt ?? check.createdAt,
+      kind: "check" as const,
+      ref: check.id,
+      summary: `${check.status} · ${check.amount} ${check.asset} · ${check.sender} → ${check.recipient}`
+    })),
+    ...tickets.map((ticket) => ({
+      at: ticket.updatedAt,
+      kind: "support" as const,
+      ref: ticket.id,
+      summary: `${ticket.status} · ${ticket.topic}`
+    })),
+    ...intents.map((intent) => ({
+      at: intent.updatedAt,
+      kind: "withdrawal" as const,
+      ref: intent.id,
+      summary: `${intent.status} · ${intent.amount} ${intent.asset} · ${intent.network}`
+    })),
+    ...kycCases.map((item) => ({
+      at: item.openedAt,
+      kind: "kyc" as const,
+      ref: item.id,
+      summary: `${item.type} ${item.status} · ${item.stage}`
+    })),
+    ...amlCases.map((item) => ({
+      at: item.openedAt,
+      kind: "aml" as const,
+      ref: item.id,
+      summary: `${item.source} ${item.severity} · ${item.state}`
+    })),
+    ...investigations.map((item) => ({
+      at: item.openedAt,
+      kind: "investigation" as const,
+      ref: item.id,
+      summary: `${item.category} ${item.priority} · ${item.state}`
+    })),
+    ...alerts.map((alert) => ({
+      at: alert.detectedAt,
+      kind: "fraud-alert" as const,
+      ref: alert.id,
+      summary: `${alert.scenario} ${alert.severity} · ${alert.state}`
+    })),
+    ...audit.map((event) => ({
+      at: event.occurredAt,
+      kind: "audit" as const,
+      ref: event.eventId,
+      summary: `${event.action} · ${event.outcome}`
+    }))
+  ];
+  if (!entries.length) return undefined;
+  entries.sort((a, b) =>
+    b.at.localeCompare(a.at) || a.kind.localeCompare(b.kind) || a.ref.localeCompare(b.ref)
+  );
+  return deepFreeze({ subject: ref, entries });
 }
 
 const data = deepFreeze({
@@ -1726,5 +1859,6 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   investigationCases: () => data.investigationCases,
   fraudAlerts: () => data.fraudAlerts,
   approvals: () => data.approvals,
-  auditSource: () => data.auditSource
+  auditSource: () => data.auditSource,
+  subjectTimeline: buildSubjectTimeline
 };
