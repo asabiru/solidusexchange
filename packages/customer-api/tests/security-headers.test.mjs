@@ -5,7 +5,7 @@ import { PERMISSIONS_POLICY, SECURITY_HEADERS } from "../src/app.mjs";
 import { OPERATIONS } from "../src/contract.mjs";
 import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
-import { customerHeaders, header, NOW_MS, rawExchange, REQUEST_ID, request, startTestServer, stopServer } from "./http-client.mjs";
+import { customerHeaders, header, NOW_MS, rawExchange, REQUEST_ID, request, startTestServer, stopServer, verifiedCustomerHeaders } from "./http-client.mjs";
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
@@ -17,7 +17,7 @@ function assertSecurityHeaders(response, label, contentType = JSON_TYPE) {
 }
 
 function operationHeaders(operation, overrides = {}) {
-  return operation.authenticated ? customerHeaders(overrides) : customerHeaders({
+  return operation.authenticated ? verifiedCustomerHeaders(overrides) : customerHeaders({
     Authorization: null,
     "X-Client-Version": null,
     "X-Platform": null,

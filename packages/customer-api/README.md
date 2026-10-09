@@ -11,7 +11,11 @@ dependency-free Node ESM `node:http` server for local development only.
 - Served operations, `GET` only:
   - `GET /api/v1/meta` (`getApiMetadata`, public, still requires `X-Request-Id`);
   - `GET /api/v1/customer/session` (`getCustomerSession`);
-  - `GET /api/v1/customer/capabilities` (`getCustomerCapabilities`).
+  - `GET /api/v1/customer/capabilities` (`getCustomerCapabilities`);
+  - `GET /api/v1/customer/wallets` (`getCustomerWallets`): a frozen deterministic
+    synthetic wallet list per subject (RUB/TON/USDT, decimal-string balances in
+    asset scale); KYC-gated — only a `verified` KYC status receives `200`, other
+    customers get `403 CAPABILITY_DENIED`.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -38,13 +42,14 @@ Only `customer` principals are accepted.
 
 ## Capabilities
 
-Deny-by-default. Only `customer.session.read` and `customer.capabilities.read`
-are granted; `commands_enabled` is always `false`. Every financial capability
-(wallets, deposits, withdrawals, quotes, exchange orders, payments, cards) is
-KYC-gated and denied with internal reason codes such as
-`FINANCIAL_COMMANDS_DISABLED`, `KYC_VERIFICATION_REQUIRED`,
-`DECISION_D_001_OPEN`, `DECISION_D_014_OPEN`. Even a synthetic `verified` KYC
-status grants nothing financial. `CapabilitiesView` has no field for reasons,
+Deny-by-default. `customer.session.read` and `customer.capabilities.read` are
+always granted; `customer.wallets.read` is granted only to a `verified` KYC
+status so it can serve the synthetic wallet collection read.
+`commands_enabled` is always `false`. Every financial capability (deposits,
+withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
+with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,
+`KYC_VERIFICATION_REQUIRED`, `DECISION_D_001_OPEN`, `DECISION_D_014_OPEN`. Even
+a synthetic `verified` KYC status grants nothing financial. `CapabilitiesView` has no field for reasons,
 so they are not exposed to clients; tests check that every referenced decision
 exists in `Documentation/regulated-core/decision-register.md` and is still `Open`.
 

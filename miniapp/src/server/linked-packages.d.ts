@@ -303,6 +303,11 @@ declare module "@solidchange/customer-api/dev-server" {
     config: CustomerApiDevConfig,
     options?: {
       kycDirectory?: { statusFor(subject: string): Promise<"unverified" | "pending" | "verified"> };
+      walletDirectory?: {
+        listFor(subject: string): Promise<{
+          wallets: readonly { wallet_id: string; asset: string; available: string; hold: string }[];
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

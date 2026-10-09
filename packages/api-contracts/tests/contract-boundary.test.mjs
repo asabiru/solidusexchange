@@ -318,6 +318,7 @@ assertRejected(
 for (const [pathName, operationId] of [
   ["/api/v1/customer/session", "getCustomerSession"],
   ["/api/v1/customer/capabilities", "getCustomerCapabilities"],
+  ["/api/v1/customer/wallets", "getCustomerWallets"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -531,6 +532,26 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.SessionView.required = ["subject"];
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical wallet views",
+  "Canonical WalletView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WalletView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects numeric canonical wallet balances",
+  "Canonical WalletView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.WalletView.properties.available = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );
