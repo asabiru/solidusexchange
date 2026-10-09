@@ -40,6 +40,7 @@ function kycStub(result: CustomerApiKyc | (() => Promise<CustomerApiKyc>)): KycS
     deposits: async () => ({ status: "not-configured" }),
     withdrawals: async () => ({ status: "not-configured" }),
     quotes: async () => ({ status: "not-configured" }),
+    exchangeOrders: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "unavailable" }),
     kyc: async (subject) => {
       calls.push(subject);

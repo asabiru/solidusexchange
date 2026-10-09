@@ -120,7 +120,7 @@ describe("session and Origin boundary", () => {
   });
 
   it("requires a session for customer data", async () => {
-    for (const path of ["/bff/session", "/bff/wallet", "/bff/operations", "/bff/operations/op-89104", "/bff/profile", "/bff/quotes", "/bff/quotes/preview?from=RUB&to=USDT&amount=1"]) {
+    for (const path of ["/bff/session", "/bff/wallet", "/bff/operations", "/bff/operations/op-89104", "/bff/profile", "/bff/quotes", "/bff/quotes/preview?from=RUB&to=USDT&amount=1", "/bff/exchange-orders"]) {
       const response = await fetch(`${running.base}${path}`);
       assert.equal(response.status, 401, path);
     }
@@ -331,12 +331,13 @@ describe("money movement is absent", () => {
     const postPaths = routeTable.filter((route) => route.method === "POST").map((route) => route.path);
     assert.deepEqual(postPaths.sort(), ["/bff/address-screening", "/bff/auth/dev-session", "/bff/auth/logout", "/bff/kyc/applications", "/bff/notifications/read", "/bff/session/telegram", "/bff/sessions/revoke", "/bff/sessions/revoke-others", "/bff/support/requests"]);
     for (const route of routeTable) {
-      // /bff/deposits and /bff/withdrawals are the two exempted paths: they
-      // are read-only observations of the customer-api deposits/withdrawals
-      // contracts (posting stays "none"), not money-moving routes — every
-      // write path above stays absent, POST /bff/deposits and POST
-      // /bff/withdrawals included.
-      if (route.path === "/bff/deposits" || route.path === "/bff/withdrawals") continue;
+      // /bff/deposits, /bff/withdrawals and /bff/exchange-orders are the
+      // exempted paths: they are read-only observations of the customer-api
+      // deposits/withdrawals/exchange-orders contracts (posting stays
+      // "none"), not money-moving routes — every write path above stays
+      // absent, POST /bff/deposits, POST /bff/withdrawals and POST
+      // /bff/exchange-orders included.
+      if (route.path === "/bff/deposits" || route.path === "/bff/withdrawals" || route.path === "/bff/exchange-orders") continue;
       assert.doesNotMatch(route.path, moneyWords, route.path);
     }
   });
@@ -352,6 +353,7 @@ describe("money movement is absent", () => {
         "/bff/quotes/Q-1/execute",
         "/bff/quotes/Q-1/confirm",
         "/bff/quotes/preview",
+        "/bff/exchange-orders",
         "/bff/orders",
         "/bff/withdraw",
         "/bff/withdrawals",
