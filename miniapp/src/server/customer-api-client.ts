@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
-import type { CustomerApiAccess, NotificationTemplate } from "../shared/api.js";
+import type { CustomerApiAccess, KycVerificationState, NotificationTemplate } from "../shared/api.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { isDecimalString } from "../shared/decimal.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
@@ -49,11 +49,41 @@ export type CustomerApiNotifications =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export type CustomerApiSessionKyc = "unverified" | "pending" | "verified";
+type CustomerApiKycReasonCode = "SIM_DOCUMENT_UNREADABLE" | "SIM_DATA_MISMATCH";
+type CustomerApiKycRequestedItem = "proof_of_address" | "selfie_retake";
+
+export interface CustomerApiKycStatusView {
+  mode: "test";
+  provider: "simulator";
+  session_kyc: CustomerApiSessionKyc;
+  status: KycVerificationState;
+  application_id?: string;
+  submitted_at?: string;
+  updated_at: string;
+  review_deadline?: string;
+  reason_codes?: readonly CustomerApiKycReasonCode[];
+  requested_items?: readonly CustomerApiKycRequestedItem[];
+  can_submit: boolean;
+}
+
+/**
+ * The KYC status read has no "denied" arm: customer.kyc.read is granted at
+ * every session KYC status upstream (a verified gate would deadlock
+ * onboarding), so a 403 can only mean contract drift or misconfiguration — it
+ * maps to "unavailable" with every other non-200 outcome.
+ */
+export type CustomerApiKyc =
+  | { status: "ok"; view: CustomerApiKycStatusView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
+  kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -194,6 +224,97 @@ function parseNotificationsView(
   return Object.freeze({ unread: value.unread, notifications: Object.freeze(notifications) });
 }
 
+const kycSessionStatuses: readonly CustomerApiSessionKyc[] = ["unverified", "pending", "verified"];
+const kycApplicationStatuses: readonly KycVerificationState[] = [
+  "not_started",
+  "submitted",
+  "in_review",
+  "approved",
+  "rejected",
+  "needs_more_data",
+  "timed_out",
+  "unavailable"
+];
+const kycReasonCodes: readonly CustomerApiKycReasonCode[] = ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"];
+const kycRequestedItems: readonly CustomerApiKycRequestedItem[] = ["proof_of_address", "selfie_retake"];
+const kycApplicationIdPattern = /^kyc_[0-9a-f]{24}$/;
+const kycStatusViewKeys = [
+  "application_id",
+  "can_submit",
+  "mode",
+  "provider",
+  "reason_codes",
+  "requested_items",
+  "review_deadline",
+  "session_kyc",
+  "status",
+  "submitted_at",
+  "updated_at"
+] as const;
+const kycStatusRequiredKeys = ["can_submit", "mode", "provider", "session_kyc", "status", "updated_at"] as const;
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string" && isoTimestampPattern.test(value) && Number.isFinite(Date.parse(value));
+}
+
+function isCodeList(value: unknown, allowed: readonly string[]): boolean {
+  return (
+    Array.isArray(value)
+    && value.length >= 1
+    && value.length <= allowed.length
+    && new Set(value).size === value.length
+    && value.every((item) => typeof item === "string" && allowed.includes(item))
+  );
+}
+
+function parseKycStatusView(value: unknown): CustomerApiKycStatusView | undefined {
+  if (
+    !isRecord(value)
+    || !kycStatusRequiredKeys.every((key) => Object.hasOwn(value, key))
+    || Object.keys(value).some((key) => !kycStatusViewKeys.includes(key as (typeof kycStatusViewKeys)[number]))
+    || value.mode !== "test"
+    || value.provider !== "simulator"
+    || typeof value.session_kyc !== "string"
+    || !kycSessionStatuses.includes(value.session_kyc as CustomerApiSessionKyc)
+    || typeof value.status !== "string"
+    || !kycApplicationStatuses.includes(value.status as KycVerificationState)
+    || !isIsoTimestamp(value.updated_at)
+    || typeof value.can_submit !== "boolean"
+  ) {
+    return undefined;
+  }
+  const applicationFields = ["application_id", "submitted_at", "review_deadline", "reason_codes", "requested_items"];
+  if (
+    applicationFields.some((field) => Object.hasOwn(value, field))
+    && !(typeof value.application_id === "string"
+      && kycApplicationIdPattern.test(value.application_id)
+      && isIsoTimestamp(value.submitted_at))
+  ) {
+    return undefined;
+  }
+  if (
+    (Object.hasOwn(value, "review_deadline") && !isIsoTimestamp(value.review_deadline))
+    || (Object.hasOwn(value, "reason_codes") && !isCodeList(value.reason_codes, kycReasonCodes))
+    || (Object.hasOwn(value, "requested_items") && !isCodeList(value.requested_items, kycRequestedItems))
+  ) {
+    return undefined;
+  }
+  const view: CustomerApiKycStatusView = {
+    mode: "test",
+    provider: "simulator",
+    session_kyc: value.session_kyc as CustomerApiSessionKyc,
+    status: value.status as KycVerificationState,
+    updated_at: value.updated_at,
+    can_submit: value.can_submit
+  };
+  if (value.application_id !== undefined) view.application_id = value.application_id as string;
+  if (value.submitted_at !== undefined) view.submitted_at = value.submitted_at as string;
+  if (value.review_deadline !== undefined) view.review_deadline = value.review_deadline as string;
+  if (value.reason_codes !== undefined) view.reason_codes = Object.freeze([...(value.reason_codes as string[])]) as readonly CustomerApiKycReasonCode[];
+  if (value.requested_items !== undefined) view.requested_items = Object.freeze([...(value.requested_items as string[])]) as readonly CustomerApiKycRequestedItem[];
+  return Object.freeze(view);
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -203,11 +324,12 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets and notifications GETs, never sends
- * X-Device-Id and fails closed to "unavailable" on any unexpected response,
- * including a non-JSON content type or a body above maxCustomerApiResponseBytes.
- * An upstream refusal of a collection read (403 capability gate) surfaces as
- * "denied".
+ * customer session, capabilities, wallets, notifications and kyc GETs, never
+ * sends X-Device-Id and fails closed to "unavailable" on any unexpected
+ * response, including a non-JSON content type or a body above
+ * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
+ * capability gate) surfaces as "denied"; the KYC status read is never gated
+ * upstream, so it reports every non-200 outcome as "unavailable".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -217,7 +339,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       configured: false,
       access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
-      notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" })
+      notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
+      kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" })
     });
   }
 
@@ -318,5 +441,23 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, notifications });
+  async function kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/kyc", token, nowMs);
+      const view = parseKycStatusView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      // No 403 carve-out: the read is granted at every upstream session
+      // status, so a refusal is upstream contract drift, not a real denial.
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets, notifications, kyc });
 }

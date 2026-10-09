@@ -30,7 +30,12 @@ import {
   ScreeningUnavailableError,
   createAddressScreeningService
 } from "./address-screening.js";
-import { type KycService, KycUnavailableError, createKycService } from "./kyc.js";
+import {
+  type KycService,
+  KycUnavailableError,
+  contractKycVerificationView,
+  createKycService
+} from "./kyc.js";
 import {
   type NotificationOutbox,
   contractNotificationsView,
@@ -723,7 +728,23 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/kyc/status") {
-      json(response, 200, kycOnboarding.view(session.subject, session.kyc));
+      // Unlike /bff/wallet and /bff/notifications, the KYC status surface is
+      // not KYC-gated upstream: customer.kyc.read is granted at every session
+      // status (a verified gate would deadlock onboarding), so a configured
+      // customer-api answers gated sessions too and only the standalone
+      // unconfigured dev BFF keeps the local synthetic view. Since the read is
+      // never denied, an upstream 403 signals contract drift and maps, like
+      // every other non-ok outcome, to the sibling *_unavailable shape.
+      if (!customerApi.configured) {
+        json(response, 200, kycOnboarding.view(session.subject, session.kyc));
+        return;
+      }
+      const upstream = await customerApi.kyc(session.subject, clock());
+      if (upstream.status !== "ok") {
+        json(response, 503, { error: "kyc_unavailable" });
+        return;
+      }
+      json(response, 200, contractKycVerificationView(upstream.view));
       return;
     }
     if (path === "/bff/notifications") {

@@ -308,7 +308,16 @@ describe("bounded load on the dev stack", () => {
     assert.equal(results.length, total);
     assertDocumented(results);
 
-    assert.deepEqual(countBy(results, "kyc-status"), { 200: total / 9 });
+    // /bff/kyc/status consults upstream for gated sessions too
+    // (customer.kyc.read is never denied), so the burst's extra upstream
+    // calls saturate the customer-api rate limit and some reads degrade to
+    // the documented 503 kyc_unavailable instead of 200.
+    const kycStatuses = countBy(results, "kyc-status");
+    assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 9);
+    assert.ok((kycStatuses[503] ?? 0) > 0, "customer-api rate limit applies to kyc status");
+    for (const result of results.filter((entry) => entry.kind === "kyc-status" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "kyc_unavailable" });
+    }
     assert.deepEqual(countBy(results, "quote"), { 200: total / 9 });
     assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 9 });
     assert.deepEqual(countBy(results, "notifications"), { 200: total / 9 });
