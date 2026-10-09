@@ -1,0 +1,41 @@
+# Miniapp BFF Core Audit — Wave 35 — Proposed
+
+- Status: Proposed
+- Scope: `miniapp/src/server/` core machinery on main — `server.ts` routing/session handling (excluding the checks block, audited previously), `init-data.ts` Telegram initData verification, `config.ts`, `observability.ts`, `customer-api-client.ts`, `kyc.ts`, `support.ts`, `activity.ts`, `address-screening.ts`, `session.ts`, `request-body.ts`, `security-headers.ts`, `synthetic.ts`, `quotes.ts`/`provider-quotes.ts`, route handlers and shared helpers (`notifications.ts` internals were audited in #213 and are out of scope; its route handlers are not)
+- Production effect: none
+
+Hunt list applied: malformed-input 500s (cookies, Host, query decoding, JSON body), session fixation/expiry/dev-login gaps, init-data verification bypasses (missing hash check, alg confusion, replay), x-device-id guard inconsistencies across routes, missing sec-fetch-site/origin guards on audit-appending or state-touching routes, unbounded in-memory growth, prototype pollution on server-supplied strings, error bodies leaking internals, header/cookie flag issues, exact-decimal math violations.
+
+## Defects found and fixed
+
+1. `new URL(request.url ?? "/", "http://127.0.0.1")` in `server.ts` ran unguarded. Node forwards malformed absolute-form request targets verbatim, so `GET http://[bad HTTP/1.1`, `http://a:99999/` or `http://%/` threw `Invalid URL` out of route resolution — answered 500 on every route including `/bff/health`. The parse is now caught and answered `400 invalid_request`.
+2. `hostnameOf` in `server.ts` and `isLoopbackHost` in `observability.ts` parsed `Host` laxly — a leading `[` kept everything to the first `]`, and `split(":")[0]` kept the first segment. `Host: [::1]garbage` and `Host: 127.0.0.1:80:90` therefore read as loopback, bypassing the 421 host gate and (in observability) the metrics gate. Both now go through a shared strict `requestHostname` parser in `security-headers.ts`: the whole value must match `hostname`, `hostname:port`, `[ipv6]` or `[ipv6]:port`; anything else fails closed.
+3. The `x-device-id` operator-header rejection existed on only a subset of routes (sessions revoke, address-screening/support POSTs, notifications read, notifications/activity/sessions/support/address-screening/checks GETs). `POST /bff/kyc/applications` and the GETs `/bff/session`, `/bff/wallet`, `/bff/operations`, `/bff/operations/:id`, `/bff/profile`, `/bff/kyc/status`, `/bff/quotes/preview` and `/bff/health` let it through to the handler, although the API contract reserves the header for operator operations and forbids it on customer and metadata requests. The guard is now uniform at the top of the router (`400 invalid_request`) and the nine duplicated inline checks are removed, so the rule cannot drift again.
+4. No `sec-fetch-site` context check existed anywhere. `GET /bff/quotes/preview` appends an audit activity entry on every call (`recordQuote`), and `currentSession`'s lazy `kycOnboarding.isVerified` sync drains verified provider callbacks that append KYC activity and outbox notifications — so every authenticated route can append audit rows, and `SameSite=Strict` still admits `same-site` requests from other loopback ports. A uniform fetch-site allowlist (`undefined`, `same-origin`, `none`) now answers `403 fetch_site_rejected`, mirroring the wave-34 backoffice rule applied to the miniapp's sync-on-read design.
+5. `createKycService` in `kyc.ts` never pruned `applicantsByReference`/`subjectsByReference`. `reset()` discarded `record.application` but left both index entries, so every dev-login reset + resubmit permanently grew the maps — unbounded per-subject growth, the same shape as the wave-34 step-up index defect. Stale callbacks also resolved as `verified: applied` (inert) instead of being rejected. `reset` now deletes the discarded application's index entries, callbacks for pruned references fail closed as `unknown_application` (consistent with `unknown_assessment` in address-screening), and a new `indexSizes()` diagnostic exposes the bound to tests.
+
+## Verified clean
+
+- Session lifecycle: re-login deletes the prior cookie session; handles are HMAC'd opaque `ses_*` values; `revokedHandles` bounded per subject; cookie `HttpOnly; SameSite=Strict; Path=/bff`, `Secure` only when the origin is https (config forbids mixing, so the rule is consistent); dev login requires `MINIAPP_ALLOW_DEV_LOGIN` + loopback config host + loopback peer + exact allowed origin + loopback origin, and fabricates then fully verifies an initData payload rather than bypassing verification.
+- initData verification: 4 KiB cap, strict key pattern, duplicate key/hash rejected, exact 64-hex HMAC with `timingSafeEqual`, `auth_date` integer-bounded (60 s future skew, `initDataMaxAgeSeconds` bound), strict `user` JSON parse (safe-integer `id > 0`), no alg confusion (HMAC pinned by construction, an `alg` member is rejected), replay bounded by `auth_date` freshness.
+- Request body parsing: `readJsonBody` caps 4 KiB, requires `application/json` (optional `charset=utf-8`), a flat string-valued object, no duplicate keys, an exact per-route key allowlist; `RequestBodyError` maps to 400/415.
+- `parseCookies` already guards `decodeURIComponent` failures (pair reads as empty, request proceeds) — the wave-34 defect is not present here.
+- Config: loopback-only host set, exact `allowedOrigins` (http only on loopback, no http/https mixing), bot-token pattern, bounded integers, refuses `NODE_ENV=production`.
+- Observability: route/method label cardinality bounded; `/bff/metrics` requires the exact request target, loopback peer and a strictly-parsed loopback `Host`, no `origin`/`forwarded`/`via`/`x-forwarded-*`/`x-real-ip` headers, `sec-fetch-site` ∈ {undefined, none}, GET only.
+- Customer API client: bounded 16 KB reads, `redirect: "error"`, 2 s timeout, exact-keys validation, capability pattern, never sends `x-device-id`, fails closed `unavailable`.
+- State stores: activity log bounded (50/subject, 1000 subjects LRU); support desk bounded per-subject/total/TTL with rate limiting and strict shared validators; address-screening bounded subjects/screenings/results/nonce with binding-digest verification; sessions store lazy-expiry with `retainNewest`.
+- Security headers: frozen api/document/dev CSP sets; `guardRawResponses` covers the clientError (400/408/431) and checkExpectation (417) paths; Vite dev server applies the same sets.
+- Exact-decimal math: quote preview and provider-quotes use bigint-scale arithmetic; synthetic fixtures deep-frozen.
+- Error surface: typed domain errors map to 400/403/409/429/503 codes; anything else answers generic `500 internal_error` with no internals.
+
+## Observations (recorded, not defects in this slice)
+
+- The shared `createCallbackInbox` in provider-simulators retains subjects/events per process as dedup evidence for the callback-verification semantics; pruning lives on the BFF side (defect 5) since the inbox exposes no removal API and serves all sim domains.
+- The metrics route keeps its own stricter gates; with the strict `Host` parser the server-level gate now rejects malformed `Host` values first (421 before the metrics route's 404) — fail-closed in both places.
+- `sec-fetch-site: same-site` is rejected alongside `cross-site`: `SameSite=Strict` cannot distinguish it, and the cookie is already attached — matching the wave-34 backoffice allowlist.
+
+## Test additions
+
+- `miniapp/src/server/bff-core.test.ts` (6 cases): malformed absolute request targets answer `400 invalid_request` (valid absolute form still 200); `Host` values that only start like a loopback literal answer 421 (valid forms still 200); the metrics gate stays closed for a malformed `Host`; `X-Device-Id` answers `400 invalid_request` uniformly on previously unguarded routes (requests without it unaffected); `sec-fetch-site` `cross-site`/`same-site` answers `403 fetch_site_rejected` on audit-appending GETs and POSTs (`same-origin`/`none`/absent stay allowed); KYC reset prunes provider-reference indexes to the live bound.
+- `miniapp/src/server/kyc.test.ts`: the reset-application callback case now asserts the stricter `unknown_application` outcome.
+- All new/changed cases fail on main and pass on this branch.

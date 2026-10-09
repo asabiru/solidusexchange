@@ -40,7 +40,7 @@ import {
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
 import { QuoteError } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
-import { apiSecurityHeaders, guardRawResponses } from "./security-headers.js";
+import { apiSecurityHeaders, guardRawResponses, requestHostname } from "./security-headers.js";
 import {
   type CustomerSession,
   ExpiringStore,
@@ -165,10 +165,6 @@ function parseCookies(request: IncomingMessage): Readonly<Record<string, string>
   return cookies;
 }
 
-function hostnameOf(host: string): string {
-  return host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
-}
-
 function isLoopbackAddress(address: string | undefined): boolean {
   return address === "127.0.0.1"
     || address === "::1"
@@ -188,6 +184,15 @@ function exactLoopbackOrigin(request: IncomingMessage, config: ServerConfig): bo
   } catch {
     return false;
   }
+}
+
+// SameSite=Strict still attaches the cookie to same-site subresource requests
+// from other loopback ports, and every route can append audit rows (the lazy
+// KYC sync inside currentSession drains signed provider callbacks; quote
+// previews record activity). The fetch-site contract is therefore uniform.
+function customerFetchAllowed(request: IncomingMessage): boolean {
+  const fetchSite = request.headers["sec-fetch-site"];
+  return fetchSite === undefined || fetchSite === "same-origin" || fetchSite === "none";
 }
 
 function sessionCookieValue(id: string, maxAge: number, origin: string): string {
@@ -359,15 +364,33 @@ export function createMiniappServer(
   }
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
-    if (!isLoopbackHostname(hostnameOf(request.headers.host ?? ""))) {
+    if (!isLoopbackHostname(requestHostname(request.headers.host) ?? "")) {
       json(response, 421, { error: "host_rejected" });
       return;
     }
-    const url = new URL(request.url ?? "/", "http://127.0.0.1");
+    let url: URL;
+    try {
+      url = new URL(request.url ?? "/", "http://127.0.0.1");
+    } catch {
+      json(response, 400, { error: "invalid_request" });
+      return;
+    }
     const path = url.pathname;
 
     if (path === "/bff/metrics") {
       await metrics(request, response);
+      return;
+    }
+
+    // X-Device-Id is an operator-only header: customer and metadata requests
+    // must not carry it. The guard is uniform here because a per-route subset
+    // had already drifted (several customer routes lacked it).
+    if (request.headers["x-device-id"] !== undefined) {
+      json(response, 400, { error: "invalid_request" });
+      return;
+    }
+    if (!customerFetchAllowed(request)) {
+      json(response, 403, { error: "fetch_site_rejected" });
       return;
     }
 
@@ -457,10 +480,6 @@ export function createMiniappServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        if (request.headers["x-device-id"] !== undefined) {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
         const single = path === "/bff/sessions/revoke";
         const { handle } = await readJsonBody(request, single ? ["handle"] : []);
         const session = currentSession(request);
@@ -528,10 +547,6 @@ export function createMiniappServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        if (request.headers["x-device-id"] !== undefined) {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
         const body = await readJsonBody(request, ["asset", "network", "address"]);
         const session = currentSession(request);
         if (!session) {
@@ -571,10 +586,6 @@ export function createMiniappServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        if (request.headers["x-device-id"] !== undefined) {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
         const body = await readJsonBody(request, ["category", "topic", "message"], ["activityId"]);
         const session = currentSession(request);
         if (!session) {
@@ -609,10 +620,6 @@ export function createMiniappServer(
       if (path === "/bff/notifications/read") {
         if (!origin) {
           json(response, 403, { error: "origin_rejected" });
-          return;
-        }
-        if (request.headers["x-device-id"] !== undefined) {
-          json(response, 400, { error: "invalid_request" });
           return;
         }
         const body = await readJsonBody(request, ["ids"]);
@@ -697,7 +704,7 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/notifications") {
-      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+      if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
         return;
       }
@@ -706,7 +713,7 @@ export function createMiniappServer(
     }
     if (path === "/bff/activity") {
       const limit = parseActivityLimit(url.search);
-      if (limit === undefined || request.headers["x-device-id"] !== undefined) {
+      if (limit === undefined) {
         json(response, 400, { error: "invalid_request" });
         return;
       }
@@ -715,7 +722,7 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/sessions") {
-      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+      if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
         return;
       }
@@ -723,7 +730,7 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/support/requests" || path.startsWith("/bff/support/requests/")) {
-      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+      if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
         return;
       }
@@ -741,7 +748,7 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/address-screening/")) {
-      if (url.search !== "" || request.headers["x-device-id"] !== undefined) {
+      if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
         return;
       }
@@ -784,10 +791,6 @@ export function createMiniappServer(
     }
 
     if (path === "/bff/checks" || path === "/bff/checks/preview" || path.startsWith("/bff/checks/")) {
-      if (request.headers["x-device-id"] !== undefined) {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       if (path === "/bff/checks") {
         if (url.search !== "") {
           json(response, 400, { error: "invalid_request" });

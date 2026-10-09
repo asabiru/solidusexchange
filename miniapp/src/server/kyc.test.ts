@@ -189,8 +189,10 @@ describe("KYC callback verification", () => {
     const { kyc, review, approval } = await pending();
     kyc.reset(subject);
     await kyc.submit(subject);
-    assert.deepEqual(kyc.receiveCallback(review, review.deliverAt), { verified: true, action: "applied" });
-    assert.deepEqual(kyc.receiveCallback(approval, approval.deliverAt), { verified: true, action: "applied" });
+    // Reset prunes the discarded application's provider-reference index, so
+    // its callbacks fail closed as unknown rather than being verified-inert.
+    assert.deepEqual(kyc.receiveCallback(review, review.deliverAt), { verified: false, reason: "unknown_application" });
+    assert.deepEqual(kyc.receiveCallback(approval, approval.deliverAt), { verified: false, reason: "unknown_application" });
     assert.equal(kyc.isVerified(subject), false);
     assert.equal(kyc.view(subject, "kyc-gated").state, "submitted");
   });

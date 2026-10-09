@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { requestHostname } from "./security-headers.js";
 
 export type LogMode = "off" | "json";
 export type MetricsMode = "off" | "loopback";
@@ -91,9 +92,8 @@ function isLoopbackPeer(address: string | undefined): boolean {
 }
 
 function isLoopbackHost(host: string | undefined): boolean {
-  if (!host) return false;
-  const hostname = host.startsWith("[") ? host.slice(1, host.indexOf("]")) : host.split(":")[0];
-  return hostname === "localhost" || hostname === "::1" || /^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(hostname);
+  const hostname = requestHostname(host);
+  return hostname === "localhost" || hostname === "::1" || /^127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/.test(hostname ?? "");
 }
 
 /**

@@ -39,6 +39,8 @@ export interface KycService {
   view(subject: string, sessionKyc: KycStatus): KycVerificationView;
   isVerified(subject: string): boolean;
   reset(subject: string): void;
+  /** Diagnostic: sizes of the provider-reference reverse indexes; both equal the number of live applications. */
+  indexSizes(): { applicants: number; subjects: number };
   drainDeliveries(): readonly ScheduledDelivery[];
   receiveCallback(delivery: KycDelivery, receivedAt?: number): KycCallbackResult;
   inspect(subject: string): InboxSubject | undefined;
@@ -237,8 +239,18 @@ export function createKycService(options: KycServiceOptions): KycService {
       const record = recordOf(subject);
       record.attempt += 1;
       record.unavailable = false;
-      record.application = undefined;
+      if (record.application) {
+        // The attempt is discarded, so its provider-reference index entries
+        // must go too: they are permanent otherwise and grow on every reset.
+        applicantsByReference.delete(record.application.providerReference);
+        subjectsByReference.delete(record.application.providerReference);
+        record.application = undefined;
+      }
       record.lastState = undefined;
+    },
+
+    indexSizes(): { applicants: number; subjects: number } {
+      return { applicants: applicantsByReference.size, subjects: subjectsByReference.size };
     },
 
     drainDeliveries(): readonly ScheduledDelivery[] {
