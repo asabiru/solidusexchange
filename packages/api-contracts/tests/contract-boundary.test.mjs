@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -1483,3 +1483,92 @@ assertAccepted("accepts closed optional event payload objects, integers and null
     schema.$defs.withdrawalHeld.properties.trace_state = { type: ["string", "null"], maxLength: 256 };
   });
 });
+
+assertRejected(
+  "rejects unrecognized fields on a path item",
+  "Path item field servers is not allowed",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/meta"].servers = [{ url: "https://api.example.invalid" }];
+  })
+);
+
+assertRejected(
+  "rejects a path item without operations",
+  "Path item must declare at least one operation",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.paths["/api/v1/meta"].get;
+  })
+);
+
+assertRejected(
+  "rejects Idempotency-Key required through path-level parameters on a read",
+  "Read-only operation must not require Idempotency-Key: getApiMetadata",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/meta"].parameters = [
+      { $ref: "#/components/parameters/IdempotencyKey" }
+    ];
+  })
+);
+
+assertRejected(
+  "rejects X-Device-Id on customer operations through path-level parameters",
+  "X-Device-Id is approved only for operator operations: getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].parameters = [
+      { $ref: "#/components/parameters/DeviceId" }
+    ];
+  })
+);
+
+assertRejected(
+  "rejects required non-canonical parameters",
+  "Only canonical parameters may be required: getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.parameters.push({
+      name: "X-Api-Key",
+      in: "header",
+      required: true,
+      schema: { type: "string" }
+    });
+  })
+);
+
+assertRejected(
+  "rejects non-canonical cookie parameters",
+  'Parameter location "cookie" is not allowed in this slice: getCustomerSession',
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.parameters.push({
+      name: "session",
+      in: "cookie",
+      required: false,
+      schema: { type: "string" }
+    });
+  })
+);
+
+assertRejected(
+  "rejects unrecognized fields on operations",
+  "Operation field externalDocs is not allowed in this slice: GET /api/v1/customer/session",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/session"].get.externalDocs = {
+      url: "https://docs.example.invalid"
+    };
+  })
+);
+
+assertRejected(
+  "rejects unrecognized top-level OpenAPI fields",
+  "Top-level OpenAPI fields",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.security = [{ CustomerBearer: [] }];
+  })
+);
+
+assertRejected(
+  "rejects symlinked files escaping the contract package",
+  "escapes contract package through a link",
+  (scratch) => {
+    rmSync(join(scratch, "schemas", "error.schema.json"));
+    symlinkSync("/etc/hostname", join(scratch, "schemas", "error.schema.json"));
+  }
+);

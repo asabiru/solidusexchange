@@ -271,9 +271,193 @@ export function validateWorkflowSurface(workflowText, fileName) {
   return errors;
 }
 
+function stripJs(text, blankStrings) {
+  const out = [...text];
+  const blank = (index) => {
+    if (out[index] !== "\n") out[index] = " ";
+  };
+  const stack = ["code"];
+  let valueBefore = false;
+  const regexKeywords = new Set([
+    "await", "case", "delete", "do", "else", "in", "instanceof",
+    "new", "of", "return", "throw", "typeof", "void", "yield",
+  ]);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i];
+    const top = stack.at(-1);
+    if (top === "line-comment") {
+      if (c === "\n") stack.pop();
+      else blank(i);
+      i++;
+      continue;
+    }
+    if (top === "block-comment") {
+      blank(i);
+      if (c === "*" && text[i + 1] === "/") {
+        blank(i + 1);
+        i += 2;
+        stack.pop();
+      } else {
+        i++;
+      }
+      continue;
+    }
+    if (top === "'" || top === '"' || top === "regex-class") {
+      if (blankStrings) blank(i);
+      if (c === "\\") {
+        if (blankStrings) blank(i + 1);
+        i += 2;
+        continue;
+      }
+      if (c === "\n") stack.pop();
+      else if (top === "regex-class" ? c === "]" : c === top) {
+        stack.pop();
+        if (top !== "regex-class") valueBefore = true;
+      }
+      i++;
+      continue;
+    }
+    if (top === "template") {
+      if (c === "\\") {
+        if (blankStrings) {
+          blank(i);
+          blank(i + 1);
+        }
+        i += 2;
+        continue;
+      }
+      if (c === "\`") {
+        if (blankStrings) blank(i);
+        stack.pop();
+        valueBefore = true;
+        i++;
+        continue;
+      }
+      if (c === "$" && text[i + 1] === "{") {
+        if (blankStrings) {
+          blank(i);
+          blank(i + 1);
+        }
+        i += 2;
+        stack.push({ braces: 0 });
+        continue;
+      }
+      if (blankStrings) blank(i);
+      i++;
+      continue;
+    }
+    if (top === "regex") {
+      if (c === "\\") {
+        if (blankStrings) {
+          blank(i);
+          blank(i + 1);
+        }
+        i += 2;
+        continue;
+      }
+      if (c === "[") {
+        stack.push("regex-class");
+        i++;
+        continue;
+      }
+      if (c === "\n") {
+        stack.pop();
+        i++;
+        continue;
+      }
+      if (blankStrings) blank(i);
+      if (c === "/") {
+        stack.pop();
+        valueBefore = true;
+      }
+      i++;
+      continue;
+    }
+    // code
+    if (/\s/.test(c)) {
+      i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      stack.push("line-comment");
+      blank(i);
+      blank(i + 1);
+      i += 2;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "*") {
+      stack.push("block-comment");
+      blank(i);
+      blank(i + 1);
+      i += 2;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      stack.push(c);
+      if (blankStrings) blank(i);
+      i++;
+      continue;
+    }
+    if (c === "\`") {
+      stack.push("template");
+      if (blankStrings) blank(i);
+      i++;
+      continue;
+    }
+    if (c === "/" && !valueBefore) {
+      stack.push("regex");
+      if (blankStrings) blank(i);
+      i++;
+      continue;
+    }
+    if (c === "}") {
+      const frame = stack.at(-1);
+      if (typeof frame === "object") {
+        if (frame.braces === 0) {
+          stack.pop();
+          if (blankStrings) blank(i);
+          i++;
+          continue;
+        }
+        frame.braces -= 1;
+      }
+      valueBefore = true;
+      i++;
+      continue;
+    }
+    if (c === "{") {
+      const frame = stack.at(-1);
+      if (typeof frame === "object") frame.braces += 1;
+      valueBefore = false;
+      i++;
+      continue;
+    }
+    if (/[\w$]/.test(c)) {
+      let end = i;
+      while (end < text.length && /[\w$]/.test(text[end])) end++;
+      valueBefore = !regexKeywords.has(text.slice(i, end));
+      i = end;
+      continue;
+    }
+    valueBefore = ")]}".includes(c);
+    i++;
+  }
+  return out.join("");
+}
+
+export function countableTestText(text, fileName) {
+  if (SHELL_FILE.test(fileName)) return shellGlued(text).text;
+  if (CODE_FILE.test(fileName)) return stripJs(text, true);
+  return text;
+}
+
 export function validateTestFileContent(text, pinned, fileName) {
   const errors = [];
-  const nonBlank = text.split(/\r?\n/).filter((line) => line.trim()).length;
+  const countable = countableTestText(text, fileName);
+  const nonBlank = countable
+    .split(/\r?\n/)
+    .filter((line) => line.trim()).length;
 
   if (nonBlank < pinned.minLines) {
     errors.push(
@@ -282,7 +466,7 @@ export function validateTestFileContent(text, pinned, fileName) {
   }
 
   if (pinned.minCases) {
-    const cases = (text.match(TEST_CASE) ?? []).length;
+    const cases = (countable.match(TEST_CASE) ?? []).length;
     if (cases < pinned.minCases) {
       errors.push(
         `${fileName}: pinned test file must keep at least ${pinned.minCases} test cases`,
@@ -306,20 +490,36 @@ export function validateSourceText(raw, fileName) {
   const testFile = TEST_PATH.test(fileName);
   const errors = [];
 
+  if (code) {
+    const unmasked = stripJs(text, false);
+    const focusedChecks = [
+      [FOCUSED_OR_SKIPPED_TEST, "tests must not be focused, skipped or marked todo"],
+      [X_PREFIXED_TEST, "tests must not be focused, skipped or marked todo"],
+    ];
+    if (testFile) {
+      focusedChecks.push([
+        TEST_OPTION_FLAG,
+        "test option objects must not set only, skip or todo",
+      ]);
+    }
+    for (const [pattern, message] of focusedChecks) {
+      const global = new RegExp(pattern.source, "g");
+      for (const match of unmasked.matchAll(global)) {
+        errors.push(`${fileName}:${lineAt(unmasked, match.index)}: ${message}`);
+      }
+    }
+    if (testFile) {
+      unmasked.split(/\r?\n/).forEach((line, index) => {
+        if (/^\s*\.(?:only|skip|todo)\b/.test(line)) {
+          errors.push(
+            `${fileName}:${index + 1}: tests must not be focused, skipped or marked todo`,
+          );
+        }
+      });
+    }
+  }
+
   text.split(/\r?\n/).forEach((line, index) => {
-    if (
-      code &&
-      (FOCUSED_OR_SKIPPED_TEST.test(line) || X_PREFIXED_TEST.test(line))
-    ) {
-      errors.push(
-        `${fileName}:${index + 1}: tests must not be focused, skipped or marked todo`,
-      );
-    }
-    if (code && testFile && TEST_OPTION_FLAG.test(line)) {
-      errors.push(
-        `${fileName}:${index + 1}: test option objects must not set only, skip or todo`,
-      );
-    }
     if (code && EARLY_PROCESS_EXIT.test(line)) {
       errors.push(
         `${fileName}:${index + 1}: checked-in scripts and tests must not call ${PROCESS}.exit`,
@@ -340,20 +540,195 @@ export function validateSourceText(raw, fileName) {
   }
 
   if (SHELL_FILE.test(fileName) && testFile) {
-    errors.push(...validateShellControl(text, fileName));
-    const unquoted = text.replace(SHELL_QUOTING, "");
-    for (const match of unquoted.matchAll(SHELL_EXIT)) {
-      const argument = match[1].trim().split(/\s+/)[0] ?? "";
-      if (!SHELL_EXIT_ARG.test(argument)) {
-        const line = lineAt(unquoted, match.index);
-        errors.push(
-          `${fileName}:${line}: test scripts must only exit with an explicit nonzero status`,
-        );
+    const shellErrors = new Set();
+    const glued = shellGlued(text);
+    if (glued.glued) {
+      shellErrors.add(
+        `${fileName}: shell expansions or substitutions glued inside command words are not allowed`,
+      );
+    }
+    for (const surface of new Set([text, glued.text])) {
+      for (const problem of validateShellControl(surface, fileName, text)) {
+        shellErrors.add(problem);
+      }
+      const unquoted = surface.replace(SHELL_QUOTING, "");
+      for (const match of unquoted.matchAll(SHELL_EXIT)) {
+        const argument = match[1].trim().split(/\s+/)[0] ?? "";
+        if (!SHELL_EXIT_ARG.test(argument)) {
+          const line = lineAt(unquoted, match.index);
+          shellErrors.add(
+            `${fileName}:${line}: test scripts must only exit with an explicit nonzero status`,
+          );
+        }
       }
     }
+    errors.push(...shellErrors);
   }
 
   return errors;
+}
+
+function shellGlued(text) {
+  const out = [];
+  const n = text.length;
+  let quote = null;
+  let wordStart = true;
+  let atCommandStart = true;
+  let wordIsCommand = false;
+  let glued = false;
+  const isWordChar = (c) => /[A-Za-z0-9_]/.test(c ?? "");
+  const startWord = () => {
+    wordIsCommand = atCommandStart;
+    atCommandStart = false;
+  };
+
+  const dropExpansion = (start) => {
+    const eat = (i) => {
+      if (text[i] === "\n") out.push("\n");
+      return i + 1;
+    };
+    let i = start + 1;
+    const next = text[i];
+    if (next === "{") {
+      let depth = 1;
+      i = eat(i);
+      while (i < n && depth > 0) {
+        if (text[i] === "{") depth++;
+        else if (text[i] === "}") depth--;
+        i = eat(i);
+      }
+      return i;
+    }
+    if (next === "(") {
+      let depth = 0;
+      while (i < n) {
+        const c = text[i];
+        if (c === "\\") {
+          i = eat(i);
+          i = eat(i);
+          continue;
+        }
+        if (c === "'" || c === '"' || c === "\`") {
+          const inner = c;
+          i = eat(i);
+          while (i < n && text[i] !== inner) {
+            if (text[i] === "\\" && inner !== "'") i = eat(i);
+            i = eat(i);
+          }
+          if (i < n) i = eat(i);
+          continue;
+        }
+        if (c === "(") depth++;
+        if (c === ")") {
+          depth--;
+          i = eat(i);
+          if (depth <= 0) return i;
+          continue;
+        }
+        i = eat(i);
+      }
+      return i;
+    }
+    if (next === "\`") {
+      i = eat(i);
+      while (i < n && text[i] !== "\`") {
+        if (text[i] === "\\") i = eat(i);
+        i = eat(i);
+      }
+      return i + 1;
+    }
+    if (/[0-9@#?$!*%-]/.test(next ?? "") || next === "$") {
+      return i + 1;
+    }
+    if (/[A-Za-z_]/.test(next ?? "")) {
+      i++;
+      while (i < n && /[\w]/.test(text[i])) i++;
+      return i;
+    }
+    return i;
+  };
+
+  const dropGluedExpansion = (start) => {
+    const end = dropExpansion(start);
+    if (wordIsCommand && (isWordChar(text[start - 1]) || isWordChar(text[end]))) glued = true;
+    return end;
+  };
+
+  let i = 0;
+  while (i < n) {
+    const c = text[i];
+    if (quote === "'") {
+      if (c === "'") {
+        quote = null;
+      } else {
+        out.push(c);
+        wordStart = false;
+      }
+      i++;
+      continue;
+    }
+    if (c === "'") {
+      if (wordStart) startWord();
+      quote = "'";
+      i++;
+      continue;
+    }
+    if (c === '"') {
+      if (wordStart) startWord();
+      quote = quote === '"' ? null : '"';
+      i++;
+      continue;
+    }
+    if (c === "\\") {
+      if (wordStart) startWord();
+      i++;
+      if (i < n && text[i] === "\n") {
+        out.push("\n");
+        wordStart = true;
+      } else if (i < n) {
+        out.push(text[i]);
+        wordStart = false;
+      }
+      i++;
+      continue;
+    }
+    if (c === "$") {
+      if (wordStart) startWord();
+      i = dropGluedExpansion(i);
+      wordStart = false;
+      continue;
+    }
+    if (c === "\`") {
+      if (wordStart) startWord();
+      const start = i;
+      i++;
+      while (i < n && text[i] !== "\`") {
+        if (text[i] === "\\") i++;
+        if (i < n && text[i] === "\n") out.push("\n");
+        i++;
+      }
+      if (i < n) i++;
+      if (wordIsCommand && (isWordChar(text[start - 1]) || isWordChar(text[i]))) glued = true;
+      wordStart = false;
+      continue;
+    }
+    if (quote === '"') {
+      out.push(c);
+      wordStart = false;
+      i++;
+      continue;
+    }
+    if (c === "#" && wordStart) {
+      while (i < n && text[i] !== "\n") i++;
+      continue;
+    }
+    if (wordStart && !/\s/.test(c)) startWord();
+    out.push(c);
+    if (/[;&|(){}<>\n]/.test(c)) atCommandStart = true;
+    wordStart = /[\s;&|(){}<>]/.test(c);
+    i++;
+  }
+  return { text: out.join(""), glued };
 }
 
 function lineAt(text, offset) {
@@ -405,13 +780,14 @@ function validateProcessAccess(text, fileName) {
   return errors;
 }
 
-function validateShellControl(text, fileName) {
+function validateShellControl(text, fileName, rawText = text) {
   const errors = [];
   const modes = [];
+  const rawLines = rawText.split("\n");
 
   text.split("\n").forEach((raw, index) => {
     const line = raw.replace(SHELL_QUOTING, "");
-    const statement = raw.trim();
+    const statement = (rawLines[index] ?? raw).trim();
     const location = `${fileName}:${index + 1}`;
 
     if (
@@ -459,16 +835,18 @@ function validateShellControl(text, fileName) {
   return errors;
 }
 
-async function* walk(directory) {
+async function* walk(directory, problems = []) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const resolved = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       if (!SKIPPED_DIRECTORY.has(entry.name)) {
-        yield* walk(resolved);
+        yield* walk(resolved, problems);
       }
     } else if (entry.isFile()) {
       yield resolved;
+    } else {
+      problems.push(resolved);
     }
   }
 }
@@ -512,13 +890,20 @@ async function main() {
     errors.push(...validateTestFileContent(text, pinned, file));
   }
 
-  for await (const file of walk(process.cwd())) {
+  const nonRegular = [];
+  for await (const file of walk(process.cwd(), nonRegular)) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
     if (!CODE_FILE.test(relative) && !SHELL_FILE.test(relative)) {
       continue;
     }
     errors.push(
       ...validateSourceText(await readFile(file, "utf8"), relative),
+    );
+  }
+  for (const file of nonRegular) {
+    const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
+    errors.push(
+      `${relative}: non-regular file entries are not allowed in the repository`,
     );
   }
 

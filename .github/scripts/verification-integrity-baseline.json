@@ -379,43 +379,43 @@
   },
   "testFiles": {
     ".github/scripts/check-dev-stack.test.mjs": {
-      "minLines": 310,
-      "minCases": 28
+      "minLines": 286,
+      "minCases": 30
     },
     ".github/scripts/check-regulated-core-status.test.mjs": {
-      "minLines": 215,
-      "minCases": 13
+      "minLines": 228,
+      "minCases": 15
     },
     ".github/scripts/check-verification-integrity.test.mjs": {
-      "minLines": 492,
-      "minCases": 32
+      "minLines": 498,
+      "minCases": 27
     },
     ".github/scripts/check-workflow-policy.test.mjs": {
-      "minLines": 714,
+      "minLines": 528,
       "minCases": 44
     },
     "backoffice/src/app/a11y.test.ts": {
-      "minLines": 624,
+      "minLines": 622,
       "minCases": 29
     },
     "backoffice/src/app/checks.test.ts": {
-      "minLines": 52,
-      "minCases": 4
-    },
-    "backoffice/src/app/i18n.test.ts": {
-      "minLines": 432,
-      "minCases": 38
-    },
-    "backoffice/src/app/subjects.test.ts": {
-      "minLines": 92,
-      "minCases": 6
-    },
-    "backoffice/src/app/support.test.ts": {
       "minLines": 51,
       "minCases": 4
     },
+    "backoffice/src/app/i18n.test.ts": {
+      "minLines": 427,
+      "minCases": 38
+    },
+    "backoffice/src/app/subjects.test.ts": {
+      "minLines": 89,
+      "minCases": 6
+    },
+    "backoffice/src/app/support.test.ts": {
+      "minLines": 50,
+      "minCases": 4
+    },
     "backoffice/src/app/withdrawals.test.ts": {
-      "minLines": 70,
+      "minLines": 69,
       "minCases": 4
     },
     "backoffice/src/auth/access.test.ts": {
@@ -423,11 +423,11 @@
       "minCases": 9
     },
     "backoffice/src/data/client.test.ts": {
-      "minLines": 264,
-      "minCases": 9
+      "minLines": 282,
+      "minCases": 10
     },
     "backoffice/src/data/demo.test.ts": {
-      "minLines": 48,
+      "minLines": 49,
       "minCases": 2
     },
     "backoffice/src/server/audit-store.test.ts": {
@@ -443,7 +443,7 @@
       "minCases": 9
     },
     "backoffice/src/server/config.test.ts": {
-      "minLines": 257,
+      "minLines": 246,
       "minCases": 16
     },
     "backoffice/src/server/controls.test.ts": {
@@ -455,23 +455,23 @@
       "minCases": 1
     },
     "backoffice/src/server/observability.test.ts": {
-      "minLines": 331,
+      "minLines": 330,
       "minCases": 12
     },
     "backoffice/src/server/oidc-session.test.ts": {
-      "minLines": 289,
+      "minLines": 286,
       "minCases": 6
     },
     "backoffice/src/server/oidc.test.ts": {
-      "minLines": 715,
+      "minLines": 693,
       "minCases": 19
     },
     "backoffice/src/server/postgres-audit-store.test.ts": {
-      "minLines": 30,
+      "minLines": 28,
       "minCases": 2
     },
     "backoffice/src/server/provider-evidence.test.ts": {
-      "minLines": 318,
+      "minLines": 316,
       "minCases": 11
     },
     "backoffice/src/server/reports.test.ts": {
@@ -483,7 +483,7 @@
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
-      "minLines": 1211,
+      "minLines": 1208,
       "minCases": 26
     },
     "backoffice/src/server/signing.test.ts": {
@@ -491,11 +491,11 @@
       "minCases": 2
     },
     "backoffice/src/server/step-up.test.ts": {
-      "minLines": 176,
+      "minLines": 167,
       "minCases": 5
     },
     "backoffice/src/server/subjects.test.ts": {
-      "minLines": 260,
+      "minLines": 256,
       "minCases": 11
     },
     "backoffice/src/server/support.test.ts": {
@@ -518,7 +518,7 @@
       "minCases": 5
     },
     "infra/local/tests/loopback-edge.test.mjs": {
-      "minLines": 72,
+      "minLines": 70,
       "minCases": 6
     },
     "infra/local/tests/x509.test.mjs": {
@@ -530,11 +530,11 @@
       "minCases": 28
     },
     "miniapp/src/app/checks-badges.test.ts": {
-      "minLines": 72,
+      "minLines": 71,
       "minCases": 6
     },
     "miniapp/src/app/i18n.test.ts": {
-      "minLines": 439,
+      "minLines": 435,
       "minCases": 38
     },
     "miniapp/src/app/notification-seen.test.ts": {
@@ -542,15 +542,15 @@
       "minCases": 6
     },
     "miniapp/src/server/activity-routes.test.ts": {
-      "minLines": 373,
+      "minLines": 371,
       "minCases": 15
     },
     "miniapp/src/server/activity.test.ts": {
-      "minLines": 242,
+      "minLines": 241,
       "minCases": 15
     },
     "miniapp/src/server/address-screening-routes.test.ts": {
-      "minLines": 363,
+      "minLines": 361,
       "minCases": 14
     },
     "miniapp/src/server/address-screening.test.ts": {
@@ -558,7 +558,7 @@
       "minCases": 18
     },
     "miniapp/src/server/bff-core.test.ts": {
-      "minLines": 186,
+      "minLines": 181,
       "minCases": 6
     },
     "miniapp/src/server/bff-security.test.ts": {
@@ -566,7 +566,7 @@
       "minCases": 5
     },
     "miniapp/src/server/checks-routes.test.ts": {
-      "minLines": 186,
+      "minLines": 185,
       "minCases": 8
     },
     "miniapp/src/server/checks.test.ts": {
@@ -574,7 +574,7 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-client.test.ts": {
-      "minLines": 496,
+      "minLines": 491,
       "minCases": 16
     },
     "miniapp/src/server/dev-server.test.ts": {
@@ -594,23 +594,23 @@
       "minCases": 10
     },
     "miniapp/src/server/kyc.test.ts": {
-      "minLines": 179,
+      "minLines": 177,
       "minCases": 13
     },
     "miniapp/src/server/notifications-routes.test.ts": {
-      "minLines": 138,
+      "minLines": 137,
       "minCases": 4
     },
     "miniapp/src/server/notifications.test.ts": {
-      "minLines": 404,
+      "minLines": 402,
       "minCases": 17
     },
     "miniapp/src/server/notifications-upstream.test.ts": {
-      "minLines": 237,
+      "minLines": 234,
       "minCases": 7
     },
     "miniapp/src/server/observability.test.ts": {
-      "minLines": 367,
+      "minLines": 366,
       "minCases": 13
     },
     "miniapp/src/server/provider-quotes.test.ts": {
@@ -626,7 +626,7 @@
       "minCases": 12
     },
     "miniapp/src/server/server.test.ts": {
-      "minLines": 337,
+      "minLines": 336,
       "minCases": 22
     },
     "miniapp/src/server/sessions-routes.test.ts": {
@@ -634,7 +634,7 @@
       "minCases": 19
     },
     "miniapp/src/server/support-routes.test.ts": {
-      "minLines": 387,
+      "minLines": 386,
       "minCases": 14
     },
     "miniapp/src/server/support.test.ts": {
@@ -657,11 +657,11 @@
       "minLines": 35
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 1350,
+      "minLines": 1425,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
-      "minLines": 546,
+      "minLines": 542,
       "minCases": 11
     },
     "packages/custody-core/tests/postgres-backup-consistency.sql": {
@@ -671,43 +671,43 @@
       "minLines": 57
     },
     "packages/custody-core/tests/postgres-backup-restore.sh": {
-      "minLines": 634
+      "minLines": 569
     },
     "packages/custody-core/tests/postgres-catalog.sh": {
-      "minLines": 83
+      "minLines": 74
     },
     "packages/custody-core/tests/postgres-catalog.sql": {
       "minLines": 539
     },
     "packages/custody-core/tests/postgres-execution-surface-catalog.sh": {
-      "minLines": 180
+      "minLines": 178
     },
     "packages/custody-core/tests/postgres-execution-surface-catalog.sql": {
       "minLines": 293
     },
     "packages/custody-core/tests/postgres-migration-history.sh": {
-      "minLines": 262
+      "minLines": 241
     },
     "packages/custody-core/tests/postgres-migration-history.sql": {
       "minLines": 30
     },
     "packages/custody-core/tests/postgres-migration-source-catalog.sh": {
-      "minLines": 46
+      "minLines": 41
     },
     "packages/custody-core/tests/postgres-migration-source-policy.sh": {
-      "minLines": 154
+      "minLines": 151
     },
     "packages/custody-core/tests/postgres-outbox.sh": {
-      "minLines": 69
+      "minLines": 67
     },
     "packages/custody-core/tests/postgres-outbox.sql": {
-      "minLines": 226
+      "minLines": 355
     },
     "packages/custody-core/tests/postgres-runtime-privilege-catalog.sql": {
       "minLines": 326
     },
     "packages/custody-core/tests/postgres-runtime-privileges.sh": {
-      "minLines": 325
+      "minLines": 288
     },
     "packages/custody-core/tests/postgres-state-snapshot.sql": {
       "minLines": 37
@@ -720,7 +720,7 @@
       "minCases": 15
     },
     "packages/custody-core/tests/unsigned-intent.test.mjs": {
-      "minLines": 297,
+      "minLines": 295,
       "minCases": 13
     },
     "packages/customer-api/tests/auth-config.test.mjs": {
@@ -728,7 +728,7 @@
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
-      "minLines": 135,
+      "minLines": 124,
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
@@ -736,11 +736,11 @@
       "minCases": 17
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 251,
+      "minLines": 242,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
-      "minLines": 260
+      "minLines": 254
     },
     "packages/customer-api/tests/contract-validator.test.mjs": {
       "minLines": 135,
@@ -750,7 +750,7 @@
       "minLines": 138
     },
     "packages/customer-api/tests/kyc.test.mjs": {
-      "minLines": 284,
+      "minLines": 281,
       "minCases": 10
     },
     "packages/customer-api/tests/machinery-hardening.test.mjs": {
@@ -758,7 +758,7 @@
       "minCases": 7
     },
     "packages/customer-api/tests/notifications.test.mjs": {
-      "minLines": 218,
+      "minLines": 217,
       "minCases": 9
     },
     "packages/customer-api/tests/observability.test.mjs": {
@@ -770,7 +770,7 @@
       "minCases": 12
     },
     "packages/customer-api/tests/routing.test.mjs": {
-      "minLines": 179,
+      "minLines": 176,
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
@@ -778,48 +778,48 @@
       "minCases": 6
     },
     "packages/customer-api/tests/wallets.test.mjs": {
-      "minLines": 194,
+      "minLines": 193,
       "minCases": 9
     },
     "packages/e2e-dev/tests/boundaries.test.mjs": {
-      "minLines": 111,
+      "minLines": 108,
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 571,
+      "minLines": 549,
       "minCases": 17
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 349,
+      "minLines": 345,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 666,
+      "minLines": 655,
       "minCases": 18
     },
     "packages/e2e-dev/tests/stack.mjs": {
-      "minLines": 141
+      "minLines": 137
     },
     "packages/financial-core/tests/command-digest-vector.json": {
       "minLines": 44
     },
     "packages/financial-core/tests/ledger-hardening.test.mjs": {
-      "minLines": 377,
+      "minLines": 355,
       "minCases": 11
     },
     "packages/financial-core/tests/ledger-posting-rules.test.mjs": {
-      "minLines": 482,
+      "minLines": 449,
       "minCases": 10
     },
     "packages/financial-core/tests/ledger.test.mjs": {
-      "minLines": 479,
+      "minLines": 461,
       "minCases": 16
     },
     "packages/financial-core/tests/postgres-acceptance-artifact-integrity.sh": {
-      "minLines": 274
+      "minLines": 205
     },
     "packages/financial-core/tests/postgres-access-control-catalog.sh": {
-      "minLines": 63
+      "minLines": 54
     },
     "packages/financial-core/tests/postgres-access-control-catalog.sql": {
       "minLines": 281
@@ -831,70 +831,70 @@
       "minLines": 201
     },
     "packages/financial-core/tests/postgres-backup-restore.sh": {
-      "minLines": 713
+      "minLines": 647
     },
     "packages/financial-core/tests/postgres-chart-of-accounts.sh": {
-      "minLines": 28
+      "minLines": 26
     },
     "packages/financial-core/tests/postgres-chart-of-accounts.sql": {
       "minLines": 49
     },
     "packages/financial-core/tests/postgres-command-digest-uniqueness.sh": {
-      "minLines": 316
+      "minLines": 285
     },
     "packages/financial-core/tests/postgres-concurrency.sh": {
-      "minLines": 305
+      "minLines": 230
     },
     "packages/financial-core/tests/postgres-constraint-catalog.sh": {
-      "minLines": 269
+      "minLines": 254
     },
     "packages/financial-core/tests/postgres-constraint-catalog.sql": {
       "minLines": 102
     },
     "packages/financial-core/tests/postgres-execution-surface-catalog.sh": {
-      "minLines": 170
+      "minLines": 168
     },
     "packages/financial-core/tests/postgres-execution-surface-catalog.sql": {
       "minLines": 293
     },
     "packages/financial-core/tests/postgres-finite-timestamps.sh": {
-      "minLines": 464
+      "minLines": 431
     },
     "packages/financial-core/tests/postgres-immutability-catalog.sh": {
-      "minLines": 90
+      "minLines": 66
     },
     "packages/financial-core/tests/postgres-immutability-catalog.sql": {
       "minLines": 44
     },
     "packages/financial-core/tests/postgres-invariant-trigger-catalog.sh": {
-      "minLines": 77
+      "minLines": 68
     },
     "packages/financial-core/tests/postgres-invariant-trigger-catalog.sql": {
       "minLines": 47
     },
     "packages/financial-core/tests/postgres-ledger-integrity.sh": {
-      "minLines": 235
+      "minLines": 209
     },
     "packages/financial-core/tests/postgres-ledger-integrity.sql": {
       "minLines": 192
     },
     "packages/financial-core/tests/postgres-migration-history.sh": {
-      "minLines": 271
+      "minLines": 242
     },
     "packages/financial-core/tests/postgres-migration-history.sql": {
       "minLines": 30
     },
     "packages/financial-core/tests/postgres-migration-source-catalog.sh": {
-      "minLines": 48
+      "minLines": 43
     },
     "packages/financial-core/tests/postgres-migration-source-policy.sh": {
-      "minLines": 124
+      "minLines": 119
     },
     "packages/financial-core/tests/postgres-owner-truncate-guard.sh": {
-      "minLines": 74
+      "minLines": 67
     },
     "packages/financial-core/tests/postgres-posting-rule-registry.sh": {
-      "minLines": 26
+      "minLines": 24
     },
     "packages/financial-core/tests/postgres-posting-rule-registry.sql": {
       "minLines": 21
@@ -927,19 +927,19 @@
       "minLines": 40
     },
     "packages/financial-core/tests/postgres-relation-catalog.sh": {
-      "minLines": 213
+      "minLines": 200
     },
     "packages/financial-core/tests/postgres-relation-catalog.sql": {
       "minLines": 156
     },
     "packages/financial-core/tests/postgres-replica-reference-integrity.sh": {
-      "minLines": 285
+      "minLines": 268
     },
     "packages/financial-core/tests/postgres-runtime-privilege-catalog.sql": {
       "minLines": 332
     },
     "packages/financial-core/tests/postgres-runtime-privileges.sh": {
-      "minLines": 423
+      "minLines": 401
     },
     "packages/financial-core/tests/postgres-smoke.sql": {
       "minLines": 302
@@ -948,7 +948,7 @@
       "minLines": 153
     },
     "packages/financial-core/tests/postgres-trigger-function-catalog.sh": {
-      "minLines": 26
+      "minLines": 24
     },
     "packages/financial-core/tests/postgres-trigger-function-catalog.sql": {
       "minLines": 54
@@ -965,7 +965,7 @@
       "minCases": 8
     },
     "packages/provider-simulators/tests/canonical-json.test.mjs": {
-      "minLines": 89,
+      "minLines": 88,
       "minCases": 7
     },
     "packages/provider-simulators/tests/checks.test.mjs": {
@@ -973,7 +973,7 @@
       "minCases": 36
     },
     "packages/provider-simulators/tests/conformance.test.mjs": {
-      "minLines": 556,
+      "minLines": 545,
       "minCases": 11
     },
     "packages/provider-simulators/tests/decimal.test.mjs": {
@@ -993,8 +993,8 @@
       "minCases": 11
     },
     "packages/provider-simulators/tests/quotes.test.mjs": {
-      "minLines": 114,
-      "minCases": 9
+      "minLines": 182,
+      "minCases": 13
     },
     "packages/provider-simulators/tests/signing.test.mjs": {
       "minLines": 269,
