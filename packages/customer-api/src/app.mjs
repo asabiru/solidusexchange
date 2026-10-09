@@ -9,6 +9,7 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import { validCardsView } from "./cards.mjs";
 import { validDepositsView } from "./deposits.mjs";
 import { validExchangeOrdersView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
@@ -50,6 +51,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
  * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
  * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
+ * @property {import("./cards.mjs").CardDirectory} cardDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -227,6 +229,7 @@ export function createCustomerApiHandler({
   quoteDirectory,
   exchangeOrderDirectory,
   paymentDirectory,
+  cardDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -269,6 +272,9 @@ export function createCustomerApiHandler({
   }
   if (typeof paymentDirectory?.listFor !== "function") {
     throw new Error("A payment directory is required");
+  }
+  if (typeof cardDirectory?.listFor !== "function") {
+    throw new Error("A card directory is required");
   }
 
   /**
@@ -499,6 +505,25 @@ export function createCustomerApiHandler({
       const view = await paymentDirectory.listFor(principal.subject);
       if (!validPaymentsView(view)) {
         throw new Error("Payment directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerCards") {
+      // customer.cards.read is KYC-gated like
+      // deposits/withdrawals/quotes/exchange-orders/payments: cards are an
+      // asset/activity collection (the payment cards issued to the
+      // subject), so unverified and pending subjects are denied with the
+      // 403 envelope. The payload is synthetic and execution-free (posting
+      // "none") and carries masked identifiers only — it authorizes
+      // nothing and can never expose a full card number.
+      if (!evaluation.granted.includes("customer.cards.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await cardDirectory.listFor(principal.subject);
+      if (!validCardsView(view)) {
+        throw new Error("Card directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

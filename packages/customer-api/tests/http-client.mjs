@@ -4,6 +4,7 @@ import { connect } from "node:net";
 import { createCustomerApiServer } from "../src/app.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
+import { createSyntheticCardDirectory } from "../src/cards.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
@@ -63,6 +64,7 @@ export async function startTestServer(options = {}) {
     quoteDirectory: createSyntheticQuoteDirectory(),
     exchangeOrderDirectory: createSyntheticExchangeOrderDirectory(),
     paymentDirectory: createSyntheticPaymentDirectory(),
+    cardDirectory: createSyntheticCardDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options
