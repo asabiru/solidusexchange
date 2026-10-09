@@ -52,6 +52,7 @@ function supportStub(result: CustomerApiSupport | (() => Promise<CustomerApiSupp
     configured: true,
     access: async () => ({ status: "unavailable" }),
     wallets: async () => ({ status: "unavailable" }),
+    deposits: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "unavailable" }),
     kyc: async () => ({ status: "unavailable" }),
     profile: async () => ({ status: "unavailable" }),

@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
-import type { CustomerApiAccess, KycVerificationState, NotificationTemplate } from "../shared/api.js";
+import type { CustomerApiAccess, DepositStatus, KycVerificationState, NotificationTemplate } from "../shared/api.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { isDecimalString } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
+import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
@@ -28,6 +29,26 @@ export interface CustomerApiWallet {
 
 export type CustomerApiWallets =
   | { status: "ok"; wallets: readonly CustomerApiWallet[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+export interface CustomerApiDeposit {
+  deposit_id: string;
+  asset: AssetCode;
+  method: "sbp";
+  status: DepositStatus;
+  expected_amount: string;
+  received_total: string;
+  reversed_total: string;
+  payment_reference: string;
+  created_at: string;
+  updated_at: string;
+  posting: "none";
+}
+
+export type CustomerApiDeposits =
+  | { status: "ok"; deposits: readonly CustomerApiDeposit[] }
   | { status: "denied" }
   | { status: "unavailable" }
   | { status: "not-configured" };
@@ -136,6 +157,7 @@ export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
+  deposits(bffSubject: string, nowMs: number): Promise<CustomerApiDeposits>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -216,6 +238,71 @@ function parseWalletsView(value: unknown): readonly CustomerApiWallet[] | undefi
 }
 
 const isoTimestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
+
+const depositKeys = [
+  "deposit_id",
+  "asset",
+  "method",
+  "status",
+  "expected_amount",
+  "received_total",
+  "reversed_total",
+  "payment_reference",
+  "created_at",
+  "updated_at",
+  "posting"
+] as const;
+
+function parseDepositsView(value: unknown): readonly CustomerApiDeposit[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["deposits", "mode"])
+    || value.mode !== "test"
+    || !Array.isArray(value.deposits)
+  ) {
+    return undefined;
+  }
+  const deposits: CustomerApiDeposit[] = [];
+  for (const entry of value.deposits) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, depositKeys)
+      || typeof entry.deposit_id !== "string"
+      || !depositIdPattern.test(entry.deposit_id)
+      || typeof entry.asset !== "string"
+      || !isAssetCode(entry.asset)
+      || entry.method !== "sbp"
+      || !isDepositStatus(entry.status)
+      || typeof entry.expected_amount !== "string"
+      || typeof entry.received_total !== "string"
+      || typeof entry.reversed_total !== "string"
+      || !isDecimalString(entry.expected_amount, assets[entry.asset].scale)
+      || !isDecimalString(entry.received_total, assets[entry.asset].scale)
+      || !isDecimalString(entry.reversed_total, assets[entry.asset].scale)
+      || typeof entry.payment_reference !== "string"
+      || !depositPaymentReferencePattern.test(entry.payment_reference)
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.updated_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    deposits.push(Object.freeze({
+      deposit_id: entry.deposit_id,
+      asset: entry.asset,
+      method: entry.method,
+      status: entry.status,
+      expected_amount: entry.expected_amount,
+      received_total: entry.received_total,
+      reversed_total: entry.reversed_total,
+      payment_reference: entry.payment_reference,
+      created_at: entry.created_at,
+      updated_at: entry.updated_at,
+      posting: entry.posting
+    }));
+  }
+  return Object.freeze(deposits);
+}
 
 function parseNotificationsView(
   value: unknown
@@ -485,8 +572,9 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities, wallets, notifications, kyc, profile and
- * support GETs, never sends X-Device-Id and fails closed to "unavailable" on
+ * customer session, capabilities, wallets, deposits, notifications, kyc,
+ * profile and support GETs, never sends X-Device-Id and fails closed to
+ * "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
  * capability gate) surfaces as "denied"; the KYC status, profile and support
@@ -501,6 +589,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       configured: false,
       access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
       wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
+      deposits: async (): Promise<CustomerApiDeposits> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -576,6 +665,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       const body = await get("/api/v1/customer/wallets", token, nowMs);
       const view = parseWalletsView(body);
       return view === undefined ? { status: "unavailable" } : { status: "ok", wallets: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function deposits(bffSubject: string, nowMs: number): Promise<CustomerApiDeposits> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/deposits", token, nowMs);
+      const view = parseDepositsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", deposits: view };
     } catch (error) {
       if (error instanceof CustomerApiHttpError && error.status === 403) {
         return { status: "denied" };
@@ -660,5 +768,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, notifications, kyc, profile, support });
 }
