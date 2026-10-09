@@ -13,6 +13,11 @@ export const WALLET_ASSETS = Object.freeze([
 
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-wallets-v1";
 const WALLET_KEYS = Object.freeze(["wallet_id", "asset", "available", "hold"]);
+// The WalletView field patterns from packages/api-contracts/openapi.yaml: the
+// runtime guard rejects a directory view that would violate the declared body.
+const WALLET_ID_PATTERN = /^syn_wal_[a-z0-9]{8,32}$/u;
+const ASSET_PATTERN = /^[A-Z0-9]{2,16}$/u;
+const DECIMAL_PATTERN = /^(0|[1-9][0-9]*)(\.[0-9]+)?$/u;
 
 /**
  * @typedef {object} WalletEntry
@@ -91,7 +96,11 @@ export function validWalletsView(view) {
         typeof wallet === "object" &&
         !Array.isArray(wallet) &&
         JSON.stringify(Object.keys(wallet).sort()) === JSON.stringify([...WALLET_KEYS].sort()) &&
-        Object.values(wallet).every((value) => typeof value === "string")
+        Object.values(wallet).every((value) => typeof value === "string") &&
+        WALLET_ID_PATTERN.test(wallet.wallet_id) &&
+        ASSET_PATTERN.test(wallet.asset) &&
+        DECIMAL_PATTERN.test(wallet.available) &&
+        DECIMAL_PATTERN.test(wallet.hold)
     )
   );
 }
