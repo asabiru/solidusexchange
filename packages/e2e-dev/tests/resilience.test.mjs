@@ -125,6 +125,38 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/notifications")) {
+      return {
+        mode: "test",
+        delivery: "disabled",
+        unread: 1,
+        notifications: [
+          {
+            notification_id: "ntf_0123456789abcdef01234567",
+            created_at: "2026-10-01T12:00:00.000Z",
+            channel: "telegram-draft",
+            template: "kyc_approved",
+            locale: "ru",
+            text: "Тестовый режим. Проверка личности пройдена.",
+            mode: "test",
+            delivered: false,
+            read: false
+          },
+          {
+            notification_id: "ntf_fedcba9876543210fedcba98",
+            created_at: "2026-09-30T12:00:00.000Z",
+            channel: "telegram-draft",
+            template: "session_login",
+            locale: "ru",
+            text: "Тестовый режим. Выполнен вход в SOLID.",
+            mode: "test",
+            delivered: false,
+            read: true
+          }
+        ],
+        ...extra
+      };
+    }
     return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
   }
 
@@ -199,6 +231,23 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function notificationsFailClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("ntf_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "notifications_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
   async function profileFailsClosed(label) {
     const hits = upstream.length;
     const startedAt = Date.now();
@@ -254,9 +303,22 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(wallet.availableRub, "85124.00");
     assert.equal(wallet.holdRub, "0.00");
     assert.equal(wallet.totalRub, "85124.00");
+    const feed = await getJson(app, "/bff/notifications", verifiedCookie);
+    assert.equal(feed.mode, "test");
+    assert.equal(feed.delivery, "disabled");
+    assert.equal(feed.unread, 1);
+    assert.deepEqual(feed.notifications.map((draft) => draft.id), [
+      "ntf_0123456789abcdef01234567",
+      "ntf_fedcba9876543210fedcba98"
+    ]);
+    assert.deepEqual(feed.notifications.map((draft) => draft.createdAt), [
+      Date.parse("2026-10-01T12:00:00.000Z"),
+      Date.parse("2026-09-30T12:00:00.000Z")
+    ]);
+    assert.deepEqual(feed.notifications.map((draft) => draft.read), [false, true]);
   });
 
-  it("degrades a verified session's wallet to the gated view on an upstream capability denial", async () => {
+  it("degrades verified sessions' wallet and notifications on an upstream capability denial", async () => {
     mode = "capability_denied";
     const hits = upstream.length;
     const response = await call(app.base, "/bff/wallet", { cookie: verifiedCookie });
@@ -269,6 +331,18 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(wallet.kyc, "kyc-gated");
     assert.equal(wallet.availableRub, "0.00");
     assert.equal(wallet.holdRub, "0.00");
+    // A refused notifications read degrades in place to the same feed a gated
+    // session sees: the local outbox drafts (a session_login per dev login).
+    const feedResponse = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
+    assert.equal(feedResponse.status, 200);
+    const feedText = await feedResponse.text();
+    assert.equal(feedText.includes(marker), false);
+    assert.equal(feedText.includes(key), false);
+    const feed = JSON.parse(feedText);
+    assert.equal(feed.mode, "test");
+    assert.equal(feed.delivery, "disabled");
+    const gatedFeed = await getJson(app, "/bff/notifications", cookie);
+    assert.deepEqual(feed, gatedFeed);
     assert.ok(upstream.length > hits, "upstream was never called");
     assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
   });
@@ -294,6 +368,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       mode = name;
       await profileFailsClosed(name);
       await walletFailsClosed(name);
+      await notificationsFailClosed(name);
       await assertGated(app, cookie, name);
     }
   });
@@ -304,6 +379,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       const elapsed = await profileFailsClosed(name);
       assert.ok(elapsed >= 1_500, `${name} returned before the client timeout (${elapsed} ms)`);
       await walletFailsClosed(name);
+      await notificationsFailClosed(name);
       await upstreamReleased(name);
       await assertGated(app, cookie, name);
     }
@@ -313,6 +389,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     mode = "valid";
     assert.equal((await getJson(app, "/bff/profile", cookie)).apiAccess.status, "connected");
     assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
+    assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
   });
 });
 

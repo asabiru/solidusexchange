@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { NotificationDraft, NotificationTemplate } from "../shared/api.js";
+import type { NotificationDraft, NotificationsView, NotificationTemplate } from "../shared/api.js";
 
 export interface NotificationOutboxOptions {
   clock: () => number;
@@ -19,6 +19,46 @@ export const notificationIdPattern = /^ntf_[0-9a-f]{24}$/;
 export const defaultMaxPerSubject = 20;
 export const defaultMaxTotal = 1_000;
 
+/** The customer-api notifications contract shape (snake_case field names). */
+export interface ContractNotification {
+  notification_id: string;
+  created_at: string;
+  channel: "telegram-draft";
+  template: NotificationTemplate;
+  locale: "ru";
+  text: string;
+  mode: "test";
+  delivered: false;
+  read: boolean;
+}
+
+/**
+ * Adapts a validated customer-api notifications feed into the app's view:
+ * notification_id/created_at become the draft's id/createdAt while the test-mode
+ * invariants (channel, locale, mode, delivered) carry over unchanged.
+ */
+export function contractNotificationsView(feed: {
+  unread: number;
+  notifications: readonly ContractNotification[];
+}): NotificationsView {
+  return {
+    mode: "test",
+    delivery: "disabled",
+    unread: feed.unread,
+    notifications: feed.notifications.map((entry) => ({
+      id: entry.notification_id,
+      createdAt: Date.parse(entry.created_at),
+      channel: entry.channel,
+      template: entry.template,
+      locale: entry.locale,
+      text: entry.text,
+      mode: entry.mode,
+      delivered: entry.delivered,
+      read: entry.read
+    }))
+  };
+}
+
 const marker = "Тестовый режим";
 
 export const notificationTexts: Readonly<Record<NotificationTemplate, string>> = Object.freeze({
@@ -33,6 +73,10 @@ export const notificationTexts: Readonly<Record<NotificationTemplate, string>> =
   support_received: `${marker}. Обращение сохранено, его никто не получит.`,
   complaint_received: `${marker}. Жалоба сохранена, её никто не получит.`
 });
+
+export function isNotificationTemplate(value: string): value is NotificationTemplate {
+  return Object.hasOwn(notificationTexts, value);
+}
 
 interface Entry {
   subject: string;

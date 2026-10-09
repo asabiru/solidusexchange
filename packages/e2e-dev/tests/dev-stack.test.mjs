@@ -270,6 +270,21 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(wallet.kyc, "kyc-gated");
     assert.equal(wallet.availableRub, "0.00");
     assert.equal(wallet.holdRub, "0.00");
+    // customer.notifications.read is refused upstream too, so the
+    // notifications feed degrades in place to the local outbox drafts this
+    // session's KYC journey recorded (newest first: kyc_approved).
+    const feed = await getMiniapp("/bff/notifications", cookie);
+    assert.equal(feed.mode, "test");
+    assert.equal(feed.delivery, "disabled");
+    assert.equal(feed.notifications.length >= 1, true);
+    assert.equal(feed.notifications[0].template, "kyc_approved");
+    assert.equal(feed.unread, feed.notifications.filter((draft) => !draft.read).length);
+    for (const draft of feed.notifications) {
+      assert.match(draft.id, /^ntf_[0-9a-f]{24}$/);
+      assert.equal(draft.channel, "telegram-draft");
+      assert.equal(draft.mode, "test");
+      assert.equal(draft.delivered, false);
+    }
   });
 
   it("serves the profile through customer-api synthetic auth", async () => {

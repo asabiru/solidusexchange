@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
-import type { CustomerApiAccess } from "../shared/api.js";
+import type { CustomerApiAccess, NotificationTemplate } from "../shared/api.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { isDecimalString } from "../shared/decimal.js";
+import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
 export const customerApiPlatform = "telegram-mini-app";
@@ -30,10 +31,29 @@ export type CustomerApiWallets =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiNotification {
+  notification_id: string;
+  created_at: string;
+  channel: "telegram-draft";
+  template: NotificationTemplate;
+  locale: "ru";
+  text: string;
+  mode: "test";
+  delivered: false;
+  read: boolean;
+}
+
+export type CustomerApiNotifications =
+  | { status: "ok"; unread: number; notifications: readonly CustomerApiNotification[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
   wallets(bffSubject: string, nowMs: number): Promise<CustomerApiWallets>;
+  notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -109,6 +129,71 @@ function parseWalletsView(value: unknown): readonly CustomerApiWallet[] | undefi
   return Object.freeze(wallets);
 }
 
+const isoTimestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
+
+function parseNotificationsView(
+  value: unknown
+): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["delivery", "mode", "notifications", "unread"])
+    || value.mode !== "test"
+    || value.delivery !== "disabled"
+    || typeof value.unread !== "number"
+    || !Number.isSafeInteger(value.unread)
+    || value.unread < 0
+    || !Array.isArray(value.notifications)
+  ) {
+    return undefined;
+  }
+  const notifications: CustomerApiNotification[] = [];
+  for (const entry of value.notifications) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, [
+        "notification_id",
+        "created_at",
+        "channel",
+        "template",
+        "locale",
+        "text",
+        "mode",
+        "delivered",
+        "read"
+      ])
+      || typeof entry.notification_id !== "string"
+      || !notificationIdPattern.test(entry.notification_id)
+      || typeof entry.created_at !== "string"
+      || !isoTimestampPattern.test(entry.created_at)
+      || !Number.isFinite(Date.parse(entry.created_at))
+      || entry.channel !== "telegram-draft"
+      || typeof entry.template !== "string"
+      || !isNotificationTemplate(entry.template)
+      || entry.locale !== "ru"
+      || typeof entry.text !== "string"
+      || entry.text.length < 1
+      || entry.text.length > 128
+      || entry.mode !== "test"
+      || entry.delivered !== false
+      || typeof entry.read !== "boolean"
+    ) {
+      return undefined;
+    }
+    notifications.push(Object.freeze({
+      notification_id: entry.notification_id,
+      created_at: entry.created_at,
+      channel: entry.channel,
+      template: entry.template,
+      locale: entry.locale,
+      text: entry.text,
+      mode: entry.mode,
+      delivered: entry.delivered,
+      read: entry.read
+    }));
+  }
+  return Object.freeze({ unread: value.unread, notifications: Object.freeze(notifications) });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -118,10 +203,11 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
- * customer session, capabilities and wallets GETs, never sends X-Device-Id and
- * fails closed to "unavailable" on any unexpected response, including a non-JSON
- * content type or a body above maxCustomerApiResponseBytes. An upstream refusal
- * of the wallets read (403 capability gate) surfaces as "denied".
+ * customer session, capabilities, wallets and notifications GETs, never sends
+ * X-Device-Id and fails closed to "unavailable" on any unexpected response,
+ * including a non-JSON content type or a body above maxCustomerApiResponseBytes.
+ * An upstream refusal of a collection read (403 capability gate) surfaces as
+ * "denied".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -130,7 +216,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     return Object.freeze({
       configured: false,
       access: async (): Promise<CustomerApiAccess> => ({ status: "not-configured" }),
-      wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" })
+      wallets: async (): Promise<CustomerApiWallets> => ({ status: "not-configured" }),
+      notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" })
     });
   }
 
@@ -210,5 +297,26 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets });
+  async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/notifications", token, nowMs);
+      const view = parseNotificationsView(body);
+      return view === undefined
+        ? { status: "unavailable" }
+        : { status: "ok", unread: view.unread, notifications: view.notifications };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets, notifications });
 }
