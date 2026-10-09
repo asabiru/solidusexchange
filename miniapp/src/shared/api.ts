@@ -385,6 +385,41 @@ export interface WithdrawalsView {
   withdrawals: readonly WithdrawalView[];
 }
 
+/** Mirrors the customer-api quotes contract pair set exactly. */
+export type QuotePair = "USDT/RUB" | "TON/RUB" | "TON/USDT";
+export type QuoteSide = "buy" | "sell";
+export type QuoteRounding = "up" | "down";
+
+export interface QuoteView {
+  id: string;
+  pair: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  side: QuoteSide;
+  baseAmount: string;
+  midPrice: string;
+  price: string;
+  spreadBps: number;
+  feeBps: number;
+  quoteAmount: string;
+  feeAmount: string;
+  totalQuoteAmount: string;
+  rounding: QuoteRounding;
+  priceObservedAt: number;
+  issuedAt: number;
+  expiresAt: number;
+  ttlSeconds: number;
+  status: "indicative";
+  execution: "not_supported";
+  posting: "none";
+}
+
+export interface QuotesView {
+  mode: "test";
+  kyc: KycStatus;
+  quotes: readonly QuoteView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;
