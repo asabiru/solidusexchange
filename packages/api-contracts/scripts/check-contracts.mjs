@@ -218,6 +218,46 @@ const pinnedResponseSchemas = {
       read: { type: "boolean" }
     }
   },
+  KycStatusView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "provider", "session_kyc", "status", "updated_at", "can_submit"],
+    properties: {
+      mode: { const: "test" },
+      provider: { const: "simulator" },
+      session_kyc: { type: "string", enum: ["unverified", "pending", "verified"] },
+      status: {
+        type: "string",
+        enum: [
+          "not_started",
+          "submitted",
+          "in_review",
+          "approved",
+          "rejected",
+          "needs_more_data",
+          "timed_out",
+          "unavailable"
+        ]
+      },
+      application_id: { type: "string", pattern: "^kyc_[0-9a-f]{24}$" },
+      submitted_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      review_deadline: { type: "string", format: "date-time" },
+      reason_codes: {
+        type: "array",
+        uniqueItems: true,
+        maxItems: 2,
+        items: { type: "string", enum: ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"] }
+      },
+      requested_items: {
+        type: "array",
+        uniqueItems: true,
+        maxItems: 2,
+        items: { type: "string", enum: ["proof_of_address", "selfie_retake"] }
+      },
+      can_submit: { type: "boolean" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -388,7 +428,6 @@ function checkOpenApi() {
       "/api/v1/customer/cards",
       "/api/v1/customer/deposits",
       "/api/v1/customer/exchange-orders",
-      "/api/v1/customer/kyc",
       "/api/v1/customer/payments",
       "/api/v1/customer/quotes",
       "/api/v1/customer/support",
@@ -421,6 +460,7 @@ function checkOpenApi() {
     ["getCustomerCapabilities", "/api/v1/customer/capabilities"],
     ["getCustomerWallets", "/api/v1/customer/wallets"],
     ["getCustomerNotifications", "/api/v1/customer/notifications"],
+    ["getCustomerKyc", "/api/v1/customer/kyc"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -444,6 +484,7 @@ function checkOpenApi() {
     ["getCustomerCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getCustomerWallets", "#/components/schemas/WalletsView"],
     ["getCustomerNotifications", "#/components/schemas/NotificationsView"],
+    ["getCustomerKyc", "#/components/schemas/KycStatusView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

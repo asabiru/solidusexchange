@@ -320,6 +320,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/capabilities", "getCustomerCapabilities"],
   ["/api/v1/customer/wallets", "getCustomerWallets"],
   ["/api/v1/customer/notifications", "getCustomerNotifications"],
+  ["/api/v1/customer/kyc", "getCustomerKyc"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -583,6 +584,46 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.NotificationView.properties.created_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical KYC status views",
+  "Canonical KycStatusView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.KycStatusView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live provider in canonical KYC status views",
+  "Canonical KycStatusView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.KycStatusView.properties.provider.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical KYC session statuses",
+  "Canonical KycStatusView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.KycStatusView.properties.session_kyc.enum.push("approved-by-ai");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical KYC timestamps",
+  "Canonical KycStatusView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.KycStatusView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

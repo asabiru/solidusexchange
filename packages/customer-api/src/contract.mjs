@@ -81,6 +81,22 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The KYC status read is served to every authenticated customer, so it
+  // declares no 403: unlike the wallets/notifications reads it is not gated
+  // on a verified KYC status (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerKyc",
+    method: "GET",
+    path: "/api/v1/customer/kyc",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

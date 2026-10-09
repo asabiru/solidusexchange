@@ -21,6 +21,15 @@ dependency-free Node ESM `node:http` server for local development only.
     (`ntf_*` ids, ISO `created_at`, `delivery: "disabled"`, `mode: "test"`);
     KYC-gated exactly like the wallets read — `403 CAPABILITY_DENIED` without a
     `verified` KYC status.
+  - `GET /api/v1/customer/kyc` (`getCustomerKyc`): a frozen deterministic
+    synthetic KYC status view per subject (`kyc_*` application ids, ISO
+    `submitted_at`/`updated_at`, optional simulator `reason_codes` and
+    `requested_items`, `mode: "test"`, `provider: "simulator"`). **Not**
+    KYC-gated: it is the onboarding surface itself, so every authenticated
+    customer can read their own status — gating it on `verified` would
+    deadlock onboarding, and the miniapp likewise serves `/bff/kyc/status` to
+    kyc-gated sessions. The derived application `status` is always coherent
+    with the session-level `session_kyc` the capability gate evaluated.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -47,10 +56,12 @@ Only `customer` principals are accepted.
 
 ## Capabilities
 
-Deny-by-default. `customer.session.read` and `customer.capabilities.read` are
-always granted; `customer.wallets.read` and `customer.notifications.read` are
-granted only to a `verified` KYC status so they can serve the synthetic wallet
-and notification collection reads.
+Deny-by-default. `customer.session.read`, `customer.capabilities.read` and
+`customer.kyc.read` are always granted — the KYC status read must stay
+reachable for unverified customers or they could never see their own
+onboarding state; `customer.wallets.read` and `customer.notifications.read`
+are granted only to a `verified` KYC status so they can serve the synthetic
+wallet and notification collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,
