@@ -10,13 +10,16 @@ import {
   startTestServer,
   stopServer,
   TEST_KEY,
-  token
+  token,
+  VERIFIED_SUBJECT,
+  verifiedCustomerHeaders
 } from "./http-client.mjs";
 
 const META = "/api/v1/meta";
 const SESSION = "/api/v1/customer/session";
 const CAPABILITIES = "/api/v1/customer/capabilities";
-const CUSTOMER_PATHS = [SESSION, CAPABILITIES];
+const WALLETS = "/api/v1/customer/wallets";
+const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
 let port;
@@ -96,7 +99,8 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [SESSION, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [SESSION, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
     [SESSION, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401],
-    ["/api/v1/operator/session", customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 404]
+    ["/api/v1/operator/session", customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 404],
+    [WALLETS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);
@@ -125,8 +129,8 @@ test("X-Device-Id is rejected on customer and metadata operations", async () => 
 
 test("X-Client-Version enforces 1-64 characters", async () => {
   for (const path of CUSTOMER_PATHS) {
-    await expectStatus(path, customerHeaders({ "X-Client-Version": "v" }), 200);
-    await expectStatus(path, customerHeaders({ "X-Client-Version": "9".repeat(64) }), 200);
+    await expectStatus(path, verifiedCustomerHeaders({ "X-Client-Version": "v" }), 200);
+    await expectStatus(path, verifiedCustomerHeaders({ "X-Client-Version": "9".repeat(64) }), 200);
     await expectStatus(path, customerHeaders({ "X-Client-Version": "9".repeat(65) }), 400, "VALIDATION_FAILED");
     await expectStatus(path, customerHeaders({ "X-Client-Version": "" }), 400, "VALIDATION_FAILED");
     await expectStatus(path, customerHeaders({ "X-Client-Version": "   " }), 400, "VALIDATION_FAILED");
@@ -136,13 +140,13 @@ test("X-Client-Version enforces 1-64 characters", async () => {
 test("X-Platform accepts only exact enum values", async () => {
   for (const value of ["Web", "WEB", "web ", "web,ios", "desktop", "", "telegram_mini_app", "operator"]) {
     for (const path of CUSTOMER_PATHS) {
-      await expectStatus(path, customerHeaders({ "X-Platform": value }), value === "web " ? 200 : 400);
+      await expectStatus(path, verifiedCustomerHeaders({ "X-Platform": value }), value === "web " ? 200 : 400);
     }
   }
 });
 
 test("Authorization accepts only one well-formed synthetic bearer token", async () => {
-  const valid = token();
+  const valid = token({ subject: VERIFIED_SUBJECT });
   const otherKey = "b".repeat(64);
   const forged = `${valid.slice(0, -1)}${valid.endsWith("0") ? "1" : "0"}`;
   const rejected = [
@@ -171,7 +175,7 @@ test("Authorization accepts only one well-formed synthetic bearer token", async 
       assert.equal(header(response, "www-authenticate"), "Bearer");
     }
     await expectStatus(path, customerHeaders({ Authorization: `bearer ${valid}` }), 200);
-    await expectStatus(path, customerHeaders({ Authorization: `Bearer ${token({ ttlSeconds: 3600 })}` }), 200);
+    await expectStatus(path, customerHeaders({ Authorization: `Bearer ${token({ subject: VERIFIED_SUBJECT, ttlSeconds: 3600 })}` }), 200);
   }
   assert.notEqual(TEST_KEY, otherKey);
 });
@@ -188,7 +192,7 @@ test("request bodies are rejected on every served operation", async () => {
 });
 
 test("header names are matched case-insensitively", async () => {
-  const headers = customerHeaders().map(([name, value]) => [name.toUpperCase(), value]);
+  const headers = verifiedCustomerHeaders().map(([name, value]) => [name.toUpperCase(), value]);
   for (const path of CUSTOMER_PATHS) {
     await expectStatus(path, headers, 200);
   }

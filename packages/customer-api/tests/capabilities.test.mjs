@@ -17,7 +17,7 @@ import { contract } from "./http-client.mjs";
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const register = readFileSync(join(repositoryRoot, "Documentation", "regulated-core", "decision-register.md"), "utf8");
-const MONEY_NAMESPACES = ["wallets", "deposits", "withdrawals", "quotes", "exchange-orders", "payments", "cards"];
+const MONEY_NAMESPACES = ["deposits", "withdrawals", "quotes", "exchange-orders", "payments", "cards"];
 
 function decisionStatus(id) {
   const row = register.split("\n").find((line) => line.startsWith(`| ${id} |`));
@@ -26,11 +26,21 @@ function decisionStatus(id) {
 }
 
 test("only served read operations are ever granted", () => {
+  // getCustomerWallets is the only KYC-gated served operation today.
+  const gated = OPERATIONS.filter((operation) => operation.operationId === "getCustomerWallets").length;
+  assert.equal(gated, 1);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
-    assert.deepEqual([...granted], ["customer.session.read", "customer.capabilities.read"]);
+    const expected = ["customer.session.read", "customer.capabilities.read"];
+    if (kycStatus === "verified") {
+      expected.push("customer.wallets.read");
+    }
+    assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
-    assert.equal(granted.length, OPERATIONS.filter((operation) => operation.authenticated).length);
+    assert.equal(
+      granted.length,
+      OPERATIONS.filter((operation) => operation.authenticated).length - (kycStatus === "verified" ? 0 : gated)
+    );
   }
 });
 
@@ -57,6 +67,12 @@ test("money-moving and balance capabilities reference limits and scope decisions
   for (const policy of financial.filter((item) => !item.capability.endsWith(".read"))) {
     assert.ok(policy.decisions.includes("D-014"), policy.capability);
   }
+  // The wallets namespace stays read-only in this dev boundary: no financial
+  // or command capability exists for it.
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.wallets.")).map((item) => item.capability),
+    ["customer.wallets.read"]
+  );
   const withdrawals = financial.find((item) => item.capability === "customer.withdrawals.create");
   assert.deepEqual([...withdrawals.decisions], ["D-001", "D-002", "D-003", "D-011", "D-014"]);
 });

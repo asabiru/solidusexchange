@@ -164,6 +164,60 @@
         }
       }
     },
+    "/api/v1/customer/wallets": {
+      "get": {
+        "operationId": "getCustomerWallets",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's synthetic wallets",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer wallets with decimal-string balances",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WalletsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -754,6 +808,46 @@
           }
         }
       },
+      "WalletsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "wallets"
+        ],
+        "properties": {
+          "wallets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WalletView"
+            }
+          }
+        }
+      },
+      "WalletView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "wallet_id",
+          "asset",
+          "available",
+          "hold"
+        ],
+        "properties": {
+          "wallet_id": {
+            "type": "string",
+            "pattern": "^syn_wal_[a-z0-9]{8,32}$"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "available": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "hold": {
+            "$ref": "#/$defs/decimalAmount"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1043,7 +1137,6 @@
       "/api/v1/customer/auth",
       "/api/v1/customer/kyc",
       "/api/v1/customer/users",
-      "/api/v1/customer/wallets",
       "/api/v1/customer/deposits",
       "/api/v1/customer/withdrawals",
       "/api/v1/customer/quotes",

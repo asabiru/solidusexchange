@@ -55,6 +55,19 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  Object.freeze({
+    operationId: "getCustomerWallets",
+    method: "GET",
+    path: "/api/v1/customer/wallets",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
   })
 ]);
 

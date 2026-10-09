@@ -33,7 +33,7 @@
     "packages/customer-api/package.json": {
       "check": "node scripts/check-boundary.mjs",
       "dev": "node src/server.mjs",
-      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/observability.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/observability.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && npm run check",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/observability.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/wallets.mjs && node --check tests/auth-config.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/http-client.mjs && node --check tests/observability.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/wallets.test.mjs && npm run check",
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
       "test": "npm run check && node --test tests/*.test.mjs",
       "typecheck": "tsc -p tsconfig.json --pretty false"
@@ -645,7 +645,7 @@
       "minLines": 35
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 1266,
+      "minLines": 1285,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
@@ -716,15 +716,15 @@
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
-      "minLines": 94,
+      "minLines": 110,
       "minCases": 7
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 239,
-      "minCases": 14
+      "minLines": 260,
+      "minCases": 15
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 246,
+      "minLines": 248,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -735,14 +735,14 @@
       "minCases": 11
     },
     "packages/customer-api/tests/http-client.mjs": {
-      "minLines": 125
+      "minLines": 134
     },
     "packages/customer-api/tests/observability.test.mjs": {
       "minLines": 248,
       "minCases": 11
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 191,
+      "minLines": 195,
       "minCases": 12
     },
     "packages/customer-api/tests/routing.test.mjs": {
@@ -753,12 +753,16 @@
       "minLines": 126,
       "minCases": 6
     },
+    "packages/customer-api/tests/wallets.test.mjs": {
+      "minLines": 194,
+      "minCases": 9
+    },
     "packages/e2e-dev/tests/boundaries.test.mjs": {
       "minLines": 111,
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 540,
+      "minLines": 548,
       "minCases": 17
     },
     "packages/e2e-dev/tests/load.test.mjs": {
