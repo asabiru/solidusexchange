@@ -325,6 +325,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/support", "getCustomerSupport"],
   ["/api/v1/customer/deposits", "getCustomerDeposits"],
   ["/api/v1/customer/withdrawals", "getCustomerWithdrawals"],
+  ["/api/v1/customer/quotes", "getCustomerQuotes"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -838,6 +839,76 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.WithdrawalView.properties.updated_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical quotes views",
+  "Canonical QuotesView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuotesView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical quotes views",
+  "Canonical QuotesView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuotesView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical quote views",
+  "Canonical QuoteView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuoteView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects widened canonical quote pairs",
+  "Canonical QuoteView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuoteView.properties.pair.enum.push("USDT/EUR");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects an executable canonical quote status",
+  "Canonical QuoteView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuoteView.properties.execution.const = "supported";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects non-decimal canonical quote amounts",
+  "Canonical QuoteView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuoteView.properties.total_quote_amount = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical quote timestamps",
+  "Canonical QuoteView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.QuoteView.properties.expires_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

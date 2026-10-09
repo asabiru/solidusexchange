@@ -9,6 +9,7 @@ import { createSyntheticDepositDirectory } from "./deposits.mjs";
 import { createSyntheticKycApplicationDirectory } from "./kyc.mjs";
 import { createSyntheticNotificationDirectory } from "./notifications.mjs";
 import { createSyntheticProfileDirectory } from "./profile.mjs";
+import { createSyntheticQuoteDirectory } from "./quotes.mjs";
 import { createSyntheticSupportDirectory } from "./support.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createSyntheticWithdrawalDirectory } from "./withdrawals.mjs";
@@ -25,12 +26,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   supportDirectory?: import("./support.mjs").SupportDirectory,
  *   depositDirectory?: import("./deposits.mjs").DepositDirectory,
  *   withdrawalDirectory?: import("./withdrawals.mjs").WithdrawalDirectory,
+ *   quoteDirectory?: import("./quotes.mjs").QuoteDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -45,6 +47,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     supportDirectory: supportDirectory ?? createSyntheticSupportDirectory(),
     depositDirectory: depositDirectory ?? createSyntheticDepositDirectory(),
     withdrawalDirectory: withdrawalDirectory ?? createSyntheticWithdrawalDirectory(),
+    quoteDirectory: quoteDirectory ?? createSyntheticQuoteDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
