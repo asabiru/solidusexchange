@@ -955,6 +955,143 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.exchangeOrders("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads payments with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const payments = [
+      {
+        payment_id: "pay_0123456789abcdef01234567",
+        asset: "RUB",
+        method: "sbp",
+        status: "completed",
+        amount: "1500.00",
+        fee_amount: "7.50",
+        total_amount: "1507.50",
+        recipient_reference: "recipient_ref_a1b2c3d4",
+        provider_reference: "SIMBANK0123456789ABCDEF",
+        created_at: "2026-10-05T11:20:00.000Z",
+        updated_at: "2026-10-05T11:24:00.000Z",
+        posting: "none"
+      }
+    ];
+    await withFakeApi(
+      () => ({ mode: "test", payments }),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.payments("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result.payments, payments);
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream payments refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const payments = JSON.stringify({ mode: "test", payments: [] });
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER", payments }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.payments("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed payments bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = {
+      payment_id: "pay_0123456789abcdef01234567",
+      asset: "RUB",
+      method: "sbp",
+      status: "completed",
+      amount: "1500.00",
+      fee_amount: "7.50",
+      total_amount: "1507.50",
+      recipient_reference: "recipient_ref_a1b2c3d4",
+      provider_reference: "SIMBANK0123456789ABCDEF",
+      created_at: "2026-10-05T11:20:00.000Z",
+      updated_at: "2026-10-05T11:24:00.000Z",
+      posting: "none"
+    };
+    for (const body of [
+      { mode: "test", payments: "oops" },
+      { mode: "test", payments: [{ ...entry, extra: true }] },
+      { mode: "test", payments: [{ ...entry, payment_id: "pay_bad" }] },
+      { mode: "test", payments: [{ ...entry, asset: "USDT" }] },
+      { mode: "test", payments: [{ ...entry, method: "card" }] },
+      { mode: "test", payments: [{ ...entry, status: "settled" }] },
+      { mode: "test", payments: [{ ...entry, amount: "1500.0" }] },
+      { mode: "test", payments: [{ ...entry, amount: "-1500.00" }] },
+      { mode: "test", payments: [{ ...entry, amount: "0.00" }] },
+      { mode: "test", payments: [{ ...entry, fee_amount: "0.00" }] },
+      { mode: "test", payments: [{ ...entry, total_amount: "1507.51" }] },
+      { mode: "test", payments: [{ ...entry, total_amount: "1507.500" }] },
+      { mode: "test", payments: [{ ...entry, recipient_reference: "ref_a1b2c3d4" }] },
+      { mode: "test", payments: [{ ...entry, provider_reference: "SIMBANKXYZ" }] },
+      { mode: "test", payments: [{ ...entry, provider_reference: null }] },
+      { mode: "test", payments: [{ ...entry, status: "created" }] },
+      { mode: "test", payments: [{ ...entry, status: "created", provider_reference: null }] },
+      { mode: "test", payments: [{ ...entry, status: "cancelled", provider_reference: "SIMBANK0123456789ABCDEF" }] },
+      { mode: "test", payments: [{ ...entry, created_at: "not-a-date" }] },
+      { mode: "test", payments: [{ ...entry, updated_at: "2026-10-05" }] },
+      { mode: "test", payments: [{ ...entry, updated_at: "2026-10-05T11:10:00.000Z" }] },
+      { mode: "test", payments: [{ ...entry, posting: "queued" }] },
+      { mode: "test", payments: [], extra: true },
+      { payments: [entry] },
+      { mode: "live", payments: [entry] },
+      ["payments"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.payments("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.payments("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api payments KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.payments.read is refused with 403.
+      assert.deepEqual(await client.payments("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.payments("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("reads notifications with the canonical headers through the contract seam", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
