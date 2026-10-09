@@ -308,6 +308,24 @@ declare module "@solidchange/customer-api/dev-server" {
           wallets: readonly { wallet_id: string; asset: string; available: string; hold: string }[];
         }>;
       };
+      notificationDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          delivery: "disabled";
+          unread: number;
+          notifications: readonly {
+            notification_id: string;
+            created_at: string;
+            channel: "telegram-draft";
+            template: string;
+            locale: "ru";
+            text: string;
+            mode: "test";
+            delivered: false;
+            read: boolean;
+          }[];
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

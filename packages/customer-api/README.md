@@ -16,6 +16,11 @@ dependency-free Node ESM `node:http` server for local development only.
     synthetic wallet list per subject (RUB/TON/USDT, decimal-string balances in
     asset scale); KYC-gated — only a `verified` KYC status receives `200`, other
     customers get `403 CAPABILITY_DENIED`.
+  - `GET /api/v1/customer/notifications` (`getCustomerNotifications`): a frozen
+    deterministic synthetic test-mode notification feed per subject
+    (`ntf_*` ids, ISO `created_at`, `delivery: "disabled"`, `mode: "test"`);
+    KYC-gated exactly like the wallets read — `403 CAPABILITY_DENIED` without a
+    `verified` KYC status.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -43,8 +48,9 @@ Only `customer` principals are accepted.
 ## Capabilities
 
 Deny-by-default. `customer.session.read` and `customer.capabilities.read` are
-always granted; `customer.wallets.read` is granted only to a `verified` KYC
-status so it can serve the synthetic wallet collection read.
+always granted; `customer.wallets.read` and `customer.notifications.read` are
+granted only to a `verified` KYC status so they can serve the synthetic wallet
+and notification collection reads.
 `commands_enabled` is always `false`. Every financial capability (deposits,
 withdrawals, quotes, exchange orders, payments, cards) is KYC-gated and denied
 with internal reason codes such as `FINANCIAL_COMMANDS_DISABLED`,

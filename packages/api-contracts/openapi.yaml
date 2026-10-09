@@ -218,6 +218,60 @@
         }
       }
     },
+    "/api/v1/customer/notifications": {
+      "get": {
+        "operationId": "getCustomerNotifications",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's synthetic notifications",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer notification feed in test mode with delivery disabled",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -848,6 +902,94 @@
           }
         }
       },
+      "NotificationsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "delivery",
+          "unread",
+          "notifications"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "delivery": {
+            "const": "disabled"
+          },
+          "unread": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "notifications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationView"
+            }
+          }
+        }
+      },
+      "NotificationView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "notification_id",
+          "created_at",
+          "channel",
+          "template",
+          "locale",
+          "text",
+          "mode",
+          "delivered",
+          "read"
+        ],
+        "properties": {
+          "notification_id": {
+            "type": "string",
+            "pattern": "^ntf_[0-9a-f]{24}$"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "channel": {
+            "const": "telegram-draft"
+          },
+          "template": {
+            "type": "string",
+            "enum": [
+              "session_login",
+              "kyc_submitted",
+              "kyc_in_review",
+              "kyc_approved",
+              "kyc_rejected",
+              "kyc_needs_more_data",
+              "kyc_timed_out",
+              "kyc_unavailable",
+              "support_received",
+              "complaint_received"
+            ]
+          },
+          "locale": {
+            "const": "ru"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "mode": {
+            "const": "test"
+          },
+          "delivered": {
+            "const": false
+          },
+          "read": {
+            "type": "boolean"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1143,7 +1285,6 @@
       "/api/v1/customer/exchange-orders",
       "/api/v1/customer/payments",
       "/api/v1/customer/cards",
-      "/api/v1/customer/notifications",
       "/api/v1/customer/support"
     ],
     "operator": [

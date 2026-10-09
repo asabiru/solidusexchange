@@ -319,6 +319,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/session", "getCustomerSession"],
   ["/api/v1/customer/capabilities", "getCustomerCapabilities"],
   ["/api/v1/customer/wallets", "getCustomerWallets"],
+  ["/api/v1/customer/notifications", "getCustomerNotifications"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -552,6 +553,36 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.WalletView.properties.available = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical notification views",
+  "Canonical NotificationView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.NotificationView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects enabled delivery in canonical notification views",
+  "Canonical NotificationsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.NotificationsView.properties.delivery.const = "enabled";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical notification timestamps",
+  "Canonical NotificationView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.NotificationView.properties.created_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

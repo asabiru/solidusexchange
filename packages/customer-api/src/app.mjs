@@ -15,6 +15,7 @@ import {
   METRICS_PATH,
   metricsRequestAllowed
 } from "./observability.mjs";
+import { validNotificationsView } from "./notifications.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
 import { validWalletsView } from "./wallets.mjs";
 
@@ -32,6 +33,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./capabilities.mjs").KycDirectory} kycDirectory
  * @property {import("./rate-limit.mjs").RateLimiter} rateLimiter
  * @property {import("./wallets.mjs").WalletDirectory} walletDirectory
+ * @property {import("./notifications.mjs").NotificationDirectory} notificationDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -200,6 +202,7 @@ export function createCustomerApiHandler({
   kycDirectory,
   rateLimiter,
   walletDirectory,
+  notificationDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -215,6 +218,9 @@ export function createCustomerApiHandler({
   }
   if (typeof walletDirectory?.listFor !== "function") {
     throw new Error("A wallet directory is required");
+  }
+  if (typeof notificationDirectory?.listFor !== "function") {
+    throw new Error("A notification directory is required");
   }
 
   /**
@@ -326,6 +332,18 @@ export function createCustomerApiHandler({
       const view = await walletDirectory.listFor(principal.subject);
       if (!validWalletsView(view)) {
         throw new Error("Wallet directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerNotifications") {
+      if (!evaluation.granted.includes("customer.notifications.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await notificationDirectory.listFor(principal.subject);
+      if (!validNotificationsView(view)) {
+        throw new Error("Notification directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
