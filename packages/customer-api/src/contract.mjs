@@ -97,6 +97,24 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The profile read is served to every authenticated customer like the KYC
+  // status read, so it declares no 403: it carries the subject's own
+  // synthetic identity surface (display name, locale, registration date —
+  // never real PII) and the miniapp serves /bff/profile to kyc-gated
+  // sessions too (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerProfile",
+    method: "GET",
+    path: "/api/v1/customer/profile",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

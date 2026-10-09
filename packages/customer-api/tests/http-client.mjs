@@ -6,6 +6,7 @@ import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
+import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticWalletDirectory } from "../src/wallets.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { conformanceErrors, createValidator, loadContract } from "./contract-validator.mjs";
@@ -49,6 +50,7 @@ export async function startTestServer(options = {}) {
     walletDirectory: createSyntheticWalletDirectory(),
     notificationDirectory: createSyntheticNotificationDirectory(),
     kycApplicationDirectory: createSyntheticKycApplicationDirectory(),
+    profileDirectory: createSyntheticProfileDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options

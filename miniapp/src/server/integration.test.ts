@@ -50,7 +50,7 @@ describe("end-to-end dev flow: login → customer API → provider quote", () =>
     const profile = await (await fetch(`${base}/bff/profile`, { headers: { cookie } })).json() as ProfileView;
     assert.deepEqual(profile.apiAccess, {
       status: "connected",
-      granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read"],
+      granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read"],
       commandsEnabled: false
     });
     assert.equal(profile.limits.decision, "D-014");

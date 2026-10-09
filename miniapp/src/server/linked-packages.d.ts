@@ -352,6 +352,15 @@ declare module "@solidchange/customer-api/dev-server" {
           can_submit: boolean;
         }>;
       };
+      profileDirectory?: {
+        viewFor(subject: string): Promise<{
+          mode: "test";
+          customer_ref: string;
+          display_name: string;
+          locale: "en" | "ky" | "ru";
+          registered_at: string;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

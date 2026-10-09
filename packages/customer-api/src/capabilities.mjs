@@ -45,6 +45,13 @@ export const CAPABILITY_POLICY = Object.freeze([
   // unserved onboarding capability below.
   entry("customer.kyc.read", "read", false, []),
   entry("customer.kyc.submit", "onboarding", false, ["D-001", "D-008"]),
+  // The served profile read is the customer's own synthetic identity surface
+  // (display name, locale, registration date — never real PII), not a
+  // collection read on assets or activity: the miniapp serves /bff/profile
+  // to every authenticated session, kyc-gated included, degrading apiAccess
+  // in place instead of gating. Like the KYC status read it must stay
+  // readable without a verified KYC status.
+  entry("customer.profile.read", "read", false, []),
   // The served wallet collection read is KYC-gated but synthetic: it needs no
   // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).
   entry("customer.wallets.read", "read", true, []),

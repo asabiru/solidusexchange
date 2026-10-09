@@ -17,6 +17,7 @@ import {
   metricsRequestAllowed
 } from "./observability.mjs";
 import { validNotificationsView } from "./notifications.mjs";
+import { validProfileView } from "./profile.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
 import { validWalletsView } from "./wallets.mjs";
 
@@ -36,6 +37,7 @@ import { validWalletsView } from "./wallets.mjs";
  * @property {import("./wallets.mjs").WalletDirectory} walletDirectory
  * @property {import("./notifications.mjs").NotificationDirectory} notificationDirectory
  * @property {import("./kyc.mjs").KycApplicationDirectory} kycApplicationDirectory
+ * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -206,6 +208,7 @@ export function createCustomerApiHandler({
   walletDirectory,
   notificationDirectory,
   kycApplicationDirectory,
+  profileDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -227,6 +230,9 @@ export function createCustomerApiHandler({
   }
   if (typeof kycApplicationDirectory?.viewFor !== "function") {
     throw new Error("A KYC application directory is required");
+  }
+  if (typeof profileDirectory?.viewFor !== "function") {
+    throw new Error("A profile directory is required");
   }
 
   /**
@@ -342,6 +348,22 @@ export function createCustomerApiHandler({
       const view = await kycApplicationDirectory.viewFor(principal.subject, kycStatus);
       if (!validKycStatusView(view)) {
         throw new Error("KYC application directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerProfile") {
+      // customer.profile.read is granted for every KYC status: the profile
+      // surface is the subject's own synthetic identity state and the
+      // miniapp serves it to kyc-gated sessions too. The check stays so a
+      // served route can never drift from the exposed capabilities.
+      if (!evaluation.granted.includes("customer.profile.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await profileDirectory.viewFor(principal.subject);
+      if (!validProfileView(view)) {
+        throw new Error("Profile directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
