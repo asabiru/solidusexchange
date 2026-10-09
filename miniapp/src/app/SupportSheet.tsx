@@ -1,9 +1,8 @@
 import { type FormEvent, type RefObject, useEffect, useId, useRef, useState } from "react";
-import type { ActivityItem, ActivityKind, SupportRequestView } from "../shared/api";
+import type { ActivityItem, SupportRequestView } from "../shared/api";
 import { screeningTargetOf } from "../shared/address-screening";
 import {
   type SupportCategory,
-  type SupportStatus,
   isValidSupportMessage,
   isValidSupportTopic,
   maxSupportMessageLength,
@@ -14,36 +13,8 @@ import { ApiError, api } from "./api";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
+import { activityKindKeyOf, arrayOf, supportCategoryKeyOf, supportStatusOf } from "./server-fields";
 import { Sheet } from "./ui";
-
-export const supportCategoryKeys: Readonly<Record<SupportCategory, MessageKey>> = {
-  question: "support.categoryQuestion",
-  operation_problem: "support.categoryOperation",
-  complaint: "support.categoryComplaint",
-  data_request: "support.categoryData"
-};
-
-const statusBadges: Readonly<Record<SupportStatus, { label: MessageKey; tone: string }>> = {
-  received: { label: "support.statusReceived", tone: "muted" },
-  in_review: { label: "support.statusInReview", tone: "warning" },
-  answered: { label: "support.statusAnswered", tone: "success" },
-  closed: { label: "support.statusClosed", tone: "muted" }
-};
-
-const activityKindKeys: Readonly<Record<ActivityKind, MessageKey>> = {
-  session_login: "activity.login",
-  session_revoked: "activity.sessionRevokedOne",
-  kyc_submitted: "activity.kycSubmitted",
-  kyc_in_review: "activity.kycInReview",
-  kyc_approved: "activity.kycApproved",
-  kyc_rejected: "activity.kycRejected",
-  kyc_needs_more_data: "activity.kycNeedsMoreData",
-  kyc_timed_out: "activity.kycTimedOut",
-  kyc_unavailable: "activity.kycUnavailable",
-  quote_previewed: "activity.filterQuote",
-  address_screened: "activity.filterScreening",
-  support_requested: "common.support"
-};
 
 type Field = "topic" | "message" | "activityId";
 
@@ -90,7 +61,7 @@ export function SupportSheet({ close }: { close: () => void }) {
   useEffect(() => {
     let active = true;
     api.supportRequests()
-      .then((view) => { if (active) setRequests(view.requests); })
+      .then((view) => { if (active) setRequests(arrayOf(view.requests)); })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, []);
@@ -159,16 +130,17 @@ function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps 
       </div>
       {requests && requests.length > 0 ? (
         <ul className="list activity" aria-label={t("support.listLabel")}>
-          {requests.map((request) => {
-            const badge = statusBadges[request.status];
+          {requests.map((request, index) => {
+            const badge = supportStatusOf(request.status);
+            const category = supportCategoryKeyOf(request.category);
             return (
-              <li key={request.id}>
+              <li key={`${request.id}:${index}`}>
                 <button type="button" className="row" onClick={() => onOpen(request)}>
                   <span className="coin coin--menu" aria-hidden="true"><Icon name="help" size="sm" /></span>
                   <span className="row__main">
                     <strong>{request.topic}</strong>
-                    <span className="num">{t(supportCategoryKeys[request.category])} · {format.dateTime(new Date(request.createdAt).toISOString())}</span>
-                    <span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span>
+                    <span className="num">{category ? t(category) : request.category} · {format.epochMs(request.createdAt)}</span>
+                    <span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : request.status}</span>
                   </span>
                   <Icon name="chevron-right" size="sm" />
                 </button>
@@ -185,7 +157,8 @@ function activityLabel(item: ActivityItem, t: ReturnType<typeof useI18n>["t"]): 
   if (item.kind === "session_revoked" && item.scope !== "single") return t("activity.sessionRevokedOthers", { count: String(item.count) });
   if (item.kind === "quote_previewed") return t("activity.quoteTitle", { from: item.from, to: item.to });
   if (item.kind === "address_screened") return t("activity.screeningTitle", { target: screeningTargetOf(item.asset, item.network)?.label ?? item.asset });
-  return t(activityKindKeys[item.kind]);
+  const key = activityKindKeyOf(item.kind);
+  return key ? t(key) : item.kind;
 }
 
 function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
@@ -218,7 +191,7 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
   useEffect(() => {
     let active = true;
     api.activity()
-      .then((view) => { if (active) setActivity(view.items.filter((item) => item.kind !== "support_requested").slice(0, 20)); })
+      .then((view) => { if (active) setActivity(arrayOf<ActivityItem>(view.items).filter((item) => item.kind !== "support_requested").slice(0, 20)); })
       .catch(() => undefined);
     return () => { active = false; };
   }, []);
@@ -258,7 +231,10 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
       <label className="form-control" htmlFor={ids.category}>
         <span>{t("support.categoryLabel")}</span>
         <select id={ids.category} value={category} onChange={(event) => setCategory(event.target.value as SupportCategory)}>
-          {supportCategories.map((value) => <option key={value} value={value}>{t(supportCategoryKeys[value])}</option>)}
+          {supportCategories.map((value) => {
+            const key = supportCategoryKeyOf(value);
+            return <option key={value} value={value}>{key ? t(key) : value}</option>;
+          })}
         </select>
       </label>
       <label className="form-control" htmlFor={ids.topic}>
@@ -302,8 +278,8 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
           onChange={(event) => { setActivityId(event.target.value); clear("activityId"); }}
         >
           <option value="">{t("support.referenceNone")}</option>
-          {activity.map((item) => (
-            <option key={item.id} value={item.id}>{activityLabel(item, t)} · {format.dateTime(new Date(item.at).toISOString())}</option>
+          {activity.map((item, index) => (
+            <option key={`${item.id}:${index}`} value={item.id}>{activityLabel(item, t)} · {format.epochMs(item.at)}</option>
           ))}
         </select>
       </label>
@@ -320,10 +296,13 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
 
 function SupportDetail({ heading, request, onBack }: HeadingProps & { request: SupportRequestView; onBack: () => void }) {
   const { t, format } = useI18n();
-  const when = (at: number) => format.dateTime(new Date(at).toISOString());
-  const badge = statusBadges[request.status];
-  const reached = (status: SupportStatus) => request.timeline.find((entry) => entry.status === status);
+  const when = (at: number) => format.epochMs(at);
+  const badge = supportStatusOf(request.status);
+  const reached = (status: string) => arrayOf<SupportRequestView["timeline"][number]>(request.timeline).find((entry) => entry.status === status);
   const resolved = reached("answered") ?? reached("closed");
+  const resolvedLabel = resolved ? supportStatusOf(resolved.status)?.label : undefined;
+  const refKind = request.activityRef ? activityKindKeyOf(request.activityRef.kind) : undefined;
+  const categoryKey = supportCategoryKeyOf(request.category);
   const steps: readonly { title: MessageKey; detail: MessageKey; at?: number; state: string }[] = [
     { title: "support.statusReceived", detail: "support.stepReceived", at: reached("received")?.at, state: "done" },
     {
@@ -333,7 +312,7 @@ function SupportDetail({ heading, request, onBack }: HeadingProps & { request: S
       state: reached("in_review") ? (resolved ? "done" : "current") : "pending"
     },
     {
-      title: resolved ? statusBadges[resolved.status].label : "support.stepResolvedTitle",
+      title: resolvedLabel ?? "support.stepResolvedTitle",
       detail: "support.stepResolved",
       at: resolved?.at,
       state: resolved ? "done" : "pending"
@@ -349,18 +328,18 @@ function SupportDetail({ heading, request, onBack }: HeadingProps & { request: S
       ) : null}
       <h3 className="section-label" ref={heading} tabIndex={-1}>{request.topic}</h3>
       <dl className="meta-list">
-        <div><dt>{t("support.categoryLabel")}</dt><dd>{t(supportCategoryKeys[request.category])}</dd></div>
-        <div><dt>{t("support.statusLabel")}</dt><dd><span className={`pill pill--${badge.tone}`}>{t(badge.label)}</span></dd></div>
+        <div><dt>{t("support.categoryLabel")}</dt><dd>{categoryKey ? t(categoryKey) : request.category}</dd></div>
+        <div><dt>{t("support.statusLabel")}</dt><dd><span className={`pill pill--${badge?.tone ?? "muted"}`}>{badge ? t(badge.label) : request.status}</span></dd></div>
         <div><dt>{t("support.createdLabel")}</dt><dd className="num">{when(request.createdAt)}</dd></div>
-        {request.activityRef ? <div><dt>{t("support.referenceValue")}</dt><dd>{t(activityKindKeys[request.activityRef.kind])}</dd></div> : null}
+        {request.activityRef ? <div><dt>{t("support.referenceValue")}</dt><dd>{refKind ? t(refKind) : request.activityRef.kind}</dd></div> : null}
         <div><dt>{t("support.storedUntil")}</dt><dd className="num">{when(request.expiresAt)}</dd></div>
       </dl>
       <h3 className="section-label">{t("support.messageLabel")}</h3>
       <p className="support-message">{request.message}</p>
       <h3 className="section-label">{t("support.timelineLabel")}</h3>
       <ol className="timeline">
-        {steps.map((step) => (
-          <li key={step.detail} className={`timeline__step is-${step.state}`}>
+        {steps.map((step, index) => (
+          <li key={`${step.detail}:${index}`} className={`timeline__step is-${step.state}`}>
             <span className="timeline__mark">
               <Icon name={step.state === "done" ? "check" : "clock"} size="xs" />
             </span>

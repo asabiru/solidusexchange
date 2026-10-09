@@ -3,6 +3,7 @@ import { type Locale, localeNames, locales, type MessageKey, messageKeyFor } fro
 import { useI18n } from "../i18n-context";
 import { Icon, type IconName } from "../Icon";
 import type { SheetRequest } from "../navigation";
+import { arrayOf } from "../server-fields";
 import { ScreenTitle, Switch } from "../ui";
 
 interface Props {
@@ -37,7 +38,7 @@ const capabilityLabels: Readonly<Record<string, MessageKey>> = {
 function apiAccessDetail(access: CustomerApiAccess, t: (key: MessageKey, params?: Readonly<Record<string, string>>) => string): string {
   if (access.status === "not-configured") return t("profile.apiNotConfigured");
   if (access.status === "unavailable") return t("profile.apiUnavailable");
-  const granted = access.granted.map((capability) => {
+  const granted = arrayOf<string>(access.granted).map((capability) => {
     const key = messageKeyFor(capabilityLabels, capability);
     return key ? t(key) : capability;
   }).join(", ");
@@ -45,16 +46,16 @@ function apiAccessDetail(access: CustomerApiAccess, t: (key: MessageKey, params?
 }
 
 export function ProfileScreen({ session, profile, openSheet, switchScenario, logout, theme, setTheme }: Props) {
-  const verified = profile.kyc.state === "verified";
+  const verified = profile.kyc?.state === "verified";
   const { t, locale, setLocale } = useI18n();
   return (
     <section className="screen" aria-label={t("tab.profile")}>
       <ScreenTitle>{t("tab.profile")}</ScreenTitle>
       <div className="profile-card">
-        <span className="avatar avatar--lg" aria-hidden="true">{profile.displayName.slice(0, 1).toUpperCase()}</span>
+        <span className="avatar avatar--lg" aria-hidden="true">{String(profile.displayName ?? "—").slice(0, 1).toUpperCase()}</span>
         <div>
-          <strong>{profile.displayName}</strong>
-          <span className="num">{profile.customerRef} · {profile.kyc.level}</span>
+          <strong>{profile.displayName ?? "—"}</strong>
+          <span className="num">{profile.customerRef} · {profile.kyc?.level ?? "—"}</span>
           <span className="pill pill--muted">{t(session.source === "telegram" ? "profile.sessionTelegram" : "profile.sessionDev")}</span>
         </div>
       </div>
