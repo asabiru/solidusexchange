@@ -99,6 +99,27 @@ function documentHeaders(directives: CspDirectives): Readonly<Record<string, str
 export const documentSecurityHeaders = documentHeaders(documentCspDirectives);
 export const devDocumentSecurityHeaders = documentHeaders(devDocumentCspDirectives);
 
+/**
+ * Strict Host header grammar: `hostname`, `hostname:port`, `[ipv6]` or
+ * `[ipv6]:port`. Anything that does not parse as a whole — a second colon,
+ * characters after the closing bracket, an empty host or a non-numeric port —
+ * yields undefined so Host-dependent gates fail closed.
+ */
+export function requestHostname(host: string | undefined): string | undefined {
+  if (host === undefined || host.length === 0) return undefined;
+  if (host.startsWith("[")) {
+    const closing = host.indexOf("]");
+    if (closing <= 1) return undefined;
+    const rest = host.slice(closing + 1);
+    return rest === "" || /^:[0-9]{1,5}$/.test(rest) ? host.slice(1, closing) : undefined;
+  }
+  const colon = host.indexOf(":");
+  if (colon === -1) return host;
+  return colon === host.lastIndexOf(":") && colon > 0 && /^[0-9]{1,5}$/.test(host.slice(colon + 1))
+    ? host.slice(0, colon)
+    : undefined;
+}
+
 type HeaderSet = Readonly<Record<string, string>>;
 
 const clientErrorStatuses: ReadonlyMap<string, number> = new Map([
