@@ -299,8 +299,23 @@ test("rejects early success exits in shell tests", () => {
 
 test("accepts pinned test files that keep their case count", () => {
   const pinned = { minLines: 3, minCases: 2 };
-  const content = 'test("a", () => {});\n// comment\nit("b", () => {});\n';
+  const content = 'test("a", () => {});\nit("b", () => {});\nconst seed = 1;\n';
   assert.deepEqual(validateTestFileContent(content, pinned, "t.test.mjs"), []);
+});
+
+test("rejects comment and string padding in pinned test file counts", () => {
+  const commentPadded =
+    'test("a", () => {});\n// padded comment\n/* block\n   pad */\nit("b", () => {});\n';
+  assert.deepEqual(
+    validateTestFileContent(commentPadded, { minLines: 3, minCases: 2 }, "t.test.mjs"),
+    ["t.test.mjs: pinned test file must keep at least 3 non-blank lines"],
+  );
+  const stringPadded =
+    'test("a", () => {});\nit("b", () => {});\nconst note = "it(\\"fake\\")";\n';
+  assert.deepEqual(
+    validateTestFileContent(stringPadded, { minLines: 3, minCases: 3 }, "t.test.mjs"),
+    ["t.test.mjs: pinned test file must keep at least 3 test cases"],
+  );
 });
 
 test("rejects emptied or thinned pinned test files", () => {
@@ -521,6 +536,41 @@ test("rejects escaped identifiers, specifiers and wrapped status codes", () => {
   }
   assert.deepEqual(
     validateSourceText(shellTest(`${EXIT} 255`), "tests/probe.sh"),
+    [],
+  );
+});
+
+test("rejects focused and skipped tests hidden by comments and line breaks", () => {
+  for (const variant of [
+    `it /* focus */ ${DOT}${ONLY}("x", () => {});`,
+    `test("x")${DOT}\n  ${DOT}${ONLY}`,
+    `it\n${DOT}${ONLY}("x", () => {});`,
+    `describe("s")\n${DOT}${SKIP}(() => {});`,
+    `it("x", {\n  ${ONLY}: true\n}, () => {});`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(`import test from "node:test";\n${variant}\n`, "a.test.mjs"),
+      [],
+      variant,
+    );
+  }
+});
+
+test("rejects shell exit aliases built from glued expansions", () => {
+  for (const variant of [
+    `e$(:)${EXIT} 0`,
+    `e$(echo xi)t 0`,
+    `e\`echo xi\`t 0`,
+    `e$VARt 0`,
+  ]) {
+    assert.notDeepEqual(
+      validateSourceText(shellTest(variant), "tests/probe.sh"),
+      [],
+      variant,
+    );
+  }
+  assert.deepEqual(
+    validateSourceText(shellTest("value=$(git rev-parse HEAD)\necho \"$value\""), "tests/probe.sh"),
     [],
   );
 });

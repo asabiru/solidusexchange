@@ -238,3 +238,27 @@ test("keeps unrelated valid edits accepted", () => {
     "finance-ledger-approval-pack.md": insertAfter("## NO-GO\n", "\nЭтот раздел не меняет review state.\n"),
   });
 });
+
+test("rejects approval claims hidden by interior hyphens", () => {
+  const target = "access-control.md";
+  for (const line of [
+    "This section was ap-proved by the CTO on 2026-01-05.",
+    "It was de-cided in the January meeting.",
+    "The document st-atus is approved.",
+    "Sign-off was gr-anted on 2026-01-05.",
+  ]) {
+    const errors = validateWith({ [target]: (text) => `${text}\n${line}\n` });
+    assert.notDeepEqual(errors, [], line);
+  }
+});
+
+test("rejects non-regular entries in the regulated-core directory", () => {
+  const errors = validateRegulatedCoreDocuments(documents, baseline, [
+    "linked-doc.md",
+    "subdir/symlinked-dir",
+  ]);
+  assert.deepEqual(errors, [
+    "linked-doc.md: regulated-core entries must be regular files",
+    "subdir/symlinked-dir: regulated-core entries must be regular files",
+  ]);
+});

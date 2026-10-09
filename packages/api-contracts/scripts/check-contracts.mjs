@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(
   process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), "..")
 );
+const rootReal = realpathSync(root);
 
 function fail(message) {
   throw new Error(message);
@@ -14,12 +15,22 @@ function assert(condition, message) {
   if (!condition) fail(message);
 }
 
+function readContained(path) {
+  const normalized = resolve(join(root, path));
+  const resolvedReal = realpathSync(normalized);
+  assert(
+    resolvedReal === rootReal || resolvedReal.startsWith(`${rootReal}${sep}`),
+    `Reference escapes contract package through a link: ${path}`
+  );
+  return readFileSync(normalized, "utf8");
+}
+
 function readJson(path) {
-  return JSON.parse(readFileSync(join(root, path), "utf8"));
+  return JSON.parse(readContained(path));
 }
 
 function checkCompatibilityPolicy() {
-  const policy = readFileSync(join(root, "COMPATIBILITY.md"), "utf8");
+  const policy = readContained("COMPATIBILITY.md");
   for (const requirement of [
     "## Compatible changes",
     "## Breaking changes",
@@ -48,6 +59,11 @@ function loadAbsolute(path) {
   assert(
     normalized === root || normalized.startsWith(`${root}${sep}`),
     `Reference escapes contract package: ${normalized}`
+  );
+  const resolvedReal = realpathSync(normalized);
+  assert(
+    resolvedReal === rootReal || resolvedReal.startsWith(`${rootReal}${sep}`),
+    `Reference escapes contract package through a link: ${normalized}`
   );
   if (!parsedFiles.has(normalized)) {
     parsedFiles.set(normalized, JSON.parse(readFileSync(normalized, "utf8")));
@@ -366,6 +382,15 @@ function refs(operation) {
   );
 }
 
+const pinnedParameterNames = new Set([
+  "CheckId",
+  "ClientVersion",
+  "DeviceId",
+  "IdempotencyKey",
+  "Platform",
+  "RequestId"
+]);
+
 const canonicalHeaderParameters = new Map([
   ["x-request-id", "#/components/parameters/RequestId"],
   ["x-client-version", "#/components/parameters/ClientVersion"],
@@ -376,7 +401,11 @@ const canonicalHeaderParameters = new Map([
 
 function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
   for (const parameter of parameters ?? []) {
-    const resolved = parameter?.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
+    assert(
+      parameter && typeof parameter === "object" && !Array.isArray(parameter),
+      `Parameter entries must be objects: ${label}`
+    );
+    const resolved = parameter.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
     if (resolved?.in === "path") {
       assert(
         canonicalJson(parameter) === canonicalJson({ $ref: "#/components/parameters/CheckId" }),
@@ -385,11 +414,25 @@ function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
       continue;
     }
     const canonical = canonicalHeaderParameters.get(String(resolved?.name ?? "").toLowerCase());
-    if (!canonical) continue;
-    assert(
-      canonicalJson(parameter) === canonicalJson({ $ref: canonical }),
-      `${resolved.name} must use only the canonical ${canonical} parameter: ${label}`
-    );
+    if (canonical) {
+      assert(
+        canonicalJson(parameter) === canonicalJson({ $ref: canonical }),
+        `${resolved.name} must use only the canonical ${canonical} parameter: ${label}`
+      );
+      continue;
+    }
+    const refMatch = String(parameter?.$ref ?? "").match(/^#\/components\/parameters\/([^/]+)$/);
+    const isPinnedReference =
+      refMatch &&
+      pinnedParameterNames.has(refMatch[1]) &&
+      canonicalJson(parameter) === canonicalJson({ $ref: parameter.$ref });
+    if (!isPinnedReference) {
+      assert(
+        ["header", "query"].includes(resolved?.in),
+        `Parameter location ${JSON.stringify(resolved?.in)} is not allowed in this slice: ${label}`
+      );
+      assert(resolved?.required !== true, `Only canonical parameters may be required: ${label}`);
+    }
   }
 }
 
@@ -421,6 +464,27 @@ function checkOpenApi() {
   assert(openapi["x-solidchange-runtime-boundary"] === "contract-only", "Runtime boundary must remain contract-only");
   assert(openapi["x-solidchange-financial-commands-enabled"] === false, "Financial commands must remain disabled");
   assert(openapi["x-solidchange-production-providers-enabled"] === false, "Production providers must remain disabled");
+  sameSet(
+    Object.keys(openapi).filter((key) => !key.startsWith("x-")),
+    ["$defs", "components", "info", "jsonSchemaDialect", "openapi", "paths", "servers", "tags"],
+    "Top-level OpenAPI fields"
+  );
+  assert(
+    openapi.jsonSchemaDialect === "https://json-schema.org/draft/2020-12/schema",
+    "OpenAPI JSON Schema dialect must remain pinned"
+  );
+  sameSet(Object.keys(openapi.info ?? {}), ["description", "title", "version"], "OpenAPI info fields");
+  assert(
+    canonicalJson(openapi.servers) === canonicalJson([
+      { url: "https://api.sandbox.invalid", description: "Non-routable contract placeholder" }
+    ]),
+    "OpenAPI servers must remain non-routable placeholders"
+  );
+  sameSet(
+    (openapi.tags ?? []).map((tag) => tag?.name),
+    ["Customer", "Metadata", "Operator"],
+    "OpenAPI tags"
+  );
   sameSet(
     openapi["x-solidchange-planned-namespaces"]?.customer ?? [],
     [
@@ -492,12 +556,45 @@ function checkOpenApi() {
     ["claimCustomerCheck", "#/components/schemas/CheckView"],
     ["cancelCustomerCheck", "#/components/schemas/CheckView"]
   ]);
+  const allowedPathItemFields = new Set([...methodNames, "parameters"]);
+  const allowedOperationFields = new Set([
+    "callbacks",
+    "description",
+    "operationId",
+    "parameters",
+    "requestBody",
+    "responses",
+    "security",
+    "summary",
+    "tags"
+  ]);
   for (const [pathName, pathItem] of Object.entries(openapi.paths ?? {})) {
     assert(pathName.startsWith("/api/v1/"), `Unversioned API path: ${pathName}`);
     assert(!Object.hasOwn(pathItem, "$ref"), `Path item $ref is prohibited: ${pathName}`);
+    for (const key of Object.keys(pathItem ?? {})) {
+      assert(
+        allowedPathItemFields.has(key),
+        `Path item field ${key} is not allowed in this slice: ${pathName}`
+      );
+    }
+    assert(
+      [...methodNames].some((method) => Object.hasOwn(pathItem ?? {}, method)),
+      `Path item must declare at least one operation: ${pathName}`
+    );
     verifyCanonicalHeaderParameters(pathItem.parameters, path, pathName);
+    const pathParameterRefs = refs(pathItem);
     for (const [method, operation] of Object.entries(pathItem)) {
       if (!methodNames.has(method)) continue;
+      assert(
+        operation && typeof operation === "object" && !Array.isArray(operation),
+        `Operation must be an object: ${method.toUpperCase()} ${pathName}`
+      );
+      for (const key of Object.keys(operation)) {
+        assert(
+          key.startsWith("x-") || allowedOperationFields.has(key),
+          `Operation field ${key} is not allowed in this slice: ${method.toUpperCase()} ${pathName}`
+        );
+      }
       assert(operation.operationId, `Missing operationId: ${method.toUpperCase()} ${pathName}`);
       const commandOperation = commandOperations.has(operation.operationId);
       assert(
@@ -538,7 +635,7 @@ function checkOpenApi() {
         `Callbacks are prohibited in this slice: ${operation.operationId}`
       );
       verifyCanonicalHeaderParameters(operation.parameters, path, operation.operationId);
-      const requestHeaders = refs(operation);
+      const requestHeaders = new Set([...refs(operation), ...pathParameterRefs]);
       assert(
         requestHeaders.has("#/components/parameters/RequestId"),
         `Missing X-Request-Id: ${operation.operationId}`

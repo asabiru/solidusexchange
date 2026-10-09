@@ -65,8 +65,17 @@ function stripMarkup(text) {
     .trim();
 }
 
+function joinHyphens(text) {
+  return text.replace(/(?<=[\p{L}\p{N}])-(?=[\p{L}\p{N}])/gu, "");
+}
+
 function forms(text) {
-  return [stripMarkup(fold(text)), stripMarkup(skeleton(text))];
+  return [
+    stripMarkup(fold(text)),
+    stripMarkup(skeleton(text)),
+    stripMarkup(joinHyphens(fold(text))),
+    stripMarkup(joinHyphens(skeleton(text))),
+  ];
 }
 
 function matchesAny(text, pattern) {
@@ -112,9 +121,10 @@ function hasApprovalVocabulary(text) {
 }
 
 function claimTokens(clause) {
-  return (clause.match(/[\p{L}\p{N}'-]+/gu) ?? []).flatMap((token) =>
-    /^sign-?off$/u.test(token) ? [token] : token.split("-").filter(Boolean),
-  );
+  return (clause.match(/[\p{L}\p{N}'-]+/gu) ?? []).flatMap((token) => {
+    const parts = token.split("-").filter(Boolean);
+    return parts.length > 1 ? [parts.join(""), ...parts] : [token];
+  });
 }
 
 function clauseHasApprovalClaim(clause, lookalikeClause) {
@@ -317,8 +327,12 @@ function unpinnedDocumentErrors(snapshot, fileName) {
   return errors;
 }
 
-export function validateRegulatedCoreDocuments(documents, baseline) {
+export function validateRegulatedCoreDocuments(documents, baseline, irregular = []) {
   const errors = [];
+
+  for (const fileName of irregular) {
+    errors.push(`${fileName}: regulated-core entries must be regular files`);
+  }
 
   for (const fileName of Object.keys(baseline.documents)) {
     if (!documents.has(fileName)) errors.push(`${fileName}: pinned regulated-core document is missing`);
@@ -357,30 +371,38 @@ export function validateRegulatedCoreDocuments(documents, baseline) {
 
 async function markdownDocuments(root) {
   const documents = new Map();
+  const irregular = [];
   async function walk(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const full = path.join(directory, entry.name);
       if (entry.isDirectory()) {
         await walk(full);
-      } else {
+      } else if (entry.isFile()) {
         documents.set(path.relative(root, full).split(path.sep).join("/"), await readFile(full, "utf8"));
+      } else {
+        irregular.push(path.relative(root, full).split(path.sep).join("/"));
       }
     }
   }
   await walk(root);
-  return new Map([...documents].sort(([left], [right]) => left.localeCompare(right)));
+  return {
+    documents: new Map([...documents].sort(([left], [right]) => left.localeCompare(right))),
+    irregular,
+  };
 }
 
 export async function loadRegulatedCore(root = path.resolve(REGULATED_CORE_DIRECTORY)) {
+  const { documents, irregular } = await markdownDocuments(root);
   return {
-    documents: await markdownDocuments(root),
+    documents,
+    irregular,
     baseline: JSON.parse(await readFile(BASELINE_FILE, "utf8")),
   };
 }
 
 async function main() {
-  const { documents, baseline } = await loadRegulatedCore();
-  const errors = validateRegulatedCoreDocuments(documents, baseline);
+  const { documents, baseline, irregular } = await loadRegulatedCore();
+  const errors = validateRegulatedCoreDocuments(documents, baseline, irregular);
 
   if (errors.length > 0) {
     console.error(errors.join("\n"));
