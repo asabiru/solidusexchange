@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -403,8 +403,12 @@
       "minCases": 4
     },
     "backoffice/src/app/i18n.test.ts": {
-      "minLines": 419,
+      "minLines": 432,
       "minCases": 38
+    },
+    "backoffice/src/app/subjects.test.ts": {
+      "minLines": 92,
+      "minCases": 6
     },
     "backoffice/src/app/support.test.ts": {
       "minLines": 51,
@@ -415,8 +419,8 @@
       "minCases": 4
     },
     "backoffice/src/auth/access.test.ts": {
-      "minLines": 67,
-      "minCases": 7
+      "minLines": 82,
+      "minCases": 9
     },
     "backoffice/src/data/client.test.ts": {
       "minLines": 264,
@@ -475,7 +479,7 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 542,
+      "minLines": 547,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
@@ -490,6 +494,10 @@
       "minLines": 176,
       "minCases": 5
     },
+    "backoffice/src/server/subjects.test.ts": {
+      "minLines": 260,
+      "minCases": 11
+    },
     "backoffice/src/server/support.test.ts": {
       "minLines": 192,
       "minCases": 9
@@ -499,7 +507,7 @@
       "minCases": 9
     },
     "backoffice/tsconfig.test.json": {
-      "minLines": 31
+      "minLines": 34
     },
     "infra/local/tests/dev-material.test.mjs": {
       "minLines": 93,
@@ -931,6 +939,10 @@
     "packages/provider-simulators/tests/checks.test.mjs": {
       "minLines": 561,
       "minCases": 36
+    },
+    "packages/provider-simulators/tests/conformance.test.mjs": {
+      "minLines": 556,
+      "minCases": 11
     },
     "packages/provider-simulators/tests/decimal.test.mjs": {
       "minLines": 68,

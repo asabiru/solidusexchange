@@ -28,6 +28,7 @@ import {
 import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
 import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from "./support.js";
 import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
+import { isSubjectRef, subjectTimelineAccessEvent } from "./subjects.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
 import {
   buildReport,
@@ -148,6 +149,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/support/:ticketId",
   "/bff/api/withdrawals",
   "/bff/api/withdrawals/:withdrawalId",
+  "/bff/api/subjects/:ref/timeline",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -736,6 +738,47 @@ export function createBackofficeServer(
           audit.status.headHash
         );
         signed(response, `withdrawal:${intent.id}`, intent);
+        return;
+      }
+
+      const subjectMatch = path.match(/^\/bff\/api\/subjects\/([^/]+)\/timeline$/);
+      if (subjectMatch) {
+        if (request.method !== "GET") {
+          response.setHeader("allow", "GET");
+          json(response, 405, { error: "method_not_allowed" });
+          return;
+        }
+        // Timeline lookups append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = authorized(request, response, "subjects:read");
+        if (!session) return;
+        let ref: string;
+        try {
+          ref = decodeURIComponent(subjectMatch[1]);
+        } catch {
+          json(response, 404, { error: "subject_not_found" });
+          return;
+        }
+        if (!isSubjectRef(ref)) {
+          json(response, 400, { error: "invalid_subject_ref" });
+          return;
+        }
+        const timeline = demoRepository.subjectTimeline(ref);
+        if (!timeline) {
+          json(response, 404, { error: "subject_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          subjectTimelineAccessEvent(`AUD-SBJ-${randomUUID()}`, session.subject, timeline),
+          audit.status.headHash
+        );
+        signed(response, `subject-timeline:${ref}`, timeline);
         return;
       }
 

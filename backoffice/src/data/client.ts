@@ -14,6 +14,7 @@ import type {
   QueueRow,
   SupportTicket,
   SupportTicketStatus,
+  SubjectTimelineEntry,
   WithdrawalIntent,
   WithdrawalIntentStatus
 } from "./demo.js";
@@ -87,6 +88,11 @@ export interface SupportTicketsPayload {
 export interface WithdrawalsPayload {
   statuses: readonly WithdrawalIntentStatus[];
   intents: readonly WithdrawalIntent[];
+}
+
+export interface SubjectTimelinePayload {
+  subject: string;
+  entries: readonly SubjectTimelineEntry[];
 }
 
 export interface KycPayload {
@@ -462,6 +468,10 @@ export function getWithdrawals(status?: WithdrawalIntentStatus): Promise<Withdra
 
 export function getWithdrawal(id: string): Promise<WithdrawalIntent> {
   return getSigned(`/bff/api/withdrawals/${encodeURIComponent(id)}`, `withdrawal:${id}`);
+}
+
+export function getSubjectTimeline(ref: string): Promise<SubjectTimelinePayload> {
+  return getSigned(`/bff/api/subjects/${encodeURIComponent(ref)}/timeline`, `subject-timeline:${ref}`);
 }
 
 export function getKycCases(): Promise<KycPayload> {
