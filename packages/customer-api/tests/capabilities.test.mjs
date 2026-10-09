@@ -26,14 +26,17 @@ function decisionStatus(id) {
 }
 
 test("only served read operations are ever granted", () => {
-  // getCustomerWallets is the only KYC-gated served operation today.
-  const gated = OPERATIONS.filter((operation) => operation.operationId === "getCustomerWallets").length;
-  assert.equal(gated, 1);
+  // getCustomerWallets and getCustomerNotifications are the only KYC-gated
+  // served operations today.
+  const gated = OPERATIONS.filter((operation) =>
+    ["getCustomerWallets", "getCustomerNotifications"].includes(operation.operationId)
+  ).length;
+  assert.equal(gated, 2);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     const expected = ["customer.session.read", "customer.capabilities.read"];
     if (kycStatus === "verified") {
-      expected.push("customer.wallets.read");
+      expected.push("customer.wallets.read", "customer.notifications.read");
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
@@ -72,6 +75,13 @@ test("money-moving and balance capabilities reference limits and scope decisions
   assert.deepEqual(
     CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.wallets.")).map((item) => item.capability),
     ["customer.wallets.read"]
+  );
+  // The notifications namespace is likewise read-only and is deliberately NOT
+  // a money namespace: it stays out of MONEY_NAMESPACES and the financial set.
+  assert.ok(!MONEY_NAMESPACES.includes("notifications"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.notifications.")).map((item) => item.capability),
+    ["customer.notifications.read"]
   );
   const withdrawals = financial.find((item) => item.capability === "customer.withdrawals.create");
   assert.deepEqual([...withdrawals.decisions], ["D-001", "D-002", "D-003", "D-011", "D-014"]);

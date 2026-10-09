@@ -41,6 +41,10 @@ export const CAPABILITY_POLICY = Object.freeze([
   // The served wallet collection read is KYC-gated but synthetic: it needs no
   // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).
   entry("customer.wallets.read", "read", true, []),
+  // The served notification collection read is likewise KYC-gated synthetic
+  // data (mirrors the miniapp's KYC-gated notifications feed), not a financial
+  // capability: notifications is not a money namespace.
+  entry("customer.notifications.read", "read", true, []),
   entry("customer.deposits.create", "financial", true, [
     "D-001",
     "D-002",

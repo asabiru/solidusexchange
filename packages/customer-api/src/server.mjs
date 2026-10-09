@@ -5,6 +5,7 @@ import { createCustomerApiServer } from "./app.mjs";
 import { createDenyAllVerifier, createSyntheticTokenVerifier } from "./auth.mjs";
 import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
+import { createSyntheticNotificationDirectory } from "./notifications.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
 
@@ -13,12 +14,13 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  * @param {{
  *   kycDirectory?: import("./capabilities.mjs").KycDirectory,
  *   walletDirectory?: import("./wallets.mjs").WalletDirectory,
+ *   notificationDirectory?: import("./notifications.mjs").NotificationDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -27,6 +29,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     verifier,
     kycDirectory: kycDirectory ?? createSyntheticKycDirectory(),
     walletDirectory: walletDirectory ?? createSyntheticWalletDirectory(),
+    notificationDirectory: notificationDirectory ?? createSyntheticNotificationDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
