@@ -1092,6 +1092,146 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.payments("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads cards with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const cards = [
+      {
+        card_id: "crd_0123456789abcdef01234567",
+        brand: "mir",
+        kind: "physical",
+        status: "active",
+        last4: "4832",
+        token_reference: "tok_0123456789abcdef01234567",
+        asset: "RUB",
+        monthly_limit: "250000.00",
+        created_at: "2026-09-12T10:00:00.000Z",
+        expires_at: "2029-09-12T00:00:00.000Z",
+        updated_at: "2026-09-12T10:05:00.000Z",
+        posting: "none"
+      }
+    ];
+    await withFakeApi(
+      () => ({ mode: "test", cards }),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.cards("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result.cards, cards);
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps an upstream cards refusal to denied and every other failure to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const cards = JSON.stringify({ mode: "test", cards: [] });
+    const statuses: [number, "denied" | "unavailable"][] = [[403, "denied"], [401, "unavailable"], [429, "unavailable"], [500, "unavailable"]];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER", cards }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.cards("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, expected, String(status));
+        assert.deepEqual(result, { status: expected });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed cards bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const entry = {
+      card_id: "crd_0123456789abcdef01234567",
+      brand: "mir",
+      kind: "physical",
+      status: "active",
+      last4: "4832",
+      token_reference: "tok_0123456789abcdef01234567",
+      asset: "RUB",
+      monthly_limit: "250000.00",
+      created_at: "2026-09-12T10:00:00.000Z",
+      expires_at: "2029-09-12T00:00:00.000Z",
+      updated_at: "2026-09-12T10:05:00.000Z",
+      posting: "none"
+    };
+    for (const body of [
+      { mode: "test", cards: "oops" },
+      { mode: "test", cards: [{ ...entry, extra: true }] },
+      // Any field that could smuggle a full PAN must fail closed: the exact
+      // key set is the only PAN boundary the contract exposes.
+      { mode: "test", cards: [{ ...entry, pan: "2202200243214832" }] },
+      { mode: "test", cards: [{ ...entry, card_number: "2202200243214832" }] },
+      { mode: "test", cards: [{ ...entry, card_id: "crd_bad" }] },
+      { mode: "test", cards: [{ ...entry, brand: "amex" }] },
+      { mode: "test", cards: [{ ...entry, kind: "sticker" }] },
+      { mode: "test", cards: [{ ...entry, status: "activated" }] },
+      { mode: "test", cards: [{ ...entry, last4: "483" }] },
+      { mode: "test", cards: [{ ...entry, last4: "48320" }] },
+      { mode: "test", cards: [{ ...entry, last4: "48x2" }] },
+      { mode: "test", cards: [{ ...entry, last4: "2202200243214832" }] },
+      { mode: "test", cards: [{ ...entry, token_reference: "tok_bad" }] },
+      { mode: "test", cards: [{ ...entry, asset: "USDT" }] },
+      { mode: "test", cards: [{ ...entry, monthly_limit: "250000.0" }] },
+      { mode: "test", cards: [{ ...entry, monthly_limit: "-250000.00" }] },
+      { mode: "test", cards: [{ ...entry, monthly_limit: "0.00" }] },
+      { mode: "test", cards: [{ ...entry, created_at: "not-a-date" }] },
+      { mode: "test", cards: [{ ...entry, expires_at: "2026-09-12T09:00:00.000Z" }] },
+      { mode: "test", cards: [{ ...entry, updated_at: "2026-09-12T09:00:00.000Z" }] },
+      { mode: "test", cards: [{ ...entry, status: "pending_activation" }] },
+      { mode: "test", cards: [{ ...entry, status: "expired" }] },
+      { mode: "test", cards: [{ ...entry, posting: "queued" }] },
+      { mode: "test", cards: [], extra: true },
+      { cards: [entry] },
+      { mode: "live", cards: [entry] },
+      ["cards"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.cards("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.cards("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("surfaces the dev customer-api cards KYC gate as denied and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The dev customer-api's synthetic KYC directory marks every subject
+      // unverified, so customer.cards.read is refused with 403.
+      assert.deepEqual(await client.cards("tg-0123456789abcdef", Date.now()), { status: "denied" });
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.cards("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("reads notifications with the canonical headers through the contract seam", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");

@@ -1,19 +1,14 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { describe, it } from "node:test";
-import type { PaymentsView } from "../shared/api.js";
+import type { CardsView } from "../shared/api.js";
 import { loadServerConfig, type ServerConfig } from "./config.js";
-import type { CustomerApiClient, CustomerApiPayment, CustomerApiPayments } from "./customer-api-client.js";
-import {
-  paymentIdPattern,
-  paymentProviderReferencePattern,
-  paymentRailObservedStatuses,
-  paymentsView
-} from "./payments.js";
+import type { CustomerApiCard, CustomerApiCards, CustomerApiClient } from "./customer-api-client.js";
+import { cardIdPattern, cardTokenReferencePattern, cardsView } from "./cards.js";
 import { createMiniappServer } from "./server.js";
 
 const origin = "http://127.0.0.1:4183";
-const marker = "pay_9e9e9e9e9e9e9e9e9e9e9e9e";
+const marker = "crd_9e9e9e9e9e9e9e9e9e9e9e9e";
 const now = 1_790_000_000_000;
 
 function config(overrides: Partial<ServerConfig> = {}): ServerConfig {
@@ -28,14 +23,14 @@ interface Running {
   close: () => Promise<void>;
 }
 
-interface PaymentsStub {
+interface CardsStub {
   client: CustomerApiClient;
   calls: string[];
 }
 
-function paymentsStub(
-  result: CustomerApiPayments | (() => Promise<CustomerApiPayments>)
-): PaymentsStub {
+function cardsStub(
+  result: CustomerApiCards | (() => Promise<CustomerApiCards>)
+): CardsStub {
   const calls: string[] = [];
   const client: CustomerApiClient = {
     configured: true,
@@ -45,11 +40,11 @@ function paymentsStub(
     withdrawals: async () => ({ status: "not-configured" }),
     quotes: async () => ({ status: "not-configured" }),
     exchangeOrders: async () => ({ status: "not-configured" }),
-    payments: async (subject) => {
+    payments: async () => ({ status: "not-configured" }),
+    cards: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
-    cards: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),
@@ -58,7 +53,7 @@ function paymentsStub(
   return { client, calls };
 }
 
-async function start(serverConfig: ServerConfig, stub?: PaymentsStub): Promise<Running> {
+async function start(serverConfig: ServerConfig, stub?: CardsStub): Promise<Running> {
   const server = createMiniappServer(serverConfig, {
     clock: () => now,
     ...(stub ? { customerApi: stub.client } : {})
@@ -93,29 +88,29 @@ async function get(base: string, path: string, cookie?: string) {
   return fetch(`${base}${path}`, { headers: cookie ? { cookie } : {} });
 }
 
-function upstreamPayment(overrides: Partial<CustomerApiPayment> = {}): CustomerApiPayment {
+function upstreamCard(overrides: Partial<CustomerApiCard> = {}): CustomerApiCard {
   return {
-    payment_id: "pay_0123456789abcdef01234567",
+    card_id: "crd_0123456789abcdef01234567",
+    brand: "mir",
+    kind: "physical",
+    status: "active",
+    last4: "4832",
+    token_reference: "tok_0123456789abcdef01234567",
     asset: "RUB",
-    method: "sbp",
-    status: "completed",
-    amount: "1500.00",
-    fee_amount: "7.50",
-    total_amount: "1507.50",
-    recipient_reference: "recipient_ref_a1b2c3d4",
-    provider_reference: "SIMBANK0123456789ABCDEF",
-    created_at: "2026-10-05T11:20:00.000Z",
-    updated_at: "2026-10-05T11:24:00.000Z",
+    monthly_limit: "250000.00",
+    created_at: "2026-09-12T10:00:00.000Z",
+    expires_at: "2029-09-12T00:00:00.000Z",
+    updated_at: "2026-09-12T10:05:00.000Z",
     posting: "none",
     ...overrides
   };
 }
 
-describe("GET /bff/payments through the customer-api seam", () => {
+describe("GET /bff/cards through the customer-api seam", () => {
   it("requires a session", async () => {
     const running = await start(config());
     try {
-      const response = await get(running.base, "/bff/payments");
+      const response = await get(running.base, "/bff/cards");
       assert.equal(response.status, 401);
       assert.deepEqual(await response.json(), { error: "unauthenticated" });
     } finally {
@@ -124,21 +119,21 @@ describe("GET /bff/payments through the customer-api seam", () => {
   });
 
   it("serves the local gated view for a kyc-gated session without consulting upstream", async () => {
-    const stub = paymentsStub({
+    const stub = cardsStub({
       status: "ok",
-      payments: [upstreamPayment({ payment_id: marker })]
+      cards: [upstreamCard({ card_id: marker })]
     });
     const running = await start(config(), stub);
     try {
       const cookie = await devLogin(running.base, "kyc-gated");
-      const response = await get(running.base, "/bff/payments", cookie);
+      const response = await get(running.base, "/bff/cards", cookie);
       assert.equal(response.status, 200);
       const text = await response.text();
       assert.equal(text.includes(marker), false, "gated sessions must not see upstream data");
-      const view = JSON.parse(text) as PaymentsView;
-      assert.deepEqual(view, paymentsView("kyc-gated"));
+      const view = JSON.parse(text) as CardsView;
+      assert.deepEqual(view, cardsView("kyc-gated"));
       assert.equal(view.kyc, "kyc-gated");
-      assert.equal(view.payments.length, 0);
+      assert.equal(view.cards.length, 0);
       assert.equal(stub.calls.length, 0, "gated sessions must not reach upstream");
     } finally {
       await running.close();
@@ -149,41 +144,41 @@ describe("GET /bff/payments through the customer-api seam", () => {
     const running = await start(config());
     try {
       const cookie = await devLogin(running.base, "verified");
-      const view = await (await get(running.base, "/bff/payments", cookie)).json() as PaymentsView;
-      assert.deepEqual(view, paymentsView("verified"));
+      const view = await (await get(running.base, "/bff/cards", cookie)).json() as CardsView;
+      assert.deepEqual(view, cardsView("verified"));
       assert.equal(view.kyc, "verified");
       assert.equal(view.mode, "test");
-      for (const payment of view.payments) {
-        assert.match(payment.id, paymentIdPattern);
-        assert.equal(payment.asset, "RUB");
-        assert.equal(payment.method, "sbp");
-        assert.equal(payment.posting, "none");
-        if (paymentRailObservedStatuses.includes(payment.status)) {
-          assert.match(payment.providerReference ?? "", paymentProviderReferencePattern);
-        } else {
-          assert.equal(payment.providerReference, null);
-        }
-        if (payment.status === "created") assert.equal(payment.updatedAt, payment.createdAt);
+      for (const card of view.cards) {
+        assert.match(card.id, cardIdPattern);
+        assert.match(card.last4, /^[0-9]{4}$/);
+        assert.match(card.tokenReference, cardTokenReferencePattern);
+        assert.equal(card.asset, "RUB");
+        assert.equal(card.posting, "none");
+        assert.ok(card.expiresAt > card.createdAt);
+        if (card.status === "pending_activation") assert.equal(card.updatedAt, card.createdAt);
+        else if (card.status === "expired") assert.equal(card.updatedAt, card.expiresAt);
+        else assert.ok(card.updatedAt > card.createdAt);
       }
     } finally {
       await running.close();
     }
   });
 
-  it("adapts the contract payments view into the app's payments shape", async () => {
-    const stub = paymentsStub({
+  it("adapts the contract cards view into the app's cards shape", async () => {
+    const stub = cardsStub({
       status: "ok",
-      payments: [
-        upstreamPayment({ payment_id: marker }),
-        upstreamPayment({
-          payment_id: "pay_fedcba9876543210fedcba98",
-          status: "created",
-          amount: "800.00",
-          fee_amount: "2.00",
-          total_amount: "802.00",
-          recipient_reference: "recipient_ref_f6e5d4c3",
-          provider_reference: null,
+      cards: [
+        upstreamCard({ card_id: marker }),
+        upstreamCard({
+          card_id: "crd_fedcba9876543210fedcba98",
+          brand: "visa",
+          kind: "virtual",
+          status: "pending_activation",
+          last4: "7716",
+          token_reference: "tok_fedcba9876543210fedcba98",
+          monthly_limit: "100000.00",
           created_at: "2026-10-08T09:15:00.000Z",
+          expires_at: "2029-10-08T09:15:00.000Z",
           updated_at: "2026-10-08T09:15:00.000Z"
         })
       ]
@@ -191,54 +186,54 @@ describe("GET /bff/payments through the customer-api seam", () => {
     const running = await start(config(), stub);
     try {
       const cookie = await devLogin(running.base, "verified");
-      const response = await get(running.base, "/bff/payments", cookie);
+      const response = await get(running.base, "/bff/cards", cookie);
       assert.equal(response.status, 200);
       const text = await response.text();
-      assert.equal(text.includes("payment_id"), false, "upstream key names must not leak");
-      assert.equal(text.includes("fee_amount"), false, "upstream key names must not leak");
-      assert.equal(text.includes("total_amount"), false, "upstream key names must not leak");
-      assert.equal(text.includes("recipient_reference"), false, "upstream key names must not leak");
-      assert.equal(text.includes("provider_reference"), false, "upstream key names must not leak");
+      assert.equal(text.includes("card_id"), false, "upstream key names must not leak");
+      assert.equal(text.includes("token_reference"), false, "upstream key names must not leak");
+      assert.equal(text.includes("monthly_limit"), false, "upstream key names must not leak");
       assert.equal(text.includes("created_at"), false, "upstream key names must not leak");
+      assert.equal(text.includes("expires_at"), false, "upstream key names must not leak");
       assert.equal(text.includes("updated_at"), false, "upstream key names must not leak");
-      const view = JSON.parse(text) as PaymentsView;
-      assert.deepEqual(Object.keys(view).sort(), ["kyc", "mode", "payments"]);
+      const view = JSON.parse(text) as CardsView;
+      assert.deepEqual(Object.keys(view).sort(), ["cards", "kyc", "mode"]);
       assert.equal(view.mode, "test");
       assert.equal(view.kyc, "verified");
-      assert.equal(view.payments.length, 2);
-      for (const payment of view.payments) {
-        assert.deepEqual(Object.keys(payment).sort(), [
-          "amount",
+      assert.equal(view.cards.length, 2);
+      for (const card of view.cards) {
+        assert.deepEqual(Object.keys(card).sort(), [
           "asset",
+          "brand",
           "createdAt",
-          "fee",
+          "expiresAt",
           "id",
-          "method",
+          "kind",
+          "last4",
+          "monthlyLimit",
           "posting",
-          "providerReference",
-          "recipientReference",
           "status",
-          "total",
+          "tokenReference",
           "updatedAt"
         ]);
-        assert.match(payment.id, paymentIdPattern);
-        assert.equal(payment.asset, "RUB");
-        assert.equal(payment.method, "sbp");
-        assert.equal(payment.posting, "none");
+        assert.match(card.id, cardIdPattern);
+        assert.match(card.last4, /^[0-9]{4}$/);
+        assert.match(card.tokenReference, cardTokenReferencePattern);
+        assert.equal(card.asset, "RUB");
+        assert.equal(card.posting, "none");
       }
-      const [first, second] = view.payments;
+      const [first, second] = view.cards;
       assert.equal(first.id, marker);
-      assert.equal(first.status, "completed");
-      assert.equal(first.amount, "1500.00");
-      assert.equal(first.fee, "7.50");
-      assert.equal(first.total, "1507.50");
-      assert.equal(first.recipientReference, "recipient_ref_a1b2c3d4");
-      assert.equal(first.providerReference, "SIMBANK0123456789ABCDEF");
-      assert.equal(first.createdAt, Date.parse("2026-10-05T11:20:00.000Z"));
-      assert.equal(first.updatedAt, Date.parse("2026-10-05T11:24:00.000Z"));
-      assert.equal(second.id, "pay_fedcba9876543210fedcba98");
-      assert.equal(second.status, "created");
-      assert.equal(second.providerReference, null);
+      assert.equal(first.brand, "mir");
+      assert.equal(first.kind, "physical");
+      assert.equal(first.status, "active");
+      assert.equal(first.last4, "4832");
+      assert.equal(first.tokenReference, "tok_0123456789abcdef01234567");
+      assert.equal(first.monthlyLimit, "250000.00");
+      assert.equal(first.createdAt, Date.parse("2026-09-12T10:00:00.000Z"));
+      assert.equal(first.expiresAt, Date.parse("2029-09-12T00:00:00.000Z"));
+      assert.equal(first.updatedAt, Date.parse("2026-09-12T10:05:00.000Z"));
+      assert.equal(second.id, "crd_fedcba9876543210fedcba98");
+      assert.equal(second.status, "pending_activation");
       assert.equal(second.updatedAt, second.createdAt);
       assert.equal(stub.calls.length, 1);
     } finally {
@@ -246,14 +241,14 @@ describe("GET /bff/payments through the customer-api seam", () => {
     }
   });
 
-  it("maps an upstream payments refusal (403) to the gated view", async () => {
-    const stub = paymentsStub({ status: "denied" });
+  it("maps an upstream cards refusal (403) to the gated view", async () => {
+    const stub = cardsStub({ status: "denied" });
     const running = await start(config(), stub);
     try {
       const gatedCookie = await devLogin(running.base, "kyc-gated");
-      const gated = await (await get(running.base, "/bff/payments", gatedCookie)).json() as PaymentsView;
+      const gated = await (await get(running.base, "/bff/cards", gatedCookie)).json() as CardsView;
       const verifiedCookie = await devLogin(running.base, "verified");
-      const response = await get(running.base, "/bff/payments", verifiedCookie);
+      const response = await get(running.base, "/bff/cards", verifiedCookie);
       assert.equal(response.status, 200);
       assert.deepEqual(await response.json(), gated);
       assert.equal(stub.calls.length, 1);
@@ -262,18 +257,19 @@ describe("GET /bff/payments through the customer-api seam", () => {
     }
   });
 
-  it("degrades to payments_unavailable on upstream outage without leaking the body", async () => {
-    const stub = paymentsStub({ status: "unavailable" });
+  it("degrades to cards_unavailable on upstream outage without leaking the body", async () => {
+    const stub = cardsStub({ status: "unavailable" });
     const running = await start(config(), stub);
     try {
       const cookie = await devLogin(running.base, "verified");
-      const response = await get(running.base, "/bff/payments", cookie);
+      const response = await get(running.base, "/bff/cards", cookie);
       assert.equal(response.status, 503);
       const text = await response.text();
       assert.equal(text.includes(marker), false);
       assert.equal(text.includes("syn_cust_"), false);
-      assert.equal(text.includes("pay_"), false);
-      assert.deepEqual(JSON.parse(text), { error: "payments_unavailable" });
+      assert.equal(text.includes("crd_"), false);
+      assert.equal(text.includes("tok_"), false);
+      assert.deepEqual(JSON.parse(text), { error: "cards_unavailable" });
       assert.equal(stub.calls.length, 1);
     } finally {
       await running.close();
@@ -281,19 +277,19 @@ describe("GET /bff/payments through the customer-api seam", () => {
   });
 
   it("recovers to the contract view once upstream answers correctly again", async () => {
-    let result: CustomerApiPayments = { status: "unavailable" };
-    const stub = paymentsStub(async () => result);
+    let result: CustomerApiCards = { status: "unavailable" };
+    const stub = cardsStub(async () => result);
     const running = await start(config(), stub);
     try {
       const cookie = await devLogin(running.base, "verified");
-      assert.equal((await get(running.base, "/bff/payments", cookie)).status, 503);
+      assert.equal((await get(running.base, "/bff/cards", cookie)).status, 503);
       result = {
         status: "ok",
-        payments: [upstreamPayment({ payment_id: "pay_5ec0de5ec0de5ec0de5ec0de" })]
+        cards: [upstreamCard({ card_id: "crd_5ec0de5ec0de5ec0de5ec0de" })]
       };
-      const view = await (await get(running.base, "/bff/payments", cookie)).json() as PaymentsView;
+      const view = await (await get(running.base, "/bff/cards", cookie)).json() as CardsView;
       assert.equal(view.kyc, "verified");
-      assert.deepEqual(view.payments.map((payment) => payment.id), ["pay_5ec0de5ec0de5ec0de5ec0de"]);
+      assert.deepEqual(view.cards.map((card) => card.id), ["crd_5ec0de5ec0de5ec0de5ec0de"]);
       assert.equal(stub.calls.length, 2);
     } finally {
       await running.close();

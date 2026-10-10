@@ -356,6 +356,7 @@ describe("money movement is absent", () => {
         "/bff/quotes/preview",
         "/bff/exchange-orders",
         "/bff/payments",
+        "/bff/cards",
         "/bff/orders",
         "/bff/withdraw",
         "/bff/withdrawals",
