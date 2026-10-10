@@ -16,6 +16,7 @@ import {
   customerHeaders,
   header,
   NOW_MS,
+  operatorHeaders,
   rawExchange,
   REQUEST_ID,
   startTestServer,
@@ -86,9 +87,12 @@ test("every served route is declared in the contract with the same method", () =
     const declared = item[operation.method.toLowerCase()];
     assert.ok(declared, `${pair} is served but missing from openapi.yaml`);
     assert.equal(declared.operationId, operation.operationId, pair);
-    assert.ok(
-      !operation.path.startsWith("/api/v1/operator/") && !(declared.tags ?? []).includes("Operator"),
-      `${pair} must not be an operator route`
+    // The served operator read is the only Operator-tagged route the service
+    // answers; every other operator route stays contract-only.
+    assert.equal(
+      operation.path.startsWith("/api/v1/operator/"),
+      (declared.tags ?? []).includes("Operator"),
+      `${pair} operator namespace and Operator tag must agree`
     );
   }
 });
@@ -133,8 +137,9 @@ test("only served contract pairs answer; every other method on every declared pa
     targets.set(path, instantiate(path));
   }
   for (const [contractPath, target] of targets) {
+    const headers = contractPath.startsWith("/api/v1/operator/") ? operatorHeaders() : verifiedCustomerHeaders();
     for (const method of METHODS) {
-      const response = await checkedRequest(port, { method, path: target, headers: verifiedCustomerHeaders() });
+      const response = await checkedRequest(port, { method, path: target, headers });
       const pair = `${method} ${contractPath}`;
       if (servedPairs.has(pair)) {
         assert.ok(

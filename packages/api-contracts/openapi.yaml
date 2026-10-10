@@ -1234,6 +1234,60 @@
           }
         }
       }
+    },
+    "/api/v1/operator/admin": {
+      "get": {
+        "operationId": "getOperatorAdmin",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read the operator's own admin overview",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator admin overview",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAdminView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1438,6 +1492,60 @@
           },
           "commands_enabled": {
             "const": false
+          }
+        }
+      },
+      "OperatorAdminView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "operator_id",
+          "subject",
+          "role",
+          "granted_capabilities",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "operator_id": {
+            "type": "string",
+            "pattern": "^opr_[0-9a-f]{24}$"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^syn_oper_[a-z0-9]{8,32}$"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "compliance-lead",
+              "support-l1",
+              "aml-investigator",
+              "fraud-investigator",
+              "auditor"
+            ]
+          },
+          "granted_capabilities": {
+            "type": "array",
+            "uniqueItems": true,
+            "maxItems": 32,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -2858,8 +2966,6 @@
   "x-solidchange-production-providers-enabled": false,
   "x-solidchange-planned-namespaces": {
     "customer": [],
-    "operator": [
-      "/api/v1/operator/admin"
-    ]
+    "operator": []
   }
 }

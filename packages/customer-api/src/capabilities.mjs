@@ -245,6 +245,47 @@ export function evaluateCapabilities({ kycStatus }) {
   });
 }
 
+// Operator capability policy. Operator surfaces answer the staff audience
+// pinned by the operator token (actorType "operator"), not customers; KYC is
+// a customer concept and never applies here. Every granted entry is a `read`
+// tier without KYC — the gate is the operator audience itself. Role-scoped
+// grants stay future work: today every operator role receives the same read
+// tier, echoed back in OperatorAdminView.granted_capabilities.
+export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
+  entry("operator.session.read", "read", false, []),
+  entry("operator.capabilities.read", "read", false, []),
+  entry("operator.admin.read", "read", false, [])
+]);
+
+/** @returns {Readonly<{ granted: readonly string[], denied: readonly unknown[], commandsEnabled: boolean }>} */
+export function evaluateOperatorCapabilities() {
+  /** @type {string[]} */
+  const granted = [];
+  /** @type {Readonly<{ capability: string, reasons: readonly string[] }>[]} */
+  const denied = [];
+  for (const policy of OPERATOR_CAPABILITY_POLICY) {
+    if (policy.kind === "read" && policy.decisions.length === 0) {
+      granted.push(policy.capability);
+    } else {
+      denied.push(
+        Object.freeze({
+          capability: policy.capability,
+          reasons: Object.freeze(
+            policy.decisions.length > 0
+              ? policy.decisions.map(decisionReasonCode)
+              : [REASON_CODES.operationNotImplemented]
+          )
+        })
+      );
+    }
+  }
+  return Object.freeze({
+    granted: Object.freeze(granted),
+    denied: Object.freeze(denied),
+    commandsEnabled: false
+  });
+}
+
 // Synthetic KYC status source. A future KYC core adapter replaces it behind
 // `statusFor(subject) -> Promise<"unverified" | "pending" | "verified">`.
 /**

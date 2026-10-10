@@ -6,6 +6,8 @@ import {
   checkedRequest,
   customerHeaders,
   header,
+  operatorHeaders,
+  operatorToken,
   REQUEST_ID,
   startTestServer,
   stopServer,
@@ -31,6 +33,7 @@ const PAYMENTS = "/api/v1/customer/payments";
 const CARDS = "/api/v1/customer/cards";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
+const OPERATOR_ADMIN = "/api/v1/operator/admin";
 const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, AUTH, USERS];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
@@ -124,7 +127,10 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [PAYMENTS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [CARDS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [AUTH, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
-    [USERS, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
+    [USERS, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
+    [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);
@@ -139,6 +145,25 @@ test("generated request IDs are fresh UUIDv7 values", async () => {
     seen.add(header(response, "x-request-id"));
   }
   assert.equal(seen.size, 20);
+});
+
+test("X-Device-Id is required and must be a lowercase UUIDv4 on the operator operation", async () => {
+  for (const [name, headers] of [
+    ["missing", operatorHeaders({ "X-Device-Id": null })],
+    ["empty", operatorHeaders({ "X-Device-Id": "" })],
+    ["uppercase", operatorHeaders({ "X-Device-Id": DEVICE_ID.toUpperCase() })],
+    ["uuidv7", operatorHeaders({ "X-Device-Id": REQUEST_ID })],
+    ["not a uuid", operatorHeaders({ "X-Device-Id": "not-a-device" })],
+    ["duplicated", [...operatorHeaders(), ["X-Device-Id", DEVICE_ID]]],
+    ["duplicated case", [...operatorHeaders(), ["x-device-id", DEVICE_ID]]]
+  ]) {
+    const response = await expectStatus(OPERATOR_ADMIN, headers, 400, "VALIDATION_FAILED");
+    assert.match(JSON.parse(response.body).message, /X-Device-Id/u, name);
+  }
+  const accepted = operatorHeaders().map(([name, value]) =>
+    name === "X-Device-Id" ? ["x-device-id", value] : [name, value]
+  );
+  await expectStatus(OPERATOR_ADMIN, accepted, 200);
 });
 
 test("X-Device-Id is rejected on customer and metadata operations", async () => {
@@ -204,9 +229,34 @@ test("Authorization accepts only one well-formed synthetic bearer token", async 
   assert.notEqual(TEST_KEY, otherKey);
 });
 
+test("Authorization on the operator operation requires the operator audience", async () => {
+  const valid = operatorToken();
+  const otherKey = "b".repeat(64);
+  const forged = `${valid.slice(0, -1)}${valid.endsWith("0") ? "1" : "0"}`;
+  const rejected = [
+    `Bearer ${token({ subject: VERIFIED_SUBJECT })}`,
+    `Bearer ${forged}`,
+    `Bearer ${operatorToken({ key: otherKey })}`,
+    `Bearer ${valid.replace("sodev1", "scdev1")}`,
+    `Bearer ${valid.replace("syn_oper_", "syn_cust_")}`,
+    valid,
+    `Bearer ${valid} extra`,
+    ""
+  ];
+  for (const value of rejected) {
+    const response = await expectStatus(OPERATOR_ADMIN, operatorHeaders({ Authorization: value }), 401, "AUTHENTICATION_REQUIRED");
+    assert.equal(header(response, "www-authenticate"), "Bearer");
+  }
+  await expectStatus(OPERATOR_ADMIN, operatorHeaders(), 200);
+});
+
 test("request bodies are rejected on every served operation", async () => {
-  for (const path of [META, ...CUSTOMER_PATHS]) {
-    const base = path === META ? [["X-Request-Id", REQUEST_ID]] : customerHeaders();
+  for (const path of [META, ...CUSTOMER_PATHS, OPERATOR_ADMIN]) {
+    const base = path === META
+      ? [["X-Request-Id", REQUEST_ID]]
+      : path === OPERATOR_ADMIN
+        ? operatorHeaders()
+        : customerHeaders();
     for (const extra of [[["Content-Length", "0"]], [["Transfer-Encoding", "chunked"]]]) {
       const response = await checkedRequest(port, { path, headers: [...base, ...extra] });
       assert.equal(response.status, 400);
@@ -220,6 +270,8 @@ test("header names are matched case-insensitively", async () => {
   for (const path of CUSTOMER_PATHS) {
     await expectStatus(path, headers, 200);
   }
+  const operator = operatorHeaders().map(([name, value]) => [name.toUpperCase(), value]);
+  await expectStatus(OPERATOR_ADMIN, operator, 200);
 });
 
 test("validation order: body, device, request id, context, rate limit, then authentication", async () => {
@@ -233,4 +285,10 @@ test("validation order: body, device, request id, context, rate limit, then auth
   assert.match(JSON.parse(device.body).message, /X-Device-Id/u);
   const platform = await expectStatus(SESSION, customerHeaders({ "X-Platform": "bad", Authorization: null }), 400);
   assert.match(JSON.parse(platform.body).message, /X-Platform/u);
+  const operatorDevice = await expectStatus(
+    OPERATOR_ADMIN,
+    operatorHeaders({ "X-Request-Id": "bad", "X-Device-Id": "bad" }),
+    400
+  );
+  assert.match(JSON.parse(operatorDevice.body).message, /X-Device-Id/u);
 });
