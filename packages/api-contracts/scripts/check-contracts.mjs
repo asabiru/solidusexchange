@@ -876,6 +876,18 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  ChecksView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "checks"],
+    properties: {
+      mode: { const: "test" },
+      checks: {
+        type: "array",
+        items: { $ref: "#/components/schemas/CheckView" }
+      }
+    }
+  },
   CheckView: {
     type: "object",
     additionalProperties: false,
@@ -1100,6 +1112,7 @@ function checkOpenApi() {
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["getOperatorAdmin", "/api/v1/operator/admin"],
+    ["getCustomerChecks", "/api/v1/customer/checks"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
     ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
     ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
@@ -1148,6 +1161,7 @@ function checkOpenApi() {
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
     ["getOperatorAdmin", readStatuses],
+    ["getCustomerChecks", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
     ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
     ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
@@ -1173,6 +1187,7 @@ function checkOpenApi() {
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
+    ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
     ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
     ["claimCustomerCheck", "#/components/schemas/CheckView"],

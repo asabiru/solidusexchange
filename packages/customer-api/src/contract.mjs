@@ -275,6 +275,25 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
   }),
+  // The checks collection read is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications, quotes, exchange-orders, payments
+  // and cards reads, so it declares a 403: checks are an asset/activity
+  // collection (the subject's own issued and received Telegram in-chat
+  // checks — a planned surface under D-019), not an onboarding or identity
+  // surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerChecks",
+    method: "GET",
+    path: "/api/v1/customer/checks",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
   // First operator-namespaced read. Operator operations require the
   // X-Device-Id header and an operator-audience token instead of a customer
   // one; KYC evaluation never applies to them.

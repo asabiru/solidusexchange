@@ -43,6 +43,7 @@ function depositsStub(result: CustomerApiDeposits | (() => Promise<CustomerApiDe
     exchangeOrders: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
+    checks: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

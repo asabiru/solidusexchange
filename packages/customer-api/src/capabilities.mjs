@@ -202,6 +202,36 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-005",
     "D-006",
     "D-014"
+  ]),
+  // The served checks collection read is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications, quotes, exchange-orders, payments
+  // and cards reads: checks are an asset/activity collection (the
+  // subject's own issued and received Telegram in-chat checks planned
+  // under D-019), not an onboarding or identity surface — unlike
+  // profile/kyc/support it must stay gated on a verified KYC status. The
+  // read is synthetic, carries no claim secrets (claim digests never leave
+  // the issuing flow) and no ledger effect (posting stays "none"), so it
+  // needs no open money-movement decisions: the unserved check commands
+  // below keep the financial denial with their decision reasons.
+  entry("customer.checks.read", "read", true, []),
+  // Previewing a check is the issuance-side rate/terms command for the
+  // chat flow: it stays denied under the financial-commands gate like the
+  // claim and cancel commands, with the in-chat checks decision D-019
+  // still Open.
+  entry("customer.checks.preview", "financial", true, [
+    "D-001",
+    "D-014",
+    "D-019"
+  ]),
+  entry("customer.checks.claim", "financial", true, [
+    "D-001",
+    "D-014",
+    "D-019"
+  ]),
+  entry("customer.checks.cancel", "financial", true, [
+    "D-001",
+    "D-014",
+    "D-019"
   ])
 ]);
 

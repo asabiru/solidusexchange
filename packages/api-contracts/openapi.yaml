@@ -851,6 +851,60 @@
         }
       }
     },
+    "/api/v1/customer/checks": {
+      "get": {
+        "operationId": "getCustomerChecks",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's own checks (issued and received)",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer checks in test mode carrying no claim secrets",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecksView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -2768,6 +2822,25 @@
           },
           "posting": {
             "const": "none"
+          }
+        }
+      },
+      "ChecksView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "checks"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CheckView"
+            }
           }
         }
       },

@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth-sessions.mjs";
+import { createSyntheticCheckDirectory, validChecksView } from "../../customer-api/src/checks.mjs";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
 import { createSyntheticSupportDirectory } from "../../customer-api/src/support.mjs";
@@ -338,6 +339,21 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(cards.mode, "test");
     assert.equal(cards.kyc, "kyc-gated");
     assert.equal(cards.cards.length, 0);
+    // customer.checks.read carries the same upstream KYC gate, so
+    // /bff/checks degrades in place to the local check book's gated list —
+    // the fixture entries with the KYC-adjusted statuses, never upstream
+    // data.
+    const checks = await getMiniapp("/bff/checks", cookie);
+    assert.equal(checks.mode, "test");
+    assert.deepEqual(Object.keys(checks).sort(), ["checks", "mode"]);
+    assert.equal(checks.checks.length, 5);
+    for (const check of checks.checks) {
+      assert.match(check.reference, /^chk_[0-9a-f]{24}$/);
+      assert.equal(check.mode, "test");
+      assert.equal(check.claimRule, "personal");
+      assert.equal(check.executable, false);
+      assert.equal(check.executionUnavailableReason, "dev_test_version");
+    }
     // customer.notifications.read is refused upstream too, so the
     // notifications feed degrades in place to the local outbox drafts this
     // session's KYC journey recorded (newest first: kyc_approved).
@@ -475,6 +491,27 @@ describe("customer journey through the Mini App BFF", () => {
       createdAt: Date.parse(upstreamView.created_at),
       updatedAt: Date.parse(upstreamView.updated_at)
     });
+  });
+
+  it("keeps the checks surface on the local book while customer.checks.read is denied upstream", async () => {
+    // customer.checks.read is KYC-gated and the upstream KYC directory marks
+    // every subject unverified, so the verified dev session's upstream read
+    // is refused: /bff/checks degrades in place to the local check book's
+    // gated list. The upstream directory still answers a deterministic,
+    // contract-valid view for the same subject — nothing here leaks into
+    // the app surface.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticCheckDirectory().viewFor(customerApiSubject(devSubject));
+    assert.equal(validChecksView(upstreamView), true);
+    assert.ok(upstreamView.checks.length >= 1);
+    assert.deepEqual(upstreamView, await createSyntheticCheckDirectory().viewFor(customerApiSubject(devSubject)));
+    const view = await getMiniapp("/bff/checks", cookie);
+    assert.equal(view.mode, "test");
+    assert.equal(view.checks.length, 5);
+    const upstreamIds = new Set(upstreamView.checks.map((check) => check.check_id));
+    for (const check of view.checks) {
+      assert.equal(upstreamIds.has(check.reference), false);
+    }
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {

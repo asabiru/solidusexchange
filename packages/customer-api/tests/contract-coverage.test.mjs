@@ -186,7 +186,9 @@ test("unknown paths under /api/v1/customer/** 404 rather than fall through", asy
     "/api/v1/customer/sessions",
     "/api/v1/customer/session/current",
     "/api/v1/customer/capabilities/all",
-    "/api/v1/customer/checks",
+    // The collection /api/v1/customer/checks is served, but its trailing
+    // slash, the singular noun and every unknown child stay contract-only.
+    "/api/v1/customer/check",
     "/api/v1/customer/checks/",
     "/api/v1/customer/auth/",
     "/api/v1/customer/auth/sess_0123456789abcdef01234567",

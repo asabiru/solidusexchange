@@ -18,10 +18,10 @@ import type {
 } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
 import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
-import { type CheckBook, CheckError, createCheckBook } from "./checks.js";
+import { type CheckBook, CheckError, contractChecksView, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
-import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
+import { type CustomerApiClient, createCustomerApiClient, customerApiSubject } from "./customer-api-client.js";
 import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
 import {
   type AddressScreeningService,
@@ -1096,7 +1096,28 @@ export function createMiniappServer(
           json(response, 400, { error: "invalid_request" });
           return;
         }
-        json(response, 200, checks.list(session.kyc));
+        // Same gating as /bff/cards: the local KYC gate and the standalone
+        // (unconfigured) dev BFF keep the synthetic checks list; only a
+        // verified session with customer-api access reads the contract
+        // view. An upstream refusal degrades to the same gated list a
+        // kyc-gated session sees (in place); any other upstream failure
+        // answers the sibling *_unavailable error shape. Check
+        // preview/view/claim/cancel stay local — nothing here wires an
+        // upstream command.
+        if (session.kyc !== "verified" || !customerApi.configured) {
+          json(response, 200, checks.list(session.kyc));
+          return;
+        }
+        const upstream = await customerApi.checks(session.subject, clock());
+        if (upstream.status === "ok") {
+          json(response, 200, contractChecksView(upstream.checks, customerApiSubject(session.subject), session.kyc));
+          return;
+        }
+        if (upstream.status === "denied") {
+          json(response, 200, checks.list("kyc-gated"));
+          return;
+        }
+        json(response, 503, { error: "checks_unavailable" });
         return;
       }
       if (path === "/bff/checks/preview") {
