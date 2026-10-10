@@ -102,6 +102,15 @@ async function assertGated(app, cookie, label) {
   const cards = await getJson(app, "/bff/cards", cookie);
   assert.equal(cards.kyc, "kyc-gated", label);
   assert.equal(cards.cards.length, 0, label);
+  const checks = await getJson(app, "/bff/checks", cookie);
+  assert.equal(checks.mode, "test", label);
+  assert.equal(checks.checks.length, 5, label);
+  for (const check of checks.checks) {
+    assert.equal(check.mode, "test", label);
+    assert.equal(check.claimRule, "personal", label);
+    assert.equal(check.executable, false, label);
+    assert.equal(check.executionUnavailableReason, "dev_test_version", label);
+  }
 }
 
 async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
@@ -327,6 +336,44 @@ describe("Mini App BFF with a failing customer-api", () => {
             created_at: "2026-10-08T09:15:00.000Z",
             expires_at: "2029-10-08T09:15:00.000Z",
             updated_at: "2026-10-08T09:15:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/checks")) {
+      return {
+        mode: "test",
+        checks: [
+          {
+            check_id: "chk_0123456789abcdef01234567",
+            check_type: "personal",
+            status: "created",
+            sender_ref: subjectOf(request),
+            recipient_ref: "syn_peer_0123456789ab",
+            amount: "25.000000",
+            asset: "USDT",
+            fee_amount: "0.075000",
+            outstanding_amount: "25.000000",
+            created_at: "2026-10-08T09:15:00.000Z",
+            expires_at: "2026-10-11T09:15:00.000Z",
+            resolved_at: null,
+            posting: "none"
+          },
+          {
+            check_id: "chk_fedcba9876543210fedcba98",
+            check_type: "personal",
+            status: "claimed",
+            sender_ref: "syn_peer_fedcba987654",
+            recipient_ref: subjectOf(request),
+            amount: "4.000000000",
+            asset: "TON",
+            fee_amount: "0.012000000",
+            outstanding_amount: "0.000000000",
+            created_at: "2026-10-01T10:00:00.000Z",
+            expires_at: "2026-10-04T10:00:00.000Z",
+            resolved_at: "2026-10-02T10:00:00.000Z",
             posting: "none"
           }
         ],
@@ -643,6 +690,36 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.deepEqual(JSON.parse(text), { error: "cards_unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
+  async function checksFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/checks", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("syn_peer_"), false, label);
+    assert.equal(text.includes("chk_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "checks_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session never consults upstream: its local checks view stays
+    // intact (and leak-free) while the verified session fails closed.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/checks", { cookie });
+    assert.equal(gatedResponse.status, 200, label);
+    const gatedText = await gatedResponse.text();
+    assert.equal(gatedText.includes(marker), false, label);
+    assert.equal(gatedText.includes(key), false, label);
+    assert.equal(gatedText.includes("syn_cust_"), false, label);
+    assert.equal(gatedText.includes("syn_peer_"), false, label);
+    assert.equal(JSON.parse(gatedText).mode, "test", label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
     return elapsed;
   }
 
@@ -1043,6 +1120,51 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedCards = await getJson(app, "/bff/cards", cookie);
     assert.equal(gatedCards.kyc, "kyc-gated");
     assert.equal(gatedCards.cards.length, 0);
+    // The checks list carries the same KYC gate: only the verified session
+    // consults upstream, and the adapted view carries only opaque check
+    // references (chk_*) — never a claim code, claim URL or bearer token.
+    // Direction comes from which side the subject sits on, timeline ends at
+    // the upstream resolution, and a sender-side draft never appears.
+    const checks = await getJson(app, "/bff/checks", verifiedCookie);
+    assert.equal(checks.mode, "test");
+    assert.deepEqual(Object.keys(checks).sort(), ["checks", "mode"]);
+    assert.equal(checks.checks.length, 2);
+    assert.deepEqual(Object.keys(checks.checks[0]).sort(), [
+      "amount",
+      "asset",
+      "claimRule",
+      "createdAt",
+      "direction",
+      "executable",
+      "executionUnavailableReason",
+      "expiresAt",
+      "fee",
+      "mode",
+      "reference",
+      "status",
+      "timeline",
+      "total"
+    ]);
+    assert.equal(checks.checks[0].reference, "chk_0123456789abcdef01234567");
+    assert.equal(checks.checks[0].direction, "sent");
+    assert.equal(checks.checks[0].status, "created");
+    assert.equal(checks.checks[0].asset, "USDT");
+    assert.equal(checks.checks[0].amount, "25.000000");
+    assert.equal(checks.checks[0].fee, "0.075000");
+    assert.equal(checks.checks[0].total, "25.075000");
+    assert.equal(checks.checks[0].claimRule, "personal");
+    assert.equal(checks.checks[0].executable, false);
+    assert.equal(checks.checks[0].executionUnavailableReason, "dev_test_version");
+    assert.equal(checks.checks[0].timeline.length, 1);
+    assert.equal(checks.checks[1].reference, "chk_fedcba9876543210fedcba98");
+    assert.equal(checks.checks[1].direction, "received");
+    assert.equal(checks.checks[1].status, "claimed");
+    assert.equal(checks.checks[1].total, "4.012000000");
+    assert.equal(checks.checks[1].timeline.length, 2);
+    assert.equal(checks.checks[1].timeline[1].status, "claimed");
+    const gatedChecks = await getJson(app, "/bff/checks", cookie);
+    assert.equal(gatedChecks.mode, "test");
+    assert.equal(gatedChecks.checks.length, 5);
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -1196,6 +1318,19 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedCardsDenied = await getJson(app, "/bff/cards", cookie);
     assert.deepEqual(JSON.parse(cardsText), gatedCardsDenied);
     assert.equal(gatedCardsDenied.kyc, "kyc-gated");
+    // A refused checks read degrades in place to the same local list a
+    // gated session sees — the fixture entries, never upstream data.
+    const checksResponse = await call(app.base, "/bff/checks", { cookie: verifiedCookie });
+    assert.equal(checksResponse.status, 200);
+    const checksText = await checksResponse.text();
+    assert.equal(checksText.includes(marker), false);
+    assert.equal(checksText.includes(key), false);
+    assert.equal(checksText.includes("chk_0123456789abcdef01234567"), false);
+    assert.equal(checksText.includes("chk_fedcba9876543210fedcba98"), false);
+    assert.equal(checksText.includes("syn_peer_"), false);
+    const gatedChecksDenied = await getJson(app, "/bff/checks", cookie);
+    assert.deepEqual(JSON.parse(checksText), gatedChecksDenied);
+    assert.equal(gatedChecksDenied.mode, "test");
     // A refused notifications read degrades in place to the same feed a gated
     // session sees: the local outbox drafts (a session_login per dev login).
     const feedResponse = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
@@ -1269,6 +1404,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await exchangeOrdersFailsClosed(name);
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
+      await checksFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -1293,6 +1429,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await exchangeOrdersFailsClosed(name);
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
+      await checksFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);

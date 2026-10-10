@@ -38,6 +38,7 @@ const QUOTES = "/api/v1/customer/quotes";
 const EXCHANGE_ORDERS = "/api/v1/customer/exchange-orders";
 const PAYMENTS = "/api/v1/customer/payments";
 const CARDS = "/api/v1/customer/cards";
+const CHECKS = "/api/v1/customer/checks";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const ADMIN = "/api/v1/operator/admin";
@@ -163,7 +164,7 @@ test("GET /api/v1/customer/capabilities grants only read capabilities, even afte
       assert.equal(response.status, 200);
       assert.deepEqual(JSON.parse(response.body), {
         capabilities: subject === "syn_cust_verified01"
-          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read"]
+          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read"]
           : ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"],
         commands_enabled: false
       });
@@ -182,7 +183,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -195,7 +196,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS]) {
       now += 61_000;
       assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
@@ -309,6 +310,12 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
   });
   await withServer({ cardDirectory: { async listFor() { throw new Error("card store exploded: secret=abc"); } } }, async (port) => {
     const response = await observe(port, { path: CARDS, headers: verifiedCustomerHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
+  await withServer({ checkDirectory: { async viewFor() { throw new Error("check store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: CHECKS, headers: verifiedCustomerHeaders() });
     assert.equal(response.status, 500);
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
@@ -514,6 +521,18 @@ test("GET /api/v1/customer/cards serves verified customers and gates the rest", 
     assert.equal(granted.status, 200);
     for (const headers of [customerHeaders()]) {
       const denied = await observe(port, { path: CARDS, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/checks serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: CHECKS, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: CHECKS, headers });
       assert.equal(denied.status, 403);
       assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
     }

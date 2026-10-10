@@ -202,3 +202,69 @@ export function createCheckBook(options: CheckBookOptions): CheckBook {
     }
   });
 }
+
+/** Contract-shaped upstream check entry (snake_case, validated by the client). */
+export interface ContractCheck {
+  check_id: string;
+  check_type: "personal";
+  status: string;
+  sender_ref: string;
+  recipient_ref: string;
+  amount: string;
+  asset: AssetCode;
+  fee_amount: string;
+  outstanding_amount: string;
+  created_at: string;
+  expires_at: string;
+  resolved_at: string | null;
+  posting: "none";
+}
+
+/**
+ * Adapts the customer-api check collection into the app's view. The
+ * subject's upstream synthetic ref decides each entry's direction
+ * (sender => sent, recipient => received — the client already proved every
+ * entry sits on exactly one side). Sender-side drafts
+ * (`awaiting_confirmation`) never become Mini App checks and are dropped;
+ * the remaining statuses map one-to-one through `effectiveCheckStatus`, so
+ * a received check created for a gated recipient still reads
+ * `awaiting_recipient_kyc`. The upstream resolved timestamp becomes the
+ * second timeline entry, matching the local book's shape.
+ */
+export function contractChecksView(
+  checks: readonly ContractCheck[],
+  subject: string,
+  kyc: KycStatus
+): ChecksView {
+  const entries: CheckView[] = [];
+  for (const check of checks) {
+    if (check.status === "awaiting_confirmation") continue;
+    const direction: CheckDirection = check.sender_ref === subject ? "sent" : "received";
+    const scale = assets[check.asset].scale;
+    const amountUnits = toUnits(check.amount, scale);
+    const feeUnits = toUnits(check.fee_amount, scale);
+    const status = check.status as CheckStatus;
+    const createdAt = Date.parse(check.created_at);
+    const timeline: CheckStatusEntry[] = [{ status: "created", at: createdAt }];
+    if (check.resolved_at !== null) {
+      timeline.push({ status, at: Date.parse(check.resolved_at) });
+    }
+    entries.push(Object.freeze({
+      reference: check.check_id,
+      mode: "test",
+      direction,
+      status: effectiveCheckStatus(status, direction, kyc),
+      asset: check.asset,
+      amount: check.amount,
+      fee: check.fee_amount,
+      total: fromUnits(amountUnits + feeUnits, scale),
+      claimRule: "personal",
+      timeline: Object.freeze(timeline.map((entry) => Object.freeze({ ...entry }))),
+      createdAt,
+      expiresAt: Date.parse(check.expires_at),
+      executable: false,
+      executionUnavailableReason: "dev_test_version"
+    }));
+  }
+  return Object.freeze({ mode: "test", checks: Object.freeze(entries) });
+}

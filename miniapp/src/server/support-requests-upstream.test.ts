@@ -58,6 +58,7 @@ function supportStub(result: CustomerApiSupport | (() => Promise<CustomerApiSupp
     exchangeOrders: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
+    checks: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "unavailable" }),
     kyc: async () => ({ status: "unavailable" }),
     profile: async () => ({ status: "unavailable" }),

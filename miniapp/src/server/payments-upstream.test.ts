@@ -50,6 +50,7 @@ function paymentsStub(
       return typeof result === "function" ? result() : result;
     },
     cards: async () => ({ status: "not-configured" }),
+    checks: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

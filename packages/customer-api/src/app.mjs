@@ -11,6 +11,7 @@ import {
 } from "./contract.mjs";
 import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
+import { validChecksView } from "./checks.mjs";
 import { validDepositsView } from "./deposits.mjs";
 import { validExchangeOrdersView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
@@ -57,6 +58,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
  * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
+ * @property {import("./checks.mjs").CheckDirectory} checkDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
@@ -241,6 +243,7 @@ export function createCustomerApiHandler({
   exchangeOrderDirectory,
   paymentDirectory,
   cardDirectory,
+  checkDirectory,
   operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
@@ -293,6 +296,9 @@ export function createCustomerApiHandler({
   }
   if (typeof cardDirectory?.listFor !== "function") {
     throw new Error("A card directory is required");
+  }
+  if (typeof checkDirectory?.viewFor !== "function") {
+    throw new Error("A check directory is required");
   }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
@@ -608,6 +614,27 @@ export function createCustomerApiHandler({
       const view = await cardDirectory.listFor(principal.subject);
       if (!validCardsView(view)) {
         throw new Error("Card directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerChecks") {
+      // customer.checks.read is KYC-gated like
+      // deposits/withdrawals/quotes/exchange-orders/payments/cards: checks
+      // are an asset/activity collection (the subject's own issued and
+      // received Telegram in-chat checks planned under D-019), so
+      // unverified and pending subjects are denied with the 403 envelope.
+      // The payload is synthetic and execution-free (posting "none") and
+      // carries no claim secrets — the claim code, claim URLs and bearer
+      // material never leave the issuing flow, so nothing here can move
+      // funds or authorize a claim.
+      if (!evaluation.granted.includes("customer.checks.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await checkDirectory.viewFor(principal.subject);
+      if (!validChecksView(view)) {
+        throw new Error("Check directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

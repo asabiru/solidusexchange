@@ -571,6 +571,32 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      checkDirectory?: {
+        viewFor(subject: string): Promise<{
+          mode: "test";
+          checks: ReadonlyArray<{
+            check_id: string;
+            check_type: "personal";
+            status:
+              | "awaiting_confirmation"
+              | "created"
+              | "awaiting_recipient_kyc"
+              | "claimed"
+              | "cancelled"
+              | "expired";
+            sender_ref: string;
+            recipient_ref: string;
+            amount: string;
+            asset: string;
+            fee_amount: string;
+            outstanding_amount: string;
+            created_at: string;
+            expires_at: string;
+            resolved_at: string | null;
+            posting: "none";
+          }>;
+        }>;
+      };
       operatorDirectory?: {
         viewFor(
           subject: string,

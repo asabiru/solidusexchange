@@ -19,6 +19,7 @@ import type {
 } from "../shared/api.js";
 import type { ScreeningNetwork } from "../shared/address-screening.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
+import { checkReferencePattern } from "../shared/checks.js";
 import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
 import {
@@ -237,6 +238,36 @@ export type CustomerApiCards =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export type CustomerApiCheckStatus =
+  | "awaiting_confirmation"
+  | "created"
+  | "awaiting_recipient_kyc"
+  | "claimed"
+  | "cancelled"
+  | "expired";
+
+export interface CustomerApiCheck {
+  check_id: string;
+  check_type: "personal";
+  status: CustomerApiCheckStatus;
+  sender_ref: string;
+  recipient_ref: string;
+  amount: string;
+  asset: AssetCode;
+  fee_amount: string;
+  outstanding_amount: string;
+  created_at: string;
+  expires_at: string;
+  resolved_at: string | null;
+  posting: "none";
+}
+
+export type CustomerApiChecks =
+  | { status: "ok"; checks: readonly CustomerApiCheck[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -407,6 +438,7 @@ export interface CustomerApiClient {
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
+  checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -1072,6 +1104,131 @@ function parseCardsView(value: unknown): readonly CustomerApiCard[] | undefined 
   return Object.freeze(cards);
 }
 
+const checkKeys = [
+  "check_id",
+  "check_type",
+  "status",
+  "sender_ref",
+  "recipient_ref",
+  "amount",
+  "asset",
+  "fee_amount",
+  "outstanding_amount",
+  "created_at",
+  "expires_at",
+  "resolved_at",
+  "posting"
+] as const;
+
+const customerApiCheckStatuses = new Set<string>([
+  "awaiting_confirmation",
+  "created",
+  "awaiting_recipient_kyc",
+  "claimed",
+  "cancelled",
+  "expired"
+]);
+
+const openCustomerApiCheckStatuses = new Set<string>(["created", "awaiting_recipient_kyc"]);
+
+/**
+ * Validates an upstream ChecksView for one subject. The exact key set is
+ * also the claim-secret boundary: the contract view carries only the opaque
+ * check reference, so any extra field (a claim code, claim URL or other
+ * bearer-material carrier) fails closed here rather than flowing into the
+ * app. Every entry must sit on exactly one side of the subject — sender for
+ * an issued check, recipient for a received one — and follow the check
+ * lifecycle: outstanding holds the full amount while the check is open and
+ * zero otherwise, drafts and open checks are unresolved, an expired check
+ * resolves exactly at expiry, and every other terminal resolution lands
+ * strictly inside its window.
+ */
+function parseChecksView(value: unknown, subject: string): readonly CustomerApiCheck[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "checks"])
+    || value.mode !== "test"
+    || !Array.isArray(value.checks)
+  ) {
+    return undefined;
+  }
+  const checks: CustomerApiCheck[] = [];
+  for (const entry of value.checks) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, checkKeys)
+      || typeof entry.check_id !== "string"
+      || !checkReferencePattern.test(entry.check_id)
+      || entry.check_type !== "personal"
+      || typeof entry.status !== "string"
+      || !customerApiCheckStatuses.has(entry.status)
+      || typeof entry.sender_ref !== "string"
+      || typeof entry.recipient_ref !== "string"
+      || entry.sender_ref === entry.recipient_ref
+      || (entry.sender_ref !== subject && entry.recipient_ref !== subject)
+      || (entry.sender_ref === subject && entry.recipient_ref === subject)
+      || typeof entry.asset !== "string"
+      || !isAssetCode(entry.asset)
+      || typeof entry.amount !== "string"
+      || typeof entry.fee_amount !== "string"
+      || typeof entry.outstanding_amount !== "string"
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.expires_at)
+      || (entry.resolved_at !== null && !isIsoTimestamp(entry.resolved_at))
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    const scale = assets[entry.asset as AssetCode].scale;
+    if (
+      !isScaledDecimal(entry.amount, scale)
+      || toUnits(entry.amount, scale) <= 0n
+      || !isScaledDecimal(entry.fee_amount, scale)
+      || !isScaledDecimal(entry.outstanding_amount, scale)
+    ) {
+      return undefined;
+    }
+    const created = Date.parse(entry.created_at);
+    const expires = Date.parse(entry.expires_at);
+    const zero = fromUnits(0n, scale);
+    const open = openCustomerApiCheckStatuses.has(entry.status);
+    const resolved = entry.resolved_at === null ? null : Date.parse(entry.resolved_at);
+    if (
+      expires <= created
+      // The pinned outstanding rule: the full amount stays outstanding only
+      // while the check can still be claimed.
+      || (open && entry.outstanding_amount !== entry.amount)
+      || (!open && entry.outstanding_amount !== zero)
+      // A pre-issuance draft has no resolution either; an expired check
+      // resolves at expiry; every other terminal status resolves strictly
+      // inside the check's window.
+      || (entry.status === "awaiting_confirmation" && resolved !== null)
+      || (open && resolved !== null)
+      || (entry.status === "expired" && resolved !== expires)
+      || ((entry.status === "claimed" || entry.status === "cancelled")
+        && (resolved === null || resolved <= created || resolved >= expires))
+    ) {
+      return undefined;
+    }
+    checks.push(Object.freeze({
+      check_id: entry.check_id,
+      check_type: "personal",
+      status: entry.status as CustomerApiCheckStatus,
+      sender_ref: entry.sender_ref,
+      recipient_ref: entry.recipient_ref,
+      amount: entry.amount,
+      asset: entry.asset as AssetCode,
+      fee_amount: entry.fee_amount,
+      outstanding_amount: entry.outstanding_amount,
+      created_at: entry.created_at,
+      expires_at: entry.expires_at,
+      resolved_at: entry.resolved_at,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(checks);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -1513,6 +1670,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
+      checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -1712,6 +1870,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/checks", token, nowMs);
+      const view = parseChecksView(body, subject);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", checks: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -1826,5 +2003,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, notifications, kyc, profile, support, authSessions, users });
 }
