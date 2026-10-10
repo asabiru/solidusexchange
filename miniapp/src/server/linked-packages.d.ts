@@ -571,6 +571,25 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      operatorDirectory?: {
+        viewFor(
+          subject: string,
+          grantedCapabilities: readonly string[]
+        ): Promise<{
+          mode: "test";
+          operator_id: string;
+          subject: string;
+          role:
+            | "compliance-lead"
+            | "support-l1"
+            | "aml-investigator"
+            | "fraud-investigator"
+            | "auditor";
+          granted_capabilities: readonly string[];
+          created_at: string;
+          updated_at: string;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

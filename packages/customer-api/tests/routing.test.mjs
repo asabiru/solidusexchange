@@ -52,8 +52,10 @@ test("non-GET methods on served paths return the 404 envelope", async () => {
   }
 });
 
-test("operator paths are not served, even with operator headers", async () => {
-  for (const path of Object.keys(contract.openapi.paths).filter((item) => item.startsWith("/api/v1/operator/"))) {
+test("unserved operator paths are not served, even with operator headers", async () => {
+  for (const path of Object.keys(contract.openapi.paths).filter(
+    (item) => item.startsWith("/api/v1/operator/") && !SERVED.includes(item)
+  )) {
     await expectNotFound("GET", path, OPERATOR_HEADERS);
     await expectNotFound("GET", path);
   }

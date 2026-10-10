@@ -1,7 +1,7 @@
 import { createServer, STATUS_CODES } from "node:http";
 
 import { parseBearerAuthorization } from "./auth.mjs";
-import { evaluateCapabilities } from "./capabilities.mjs";
+import { evaluateCapabilities, evaluateOperatorCapabilities } from "./capabilities.mjs";
 import {
   API_METADATA,
   CLIENT_VERSION_MAX_LENGTH,
@@ -22,6 +22,7 @@ import {
   metricsRequestAllowed
 } from "./observability.mjs";
 import { validNotificationsView } from "./notifications.mjs";
+import { validOperatorAdminView } from "./operator.mjs";
 import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
@@ -56,6 +57,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
  * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
+ * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -101,6 +103,9 @@ const BASE_HEADERS = Object.freeze({
   "content-type": "application/json; charset=utf-8"
 });
 const SCOPE_PATTERN = /^[a-z][a-z0-9.:-]{0,127}$/u;
+// Operator operations require the workstation device identifier: an opaque
+// lowercase UUIDv4 that never encodes hardware identifiers or PII.
+const DEVICE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 // Every peer of this loopback-only server is local, and a local client can pick
 // any 127.0.0.0/8 source address, so the whole range shares one bucket.
 const IPV4_LOOPBACK_PATTERN = /^(?:::ffff:)?127\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$/iu;
@@ -236,6 +241,7 @@ export function createCustomerApiHandler({
   exchangeOrderDirectory,
   paymentDirectory,
   cardDirectory,
+  operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -288,6 +294,9 @@ export function createCustomerApiHandler({
   if (typeof cardDirectory?.listFor !== "function") {
     throw new Error("A card directory is required");
   }
+  if (typeof operatorDirectory?.viewFor !== "function") {
+    throw new Error("An operator directory is required");
+  }
 
   /**
    * @param {IncomingMessage} request
@@ -312,7 +321,14 @@ export function createCustomerApiHandler({
       });
       return;
     }
-    if (headers.has("x-device-id")) {
+    const operatorRoute = operation.path.startsWith("/api/v1/operator/");
+    if (operatorRoute) {
+      const deviceId = singleHeader(headers, "x-device-id");
+      if (deviceId === null || !DEVICE_ID_PATTERN.test(deviceId)) {
+        fail(400, "VALIDATION_FAILED", "X-Device-Id must be exactly one lowercase UUIDv4.");
+        return;
+      }
+    } else if (headers.has("x-device-id")) {
       fail(
         400,
         "VALIDATION_FAILED",
@@ -368,7 +384,11 @@ export function createCustomerApiHandler({
     if (!validPrincipal(principal, clock())) {
       throw new Error("Verifier returned an invalid principal");
     }
-    if (principal.actorType !== "customer") {
+    // The token audience is bound to the namespace the path belongs to: a
+    // customer token never authenticates an operator route and an operator
+    // token never authenticates a customer route — both fail closed as
+    // unauthenticated.
+    if (principal.actorType !== (operatorRoute ? "operator" : "customer")) {
       unauthenticated();
       return;
     }
@@ -385,6 +405,24 @@ export function createCustomerApiHandler({
         },
         requestId
       );
+      return;
+    }
+
+    if (operation.operationId === "getOperatorAdmin") {
+      // operator.admin.read is granted to the operator audience by policy:
+      // the operator token and device identifier are the gate, KYC never
+      // applies to staff surfaces. The check stays so a served route can
+      // never drift from the capabilities the service exposes.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.admin.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await operatorDirectory.viewFor(principal.subject, operatorEvaluation.granted);
+      if (!validOperatorAdminView(view)) {
+        throw new Error("Operator directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
       return;
     }
 

@@ -315,6 +315,17 @@ assertRejected(
   }
 );
 
+assertRejected(
+  "rejects the served operator admin read without a device identifier",
+  "Missing X-Device-Id: getOperatorAdmin",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/admin"].get;
+    operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
 for (const [pathName, operationId] of [
   ["/api/v1/customer/session", "getCustomerSession"],
   ["/api/v1/customer/capabilities", "getCustomerCapabilities"],

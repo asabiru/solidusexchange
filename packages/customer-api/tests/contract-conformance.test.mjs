@@ -10,8 +10,11 @@ import {
   checkedRequest,
   contract,
   customerHeaders,
+  DEVICE_ID,
   header,
   NOW_MS,
+  OPERATOR_SUBJECT,
+  operatorHeaders,
   REQUEST_ID,
   SUBJECT,
   startTestServer,
@@ -37,6 +40,7 @@ const PAYMENTS = "/api/v1/customer/payments";
 const CARDS = "/api/v1/customer/cards";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
+const ADMIN = "/api/v1/operator/admin";
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -62,7 +66,7 @@ function headerParameterNames(operation) {
     .map((parameter) => parameter.name.toLowerCase());
 }
 
-test("served operations match the contract exactly; operator and checks paths are not served", () => {
+test("served operations match the contract exactly; unserved operator and checks paths stay unserved", () => {
   const served = new Set(OPERATIONS.map((operation) => operation.path));
   const contractOperations = [];
   for (const [path, item] of Object.entries(contract.openapi.paths)) {
@@ -70,9 +74,12 @@ test("served operations match the contract exactly; operator and checks paths ar
       contractOperations.push({ path, method: method.toUpperCase(), operation });
     }
   }
-  const expected = contractOperations.filter(
-    ({ path }) => !path.startsWith("/api/v1/operator/") && !path.startsWith("/api/v1/customer/checks/")
-  );
+  // Operator routes other than the served admin read and every checks command
+  // path remain declared-but-unserved.
+  const unserved = (path) =>
+    path.startsWith("/api/v1/customer/checks/") ||
+    (path.startsWith("/api/v1/operator/") && path !== "/api/v1/operator/admin");
+  const expected = contractOperations.filter(({ path }) => !unserved(path));
   assert.equal(OPERATIONS.length, expected.length);
   for (const { path, method, operation } of expected) {
     const runtime = OPERATIONS.find((candidate) => candidate.operationId === operation.operationId);
@@ -84,17 +91,16 @@ test("served operations match the contract exactly; operator and checks paths ar
       [...runtime.statuses].sort(),
       Object.keys(operation.responses).map(Number).sort()
     );
+    const operatorRoute = path.startsWith("/api/v1/operator/");
     const required = headerParameterNames(operation);
     if (runtime.authenticated) {
       required.push("authorization");
-      assert.deepEqual(operation.security, [{ CustomerBearer: [] }]);
+      assert.deepEqual(operation.security, [operatorRoute ? { OperatorBearer: [] } : { CustomerBearer: [] }]);
     }
     assert.deepEqual([...runtime.requiredHeaders].sort(), required.sort());
-    assert.ok(!required.includes("x-device-id"));
+    assert.equal(required.includes("x-device-id"), operatorRoute, `${path} device-id requirement`);
   }
-  const unservedPaths = contractOperations.filter(
-    ({ path }) => path.startsWith("/api/v1/operator/") || path.startsWith("/api/v1/customer/checks/")
-  );
+  const unservedPaths = contractOperations.filter(({ path }) => unserved(path));
   assert.ok(unservedPaths.length > 0);
   for (const { path } of unservedPaths) {
     assert.ok(!served.has(path), path);
@@ -198,6 +204,13 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
       assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
       assert.equal(header(limited, "retry-after"), "60");
     }
+    now += 61_000;
+    assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders() })).status, 200);
+    assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders({ Authorization: null }) })).status, 401);
+    const limitedAdmin = await observe(port, { path: ADMIN, headers: operatorHeaders() });
+    assert.equal(limitedAdmin.status, 429);
+    assert.equal(JSON.parse(limitedAdmin.body).code, "RATE_LIMITED");
+    assert.equal(header(limitedAdmin, "retry-after"), "60");
     const meta = await observe(port, { path: META, headers: metaHeaders });
     assert.equal(meta.status, 200);
   });
@@ -312,6 +325,12 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
+  await withServer({ operatorDirectory: { async viewFor() { throw new Error("operator store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: ADMIN, headers: operatorHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
 });
 
 test("metadata drift fails closed with a 500 envelope", async () => {
@@ -400,6 +419,35 @@ test("GET /api/v1/customer/users serves every authenticated customer regardless 
   });
 });
 
+test("GET /api/v1/operator/admin serves the operator's own admin overview to the operator audience only", async () => {
+  await withServer({}, async (port) => {
+    const response = await observe(port, { path: ADMIN, headers: operatorHeaders() });
+    assert.equal(response.status, 200);
+    const view = JSON.parse(response.body);
+    assert.equal(view.mode, "test");
+    assert.match(view.operator_id, /^opr_[0-9a-f]{24}$/u);
+    assert.equal(view.subject, OPERATOR_SUBJECT);
+    assert.deepEqual(view.granted_capabilities, [
+      "operator.session.read",
+      "operator.capabilities.read",
+      "operator.admin.read"
+    ]);
+    const customer = await observe(port, {
+      path: ADMIN,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+    assert.equal(header(customer, "www-authenticate"), "Bearer");
+    const operatorOnCustomerPath = await observe(port, {
+      path: SESSION,
+      headers: operatorHeaders({ "X-Device-Id": null })
+    });
+    assert.equal(operatorOnCustomerPath.status, 401);
+    assert.equal(JSON.parse(operatorOnCustomerPath.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
 test("GET /api/v1/customer/deposits serves verified customers and gates the rest", async () => {
   await withServer({}, async (port) => {
     const granted = await observe(port, { path: DEPOSITS, headers: verifiedCustomerHeaders() });
@@ -472,7 +520,7 @@ test("GET /api/v1/customer/cards serves verified customers and gates the rest", 
   });
 });
 
-test("a principal for a non-customer actor is never accepted as a customer", async () => {
+test("a principal for a non-customer actor is never accepted on the wrong audience", async () => {
   const verifier = {
     async verify() {
       return { subject: "syn_operator_1", actorType: "operator", scopes: [], expiresAt: "2026-10-01T13:00:00.000Z" };
