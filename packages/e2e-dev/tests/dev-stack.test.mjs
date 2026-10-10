@@ -659,6 +659,30 @@ describe("operator journey through the backoffice BFF", () => {
     assert.equal(await verified(altered), false);
   });
 
+  it("rejects envelopes when the matching key is not a live Ed25519 key", async () => {
+    const response = await fetch(`${backofficeBase}/bff/api/kyc`, { headers: { cookie: lead } });
+    const envelope = await readJson(response);
+    const keyset = await signingKeys();
+    assert.equal(verifyEnvelope(envelope, keyset), true);
+    const withWrongAlgorithm = {
+      ...keyset,
+      keys: keyset.keys.map((key) =>
+        key.keyId === envelope.keyId ? { ...key, algorithm: "ES256" } : key
+      )
+    };
+    assert.equal(verifyEnvelope(envelope, withWrongAlgorithm), false);
+    // A retired key must not attest envelopes issued after its retirement.
+    const retiredBeforeIssue = {
+      ...keyset,
+      keys: keyset.keys.map((key) =>
+        key.keyId === envelope.keyId
+          ? { ...key, status: "retired", retiredAt: "2000-01-01T00:00:00.000Z" }
+          : key
+      )
+    };
+    assert.equal(verifyEnvelope(envelope, retiredBeforeIssue), false);
+  });
+
   it("lists and fetches draft reports for compliance-lead and audits the access", async () => {
     const list = await signedGet("/bff/api/reports", lead, "reports");
     assert.equal(list.status, "draft");

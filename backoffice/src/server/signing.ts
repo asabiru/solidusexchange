@@ -19,6 +19,47 @@ const ENVELOPE_FIELDS = [
   "signatureVersion"
 ].sort().join(",");
 
+const CANONICAL_BASE64URL = /^[A-Za-z0-9_-]+$/;
+const MAX_PAYLOAD_DEPTH = 16;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+// The payload a signature attests must serialize to exactly the canonical
+// JSON bytes it claims: anything `JSON.stringify` rewrites (non-finite
+// numbers to null, -0 to 0), drops (undefined leaves, sparse arrays) or
+// resolves dynamically (accessors, non-plain objects) lets a mutated payload
+// keep a valid signature while the consumer reads different data.
+function isCanonicalJsonValue(value: unknown, depth: number): boolean {
+  if (depth > MAX_PAYLOAD_DEPTH) return false;
+  if (value === null || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+  if (typeof value === "string") return true;
+  if (Array.isArray(value)) {
+    if (Object.getPrototypeOf(value) !== Array.prototype) return false;
+    for (let index = 0; index < value.length; index += 1) {
+      if (!Object.hasOwn(value, index) || !isCanonicalJsonValue(value[index], depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (typeof value === "object") {
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return false;
+    if (Object.getOwnPropertySymbols(value).length > 0) return false;
+    for (const key of Object.keys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor || !("value" in descriptor) || !isCanonicalJsonValue(descriptor.value, depth + 1)) {
+        return false;
+      }
+    }
+    return true;
+  }
+  return false;
+}
+
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
   keyId: string;
@@ -171,19 +212,47 @@ export class EphemeralSigningKeyProvider {
 
   verify<T>(envelope: SignedEnvelope<T>): boolean {
     // Same strict shape the browser verifier enforces: exactly the eight
-    // signed fields, so unsigned extras can never ride inside a valid
-    // envelope.
+    // signed fields of canonical JSON types, so unsigned extras or malformed
+    // members can never ride inside a valid envelope. Verification is total:
+    // anything that is not a well-formed envelope returns false.
+    if (!isRecord(envelope)) return false;
     const fields = Object.keys(envelope).sort().join(",");
     if (fields !== ENVELOPE_FIELDS) return false;
-    const key = this.#keys.find((candidate) => candidate.keyId === envelope.keyId);
     if (
-      !key
+      envelope.signatureVersion !== 1
+      || typeof envelope.keyId !== "string"
       || !Number.isSafeInteger(envelope.keyVersion)
       || envelope.keyVersion < 1
-      || key.version !== envelope.keyVersion
-      || envelope.signatureVersion !== 1
+      || typeof envelope.issuedAt !== "string"
+      || typeof envelope.requestId !== "string"
+      || envelope.requestId.length === 0
+      || typeof envelope.resource !== "string"
+      || typeof envelope.signature !== "string"
+      || !CANONICAL_BASE64URL.test(envelope.signature)
     ) {
       return false;
+    }
+    const signature = Buffer.from(envelope.signature, "base64url");
+    if (signature.toString("base64url") !== envelope.signature) return false;
+    // `issuedAt` must be a canonical ISO instant so lifecycle checks compare
+    // the same instant every verifier sees.
+    const issuedAt = Date.parse(envelope.issuedAt);
+    const issuedAtDate = new Date(issuedAt);
+    if (
+      !Number.isFinite(issuedAt)
+      || !Number.isFinite(issuedAtDate.valueOf())
+      || issuedAtDate.toISOString() !== envelope.issuedAt
+    ) {
+      return false;
+    }
+    if (!isCanonicalJsonValue(envelope.payload, 0)) return false;
+    const key = this.#keys.find((candidate) => candidate.keyId === envelope.keyId);
+    if (!key || key.version !== envelope.keyVersion) return false;
+    // A retired key may only attest envelopes issued before it was retired;
+    // anything newer means the key material outlived its trust window.
+    if (key.status === "retired") {
+      const retiredAt = typeof key.retiredAt === "string" ? Date.parse(key.retiredAt) : Number.NaN;
+      if (!Number.isFinite(retiredAt) || issuedAt > retiredAt) return false;
     }
     return verify(
       null,
@@ -197,7 +266,7 @@ export class EphemeralSigningKeyProvider {
         envelope.payload
       )),
       key.publicKey,
-      Buffer.from(envelope.signature, "base64url")
+      signature
     );
   }
 
