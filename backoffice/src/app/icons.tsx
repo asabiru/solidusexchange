@@ -1,4 +1,4 @@
-import type { ScreenId } from "./navigation";
+import type { ScreenId } from "./navigation.js";
 
 const screenPaths: Readonly<Record<ScreenId, string>> = {
   dashboard: "M4 13h6V4H4zM14 20h6v-9h-6zM14 8h6V4h-6zM4 20h6v-3H4z",

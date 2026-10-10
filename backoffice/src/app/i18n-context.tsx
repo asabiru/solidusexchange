@@ -13,7 +13,7 @@ import {
   storeLocale,
   type TranslationParams,
   translate
-} from "./i18n";
+} from "./i18n.js";
 
 export interface I18n {
   locale: Locale;
