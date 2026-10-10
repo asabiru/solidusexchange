@@ -183,6 +183,25 @@ function clone(value) {
   return structuredClone(value);
 }
 
+// UUID identity is canonicalized to lowercase, matching the PostgreSQL `uuid`
+// type, so case variants cannot alias distinct ledger objects or fork digests.
+function normalizeUuid(value) {
+  return typeof value === "string" ? value.toLowerCase() : value;
+}
+
+function normalizeCommandIdentifiers(command) {
+  if (!command || typeof command !== "object" || Array.isArray(command)) return;
+  command.journal_id = normalizeUuid(command.journal_id);
+  command.correlation_id = normalizeUuid(command.correlation_id);
+  command.causation_id = normalizeUuid(command.causation_id);
+  if (!Array.isArray(command.entries)) return;
+  for (const entry of command.entries) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    entry.entry_id = normalizeUuid(entry.entry_id);
+    entry.account_id = normalizeUuid(entry.account_id);
+  }
+}
+
 function snapshotPlainData(value, code, label, ancestors = new Set()) {
   if (typeof value === "function") reject(code, `${label} must be plain data.`);
   if (value === null || typeof value !== "object") return value;
@@ -403,6 +422,7 @@ function validateAccounts(accounts, chartDefinitions, assets) {
       "Ledger account"
     );
     assertString(account.account_id, UUID_PATTERN, "Account ID");
+    account.account_id = normalizeUuid(account.account_id);
     assertString(account.legal_entity_id, IDENTIFIER_PATTERN, "Legal entity ID");
     assertString(account.asset_code, ASSET_PATTERN, "Account asset");
     assertDateTime(account.created_at, "Account created_at");
@@ -591,10 +611,12 @@ export function createInMemoryLedger({
   const assetRegistry = validateAssets(assets);
   const accountRegistry = validateAccounts(accounts, definitions, assetRegistry);
   const journals = new Map();
+  const postedEntryIds = new Set();
   const idempotency = new Map();
 
   function post(command) {
     const candidate = snapshotPlainData(command, "LEDGER_VALIDATION_FAILED", "Posting command");
+    normalizeCommandIdentifiers(candidate);
     validateCommand(candidate, accountRegistry, assetRegistry, postingRuleRegistry);
     const commandDigest = digest(candidate);
     const idempotencyIdentity = `${candidate.legal_entity_id}|${candidate.idempotency_key}`;
@@ -611,6 +633,11 @@ export function createInMemoryLedger({
     if (journals.has(candidate.journal_id)) {
       reject("LEDGER_DUPLICATE_JOURNAL", "Journal ID already exists.");
     }
+    for (const entry of candidate.entries) {
+      if (postedEntryIds.has(entry.entry_id)) {
+        reject("LEDGER_DUPLICATE_ENTRY", `Entry ID ${entry.entry_id} already exists.`);
+      }
+    }
 
     const acceptedAt = clock();
     assertDateTime(acceptedAt, "Accepted time");
@@ -620,6 +647,7 @@ export function createInMemoryLedger({
       command_digest: commandDigest
     });
     journals.set(candidate.journal_id, accepted);
+    for (const entry of candidate.entries) postedEntryIds.add(entry.entry_id);
     idempotency.set(idempotencyIdentity, freezeDeep({ commandDigest, journal: accepted }));
     return clone(accepted);
   }
@@ -629,7 +657,7 @@ export function createInMemoryLedger({
   }
 
   function getProjection(accountId) {
-    const account = accountRegistry.get(accountId);
+    const account = accountRegistry.get(normalizeUuid(accountId));
     if (!account) reject("LEDGER_ACCOUNT_NOT_FOUND", `Unknown account ${accountId}.`);
     const definition = definitions.get(account.definition_code);
     const asset = assetRegistry.get(account.asset_code);
@@ -637,7 +665,7 @@ export function createInMemoryLedger({
     let credits = 0n;
     for (const journal of journals.values()) {
       for (const entry of journal.entries) {
-        if (entry.account_id !== accountId) continue;
+        if (entry.account_id !== account.account_id) continue;
         const amount = parseAmount(entry.amount, asset.scale);
         if (entry.side === "DEBIT") debits += amount;
         else credits += amount;
@@ -645,7 +673,7 @@ export function createInMemoryLedger({
     }
     const balance = definition.normal_side === "DEBIT" ? debits - credits : credits - debits;
     return freezeDeep({
-      account_id: accountId,
+      account_id: account.account_id,
       asset_code: account.asset_code,
       as_of_journal_count: journals.size,
       debit_total: formatAmount(debits, asset.scale),

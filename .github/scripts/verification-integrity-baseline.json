@@ -831,6 +831,10 @@
       "minLines": 355,
       "minCases": 11
     },
+    "packages/financial-core/tests/ledger-identity.test.mjs": {
+      "minLines": 136,
+      "minCases": 8
+    },
     "packages/financial-core/tests/ledger-posting-rules.test.mjs": {
       "minLines": 449,
       "minCases": 10
