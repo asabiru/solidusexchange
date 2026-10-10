@@ -46,7 +46,8 @@ function withdrawalsStub(result: CustomerApiWithdrawals | (() => Promise<Custome
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),
-    support: async () => ({ status: "not-configured" })
+    support: async () => ({ status: "not-configured" }),
+    authSessions: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }

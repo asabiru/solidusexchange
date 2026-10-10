@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
+import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth-sessions.mjs";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
 import { createSyntheticSupportDirectory } from "../../customer-api/src/support.mjs";
@@ -410,6 +411,34 @@ describe("customer journey through the Mini App BFF", () => {
         expiresAt: Date.parse(ticket.expires_at)
       }))
     );
+  });
+
+  it("serves the device session list through customer-api synthetic auth", async () => {
+    // /bff/sessions consults the customer-api contract for every session
+    // (customer.auth.read is never denied upstream): the synthetic
+    // directory's active sessions adapt onto the app's device list — sess_*
+    // handles, telegram/dev-login clients, millisecond timestamps — while
+    // ended lifecycle states drop out of the surface.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticAuthSessionDirectory().listFor(customerApiSubject(devSubject));
+    const view = await getMiniapp("/bff/sessions", cookie);
+    assert.deepEqual(Object.keys(view).sort(), ["mode", "sessions"]);
+    assert.equal(view.mode, "test");
+    const expected = upstreamView.sessions
+      .filter((session) => session.state === "active")
+      .map((session) => ({
+        handle: session.session_id,
+        client: session.platform === "telegram-mini-app" ? "telegram" : "dev-login",
+        createdAt: Date.parse(session.created_at),
+        lastSeenAt: Date.parse(session.last_seen_at),
+        current: session.current
+      }))
+      .sort(
+        (a, b) =>
+          Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt
+      );
+    assert.deepEqual(view.sessions, expected);
+    assert.equal(view.sessions.filter((entry) => entry.current).length, 1);
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {

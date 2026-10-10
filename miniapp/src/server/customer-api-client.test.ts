@@ -1806,6 +1806,172 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.support("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads the auth sessions with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      sessions: [
+        {
+          session_id: "sess_0123456789abcdef01234567",
+          platform: "telegram-mini-app",
+          state: "active",
+          created_at: "2026-10-01T12:00:00.000Z",
+          last_seen_at: "2026-10-01T13:00:00.000Z",
+          current: true
+        },
+        {
+          session_id: "sess_fedcba9876543210fedcba98",
+          platform: "web",
+          state: "revoked",
+          created_at: "2026-09-30T12:00:00.000Z",
+          last_seen_at: "2026-10-01T12:00:00.000Z",
+          current: false
+        }
+      ]
+    };
+    await withFakeApi(
+      () => view,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.authSessions("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", view });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps every auth sessions read failure to unavailable, including an upstream 403", async () => {
+    const key = randomBytes(32).toString("hex");
+    // customer.auth.read is granted at every upstream session status, so
+    // even a 403 is contract drift, not a real capability denial: there is no
+    // denied arm and every non-200 outcome fails closed to "unavailable".
+    for (const status of [403, 401, 429, 500]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.authSessions("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "unavailable", String(status));
+        assert.deepEqual(result, { status: "unavailable" });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed auth sessions bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const current = {
+      session_id: "sess_0123456789abcdef01234567",
+      platform: "telegram-mini-app",
+      state: "active",
+      created_at: "2026-10-01T12:00:00.000Z",
+      last_seen_at: "2026-10-01T13:00:00.000Z",
+      current: true
+    };
+    const other = {
+      session_id: "sess_fedcba9876543210fedcba98",
+      platform: "web",
+      state: "revoked",
+      created_at: "2026-09-30T12:00:00.000Z",
+      last_seen_at: "2026-10-01T12:00:00.000Z",
+      current: false
+    };
+    const view = { mode: "test", sessions: [current, other] };
+    for (const body of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, sessions: {} },
+      { mode: "test" },
+      { ...view, sessions: [{ ...current, extra: true }] },
+      // Credential-shaped carriers have no place in a metadata view — any
+      // extra key fails closed, these spell it out.
+      { ...view, sessions: [{ ...current, token: "scdev1.syn_cust_x.0000000000.abc" }] },
+      { ...view, sessions: [{ ...current, secret: "hmac-secret" }] },
+      { ...view, sessions: [{ ...current, session_id: "ses_0123456789abcdef0123456789abcdef01" }] },
+      { ...view, sessions: [{ ...current, session_id: "sess_0123456789ABCDEF01234567" }] },
+      { ...view, sessions: [{ ...current, session_id: 42 }] },
+      { ...view, sessions: [{ ...current, platform: "operator-web" }] },
+      { ...view, sessions: [{ ...current, platform: "service" }] },
+      { ...view, sessions: [{ ...current, platform: 42 }] },
+      { ...view, sessions: [{ ...current, state: "suspended" }] },
+      { ...view, sessions: [{ ...current, state: 42 }] },
+      { ...view, sessions: [{ ...current, current: "yes" }] },
+      { ...view, sessions: [{ ...current, created_at: "yesterday" }] },
+      { ...view, sessions: [{ ...current, created_at: "2026-10-01T12:00:00Z" }] },
+      { ...view, sessions: [{ ...current, last_seen_at: "2026-13-40T12:00:00.000Z" }] },
+      // Lifecycle drift: observed before creation, an ended session that was
+      // never re-observed, a non-live current session.
+      { ...view, sessions: [{ ...current, last_seen_at: "2026-10-01T11:00:00.000Z" }] },
+      { ...view, sessions: [{ ...other, last_seen_at: other.created_at }] },
+      { ...view, sessions: [{ ...current, state: "revoked" }] },
+      // Exactly one session must carry the current marker.
+      { ...view, sessions: [other] },
+      { ...view, sessions: [current, { ...other, current: true }] },
+      { ...view, sessions: [] },
+      ["sessions"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.authSessions("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.authSessions("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("reads the auth sessions from the dev customer-api without a KYC gate and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // customer.auth.read is granted at every session status: the dev
+      // customer-api answers 200 with the deterministic synthetic session
+      // list even though its KYC directory marks every subject unverified.
+      const first = await client.authSessions("tg-0123456789abcdef", Date.now());
+      assert.equal(first.status, "ok");
+      if (first.status !== "ok") return;
+      assert.equal(first.view.mode, "test");
+      assert.ok(first.view.sessions.length >= 1);
+      assert.equal(first.view.sessions.filter((session) => session.current).length, 1);
+      for (const session of first.view.sessions) {
+        assert.match(session.session_id, /^sess_[0-9a-f]{24}$/);
+        assert.match(session.platform, /^(web|ios|android|telegram-mini-app)$/);
+        assert.match(session.state, /^(active|revoked|expired)$/);
+        assert.equal(typeof session.current, "boolean");
+        assert.match(session.created_at, isoTimestamp);
+        assert.match(session.last_seen_at, isoTimestamp);
+      }
+      assert.deepEqual(await client.authSessions("tg-0123456789abcdef", Date.now()), first);
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.authSessions("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

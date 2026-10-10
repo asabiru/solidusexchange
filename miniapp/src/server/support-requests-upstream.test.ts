@@ -64,7 +64,8 @@ function supportStub(result: CustomerApiSupport | (() => Promise<CustomerApiSupp
     support: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
-    }
+    },
+    authSessions: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }

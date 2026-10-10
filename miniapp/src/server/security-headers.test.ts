@@ -252,7 +252,8 @@ describe("Mini App BFF security headers on every route", () => {
         notifications: async () => ({ status: "not-configured" }),
         kyc: async () => ({ status: "not-configured" }),
         profile: async () => ({ status: "not-configured" }),
-        support: async () => ({ status: "not-configured" })
+        support: async () => ({ status: "not-configured" }),
+        authSessions: async () => ({ status: "not-configured" })
       }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
