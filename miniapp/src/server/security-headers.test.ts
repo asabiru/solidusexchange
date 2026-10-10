@@ -253,7 +253,8 @@ describe("Mini App BFF security headers on every route", () => {
         kyc: async () => ({ status: "not-configured" }),
         profile: async () => ({ status: "not-configured" }),
         support: async () => ({ status: "not-configured" }),
-        authSessions: async () => ({ status: "not-configured" })
+        authSessions: async () => ({ status: "not-configured" }),
+        users: async () => ({ status: "not-configured" })
       }
     });
     await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -297,6 +298,7 @@ describe("Mini App BFF security headers on every route", () => {
     const successes: Record<string, () => Promise<Reply>> = {
       "GET /bff/health": () => send(port, "GET", "/bff/health"),
       "GET /bff/session": () => get("/bff/session"),
+      "GET /bff/account": () => get("/bff/account"),
       "POST /bff/session/telegram": () => postJson(port, "/bff/session/telegram", { initData: telegramInitData() }),
       "POST /bff/auth/dev-session": () => postJson(port, "/bff/auth/dev-session", { kyc: "verified" }),
       "POST /bff/auth/logout": async () => postJson(port, "/bff/auth/logout", {}, { cookie: await devLogin("verified") }),

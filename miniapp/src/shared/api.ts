@@ -37,6 +37,27 @@ export interface SessionView {
   expiresAt: number;
 }
 
+/**
+ * Mirrors the account lifecycle the customer-api users contract declares.
+ */
+export type AccountStatus = "pending" | "active" | "suspended" | "closed";
+
+export interface AccountFlags {
+  termsAccepted: boolean;
+  twoFactorEnabled: boolean;
+  marketingOptIn: boolean;
+}
+
+export interface AccountView {
+  mode: "test";
+  id: string;
+  subject: string;
+  status: AccountStatus;
+  flags: AccountFlags;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface AssetBalance {
   code: AssetCode;
   available: string;

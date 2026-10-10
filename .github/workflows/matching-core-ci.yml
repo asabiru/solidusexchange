@@ -1,0 +1,59 @@
+name: Matching Core CI
+
+on:
+  pull_request:
+    paths:
+      - "packages/matching-core/**"
+      - "Documentation/regulated-core/decision-register.md"
+      - ".github/workflows/matching-core-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/matching-core/**"
+      - "Documentation/regulated-core/decision-register.md"
+      - ".github/workflows/matching-core-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/matching-core
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: packages/matching-core/package-lock.json
+
+      - name: Install locked package
+        run: npm ci
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
+
+      - name: Verify engine boundary
+        run: npm run check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test engine and verifiers
+        run: npm test
+
+      - name: Build type declarations
+        run: npm run build

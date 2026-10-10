@@ -56,6 +56,7 @@ import {
   sessionHandlePattern
 } from "./session.js";
 import { contractAuthSessionsView } from "./sessions.js";
+import { contractAccountView, localAccountView } from "./account.js";
 import {
   type SupportDesk,
   SupportInputError,
@@ -85,6 +86,7 @@ export interface Route {
 export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/health" },
   { method: "GET", path: "/bff/session" },
+  { method: "GET", path: "/bff/account" },
   { method: "POST", path: "/bff/session/telegram" },
   { method: "POST", path: "/bff/auth/dev-session" },
   { method: "POST", path: "/bff/auth/logout" },
@@ -695,6 +697,28 @@ export function createMiniappServer(
 
     if (path === "/bff/session") {
       json(response, 200, sessionView(session));
+      return;
+    }
+    if (path === "/bff/account") {
+      // Like /bff/profile, /bff/kyc/status, /bff/support/requests and
+      // /bff/sessions — and unlike /bff/wallet and /bff/notifications — the
+      // account surface is not KYC-gated upstream: customer.users.read is
+      // granted at every session status (it is the subject's own account
+      // record), so a configured customer-api answers gated sessions too and
+      // only the standalone unconfigured dev BFF keeps the local view. Since
+      // the read is never denied, an upstream 403 signals contract drift and
+      // maps, like every other non-ok outcome, to the sibling *_unavailable
+      // shape.
+      if (customerApi.configured) {
+        const upstream = await customerApi.users(session.subject, clock());
+        if (upstream.status !== "ok") {
+          json(response, 503, { error: "account_unavailable" });
+          return;
+        }
+        json(response, 200, contractAccountView(upstream.view));
+        return;
+      }
+      json(response, 200, localAccountView(session));
       return;
     }
     if (path === "/bff/wallet") {

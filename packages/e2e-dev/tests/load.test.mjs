@@ -43,7 +43,7 @@ const rssGrowthBudgetBytes = 256 * 1024 * 1024;
 const customerApiRateLimit = 40;
 const maxSessionsPerSubject = 5;
 const documentedStatuses = new Set([200, 201, 202, 429, 503]);
-const documented503 = new Set(["audit_integrity_unavailable", "cards_unavailable", "deposits_unavailable", "kyc_unavailable", "profile_unavailable", "exchange_orders_unavailable", "payments_unavailable", "quote_unavailable", "screening_unavailable", "sessions_unavailable", "support_unavailable", "quotes_unavailable", "withdrawals_unavailable"]);
+const documented503 = new Set(["audit_integrity_unavailable", "cards_unavailable", "deposits_unavailable", "kyc_unavailable", "profile_unavailable", "exchange_orders_unavailable", "payments_unavailable", "quote_unavailable", "screening_unavailable", "sessions_unavailable", "support_unavailable", "account_unavailable", "quotes_unavailable", "withdrawals_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 let startedAt;
@@ -270,10 +270,10 @@ describe("bounded load on the dev stack", () => {
     await operator.body?.cancel();
     const auditBefore = (await auditStore.snapshot()).status.length;
 
-    const total = 816;
+    const total = 864;
     const burst = Array.from({ length: total }, (_, index) => {
       const cookie = cookies[index % cookies.length];
-      switch (index % 17) {
+      switch (index % 18) {
         case 0:
           return outcome("kyc-status", request(miniappBase, "/bff/kyc/status", { cookie }));
         case 1:
@@ -289,7 +289,7 @@ describe("bounded load on the dev stack", () => {
             "kyc-submit",
             request(miniappBase, "/bff/kyc/applications", {
               method: "POST",
-              cookie: cookies[Math.floor(index / 17) % cookies.length]
+              cookie: cookies[Math.floor(index / 18) % cookies.length]
             })
           );
         case 4:
@@ -326,6 +326,8 @@ describe("bounded load on the dev stack", () => {
           return outcome("cards", request(miniappBase, "/bff/cards", { cookie: devCookie }));
         case 15:
           return outcome("sessions", request(miniappBase, "/bff/sessions", { cookie }));
+        case 16:
+          return outcome("account", request(miniappBase, "/bff/account", { cookie }));
         default:
           return outcome("quotes", request(miniappBase, "/bff/quotes", { cookie: devCookie }));
       }
@@ -339,32 +341,49 @@ describe("bounded load on the dev stack", () => {
     // calls saturate the customer-api rate limit and some reads degrade to
     // the documented 503 kyc_unavailable instead of 200.
     const kycStatuses = countBy(results, "kyc-status");
-    assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 17);
+    assert.equal((kycStatuses[200] ?? 0) + (kycStatuses[503] ?? 0), total / 18);
     assert.ok((kycStatuses[200] ?? 0) > 0, "customer-api answered at least one kyc status read");
     assert.ok((kycStatuses[503] ?? 0) > 0, "customer-api rate limit applies to kyc status");
     for (const result of results.filter((entry) => entry.kind === "kyc-status" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "kyc_unavailable" });
     }
-    assert.deepEqual(countBy(results, "quote"), { 200: total / 17 });
-    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 17 });
-    assert.deepEqual(countBy(results, "notifications"), { 200: total / 17 });
+    assert.deepEqual(countBy(results, "quote"), { 200: total / 18 });
+    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 18 });
+    assert.deepEqual(countBy(results, "notifications"), { 200: total / 18 });
     // /bff/sessions consults upstream for gated sessions too
     // (customer.auth.read is never denied), so under the saturated
     // customer-api rate limit some reads degrade to the documented 503
     // sessions_unavailable instead of 200.
     const sessions = countBy(results, "sessions");
-    assert.equal((sessions[200] ?? 0) + (sessions[503] ?? 0), total / 17);
+    assert.equal((sessions[200] ?? 0) + (sessions[503] ?? 0), total / 18);
     assert.ok((sessions[200] ?? 0) > 0, "customer-api answered at least one sessions read");
     assert.ok((sessions[503] ?? 0) > 0, "customer-api rate limit applies to sessions");
     for (const result of results.filter((entry) => entry.kind === "sessions" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "sessions_unavailable" });
+    }
+    // /bff/account consults upstream for gated sessions too
+    // (customer.users.read is never denied), so under the saturated
+    // customer-api rate limit some reads degrade to the documented 503
+    // account_unavailable instead of 200.
+    const accounts = countBy(results, "account");
+    assert.equal((accounts[200] ?? 0) + (accounts[503] ?? 0), total / 18);
+    assert.ok((accounts[200] ?? 0) > 0, "customer-api answered at least one account read");
+    assert.ok((accounts[503] ?? 0) > 0, "customer-api rate limit applies to account");
+    for (const result of results.filter((entry) => entry.kind === "account" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "account_unavailable" });
+    }
+    // 200s carry the adapted account record fields through.
+    for (const result of results.filter((entry) => entry.kind === "account" && entry.status === 200)) {
+      assert.equal(result.body.mode, "test");
+      assert.match(result.body.id, /^usr_[0-9a-f]{24}$/);
+      assert.match(result.body.subject, /^syn_cust_[a-z0-9]{8,32}$/);
     }
     // /bff/profile consults upstream for gated sessions too
     // (customer.profile.read is never denied), so under the saturated
     // customer-api rate limit some reads degrade to the documented 503
     // profile_unavailable instead of 200.
     const profiles = countBy(results, "profile");
-    assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 17);
+    assert.equal((profiles[200] ?? 0) + (profiles[503] ?? 0), total / 18);
     assert.ok((profiles[200] ?? 0) > 0, "customer-api answered at least one profile read");
     assert.ok((profiles[503] ?? 0) > 0, "customer-api rate limit applies to profile");
     for (const result of results.filter((entry) => entry.kind === "profile" && entry.status === 503)) {
@@ -375,7 +394,7 @@ describe("bounded load on the dev stack", () => {
     // customer-api rate limit some reads degrade to the documented 503
     // support_unavailable instead of 200.
     const supports = countBy(results, "support");
-    assert.equal((supports[200] ?? 0) + (supports[503] ?? 0), total / 17);
+    assert.equal((supports[200] ?? 0) + (supports[503] ?? 0), total / 18);
     assert.ok((supports[200] ?? 0) > 0, "customer-api answered at least one support read");
     assert.ok((supports[503] ?? 0) > 0, "customer-api rate limit applies to support");
     for (const result of results.filter((entry) => entry.kind === "support" && entry.status === 503)) {
@@ -387,7 +406,7 @@ describe("bounded load on the dev stack", () => {
     // gated view (200) while rate-limited reads answer the documented 503
     // deposits_unavailable.
     const deposits = countBy(results, "deposits");
-    assert.equal((deposits[200] ?? 0) + (deposits[503] ?? 0), total / 17);
+    assert.equal((deposits[200] ?? 0) + (deposits[503] ?? 0), total / 18);
     assert.ok((deposits[200] ?? 0) > 0, "customer-api answered at least one deposits read");
     assert.ok((deposits[503] ?? 0) > 0, "customer-api rate limit applies to deposits");
     for (const result of results.filter((entry) => entry.kind === "deposits" && entry.status === 503)) {
@@ -397,7 +416,7 @@ describe("bounded load on the dev stack", () => {
     // (customer.withdrawals.read), so it degrades and rate-limits exactly
     // like deposits.
     const withdrawals = countBy(results, "withdrawals");
-    assert.equal((withdrawals[200] ?? 0) + (withdrawals[503] ?? 0), total / 17);
+    assert.equal((withdrawals[200] ?? 0) + (withdrawals[503] ?? 0), total / 18);
     assert.ok((withdrawals[200] ?? 0) > 0, "customer-api answered at least one withdrawals read");
     assert.ok((withdrawals[503] ?? 0) > 0, "customer-api rate limit applies to withdrawals");
     for (const result of results.filter((entry) => entry.kind === "withdrawals" && entry.status === 503)) {
@@ -406,7 +425,7 @@ describe("bounded load on the dev stack", () => {
     // /bff/quotes shares the same upstream KYC gate (customer.quotes.read),
     // so it degrades and rate-limits exactly like deposits and withdrawals.
     const quotes = countBy(results, "quotes");
-    assert.equal((quotes[200] ?? 0) + (quotes[503] ?? 0), total / 17);
+    assert.equal((quotes[200] ?? 0) + (quotes[503] ?? 0), total / 18);
     assert.ok((quotes[200] ?? 0) > 0, "customer-api answered at least one quotes read");
     assert.ok((quotes[503] ?? 0) > 0, "customer-api rate limit applies to quotes");
     for (const result of results.filter((entry) => entry.kind === "quotes" && entry.status === 503)) {
@@ -416,7 +435,7 @@ describe("bounded load on the dev stack", () => {
     // (customer.exchange-orders.read), so it degrades and rate-limits
     // exactly like deposits, withdrawals and quotes.
     const orders = countBy(results, "exchange-orders");
-    assert.equal((orders[200] ?? 0) + (orders[503] ?? 0), total / 17);
+    assert.equal((orders[200] ?? 0) + (orders[503] ?? 0), total / 18);
     assert.ok((orders[200] ?? 0) > 0, "customer-api answered at least one exchange-orders read");
     assert.ok((orders[503] ?? 0) > 0, "customer-api rate limit applies to exchange-orders");
     for (const result of results.filter((entry) => entry.kind === "exchange-orders" && entry.status === 503)) {
@@ -426,7 +445,7 @@ describe("bounded load on the dev stack", () => {
     // (customer.payments.read), so it degrades and rate-limits exactly like
     // deposits, withdrawals, quotes and exchange-orders.
     const payments = countBy(results, "payments");
-    assert.equal((payments[200] ?? 0) + (payments[503] ?? 0), total / 17);
+    assert.equal((payments[200] ?? 0) + (payments[503] ?? 0), total / 18);
     assert.ok((payments[200] ?? 0) > 0, "customer-api answered at least one payments read");
     assert.ok((payments[503] ?? 0) > 0, "customer-api rate limit applies to payments");
     for (const result of results.filter((entry) => entry.kind === "payments" && entry.status === 503)) {
@@ -435,15 +454,15 @@ describe("bounded load on the dev stack", () => {
     // /bff/cards shares the same upstream KYC gate (customer.cards.read),
     // so it degrades and rate-limits exactly like payments.
     const cards = countBy(results, "cards");
-    assert.equal((cards[200] ?? 0) + (cards[503] ?? 0), total / 17);
+    assert.equal((cards[200] ?? 0) + (cards[503] ?? 0), total / 18);
     assert.ok((cards[200] ?? 0) > 0, "customer-api answered at least one cards read");
     assert.ok((cards[503] ?? 0) > 0, "customer-api rate limit applies to cards");
     for (const result of results.filter((entry) => entry.kind === "cards" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "cards_unavailable" });
     }
-    assert.deepEqual(countBy(results, "activity"), { 200: total / 17 });
+    assert.deepEqual(countBy(results, "activity"), { 200: total / 18 });
     const submits = countBy(results, "kyc-submit");
-    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 17);
+    assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 18);
     // The burst drives 25 distinct telegram subjects through two submissions
     // each: the first must create (202), so at least 25 creates must appear —
     // a submit path that silently never creates would report all 200s.
@@ -478,7 +497,7 @@ describe("bounded load on the dev stack", () => {
 
     assert.deepEqual(countBy(results, "screening"), {
       202: maxNewScreeningsPerWindow,
-      429: total / 17 - maxNewScreeningsPerWindow
+      429: total / 18 - maxNewScreeningsPerWindow
     });
     assert.equal(addressScreening.size(devSubject), maxScreeningsPerSubject);
     assert.equal(activity.size(devSubject), maxActivityPerSubject);
@@ -487,7 +506,7 @@ describe("bounded load on the dev stack", () => {
     // The audit store is in-memory here, so every operator report read must
     // succeed — a single 503 means the audited route failed closed.
     const reports = countBy(results, "report");
-    assert.deepEqual(reports, { 200: total / 17 });
+    assert.deepEqual(reports, { 200: total / 18 });
     assert.equal((await auditStore.snapshot()).status.length - auditBefore, reports[200] ?? 0);
     assert.ok(outbox.size() <= defaultMaxTotal);
   });
