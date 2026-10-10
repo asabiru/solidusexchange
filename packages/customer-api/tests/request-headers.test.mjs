@@ -29,7 +29,8 @@ const QUOTES = "/api/v1/customer/quotes";
 const EXCHANGE_ORDERS = "/api/v1/customer/exchange-orders";
 const PAYMENTS = "/api/v1/customer/payments";
 const CARDS = "/api/v1/customer/cards";
-const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS];
+const AUTH = "/api/v1/customer/auth";
+const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, AUTH];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
 let port;
@@ -120,7 +121,8 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [QUOTES, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [EXCHANGE_ORDERS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [PAYMENTS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
-    [CARDS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
+    [CARDS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [AUTH, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);

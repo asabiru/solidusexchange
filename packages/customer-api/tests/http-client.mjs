@@ -3,6 +3,7 @@ import { connect } from "node:net";
 
 import { createCustomerApiServer } from "../src/app.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
+import { createSyntheticAuthSessionDirectory } from "../src/auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticCardDirectory } from "../src/cards.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
@@ -59,6 +60,7 @@ export async function startTestServer(options = {}) {
     kycApplicationDirectory: createSyntheticKycApplicationDirectory(),
     profileDirectory: createSyntheticProfileDirectory(),
     supportDirectory: createSyntheticSupportDirectory(),
+    authSessionDirectory: createSyntheticAuthSessionDirectory(),
     depositDirectory: createSyntheticDepositDirectory(),
     withdrawalDirectory: createSyntheticWithdrawalDirectory(),
     quoteDirectory: createSyntheticQuoteDirectory(),

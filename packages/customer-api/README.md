@@ -126,6 +126,17 @@ dependency-free Node ESM `node:http` server for local development only.
     surface — `403 CAPABILITY_DENIED` without a `verified` KYC status. The
     read is observational only: `cards.issue` stays an unserved, denied
     financial capability.
+  - `GET /api/v1/customer/auth` (`getCustomerAuth`): a frozen deterministic
+    synthetic auth-session list per subject (`sess_*` ids, the
+    `web`/`ios`/`android`/`telegram-mini-app` customer client `platform`
+    enum, the `active`/`revoked`/`expired` `state` lifecycle, coherent ISO
+    `created_at`/`last_seen_at`, a `current` marker on exactly the session
+    that made the request, `mode: "test"`). Session metadata only — never
+    tokens, secrets or credential material. **Not** KYC-gated: the list is
+    the subject's own sign-in surface and the miniapp likewise serves
+    `/bff/sessions` to every authenticated session, kyc-gated included —
+    like the KYC status, profile and support reads it must stay readable
+    while the customer is unverified.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -153,10 +164,11 @@ Only `customer` principals are accepted.
 ## Capabilities
 
 Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
-`customer.kyc.read`, `customer.profile.read` and `customer.support.read` are
-always granted — the KYC status, profile and support tickets reads must stay
-reachable for unverified customers or they could never see their own
-onboarding, identity and service-requests state;
+`customer.kyc.read`, `customer.profile.read`, `customer.support.read` and
+`customer.auth.read` are always granted — the KYC status, profile, support
+tickets and auth sessions reads must stay reachable for unverified
+customers or they could never see their own onboarding, identity,
+service-requests and sign-in state;
 `customer.wallets.read`, `customer.notifications.read`,
 `customer.deposits.read`, `customer.withdrawals.read`,
 `customer.quotes.read`, `customer.exchange-orders.read`,

@@ -381,6 +381,19 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      authSessionDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          sessions: ReadonlyArray<{
+            session_id: string;
+            platform: "web" | "ios" | "android" | "telegram-mini-app";
+            state: "active" | "revoked" | "expired";
+            created_at: string;
+            last_seen_at: string;
+            current: boolean;
+          }>;
+        }>;
+      };
       depositDirectory?: {
         listFor(subject: string): Promise<{
           mode: "test";
