@@ -348,7 +348,7 @@ describe("i18n: locale formatting", () => {
     for (const source of sources) {
       assert.doesNotMatch(source, /parseFloat|Number\(\s*(?:row|item|selected|approval|metric|preview|customer)\./);
     }
-    assert.match(sources[0] ?? "", /\{row\.value\}/);
+    assert.match(sources[0] ?? "", /\{textOf\(row\.value\)\}/);
   });
 });
 
@@ -446,10 +446,10 @@ describe("i18n: no hard-coded UI strings in components", () => {
   it("keeps contract markers and identifiers out of translation", () => {
     const app = readFileSync(new URL("App.tsx", appDirectory), "utf8");
     assert.equal(app.match(/"not_for_submission"/g)?.length, 1);
-    assert.match(app, /status: data\.status,/);
-    assert.match(app, /environment: data\.environment,/);
-    assert.match(app, /<th scope="col" key=\{column\}>\{column\}<\/th>/);
-    assert.match(app, /<dt>\{row\.key\}<\/dt>/);
+    assert.match(app, /status: textOf\(recordOf\(data\)\.status\),/);
+    assert.match(app, /environment: textOf\(recordOf\(data\)\.environment\),/);
+    assert.match(app, /<th scope="col" key=\{columnIndex\}>\{textOf\(column\)\}<\/th>/);
+    assert.match(app, /<dt>\{textOf\(row\.key\)\}<\/dt>/);
     for (const value of Object.values(ru)) assert.doesNotMatch(value, /not_for_submission/);
     assert.deepEqual(navigation.map((item) => item.capability).filter(Boolean).length, navigation.filter((item) => item.capability).length);
   });

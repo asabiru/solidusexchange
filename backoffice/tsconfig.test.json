@@ -5,8 +5,15 @@
     "moduleResolution": "NodeNext",
     "strict": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "types": [
-      "node"
+      "node",
+      "vite/client"
     ],
     "rootDir": "src",
     "outDir": ".test-dist"
@@ -20,9 +27,16 @@
     "src/app/withdrawals.test.ts",
     "src/app/subjects.test.ts",
     "src/app/i18n.ts",
+    "src/app/i18n-context.tsx",
     "src/app/i18n.test.ts",
+    "src/app/icons.tsx",
     "src/app/locales/*.ts",
     "src/app/navigation.ts",
+    "src/app/runtime.ts",
+    "src/app/App.tsx",
+    "src/app/server-fields.ts",
+    "src/app/server-fields.test.ts",
+    "src/app/app-render.test.ts",
     "src/data/demo.ts",
     "src/data/demo.test.ts",
     "src/data/provider-evidence.ts",
