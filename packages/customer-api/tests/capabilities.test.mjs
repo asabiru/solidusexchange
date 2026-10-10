@@ -36,12 +36,13 @@ test("only served read operations are ever granted", () => {
   assert.equal(gated, 8);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
-    // customer.kyc.read, customer.profile.read, customer.support.read and
-    // customer.auth.read are granted at every KYC status: the status,
-    // profile, support tickets and auth sessions reads are the
-    // onboarding/identity/service-requests/sign-in surface and must stay
-    // readable for unverified subjects.
-    const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read"];
+    // customer.kyc.read, customer.profile.read, customer.support.read,
+    // customer.auth.read and customer.users.read are granted at every KYC
+    // status: the status, profile, support tickets, auth sessions and user
+    // account record reads are the onboarding/identity/service-requests/
+    // sign-in/account surface and must stay readable for unverified
+    // subjects.
+    const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"];
     if (kycStatus === "verified") {
       expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read");
     }
@@ -129,6 +130,13 @@ test("money-moving and balance capabilities reference limits and scope decisions
   assert.deepEqual(
     CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.auth.")).map((item) => item.capability),
     ["customer.auth.read"]
+  );
+  // The users namespace holds only the always-granted account record read:
+  // it is not a money namespace and no financial capability exists for it.
+  assert.ok(!MONEY_NAMESPACES.includes("users"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.users.")).map((item) => item.capability),
+    ["customer.users.read"]
   );
   // The deposits namespace stays a money namespace: it now serves the
   // KYC-gated synthetic collection read while deposits.create remains a

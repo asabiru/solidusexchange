@@ -369,7 +369,7 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(profile.kyc.state, "verified");
     assert.equal(profile.apiAccess.status, "connected");
     // The upstream's synthetic KYC directory reports every subject
-    // "unverified", so the granted set is exactly the six never-denied reads
+    // "unverified", so the granted set is exactly the seven never-denied reads
     // in CAPABILITY_POLICY order — a customer-api that over-granted
     // KYC-gated or financial capabilities here must fail this pin.
     assert.deepEqual(profile.apiAccess.granted, [
@@ -378,7 +378,8 @@ describe("customer journey through the Mini App BFF", () => {
       "customer.kyc.read",
       "customer.profile.read",
       "customer.support.read",
-      "customer.auth.read"
+      "customer.auth.read",
+      "customer.users.read"
     ]);
     assert.equal(profile.apiAccess.commandsEnabled, false);
   });

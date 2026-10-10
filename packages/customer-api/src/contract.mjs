@@ -255,6 +255,25 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The users read is served to every authenticated customer like the KYC
+  // status, profile, support and auth sessions reads, so it declares no
+  // 403: it is the subject's own user account record (account state only —
+  // never credentials or secrets) and the miniapp serves the matching
+  // /bff/session account surface to kyc-gated sessions too (see
+  // capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerUsers",
+    method: "GET",
+    path: "/api/v1/customer/users",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

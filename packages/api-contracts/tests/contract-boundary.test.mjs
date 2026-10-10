@@ -330,6 +330,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/payments", "getCustomerPayments"],
   ["/api/v1/customer/cards", "getCustomerCards"],
   ["/api/v1/customer/auth", "getCustomerAuth"],
+  ["/api/v1/customer/users", "getCustomerUsers"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -1195,6 +1196,77 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.AuthSessionView.properties.last_seen_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical user views",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical user views",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects credential material in canonical user views",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.password = { type: "string" };
+    openapi.components.schemas.UserView.required.push("password");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a non-synthetic subject in canonical user views",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.subject = { type: "string" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects money vocabulary in canonical user views",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.status.enum.push("funded");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical user flags",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.flags.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical user timestamps",
+  "Canonical UserView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.UserView.properties.updated_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

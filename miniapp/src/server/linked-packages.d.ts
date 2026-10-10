@@ -394,6 +394,21 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      userDirectory?: {
+        viewFor(subject: string): Promise<{
+          mode: "test";
+          user_id: string;
+          subject: string;
+          status: "pending" | "active" | "suspended" | "closed";
+          flags: {
+            terms_accepted: boolean;
+            two_factor_enabled: boolean;
+            marketing_opt_in: boolean;
+          };
+          created_at: string;
+          updated_at: string;
+        }>;
+      };
       depositDirectory?: {
         listFor(subject: string): Promise<{
           mode: "test";

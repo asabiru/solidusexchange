@@ -711,6 +711,29 @@ const pinnedResponseSchemas = {
       current: { type: "boolean" }
     }
   },
+  UserView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "user_id", "subject", "status", "flags", "created_at", "updated_at"],
+    properties: {
+      mode: { const: "test" },
+      user_id: { type: "string", pattern: "^usr_[0-9a-f]{24}$" },
+      subject: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
+      status: { type: "string", enum: ["pending", "active", "suspended", "closed"] },
+      flags: {
+        type: "object",
+        additionalProperties: false,
+        required: ["terms_accepted", "two_factor_enabled", "marketing_opt_in"],
+        properties: {
+          terms_accepted: { type: "boolean" },
+          two_factor_enabled: { type: "boolean" },
+          marketing_opt_in: { type: "boolean" }
+        }
+      },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -928,7 +951,7 @@ function checkOpenApi() {
   );
   sameSet(
     openapi["x-solidchange-planned-namespaces"]?.customer ?? [],
-    ["/api/v1/customer/users"],
+    [],
     "Planned customer namespaces"
   );
   sameSet(
@@ -970,6 +993,7 @@ function checkOpenApi() {
     ["getCustomerPayments", "/api/v1/customer/payments"],
     ["getCustomerCards", "/api/v1/customer/cards"],
     ["getCustomerAuth", "/api/v1/customer/auth"],
+    ["getCustomerUsers", "/api/v1/customer/users"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -1016,6 +1040,7 @@ function checkOpenApi() {
     ["getCustomerPayments", gatedReadStatuses],
     ["getCustomerCards", gatedReadStatuses],
     ["getCustomerAuth", readStatuses],
+    ["getCustomerUsers", readStatuses],
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
@@ -1039,6 +1064,7 @@ function checkOpenApi() {
     ["getCustomerPayments", "#/components/schemas/PaymentsView"],
     ["getCustomerCards", "#/components/schemas/CardsView"],
     ["getCustomerAuth", "#/components/schemas/AuthSessionsView"],
+    ["getCustomerUsers", "#/components/schemas/UserView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
