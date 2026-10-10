@@ -61,3 +61,25 @@ export function toIsoSeconds(epochSeconds) {
   assertEpochSeconds(epochSeconds, "timestamp");
   return new Date(epochSeconds * 1000).toISOString().replace(".000Z", "Z");
 }
+
+const ISO_SECONDS = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$/;
+
+/**
+ * Inverse of {@link toIsoSeconds}: parses a canonical UTC timestamp with
+ * second precision back to integer epoch seconds. Anything the formatter
+ * would never emit — other shapes, other zones, impossible calendar values —
+ * is rejected, so a timestamp round-trips only when it is canonical.
+ *
+ * @param {unknown} text
+ * @returns {number}
+ */
+export function fromIsoSeconds(text) {
+  if (typeof text !== "string" || !ISO_SECONDS.test(text)) {
+    throw new TypeError("timestamp must be a canonical ISO-8601 seconds string");
+  }
+  const epoch = Date.parse(text) / 1000;
+  if (toIsoSeconds(epoch) !== text) {
+    throw new RangeError("timestamp must be a real UTC second");
+  }
+  return epoch;
+}

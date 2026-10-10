@@ -74,6 +74,11 @@ Rejected submissions do not consume order ids; a resubmission of the same
 id is judged on its own merits. Cancelling an id that is not resting —
 unknown, filled, cancelled or rejected — is rejected `order_not_resting`.
 
+`engine.journal()` returns every event emitted so far, in `seq` order, as
+a frozen array of the same frozen records — including `rejected` events,
+since rejected submissions and cancels consume `seq` too. The journal is
+append-only in-memory data, never a ledger.
+
 ## API
 
 ```js
@@ -93,6 +98,42 @@ engine.orderStatus("ord_…");       // tracked state or null
 
 `createMatchingEngine({ instruments })` accepts a custom instrument list;
 each entry must be a well-formed `BASE/QUOTE` definition.
+
+## Persistence groundwork (data-only)
+
+The journal, snapshot and replay layer is the persistence groundwork for
+the engine — still library-only and data-only: it captures and rebuilds
+state, it never writes storage, does I/O, or posts anything.
+
+- `engine.snapshot()` returns a canonical plain-data snapshot
+  `{ kind, version, instruments, orders, resting, next_seq, next_fill,
+  last_at }`: every tracked order with its state, the resting ids in
+  book-insertion order, and the counters. It deep-freezes and JSON
+  round-trips.
+- `restoreMatchingEngine(snapshot, { clock? })` validates the snapshot
+  fail-closed (`TypeError` with an `invalid engine snapshot:` reason —
+  wrong types, unknown keys, duplicate ids, a resting order missing from
+  the tracked set, the resting list out of book order, counters below
+  what the recorded orders require) and rebuilds an engine whose
+  `bookSnapshot`/`orderStatus` are byte-identical to the source's.
+  `seq`/`fill_id` continue where the snapshot left them; the restored
+  `journal()` starts empty — a snapshot carries state, not history.
+- `replayMatchingEngine({ instruments?, events, clock? })` folds a
+  recorded event stream — typically another engine's `journal()` — into
+  an engine-equivalent state. The stream must be a prefix the real
+  engine could have emitted: contiguous `seq` from 1, non-decreasing
+  canonical timestamps, known types and fields only, fill pairs
+  consecutive maker-then-taker sharing sequential `fill_id`s, every
+  referenced order accepted by the stream, and fill/cancel arithmetic
+  matching the tracked remainder. Anything else throws `TypeError` with
+  an `invalid event stream:` reason. The replayed engine's `journal()`
+  returns the folded stream.
+
+Replayed and restored engines agree byte-identically with the live
+engine on `bookSnapshot` and `orderStatus` — `tests/replay.test.mjs`
+pins all three paths on one mixed scenario. One honest gap: `accepted`
+events do not carry `owner`, so a replayed engine loses owner tags and
+its self-trade policy has nothing to compare; snapshots preserve owners.
 
 ## Determinism
 
