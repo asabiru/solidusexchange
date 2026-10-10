@@ -183,6 +183,7 @@ declare module "@solidchange/provider-simulators" {
     };
     expire(now: number): string[];
     get(subjectId: string): InboxSubject | undefined;
+    discard(subjectId: string): boolean;
   }
 
   export const KYC_SCENARIOS: Readonly<Record<KycScenario, unknown>>;

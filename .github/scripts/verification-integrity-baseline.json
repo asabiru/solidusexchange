@@ -554,8 +554,8 @@
       "minCases": 14
     },
     "miniapp/src/server/address-screening.test.ts": {
-      "minLines": 352,
-      "minCases": 18
+      "minLines": 361,
+      "minCases": 19
     },
     "miniapp/src/server/bff-core.test.ts": {
       "minLines": 181,
@@ -598,8 +598,8 @@
       "minCases": 8
     },
     "miniapp/src/server/kyc.test.ts": {
-      "minLines": 177,
-      "minCases": 13
+      "minLines": 186,
+      "minCases": 14
     },
     "miniapp/src/server/notifications-routes.test.ts": {
       "minLines": 137,
@@ -1011,6 +1011,10 @@
     "packages/provider-simulators/tests/determinism.test.mjs": {
       "minLines": 91,
       "minCases": 4
+    },
+    "packages/provider-simulators/tests/inbox-discard-wave47.test.mjs": {
+      "minLines": 57,
+      "minCases": 2
     },
     "packages/provider-simulators/tests/internals-audit.test.mjs": {
       "minLines": 246,

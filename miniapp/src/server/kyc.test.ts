@@ -111,6 +111,19 @@ describe("test-mode KYC onboarding service", () => {
     assert.equal(run.kyc.inspect(subject)?.lateEvents, 1);
   });
 
+  it("expires queued callbacks consumed after the review deadline instead of applying them", async () => {
+    const run = service("approve", 600);
+    await run.kyc.submit(subject);
+    // A single clock jump drains the whole queue at once: every event is
+    // older than the signature window and the subject is past its deadline,
+    // so nothing may apply — the queued approval must not resurrect it.
+    run.advance(700);
+    assert.equal(run.kyc.view(subject, "kyc-gated").state, "timed_out");
+    assert.equal(run.kyc.isVerified(subject), false);
+    assert.equal(run.kyc.inspect(subject)?.timedOut, true);
+    assert.equal(run.kyc.inspect(subject)?.sequence, 0);
+  });
+
   it("applies duplicated and reordered deliveries exactly once and in order", async () => {
     for (const scenario of ["duplicate_callback", "out_of_order_callback"] as const) {
       const run = service(scenario);

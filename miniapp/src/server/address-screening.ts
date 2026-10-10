@@ -195,13 +195,19 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
   const subjects = new Map<string, SubjectRecord>();
   const results = new Map<string, AssessmentResult>();
 
+  function releaseAssessment(assessmentId: string | undefined): void {
+    if (assessmentId === undefined) return;
+    results.delete(assessmentId);
+    inbox.discard(assessmentId);
+  }
+
   function track(assessmentId: string, bindingDigest: string): void {
     if (results.has(assessmentId)) return;
     results.set(assessmentId, { bindingDigest, candidates: new Map() });
     while (results.size > maxTrackedAssessments) {
       const oldest = results.keys().next().value;
       if (oldest === undefined) break;
-      results.delete(oldest);
+      releaseAssessment(oldest);
     }
   }
 
@@ -232,7 +238,10 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
   }
 
   function sync(): void {
-    for (const delivery of simulator.drainCallbacks()) receiveCallback(delivery, Math.floor(delivery.deliverAt));
+    // Deliveries are consumed at drain time, not at their scheduled
+    // deliverAt: the signature staleness window and the inbox deadline are
+    // measured against the real receive time.
+    for (const delivery of simulator.drainCallbacks()) receiveCallback(delivery);
     inbox.expire(nowSeconds());
   }
 
@@ -270,7 +279,13 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
     while (subjects.size > maxScreeningSubjects) {
       const oldest = subjects.keys().next().value;
       if (oldest === undefined) break;
+      const dropped = subjects.get(oldest);
       subjects.delete(oldest);
+      if (dropped !== undefined) {
+        for (const screening of dropped.screenings.values()) {
+          releaseAssessment(screening.assessmentId);
+        }
+      }
     }
     return record;
   }
@@ -281,7 +296,9 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
     while (record.screenings.size > maxScreeningsPerSubject) {
       const oldest = record.screenings.keys().next().value;
       if (oldest === undefined) break;
+      const dropped = record.screenings.get(oldest);
       record.screenings.delete(oldest);
+      releaseAssessment(dropped?.assessmentId);
     }
   }
 
