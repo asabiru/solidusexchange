@@ -4,7 +4,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { after, before, describe, it } from "node:test";
 import { startCustomerApi } from "@solidchange/customer-api/dev-server";
-import type { ProfileView, QuotePreview, SupportRequestsView } from "../shared/api.js";
+import type { DeviceSessionsView, ProfileView, QuotePreview, SupportRequestsView } from "../shared/api.js";
 import { loadServerConfig } from "./config.js";
 import { createMiniappServer } from "./server.js";
 
@@ -77,6 +77,25 @@ describe("end-to-end dev flow: login → customer API → provider quote", () =>
       assert.equal(request.mode, "test");
       assert.equal(request.delivery, "disabled");
       assert.equal(request.status, request.timeline.at(-1)?.status);
+    }
+  });
+
+  it("serves the device session list through the customer-api contract", async () => {
+    // customer.auth.read is granted at every session status upstream, so a
+    // kyc-gated session reaches the contract surface too: the adapted view
+    // carries sess_* handles and only live (active) sign-ins.
+    const cookie = await login("kyc-gated");
+    const response = await fetch(`${base}/bff/sessions`, { headers: { cookie } });
+    assert.equal(response.status, 200);
+    const view = await response.json() as DeviceSessionsView;
+    assert.deepEqual(Object.keys(view).sort(), ["mode", "sessions"]);
+    assert.equal(view.mode, "test");
+    assert.ok(view.sessions.length >= 1);
+    assert.equal(view.sessions.filter((entry) => entry.current).length, 1);
+    for (const entry of view.sessions) {
+      assert.match(entry.handle, /^sess_[0-9a-f]{24}$/);
+      assert.match(entry.client, /^(telegram|dev-login)$/);
+      assert.ok(entry.lastSeenAt >= entry.createdAt);
     }
   });
 

@@ -55,6 +55,7 @@ import {
   lastSeenGranularityMs,
   sessionHandlePattern
 } from "./session.js";
+import { contractAuthSessionsView } from "./sessions.js";
 import {
   type SupportDesk,
   SupportInputError,
@@ -867,6 +868,25 @@ export function createMiniappServer(
     if (path === "/bff/sessions") {
       if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      // Like /bff/profile, /bff/kyc/status and /bff/support/requests — and
+      // unlike /bff/wallet and /bff/notifications — the sessions surface is
+      // not KYC-gated upstream: customer.auth.read is granted at every
+      // session status (it is the subject's own identity surface), so a
+      // configured customer-api answers gated sessions too and only the
+      // standalone unconfigured dev BFF keeps the local view. Since the read
+      // is never denied, an upstream 403 signals contract drift and maps,
+      // like every other non-ok outcome, to the sibling *_unavailable shape.
+      // The revoke POSTs stay local-store operations: the upstream read owns
+      // the list only.
+      if (customerApi.configured) {
+        const upstream = await customerApi.authSessions(session.subject, clock());
+        if (upstream.status !== "ok") {
+          json(response, 503, { error: "sessions_unavailable" });
+          return;
+        }
+        json(response, 200, contractAuthSessionsView(upstream.view));
         return;
       }
       json(response, 200, sessionsView(session));
