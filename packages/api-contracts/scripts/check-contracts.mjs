@@ -224,6 +224,28 @@ const pinnedResponseSchemas = {
       commands_enabled: { const: false }
     }
   },
+  OperatorAdminView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "operator_id", "subject", "role", "granted_capabilities", "created_at", "updated_at"],
+    properties: {
+      mode: { const: "test" },
+      operator_id: { type: "string", pattern: "^opr_[0-9a-f]{24}$" },
+      subject: { type: "string", pattern: "^syn_oper_[a-z0-9]{8,32}$" },
+      role: {
+        type: "string",
+        enum: ["compliance-lead", "support-l1", "aml-investigator", "fraud-investigator", "auditor"]
+      },
+      granted_capabilities: {
+        type: "array",
+        uniqueItems: true,
+        maxItems: 32,
+        items: boundedString
+      },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" }
+    }
+  },
   WalletsView: {
     type: "object",
     additionalProperties: false,
@@ -1037,7 +1059,7 @@ function checkOpenApi() {
   );
   sameSet(
     openapi["x-solidchange-planned-namespaces"]?.operator ?? [],
-    ["/api/v1/operator/admin"],
+    [],
     "Planned operator namespaces"
   );
 
@@ -1077,6 +1099,7 @@ function checkOpenApi() {
     ["getCustomerUsers", "/api/v1/customer/users"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
+    ["getOperatorAdmin", "/api/v1/operator/admin"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
     ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
     ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
@@ -1124,6 +1147,7 @@ function checkOpenApi() {
     ["getCustomerUsers", readStatuses],
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
+    ["getOperatorAdmin", readStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
     ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
     ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
@@ -1148,6 +1172,7 @@ function checkOpenApi() {
     ["getCustomerUsers", "#/components/schemas/UserView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
+    ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
     ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
     ["claimCustomerCheck", "#/components/schemas/CheckView"],

@@ -274,6 +274,23 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // First operator-namespaced read. Operator operations require the
+  // X-Device-Id header and an operator-audience token instead of a customer
+  // one; KYC evaluation never applies to them.
+  Object.freeze({
+    operationId: "getOperatorAdmin",
+    method: "GET",
+    path: "/api/v1/operator/admin",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

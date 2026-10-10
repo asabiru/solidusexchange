@@ -22,14 +22,22 @@ export const CUSTOMER_SCOPES = Object.freeze([
   "customer.session.read",
   "customer.capabilities.read"
 ]);
+export const OPERATOR_SCOPES = Object.freeze([
+  "operator.session.read",
+  "operator.capabilities.read"
+]);
 export const SYNTHETIC_TOKEN_MAX_TTL_SECONDS = 3600;
 export const SYNTHETIC_SUBJECT_PATTERN = /^syn_cust_[a-z0-9]{8,32}$/u;
+export const SYNTHETIC_OPERATOR_SUBJECT_PATTERN = /^syn_oper_[a-z0-9]{8,32}$/u;
 export const DEV_TOKEN_KEY_PATTERN = /^[0-9a-f]{64}$/u;
 
 const TOKEN_PATTERN =
   /^scdev1\.(syn_cust_[a-z0-9]{8,32})\.([1-9][0-9]{9})\.([0-9a-f]{64})$/u;
+const OPERATOR_TOKEN_PATTERN =
+  /^sodev1\.(syn_oper_[a-z0-9]{8,32})\.([1-9][0-9]{9})\.([0-9a-f]{64})$/u;
 const TOKEN_MAX_LENGTH = 160;
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-dev-token-v1";
+const OPERATOR_SIGNATURE_DOMAIN = "solidchange-operator-api-synthetic-dev-token-v1";
 const BEARER_PATTERN = /^Bearer ([A-Za-z0-9._~+/-]+=*)$/iu;
 
 /**
@@ -44,12 +52,13 @@ function assertKey(key) {
 
 /**
  * @param {string} key
+ * @param {string} domain
  * @param {string} subject
  * @param {number | string} expiresAtSeconds
  */
-function sign(key, subject, expiresAtSeconds) {
+function sign(key, domain, subject, expiresAtSeconds) {
   return createHmac("sha256", Buffer.from(key, "hex"))
-    .update(`${SIGNATURE_DOMAIN}\n${subject}\n${expiresAtSeconds}`)
+    .update(`${domain}\n${subject}\n${expiresAtSeconds}`)
     .digest("hex");
 }
 
@@ -68,7 +77,25 @@ export function mintSyntheticCustomerToken({ key, subject, expiresAtSeconds }) {
   ) {
     throw new Error("Synthetic token expiry must be a 10-digit epoch second");
   }
-  return `scdev1.${subject}.${expiresAtSeconds}.${sign(key, subject, expiresAtSeconds)}`;
+  return `scdev1.${subject}.${expiresAtSeconds}.${sign(key, SIGNATURE_DOMAIN, subject, expiresAtSeconds)}`;
+}
+
+/**
+ * @param {{ key: unknown, subject: unknown, expiresAtSeconds: number }} options
+ */
+export function mintSyntheticOperatorToken({ key, subject, expiresAtSeconds }) {
+  assertKey(key);
+  if (typeof subject !== "string" || !SYNTHETIC_OPERATOR_SUBJECT_PATTERN.test(subject)) {
+    throw new Error("Synthetic operator subject must match syn_oper_[a-z0-9]{8,32}");
+  }
+  if (
+    !Number.isSafeInteger(expiresAtSeconds) ||
+    expiresAtSeconds < 1_000_000_000 ||
+    expiresAtSeconds > 9_999_999_999
+  ) {
+    throw new Error("Synthetic token expiry must be a 10-digit epoch second");
+  }
+  return `sodev1.${subject}.${expiresAtSeconds}.${sign(key, OPERATOR_SIGNATURE_DOMAIN, subject, expiresAtSeconds)}`;
 }
 
 /** @param {unknown} value */
@@ -109,12 +136,15 @@ export function createSyntheticTokenVerifier({
       if (typeof token !== "string" || token.length > TOKEN_MAX_LENGTH) {
         return null;
       }
-      const match = TOKEN_PATTERN.exec(token);
+      const customerMatch = TOKEN_PATTERN.exec(token);
+      const operatorMatch = customerMatch ? null : OPERATOR_TOKEN_PATTERN.exec(token);
+      const match = customerMatch ?? operatorMatch;
       if (!match) {
         return null;
       }
       const [, subject, expiresText, signature] = match;
-      const expected = Buffer.from(sign(key, subject, expiresText), "hex");
+      const domain = operatorMatch ? OPERATOR_SIGNATURE_DOMAIN : SIGNATURE_DOMAIN;
+      const expected = Buffer.from(sign(key, domain, subject, expiresText), "hex");
       if (!timingSafeEqual(expected, Buffer.from(signature, "hex"))) {
         return null;
       }
@@ -133,8 +163,8 @@ export function createSyntheticTokenVerifier({
       }
       return Object.freeze({
         subject,
-        actorType: "customer",
-        scopes: Object.freeze([...CUSTOMER_SCOPES]),
+        actorType: operatorMatch ? "operator" : "customer",
+        scopes: Object.freeze([...(operatorMatch ? OPERATOR_SCOPES : CUSTOMER_SCOPES)]),
         expiresAt: new Date(expiresAtSeconds * 1000).toISOString()
       });
     }
