@@ -363,6 +363,7 @@ describe("Backoffice BFF security headers on every route", () => {
       "/bff/api/withdrawals/:withdrawalId": () => get("/bff/api/withdrawals/WDR-991804"),
       "/bff/api/subjects/:ref/timeline": () => get("/bff/api/subjects/sim-alina-mironova/timeline"),
       "/bff/api/kyc": () => get("/bff/api/kyc"),
+      "/bff/api/operator/admin": () => get("/bff/api/operator/admin"),
       "/bff/api/aml": () => get("/bff/api/aml"),
       "/bff/api/investigations": () => get("/bff/api/investigations"),
       "/bff/api/fraud-alerts": () => get("/bff/api/fraud-alerts"),

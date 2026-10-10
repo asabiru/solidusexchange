@@ -22,7 +22,9 @@ const configurationEnvironment = [
   "BACKOFFICE_OIDC_ROLE_CLAIM",
   "BACKOFFICE_OIDC_ROLE_MAP_JSON",
   "BACKOFFICE_DEVICE_BINDING",
-  "BACKOFFICE_APPROVED_DEVICE_DIGESTS"
+  "BACKOFFICE_APPROVED_DEVICE_DIGESTS",
+  "BACKOFFICE_CUSTOMER_API_URL",
+  "BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY"
 ] as const;
 const original = Object.fromEntries(
   configurationEnvironment.map((name) => [name, process.env[name]])
@@ -243,6 +245,55 @@ describe("operator device binding configuration", () => {
       process.env.BACKOFFICE_APPROVED_DEVICE_DIGESTS = digests;
       assert.throws(() => loadServerConfig(), message);
     }
+  });
+});
+
+describe("customer API upstream configuration", () => {
+  const devTokenKey = "0".repeat(64);
+
+  it("stays unconfigured without both values", () => {
+    delete process.env.BACKOFFICE_CUSTOMER_API_URL;
+    delete process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY;
+    const config = loadServerConfig();
+    assert.equal(config.customerApiUrl, undefined);
+    assert.equal(config.customerApiDevTokenKey, undefined);
+  });
+
+  it("requires the URL and the dev token key together", () => {
+    process.env.BACKOFFICE_CUSTOMER_API_URL = "http://127.0.0.1:4180";
+    delete process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY;
+    assert.throws(() => loadServerConfig(), /must be set together/);
+    delete process.env.BACKOFFICE_CUSTOMER_API_URL;
+    process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY = devTokenKey;
+    assert.throws(() => loadServerConfig(), /must be set together/);
+  });
+
+  it("accepts only an exact loopback http origin and a 64-hex key", () => {
+    const keyCases: readonly [string, RegExp][] = [
+      ["A".repeat(64), /64 lowercase hex/],
+      ["0".repeat(63), /64 lowercase hex/],
+      [`z${devTokenKey.slice(1)}`, /64 lowercase hex/]
+    ];
+    const urlCases: readonly [string, RegExp][] = [
+      ["not a url", /absolute origin/],
+      ["http://127.0.0.1:4180/api", /exact loopback http origin/],
+      ["https://127.0.0.1:4180", /exact loopback http origin/],
+      ["http://203.0.113.10:4180", /exact loopback http origin/]
+    ];
+    for (const [url, message] of urlCases) {
+      process.env.BACKOFFICE_CUSTOMER_API_URL = url;
+      process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY = devTokenKey;
+      assert.throws(() => loadServerConfig(), message, url);
+    }
+    process.env.BACKOFFICE_CUSTOMER_API_URL = "http://127.0.0.1:4180";
+    for (const [key, message] of keyCases) {
+      process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY = key;
+      assert.throws(() => loadServerConfig(), message, key);
+    }
+    process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY = ` ${devTokenKey} `;
+    const config = loadServerConfig();
+    assert.equal(config.customerApiUrl, "http://127.0.0.1:4180");
+    assert.equal(config.customerApiDevTokenKey, devTokenKey);
   });
 });
 
