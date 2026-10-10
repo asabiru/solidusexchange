@@ -48,6 +48,8 @@ export interface ServerConfig {
   signing: SigningConfig;
   deviceBinding?: DeviceBindingConfig;
   oidc?: OidcConfig;
+  customerApiUrl?: string;
+  customerApiDevTokenKey?: string;
   observability?: ObservabilityConfig;
 }
 
@@ -58,6 +60,8 @@ const roles = new Set<OperatorRole>([
   "fraud-investigator",
   "auditor"
 ]);
+
+const devTokenKeyPattern = /^[0-9a-f]{64}$/;
 
 function requiredOidcValue(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -268,6 +272,28 @@ function loadSigningConfig(): SigningConfig {
   };
 }
 
+function parseCustomerApi(): { customerApiUrl?: string; customerApiDevTokenKey?: string } {
+  const url = process.env.BACKOFFICE_CUSTOMER_API_URL?.trim() || undefined;
+  const key = process.env.BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY?.trim() || undefined;
+  if (url === undefined && key === undefined) return {};
+  if (url === undefined || key === undefined) {
+    throw new Error("BACKOFFICE_CUSTOMER_API_URL and BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY must be set together");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error("BACKOFFICE_CUSTOMER_API_URL must be an absolute origin");
+  }
+  if (parsed.protocol !== "http:" || parsed.origin !== url || !isLoopbackHostname(parsed.hostname)) {
+    throw new Error("BACKOFFICE_CUSTOMER_API_URL must be an exact loopback http origin; the dev customer API is never remote");
+  }
+  if (!devTokenKeyPattern.test(key)) {
+    throw new Error("BACKOFFICE_CUSTOMER_API_DEV_TOKEN_KEY must be 64 lowercase hex characters");
+  }
+  return { customerApiUrl: url, customerApiDevTokenKey: key };
+}
+
 function loadDeviceBindingConfig(): DeviceBindingConfig {
   const mode = process.env.BACKOFFICE_DEVICE_BINDING ?? "off";
   if (mode !== "off" && mode !== "enforce") {
@@ -351,6 +377,7 @@ export function loadServerConfig(): ServerConfig {
     signing: loadSigningConfig(),
     deviceBinding: loadDeviceBindingConfig(),
     oidc: loadOidcConfig(allowedOrigins),
+    ...parseCustomerApi(),
     observability: {
       log: modeSetting("BACKOFFICE_LOG", logModes),
       metrics: modeSetting("BACKOFFICE_METRICS", metricsModes)

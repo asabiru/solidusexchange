@@ -30,6 +30,7 @@ import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from
 import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
 import { isSubjectRef, readableSubjectKinds, subjectTimelineAccessEvent } from "./subjects.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
+import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
 import {
   buildReport,
   buildReportExport,
@@ -141,6 +142,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/signing-key",
   "/bff/api/signing-keys",
   "/bff/api/session",
+  "/bff/api/operator/admin",
   "/bff/api/dashboard",
   "/bff/api/customers",
   "/bff/api/checks",
@@ -183,7 +185,8 @@ export function createBackofficeServer(
   config: ServerConfig,
   auditStore: AuditStore = defaultAuditStore(config),
   injectedSigningKeys?: EphemeralSigningKeyProvider,
-  observability: ObservabilityOptions = {}
+  observability: ObservabilityOptions = {},
+  customerApiClient?: CustomerApiClient
 ) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
   const sessions = new ExpiringStore<OperatorSession>();
@@ -192,6 +195,11 @@ export function createBackofficeServer(
   const signer = new ResponseSigner(signingKeys);
   const stepUp = new SyntheticStepUpService(config.stepUp);
   const providerEvidence = createProviderEvidenceSource();
+  const customerApi = customerApiClient
+    ?? createCustomerApiClient({
+      baseUrl: config.customerApiUrl,
+      devTokenKey: config.customerApiDevTokenKey
+    });
   const deviceBinding = config.deviceBinding ?? { mode: "off", approvedDeviceDigests: [] };
   const enforceDevices = deviceBinding.mode === "enforce";
   const approvedDevices = new Set(deviceBinding.approvedDeviceDigests);
@@ -569,6 +577,56 @@ export function createBackofficeServer(
             capabilities: profile.capabilities
           },
           expiresAt: new Date(session.expiresAt).toISOString()
+        });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/operator/admin") {
+        const session = authorized(request, response);
+        if (!session) return;
+        if (customerApi.configured) {
+          // The upstream operator audience pins X-Device-Id to the session's
+          // bound workstation device (in enforce mode currentSession already
+          // proved the presented device equals session.deviceId). Without a
+          // device identity the BFF cannot form a contract-valid request and
+          // rejects locally before any upstream call.
+          const deviceId = requestDeviceId(request);
+          if (!deviceId) {
+            json(response, 403, { error: "device_required" });
+            return;
+          }
+          const upstream = await customerApi.operatorAdmin(session.subject, deviceId, Date.now());
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "operator_admin_unavailable" });
+            return;
+          }
+          signed(response, "operator-admin", {
+            mode: upstream.view.mode,
+            operatorId: upstream.view.operator_id,
+            subject: upstream.view.subject,
+            role: upstream.view.role,
+            grantedCapabilities: [...upstream.view.granted_capabilities],
+            createdAt: upstream.view.created_at,
+            updatedAt: upstream.view.updated_at
+          });
+          return;
+        }
+        // Unconfigured: the existing local synthetic behavior — the operator's
+        // own session plus its role profile, with upstream-only directory
+        // fields left empty rather than invented.
+        const profile = findRole(session.role);
+        if (!profile) {
+          json(response, 403, { error: "role_not_found" });
+          return;
+        }
+        signed(response, "operator-admin", {
+          mode: "test",
+          operatorId: null,
+          subject: session.subject,
+          role: session.role,
+          grantedCapabilities: [...profile.capabilities],
+          createdAt: null,
+          updatedAt: null
         });
         return;
       }

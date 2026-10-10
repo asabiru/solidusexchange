@@ -172,3 +172,52 @@ declare module "@solidchange/provider-simulators" {
   export function createKycCallbackInbox(): CallbackInbox;
   export function createKytCallbackInbox(): CallbackInbox;
 }
+
+declare module "@solidchange/customer-api/synthetic-token" {
+  export const SYNTHETIC_OPERATOR_SUBJECT_PATTERN: RegExp;
+  export const DEV_TOKEN_KEY_PATTERN: RegExp;
+  export function mintSyntheticOperatorToken(options: { key: string; subject: string; expiresAtSeconds: number }): string;
+}
+
+declare module "@solidchange/customer-api/request-id" {
+  export function generateUuidV7(nowMs?: number): string;
+}
+
+declare module "@solidchange/customer-api/dev-server" {
+  import type { AddressInfo } from "node:net";
+  import type { Server } from "node:http";
+
+  export interface CustomerApiDevConfig {
+    readonly host: string;
+    readonly port: number;
+    readonly rateLimitPerMinute: number;
+    readonly authMode: "synthetic-dev" | "deny-all";
+    readonly devTokenKey: string | null;
+  }
+
+  export function startCustomerApi(
+    config: CustomerApiDevConfig,
+    options?: {
+      operatorDirectory?: {
+        viewFor(
+          subject: string,
+          grantedCapabilities: readonly string[]
+        ): Promise<{
+          mode: "test";
+          operator_id: string;
+          subject: string;
+          role:
+            | "compliance-lead"
+            | "support-l1"
+            | "aml-investigator"
+            | "fraud-investigator"
+            | "auditor";
+          granted_capabilities: readonly string[];
+          created_at: string;
+          updated_at: string;
+        }>;
+      };
+      clock?: () => number;
+    }
+  ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;
+}
