@@ -57,7 +57,8 @@ function profileStub(
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
-    support: async () => ({ status: "not-configured" })
+    support: async () => ({ status: "not-configured" }),
+    authSessions: async () => ({ status: "not-configured" })
   };
   return stub;
 }

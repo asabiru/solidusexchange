@@ -412,6 +412,38 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/auth")) {
+      return {
+        mode: "test",
+        sessions: [
+          {
+            session_id: "sess_0123456789abcdef01234567",
+            platform: "telegram-mini-app",
+            state: "active",
+            created_at: "2026-10-01T12:00:00.000Z",
+            last_seen_at: "2026-10-01T13:00:00.000Z",
+            current: true
+          },
+          {
+            session_id: "sess_fedcba9876543210fedcba98",
+            platform: "web",
+            state: "active",
+            created_at: "2026-10-02T12:00:00.000Z",
+            last_seen_at: "2026-10-02T14:00:00.000Z",
+            current: false
+          },
+          {
+            session_id: "sess_aabbccddeeff00112233aabb",
+            platform: "ios",
+            state: "revoked",
+            created_at: "2026-09-30T12:00:00.000Z",
+            last_seen_at: "2026-10-01T12:00:00.000Z",
+            current: false
+          }
+        ],
+        ...extra
+      };
+    }
     return undefined;
   }
 
@@ -663,6 +695,24 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("tck_"), false, label);
     assert.equal(text.includes("ticket_id"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "support_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
+  async function sessionsFailsClosed(label, sessionCookie) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/sessions", { cookie: sessionCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(/sess_[0-9a-f]/.test(text), false, label);
+    assert.equal(text.includes("session_id"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "sessions_unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
@@ -999,6 +1049,22 @@ describe("Mini App BFF with a failing customer-api", () => {
       { status: "in_review", at: Date.parse("2026-10-01T13:00:00.000Z") }
     ]);
     assert.deepEqual(await getJson(app, "/bff/support/requests", verifiedCookie), requests);
+    // The sessions list consults upstream for gated sessions too
+    // (customer.auth.read is never denied): the adapted view carries only
+    // live sign-ins — the revoked entry drops out — with sess_* handles and
+    // exactly one current marker.
+    const sessions = await getJson(app, "/bff/sessions", cookie);
+    assert.equal(sessions.mode, "test");
+    assert.equal(sessions.sessions.length, 2);
+    assert.deepEqual(sessions.sessions.map((entry) => entry.handle), [
+      "sess_0123456789abcdef01234567",
+      "sess_fedcba9876543210fedcba98"
+    ]);
+    assert.deepEqual(sessions.sessions.map((entry) => entry.client), ["telegram", "dev-login"]);
+    assert.deepEqual(sessions.sessions.map((entry) => entry.current), [true, false]);
+    assert.equal(sessions.sessions[0].createdAt, Date.parse("2026-10-01T12:00:00.000Z"));
+    assert.equal(sessions.sessions[0].lastSeenAt, Date.parse("2026-10-01T13:00:00.000Z"));
+    assert.deepEqual(await getJson(app, "/bff/sessions", verifiedCookie), sessions);
   });
 
   it("degrades verified sessions' wallet and notifications on an upstream capability denial", async () => {
@@ -1098,6 +1164,11 @@ describe("Mini App BFF with a failing customer-api", () => {
       const supportResponse = await call(app.base, "/bff/support/requests", { cookie: sessionCookie });
       assert.equal(supportResponse.status, 503);
       assert.deepEqual(await readJson(supportResponse), { error: "support_unavailable" });
+      // customer.auth.read is never denied either, so a refused sessions read
+      // is likewise contract drift: it fails closed for both session levels.
+      const sessionsResponse = await call(app.base, "/bff/sessions", { cookie: sessionCookie });
+      assert.equal(sessionsResponse.status, 503);
+      assert.deepEqual(await readJson(sessionsResponse), { error: "sessions_unavailable" });
     }
     assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
   });
@@ -1135,6 +1206,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
+      await sessionsFailsClosed(`${name} verified`, verifiedCookie);
+      await sessionsFailsClosed(`${name} gated`, cookie);
       await assertGated(app, cookie, name);
     }
   });
@@ -1155,6 +1228,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
+      await sessionsFailsClosed(`${name} verified`, verifiedCookie);
+      await sessionsFailsClosed(`${name} gated`, cookie);
       await upstreamReleased(name);
       await assertGated(app, cookie, name);
     }
@@ -1175,6 +1250,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/sessions", cookie)).sessions[0].handle, "sess_0123456789abcdef01234567");
   });
 });
 
@@ -1190,6 +1266,11 @@ describe("Mini App BFF with an unreachable customer-api", () => {
     const support = await call(app.base, "/bff/support/requests", { cookie });
     assert.equal(support.status, 503, label);
     assert.deepEqual(await readJson(support), { error: "support_unavailable" }, label);
+    // The sessions surface is also never gated upstream, so an unreachable
+    // customer-api fails it closed outright for either session level.
+    const sessions = await call(app.base, "/bff/sessions", { cookie });
+    assert.equal(sessions.status, 503, label);
+    assert.deepEqual(await readJson(sessions), { error: "sessions_unavailable" }, label);
     await assertGated(app, cookie, label);
   }
 
