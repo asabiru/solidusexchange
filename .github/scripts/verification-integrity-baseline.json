@@ -1187,6 +1187,18 @@
       "minLines": 130,
       "minCases": 5
     },
+    "packages/matching-core/tests/journal.test.mjs": {
+      "minLines": 64,
+      "minCases": 5
+    },
+    "packages/matching-core/tests/replay.test.mjs": {
+      "minLines": 228,
+      "minCases": 10
+    },
+    "packages/matching-core/tests/snapshot.test.mjs": {
+      "minLines": 230,
+      "minCases": 12
+    },
     "miniapp/src/server/account-upstream.test.ts": {
       "minLines": 264,
       "minCases": 7

@@ -9,6 +9,7 @@ export {
   assertEpochSeconds,
   createSimulatedClock,
   DEFAULT_EPOCH_SECONDS,
+  fromIsoSeconds,
   toIsoSeconds,
 } from "./deterministic.mjs";
 export { createMatchingEngine } from "./engine.mjs";
@@ -26,4 +27,5 @@ export {
   SIDES,
 } from "./events.mjs";
 export { INSTRUMENTS, instrumentIndex, validInstrumentDefinition } from "./instruments.mjs";
+export { replayMatchingEngine, restoreMatchingEngine } from "./replay.mjs";
 export { snapshotPlainData } from "./snapshot.mjs";

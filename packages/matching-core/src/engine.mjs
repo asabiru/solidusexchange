@@ -10,7 +10,7 @@ import {
   SELF_TRADE_POLICY,
 } from "./events.mjs";
 import { INSTRUMENTS, instrumentIndex } from "./instruments.mjs";
-import { snapshotPlainData } from "./snapshot.mjs";
+import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
 
 /**
  * Pure deterministic matching engine. A submission runs synchronously:
@@ -21,11 +21,17 @@ import { snapshotPlainData } from "./snapshot.mjs";
  * or talks to anything. Same input sequence always yields the same event
  * sequence, byte-identical.
  *
+ * Every emitted event also lands on the engine's append-only in-memory
+ * journal, and the whole live state serializes to a canonical snapshot —
+ * the persistence groundwork the replay/restore layer folds back into an
+ * equivalent engine.
+ *
  * @typedef {import("./book.mjs").RestingOrder} RestingOrder
  * @typedef {import("./events.mjs").MatchingEvent} MatchingEvent
  * @typedef {import("./events.mjs").OrderInput} OrderInput
  * @typedef {import("./deterministic.mjs").SimulatedClock} SimulatedClock
  * @typedef {import("./instruments.mjs").InstrumentDefinition} InstrumentDefinition
+ * @typedef {import("./snapshot.mjs").EngineSnapshot} EngineSnapshot
  *
  * @typedef {object} TrackedOrder
  * @property {string} order_id
@@ -38,6 +44,14 @@ import { snapshotPlainData } from "./snapshot.mjs";
  * @property {bigint} quantity_units
  * @property {bigint} remaining_units
  * @property {"resting" | "filled" | "cancelled" | "rejected"} state
+ *
+ * @typedef {object} EngineState Live internals the engine runs on.
+ * @property {Map<string, ReturnType<typeof createOrderBook>>} books
+ * @property {Map<string, TrackedOrder>} tracked
+ * @property {MatchingEvent[]} journal Append-only emitted events.
+ * @property {number} nextSeq Next un-emitted event sequence.
+ * @property {number} nextFill Next un-issued fill counter.
+ * @property {number} lastAt Epoch seconds of the last stamp (-1 before any).
  *
  * @typedef {object} OrderStatusView
  * @property {string} order_id
@@ -53,7 +67,7 @@ const REQUIRED_ORDER_KEYS = Object.freeze(["instrument", "order_id", "price", "q
 
 /**
  * @param {unknown} options
- * @returns {{ instruments: import("./instruments.mjs").InstrumentDefinition[] | undefined, clock: SimulatedClock | undefined }}
+ * @returns {{ instruments: InstrumentDefinition[] | undefined, clock: SimulatedClock | undefined }}
  */
 function engineOptions(options) {
   if (options === undefined) {
@@ -89,15 +103,34 @@ function engineOptions(options) {
  */
 export function createMatchingEngine(options = {}) {
   const { instruments, clock } = engineOptions(options);
-  const index = instrumentIndex(instruments ?? INSTRUMENTS);
-  const timeSource = clock ?? createSimulatedClock();
-  /** @type {Map<string, ReturnType<typeof createOrderBook>>} */
-  const books = new Map();
-  /** @type {Map<string, TrackedOrder>} */
-  const tracked = new Map();
-  let nextSeq = 1;
-  let nextFill = 1;
-  let lastAt = -1;
+  /** @type {EngineState} */
+  const state = {
+    books: new Map(),
+    tracked: new Map(),
+    journal: [],
+    nextSeq: 1,
+    nextFill: 1,
+    lastAt: -1,
+  };
+  return createMatchingEngineFromState(
+    instrumentIndex(instruments ?? INSTRUMENTS),
+    clock ?? createSimulatedClock(),
+    state,
+  );
+}
+
+/**
+ * Rebuilds an engine over hydrated state. The persistence layer
+ * (journal replay and snapshot restore) calls this with state it has
+ * validated and reconstructed; it must satisfy the exact invariants
+ * `createMatchingEngine` maintains.
+ *
+ * @param {ReadonlyMap<string, InstrumentDefinition>} index
+ * @param {SimulatedClock} timeSource
+ * @param {EngineState} state
+ */
+export function createMatchingEngineFromState(index, timeSource, state) {
+  const { books, tracked, journal } = state;
 
   /**
    * @param {string} instrument
@@ -117,11 +150,11 @@ export function createMatchingEngine(options = {}) {
   function stamp() {
     const now = timeSource.now();
     assertEpochSeconds(now, "clock time");
-    if (now < lastAt) {
+    if (now < state.lastAt) {
       throw new RangeError("clock must not go backwards");
     }
-    lastAt = now;
-    return { seq: nextSeq++, at: toIsoSeconds(now) };
+    state.lastAt = now;
+    return { seq: state.nextSeq++, at: toIsoSeconds(now) };
   }
 
   /**
@@ -130,11 +163,11 @@ export function createMatchingEngine(options = {}) {
    * @param {Record<string, unknown>} fields
    */
   function emit(events, type, fields) {
-    events.push(
-      /** @type {MatchingEvent} */ (
-        Object.freeze({ ...stamp(), ...fields, type, posting: POSTING })
-      ),
+    const event = /** @type {MatchingEvent} */ (
+      Object.freeze({ ...stamp(), ...fields, type, posting: POSTING })
     );
+    events.push(event);
+    journal.push(event);
   }
 
   /**
@@ -322,8 +355,8 @@ export function createMatchingEngine(options = {}) {
           taker.remaining_units < maker.remaining_units
             ? taker.remaining_units
             : maker.remaining_units;
-        const fillId = `fll_${nextFill.toString(16).padStart(24, "0")}`;
-        nextFill += 1;
+        const fillId = `fll_${state.nextFill.toString(16).padStart(24, "0")}`;
+        state.nextFill += 1;
         maker.remaining_units -= quantityUnits;
         taker.remaining_units -= quantityUnits;
         emitFill(events, taker, maker, fillId, quantityUnits, definition.base_scale);
@@ -440,6 +473,36 @@ export function createMatchingEngine(options = {}) {
         quantity: entry.quantity,
         remaining_quantity: formatScaledDecimal(entry.remaining_units, definition.base_scale),
         state: entry.state,
+      });
+    },
+
+    /**
+     * The engine journal: every event emitted so far, in `seq` order —
+     * append-only in-memory event data, never ledger postings. Each call
+     * returns a fresh frozen array of the frozen event records, so callers
+     * cannot mutate the journal.
+     *
+     * @returns {readonly MatchingEvent[]}
+     */
+    journal() {
+      return Object.freeze(journal.slice());
+    },
+
+    /**
+     * Canonical plain-data snapshot of the whole engine state — instruments,
+     * tracked orders, resting ids, event/fill counters and the last stamp —
+     * suitable for `restoreMatchingEngine`. Deep-frozen and JSON
+     * round-trippable.
+     *
+     * @returns {EngineSnapshot}
+     */
+    snapshot() {
+      return canonicalEngineSnapshot({
+        index,
+        tracked,
+        nextSeq: state.nextSeq,
+        nextFill: state.nextFill,
+        lastAt: state.lastAt,
       });
     },
   });
