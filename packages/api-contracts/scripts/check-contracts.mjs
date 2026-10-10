@@ -25,8 +25,65 @@ function readContained(path) {
   return readFileSync(normalized, "utf8");
 }
 
+function assertNoDuplicateKeys(text, label) {
+  const stack = [];
+  let index = 0;
+  while (index < text.length) {
+    const char = text[index];
+    if (/\s/.test(char)) {
+      index++;
+      continue;
+    }
+    if (char === '"') {
+      const start = index;
+      index++;
+      while (index < text.length) {
+        if (text[index] === "\\") {
+          index += 2;
+          continue;
+        }
+        if (text[index] === '"') {
+          index++;
+          break;
+        }
+        index++;
+      }
+      let cursor = index;
+      while (cursor < text.length && /\s/.test(text[cursor])) cursor++;
+      const top = stack[stack.length - 1];
+      if (top instanceof Set && text[cursor] === ":") {
+        const key = JSON.parse(text.slice(start, index));
+        assert(!top.has(key), `${label}: duplicate JSON key ${JSON.stringify(key)}`);
+        top.add(key);
+      }
+      continue;
+    }
+    if (char === "{") {
+      stack.push(new Set());
+      index++;
+      continue;
+    }
+    if (char === "[") {
+      stack.push(true);
+      index++;
+      continue;
+    }
+    if (char === "}" || char === "]") {
+      stack.pop();
+      index++;
+      continue;
+    }
+    index++;
+  }
+}
+
+function parseJsonStrict(text, label) {
+  assertNoDuplicateKeys(text, label);
+  return JSON.parse(text);
+}
+
 function readJson(path) {
-  return JSON.parse(readContained(path));
+  return parseJsonStrict(readContained(path), path);
 }
 
 function checkCompatibilityPolicy() {
@@ -66,12 +123,16 @@ function loadAbsolute(path) {
     `Reference escapes contract package through a link: ${normalized}`
   );
   if (!parsedFiles.has(normalized)) {
-    parsedFiles.set(normalized, JSON.parse(readFileSync(normalized, "utf8")));
+    parsedFiles.set(normalized, parseJsonStrict(readFileSync(normalized, "utf8"), normalized));
   }
   return parsedFiles.get(normalized);
 }
 
 function resolveRef(sourcePath, reference) {
+  assert(
+    reference.indexOf("#") === reference.lastIndexOf("#"),
+    `Ambiguous $ref is prohibited: ${reference}`
+  );
   const [filePart, fragment = ""] = reference.split("#", 2);
   const targetPath = filePart ? resolve(dirname(sourcePath), filePart) : sourcePath;
   const target = loadAbsolute(targetPath);
@@ -87,7 +148,12 @@ function verifyReferences(value, sourcePath, seen = new Set()) {
   if (Object.hasOwn(value, "$ref")) {
     assert(typeof value.$ref === "string", `$ref must be a string: ${sourcePath}`);
     assert(!/^[a-z][a-z0-9+.-]*:/i.test(value.$ref) && !value.$ref.startsWith("//"), `Remote $ref is prohibited: ${value.$ref}`);
-    assert(!value.$ref.includes("%") && !value.$ref.includes("\\"), `Encoded $ref is prohibited: ${value.$ref}`);
+    // `~` escapes are resolved by this checker but not by consumer validators,
+    // so a reference the package accepts could be unresolvable downstream.
+    assert(
+      !["%", "\\", "~"].some((mark) => value.$ref.includes(mark)),
+      `Encoded $ref is prohibited: ${value.$ref}`
+    );
     for (const key of Object.keys(value)) {
       assert(allowedReferenceSiblings.has(key), `$ref sibling ${key} is prohibited: ${value.$ref}`);
     }
@@ -881,6 +947,16 @@ const canonicalHeaderParameters = new Map([
   ["idempotency-key", "#/components/parameters/IdempotencyKey"]
 ]);
 
+function verifyUniqueParameters(pathParameters, operationParameters, sourcePath, label) {
+  const seen = new Set();
+  for (const parameter of [...(pathParameters ?? []), ...(operationParameters ?? [])]) {
+    const resolved = parameter.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
+    const key = `${resolved?.in}:${String(resolved?.name ?? "").toLowerCase()}`;
+    assert(!seen.has(key), `Duplicate parameter ${resolved?.in} ${resolved?.name}: ${label}`);
+    seen.add(key);
+  }
+}
+
 function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
   for (const parameter of parameters ?? []) {
     assert(
@@ -970,6 +1046,11 @@ function checkOpenApi() {
     (openapi.tags ?? []).map((tag) => tag?.name),
     ["Customer", "Metadata", "Operator"],
     "OpenAPI tags"
+  );
+  sameSet(
+    Object.keys(openapi["x-solidchange-planned-namespaces"] ?? {}),
+    ["customer", "operator"],
+    "Planned namespaces"
   );
   sameSet(
     openapi["x-solidchange-planned-namespaces"]?.customer ?? [],
@@ -1176,6 +1257,7 @@ function checkOpenApi() {
         `Callbacks are prohibited in this slice: ${operation.operationId}`
       );
       verifyCanonicalHeaderParameters(operation.parameters, path, operation.operationId);
+      verifyUniqueParameters(pathItem.parameters, operation.parameters, path, operation.operationId);
       const requestHeaders = new Set([...refs(operation), ...pathParameterRefs]);
       assert(
         requestHeaders.has("#/components/parameters/RequestId"),
@@ -1415,6 +1497,7 @@ function checkOpenApi() {
     }),
     "Canonical RetryAfter response header must remain required with a positive-integer schema"
   );
+  verifyNoNestedSchemaIdentifiers(openapi, "OpenAPI");
   verifyReferences(openapi, path);
   verifyNoExtensions(openapi, "OpenAPI", new Set(allowedOpenApiExtensions));
   verifyMoneyFieldSchemas(openapi, "OpenAPI");
@@ -1552,14 +1635,19 @@ function validateValue(value, schema, rootSchema, label) {
     assert(types.some((type) => schemaTypeMatches(value, type)), `${label}: type mismatch`);
   }
   if (typeof value === "string") {
-    if (schema.minLength !== undefined) assert(value.length >= schema.minLength, `${label}: string is too short`);
-    if (schema.maxLength !== undefined) assert(value.length <= schema.maxLength, `${label}: string is too long`);
-    if (schema.pattern) assert(new RegExp(schema.pattern).test(value), `${label}: pattern mismatch`);
+    const length = [...value].length;
+    if (schema.minLength !== undefined) assert(length >= schema.minLength, `${label}: string is too short`);
+    if (schema.maxLength !== undefined) assert(length <= schema.maxLength, `${label}: string is too long`);
+    if (schema.pattern) assert(new RegExp(schema.pattern, "u").test(value), `${label}: pattern mismatch`);
     if (schema.format === "uuid") {
-      assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value), `${label}: invalid UUID`);
+      assert(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value), `${label}: invalid UUID`);
     }
     if (schema.format === "date-time") {
-      assert(Number.isFinite(Date.parse(value)), `${label}: invalid date-time`);
+      assert(
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/u.test(value)
+          && Number.isFinite(Date.parse(value)),
+        `${label}: invalid date-time`
+      );
     }
   }
   if (typeof value === "number") {
@@ -1568,8 +1656,9 @@ function validateValue(value, schema, rootSchema, label) {
   }
   if (Array.isArray(value)) {
     if (schema.minItems !== undefined) assert(value.length >= schema.minItems, `${label}: too few items`);
+    if (schema.maxItems !== undefined) assert(value.length <= schema.maxItems, `${label}: too many items`);
     if (schema.uniqueItems) {
-      assert(new Set(value.map((item) => JSON.stringify(item))).size === value.length, `${label}: duplicate items`);
+      assert(new Set(value.map((item) => canonicalJson(item))).size === value.length, `${label}: duplicate items`);
     }
     if (schema.items) value.forEach((item, index) => validateValue(item, schema.items, rootSchema, `${label}[${index}]`));
   } else if (value !== null && typeof value === "object") {
@@ -1889,11 +1978,90 @@ function verifyClosedEventSchema(schema, label) {
       `${label}: type must be exactly one of ${[...allowedEventSchemaTypes].join(", ")}, optionally nullable`
     );
   }
-  for (const literal of [schema.const, ...(Array.isArray(schema.enum) ? schema.enum : [])]) {
+  for (const keyword of ["minLength", "maxLength", "minItems", "maxItems"]) {
+    assert(
+      !Object.hasOwn(schema, keyword)
+        || (Number.isInteger(schema[keyword]) && schema[keyword] >= 0),
+      `${label}: ${keyword} must be a non-negative integer`
+    );
+  }
+  for (const keyword of ["minimum", "maximum"]) {
+    assert(
+      !Object.hasOwn(schema, keyword)
+        || (typeof schema[keyword] === "number" && Number.isFinite(schema[keyword])),
+      `${label}: ${keyword} must be a finite number`
+    );
+  }
+  for (const keyword of ["pattern", "format", "$ref"]) {
+    assert(
+      !Object.hasOwn(schema, keyword) || typeof schema[keyword] === "string",
+      `${label}: ${keyword} must be a string`
+    );
+  }
+  assert(
+    !Object.hasOwn(schema, "uniqueItems") || typeof schema.uniqueItems === "boolean",
+    `${label}: uniqueItems must be a boolean`
+  );
+  if (typeof schema.pattern === "string") {
+    try {
+      new RegExp(schema.pattern, "u");
+    } catch {
+      assert(false, `${label}: pattern must compile under the Unicode flag`);
+    }
+  }
+  assert(
+    !Object.hasOwn(schema, "enum")
+      || (Array.isArray(schema.enum)
+        && schema.enum.length > 0
+        && new Set(schema.enum.map((member) => canonicalJson(member))).size === schema.enum.length),
+    `${label}: enum must be an array of unique literals`
+  );
+  assert(
+    !Object.hasOwn(schema, "required")
+      || (Array.isArray(schema.required)
+        && schema.required.every((name) => typeof name === "string")
+        && new Set(schema.required).size === schema.required.length),
+    `${label}: required must be an array of unique property names`
+  );
+  const literals = [
+    ...(Object.hasOwn(schema, "const") ? [schema.const] : []),
+    ...(Array.isArray(schema.enum) ? schema.enum : [])
+  ];
+  for (const literal of literals) {
     assert(
       typeof literal !== "number" || Number.isInteger(literal),
       `${label}: floating-point literals are prohibited`
     );
+    assert(
+      types.length === 0 || types.some((type) => schemaTypeMatches(literal, type)),
+      `${label}: literal ${JSON.stringify(literal)} violates the declared type`
+    );
+  }
+  if (types.length > 0) {
+    for (const keyword of ["additionalProperties", "properties", "required"]) {
+      assert(
+        !Object.hasOwn(schema, keyword) || types.includes("object"),
+        `${label}: ${keyword} requires an object type`
+      );
+    }
+    for (const keyword of ["items", "maxItems", "minItems", "uniqueItems"]) {
+      assert(
+        !Object.hasOwn(schema, keyword) || types.includes("array"),
+        `${label}: ${keyword} requires an array type`
+      );
+    }
+    for (const keyword of ["format", "maxLength", "minLength", "pattern"]) {
+      assert(
+        !Object.hasOwn(schema, keyword) || types.includes("string"),
+        `${label}: ${keyword} requires a string type`
+      );
+    }
+    for (const keyword of ["maximum", "minimum"]) {
+      assert(
+        !Object.hasOwn(schema, keyword) || types.includes("integer"),
+        `${label}: ${keyword} requires an integer type`
+      );
+    }
   }
   if (Object.hasOwn(schema, "format")) {
     assert(allowedEventStringFormats.has(schema.format), `${label}: string format ${schema.format} is prohibited`);
@@ -1904,6 +2072,12 @@ function verifyClosedEventSchema(schema, label) {
       schema.properties && typeof schema.properties === "object" && !Array.isArray(schema.properties),
       `${label} object must declare explicit properties`
     );
+    for (const name of schema.required ?? []) {
+      assert(
+        Object.hasOwn(schema.properties, name),
+        `${label}: required property ${name} is not declared`
+      );
+    }
     for (const [name, child] of Object.entries(schema.properties)) {
       verifyClosedEventSchema(child, `${label}.${name}`);
     }
