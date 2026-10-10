@@ -40,7 +40,8 @@ const RECEIVED_CHECK_STATUSES = Object.freeze([
 // Check assets and scales mirror the check domain (USDT scale 6, TON scale
 // 9) like the provider-simulators check book and the miniapp asset table.
 export const CHECK_ASSETS = Object.freeze({ USDT: 6, TON: 9 });
-const CHECK_ASSET_CODES = Object.freeze(Object.keys(CHECK_ASSETS));
+const CHECK_ASSET_ENTRIES = Object.freeze(Object.entries(CHECK_ASSETS));
+const CHECK_ASSET_SCALES = new Map(Object.entries(CHECK_ASSETS));
 const CHECK_FEE_BPS = 30n;
 const BPS_UNIT = 10_000n;
 
@@ -142,8 +143,7 @@ function buildCheck(subject, index) {
   const sent = units(subject, `direction:${index}`, 2n) === 0n;
   const pool = sent ? SENT_CHECK_STATUSES : RECEIVED_CHECK_STATUSES;
   const status = pool[Number(units(subject, `status:${index}`, BigInt(pool.length)))];
-  const asset = CHECK_ASSET_CODES[Number(units(subject, `asset:${index}`, BigInt(CHECK_ASSET_CODES.length)))];
-  const scale = CHECK_ASSETS[asset];
+  const [asset, scale] = CHECK_ASSET_ENTRIES[Number(units(subject, `asset:${index}`, BigInt(CHECK_ASSET_ENTRIES.length)))];
   const amountUnits = 1_000_000n + units(subject, `amount:${index}`, 99_000_001n);
   const feeUnits = (amountUnits * CHECK_FEE_BPS + BPS_UNIT - 1n) / BPS_UNIT;
   const peer = `syn_peer_${digest(subject, `peer:${index}`).toString("hex").slice(0, 12)}`;
@@ -230,7 +230,7 @@ function validCheck(check) {
   ) {
     return false;
   }
-  const scale = CHECK_ASSETS[candidate.asset];
+  const scale = CHECK_ASSET_SCALES.get(candidate.asset);
   if (scale === undefined) {
     return false;
   }
