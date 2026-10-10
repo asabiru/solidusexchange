@@ -686,6 +686,31 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  AuthSessionsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "sessions"],
+    properties: {
+      mode: { const: "test" },
+      sessions: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AuthSessionView" }
+      }
+    }
+  },
+  AuthSessionView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["session_id", "platform", "state", "created_at", "last_seen_at", "current"],
+    properties: {
+      session_id: { type: "string", pattern: "^sess_[0-9a-f]{24}$" },
+      platform: { type: "string", enum: ["web", "ios", "android", "telegram-mini-app"] },
+      state: { type: "string", enum: ["active", "revoked", "expired"] },
+      created_at: { type: "string", format: "date-time" },
+      last_seen_at: { type: "string", format: "date-time" },
+      current: { type: "boolean" }
+    }
+  },
   CheckPreviewRequest: {
     type: "object",
     additionalProperties: false,
@@ -903,10 +928,7 @@ function checkOpenApi() {
   );
   sameSet(
     openapi["x-solidchange-planned-namespaces"]?.customer ?? [],
-    [
-      "/api/v1/customer/auth",
-      "/api/v1/customer/users"
-    ],
+    ["/api/v1/customer/users"],
     "Planned customer namespaces"
   );
   sameSet(
@@ -947,6 +969,7 @@ function checkOpenApi() {
     ["getCustomerExchangeOrders", "/api/v1/customer/exchange-orders"],
     ["getCustomerPayments", "/api/v1/customer/payments"],
     ["getCustomerCards", "/api/v1/customer/cards"],
+    ["getCustomerAuth", "/api/v1/customer/auth"],
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
@@ -992,6 +1015,7 @@ function checkOpenApi() {
     ["getCustomerExchangeOrders", gatedReadStatuses],
     ["getCustomerPayments", gatedReadStatuses],
     ["getCustomerCards", gatedReadStatuses],
+    ["getCustomerAuth", readStatuses],
     ["getOperatorSession", gatedReadStatuses],
     ["getOperatorCapabilities", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
@@ -1014,6 +1038,7 @@ function checkOpenApi() {
     ["getCustomerExchangeOrders", "#/components/schemas/ExchangeOrdersView"],
     ["getCustomerPayments", "#/components/schemas/PaymentsView"],
     ["getCustomerCards", "#/components/schemas/CardsView"],
+    ["getCustomerAuth", "#/components/schemas/AuthSessionsView"],
     ["getOperatorSession", "#/components/schemas/SessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],

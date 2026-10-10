@@ -237,6 +237,24 @@ export const OPERATIONS = Object.freeze([
       "x-platform"
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The auth sessions read is served to every authenticated customer like
+  // the KYC status, profile and support reads, so it declares no 403: it is
+  // the subject's own sign-in surface (session metadata only — never tokens
+  // or secrets) and the miniapp serves /bff/sessions to kyc-gated sessions
+  // too (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerAuth",
+    method: "GET",
+    path: "/api/v1/customer/auth",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

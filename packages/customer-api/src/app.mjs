@@ -9,6 +9,7 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validDepositsView } from "./deposits.mjs";
 import { validExchangeOrdersView } from "./exchange-orders.mjs";
@@ -46,6 +47,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./kyc.mjs").KycApplicationDirectory} kycApplicationDirectory
  * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
  * @property {import("./support.mjs").SupportDirectory} supportDirectory
+ * @property {import("./auth-sessions.mjs").AuthSessionDirectory} authSessionDirectory
  * @property {import("./deposits.mjs").DepositDirectory} depositDirectory
  * @property {import("./withdrawals.mjs").WithdrawalDirectory} withdrawalDirectory
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
@@ -224,6 +226,7 @@ export function createCustomerApiHandler({
   kycApplicationDirectory,
   profileDirectory,
   supportDirectory,
+  authSessionDirectory,
   depositDirectory,
   withdrawalDirectory,
   quoteDirectory,
@@ -257,6 +260,9 @@ export function createCustomerApiHandler({
   }
   if (typeof supportDirectory?.listFor !== "function") {
     throw new Error("A support directory is required");
+  }
+  if (typeof authSessionDirectory?.listFor !== "function") {
+    throw new Error("An auth session directory is required");
   }
   if (typeof depositDirectory?.listFor !== "function") {
     throw new Error("A deposit directory is required");
@@ -422,6 +428,23 @@ export function createCustomerApiHandler({
       const view = await supportDirectory.listFor(principal.subject);
       if (!validSupportTicketsView(view)) {
         throw new Error("Support directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerAuth") {
+      // customer.auth.read is granted for every KYC status: the auth
+      // sessions list is the subject's own sign-in surface (session
+      // metadata only — never tokens or secrets) and the miniapp serves
+      // /bff/sessions to kyc-gated sessions too. The check stays so a
+      // served route can never drift from the exposed capabilities.
+      if (!evaluation.granted.includes("customer.auth.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await authSessionDirectory.listFor(principal.subject);
+      if (!validAuthSessionsView(view)) {
+        throw new Error("Auth session directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 
 import { createCustomerApiServer } from "./app.mjs";
 import { createDenyAllVerifier, createSyntheticTokenVerifier } from "./auth.mjs";
+import { createSyntheticAuthSessionDirectory } from "./auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createSyntheticCardDirectory } from "./cards.mjs";
@@ -27,6 +28,7 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   kycApplicationDirectory?: import("./kyc.mjs").KycApplicationDirectory,
  *   profileDirectory?: import("./profile.mjs").ProfileDirectory,
  *   supportDirectory?: import("./support.mjs").SupportDirectory,
+ *   authSessionDirectory?: import("./auth-sessions.mjs").AuthSessionDirectory,
  *   depositDirectory?: import("./deposits.mjs").DepositDirectory,
  *   withdrawalDirectory?: import("./withdrawals.mjs").WithdrawalDirectory,
  *   quoteDirectory?: import("./quotes.mjs").QuoteDirectory,
@@ -38,7 +40,7 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -51,6 +53,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     kycApplicationDirectory: kycApplicationDirectory ?? createSyntheticKycApplicationDirectory(),
     profileDirectory: profileDirectory ?? createSyntheticProfileDirectory(),
     supportDirectory: supportDirectory ?? createSyntheticSupportDirectory(),
+    authSessionDirectory: authSessionDirectory ?? createSyntheticAuthSessionDirectory(),
     depositDirectory: depositDirectory ?? createSyntheticDepositDirectory(),
     withdrawalDirectory: withdrawalDirectory ?? createSyntheticWithdrawalDirectory(),
     quoteDirectory: quoteDirectory ?? createSyntheticQuoteDirectory(),

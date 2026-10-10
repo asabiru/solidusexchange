@@ -749,6 +749,57 @@
         }
       }
     },
+    "/api/v1/customer/auth": {
+      "get": {
+        "operationId": "getCustomerAuth",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's synthetic auth sessions",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer auth sessions in test mode carrying session metadata only",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSessionsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -2342,6 +2393,71 @@
           }
         }
       },
+      "AuthSessionsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "sessions"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "sessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuthSessionView"
+            }
+          }
+        }
+      },
+      "AuthSessionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "session_id",
+          "platform",
+          "state",
+          "created_at",
+          "last_seen_at",
+          "current"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "pattern": "^sess_[0-9a-f]{24}$"
+          },
+          "platform": {
+            "type": "string",
+            "enum": [
+              "web",
+              "ios",
+              "android",
+              "telegram-mini-app"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "revoked",
+              "expired"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_seen_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "current": {
+            "type": "boolean"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -2628,7 +2744,6 @@
   "x-solidchange-production-providers-enabled": false,
   "x-solidchange-planned-namespaces": {
     "customer": [
-      "/api/v1/customer/auth",
       "/api/v1/customer/users"
     ],
     "operator": [

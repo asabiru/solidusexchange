@@ -329,6 +329,7 @@ for (const [pathName, operationId] of [
   ["/api/v1/customer/exchange-orders", "getCustomerExchangeOrders"],
   ["/api/v1/customer/payments", "getCustomerPayments"],
   ["/api/v1/customer/cards", "getCustomerCards"],
+  ["/api/v1/customer/auth", "getCustomerAuth"],
   ["/api/v1/meta", "getApiMetadata"]
 ]) {
   assertRejected(
@@ -1133,6 +1134,67 @@ assertRejected(
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     openapi.components.schemas.CardView.properties.updated_at = { type: "number" };
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical auth sessions views",
+  "Canonical AuthSessionsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionsView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects a live mode in canonical auth sessions views",
+  "Canonical AuthSessionsView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionsView.properties.mode.const = "live";
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects permissive canonical auth session views",
+  "Canonical AuthSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects credential material in canonical auth session views",
+  "Canonical AuthSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionView.properties.token = { type: "string" };
+    openapi.components.schemas.AuthSessionView.required.push("token");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects an operator platform in canonical auth session views",
+  "Canonical AuthSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionView.properties.platform.enum.push("operator-web");
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects epoch numeric canonical auth session timestamps",
+  "Canonical AuthSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.AuthSessionView.properties.last_seen_at = { type: "number" };
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );
