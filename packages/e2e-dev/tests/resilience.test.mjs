@@ -99,6 +99,9 @@ async function assertGated(app, cookie, label) {
   const payments = await getJson(app, "/bff/payments", cookie);
   assert.equal(payments.kyc, "kyc-gated", label);
   assert.equal(payments.payments.length, 0, label);
+  const cards = await getJson(app, "/bff/cards", cookie);
+  assert.equal(cards.kyc, "kyc-gated", label);
+  assert.equal(cards.cards.length, 0, label);
 }
 
 async function advanceUntil(app, path, cookie, done, { stepMs, maxSteps }) {
@@ -287,6 +290,42 @@ describe("Mini App BFF with a failing customer-api", () => {
             recipient_reference: "recipient_ref_f6e5d4c3",
             provider_reference: null,
             created_at: "2026-10-08T09:15:00.000Z",
+            updated_at: "2026-10-08T09:15:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/cards")) {
+      return {
+        mode: "test",
+        cards: [
+          {
+            card_id: "crd_0123456789abcdef01234567",
+            brand: "mir",
+            kind: "physical",
+            status: "active",
+            last4: "4832",
+            token_reference: "tok_0123456789abcdef01234567",
+            asset: "RUB",
+            monthly_limit: "250000.00",
+            created_at: "2026-09-12T10:00:00.000Z",
+            expires_at: "2029-09-12T00:00:00.000Z",
+            updated_at: "2026-09-12T10:05:00.000Z",
+            posting: "none"
+          },
+          {
+            card_id: "crd_fedcba9876543210fedcba98",
+            brand: "visa",
+            kind: "virtual",
+            status: "pending_activation",
+            last4: "7716",
+            token_reference: "tok_fedcba9876543210fedcba98",
+            asset: "RUB",
+            monthly_limit: "100000.00",
+            created_at: "2026-10-08T09:15:00.000Z",
+            expires_at: "2029-10-08T09:15:00.000Z",
             updated_at: "2026-10-08T09:15:00.000Z",
             posting: "none"
           }
@@ -536,6 +575,24 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("pay_"), false, label);
     assert.equal(text.includes("SIMBANK"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "payments_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    return elapsed;
+  }
+
+  async function cardsFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/cards", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("crd_"), false, label);
+    assert.equal(text.includes("tok_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "cards_unavailable" }, label);
     assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
@@ -864,6 +921,43 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedPayments = await getJson(app, "/bff/payments", cookie);
     assert.equal(gatedPayments.kyc, "kyc-gated");
     assert.equal(gatedPayments.payments.length, 0);
+    // The cards list is KYC-gated like payments: only the verified session
+    // consults upstream, and the adapted view carries only masked card
+    // identifiers (last4 + token_reference — never a full PAN) with
+    // posting "none".
+    const cards = await getJson(app, "/bff/cards", verifiedCookie);
+    assert.equal(cards.mode, "test");
+    assert.equal(cards.kyc, "verified");
+    assert.deepEqual(Object.keys(cards).sort(), ["cards", "kyc", "mode"]);
+    assert.equal(cards.cards.length, 2);
+    assert.deepEqual(Object.keys(cards.cards[0]).sort(), [
+      "asset",
+      "brand",
+      "createdAt",
+      "expiresAt",
+      "id",
+      "kind",
+      "last4",
+      "monthlyLimit",
+      "posting",
+      "status",
+      "tokenReference",
+      "updatedAt"
+    ]);
+    assert.equal(cards.cards[0].id, "crd_0123456789abcdef01234567");
+    assert.equal(cards.cards[0].brand, "mir");
+    assert.equal(cards.cards[0].kind, "physical");
+    assert.equal(cards.cards[0].status, "active");
+    assert.equal(cards.cards[0].last4, "4832");
+    assert.equal(cards.cards[0].tokenReference, "tok_0123456789abcdef01234567");
+    assert.equal(cards.cards[0].monthlyLimit, "250000.00");
+    assert.equal(cards.cards[0].posting, "none");
+    assert.equal(cards.cards[1].id, "crd_fedcba9876543210fedcba98");
+    assert.equal(cards.cards[1].status, "pending_activation");
+    assert.equal(cards.cards[1].updatedAt, cards.cards[1].createdAt);
+    const gatedCards = await getJson(app, "/bff/cards", cookie);
+    assert.equal(gatedCards.kyc, "kyc-gated");
+    assert.equal(gatedCards.cards.length, 0);
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -964,6 +1058,18 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedPaymentsDenied = await getJson(app, "/bff/payments", cookie);
     assert.deepEqual(JSON.parse(paymentsText), gatedPaymentsDenied);
     assert.equal(gatedPaymentsDenied.kyc, "kyc-gated");
+    // A refused cards read degrades the same way: the verified session falls
+    // back to the emptied list a gated session sees.
+    const cardsResponse = await call(app.base, "/bff/cards", { cookie: verifiedCookie });
+    assert.equal(cardsResponse.status, 200);
+    const cardsText = await cardsResponse.text();
+    assert.equal(cardsText.includes(marker), false);
+    assert.equal(cardsText.includes(key), false);
+    assert.equal(cardsText.includes("crd_"), false);
+    assert.equal(cardsText.includes("tok_"), false);
+    const gatedCardsDenied = await getJson(app, "/bff/cards", cookie);
+    assert.deepEqual(JSON.parse(cardsText), gatedCardsDenied);
+    assert.equal(gatedCardsDenied.kyc, "kyc-gated");
     // A refused notifications read degrades in place to the same feed a gated
     // session sees: the local outbox drafts (a session_login per dev login).
     const feedResponse = await call(app.base, "/bff/notifications", { cookie: verifiedCookie });
@@ -1025,6 +1131,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await quotesFailsClosed(name);
       await exchangeOrdersFailsClosed(name);
       await paymentsFailsClosed(name);
+      await cardsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -1044,6 +1151,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await quotesFailsClosed(name);
       await exchangeOrdersFailsClosed(name);
       await paymentsFailsClosed(name);
+      await cardsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -1063,6 +1171,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/quotes", verifiedCookie)).quotes[0].id, "qte_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/exchange-orders", verifiedCookie)).orders[0].id, "ord_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/payments", verifiedCookie)).payments[0].id, "pay_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/cards", verifiedCookie)).cards[0].id, "crd_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
     assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");

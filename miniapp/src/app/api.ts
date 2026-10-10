@@ -1,6 +1,7 @@
 import type {
   ActivityView,
   AddressScreeningView,
+  CardsView,
   CheckPreview,
   CheckView,
   ChecksView,
@@ -67,6 +68,7 @@ export const api = {
   quotes: () => call<QuotesView>("/bff/quotes"),
   exchangeOrders: () => call<ExchangeOrdersView>("/bff/exchange-orders"),
   payments: () => call<PaymentsView>("/bff/payments"),
+  cards: () => call<CardsView>("/bff/cards"),
   operations: () => call<{ operations: OperationSummary[] }>("/bff/operations"),
   operation: (id: string) => call<OperationDetail>(`/bff/operations/${encodeURIComponent(id)}`),
   profile: () => call<ProfileView>("/bff/profile"),

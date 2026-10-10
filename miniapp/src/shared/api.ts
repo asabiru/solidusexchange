@@ -481,6 +481,39 @@ export interface PaymentsView {
   payments: readonly PaymentView[];
 }
 
+/** Mirrors the customer-api cards contract lifecycle exactly. */
+export type CardStatus =
+  | "pending_activation"
+  | "active"
+  | "frozen"
+  | "blocked"
+  | "expired"
+  | "terminated";
+
+export type CardBrand = "visa" | "mastercard" | "mir";
+export type CardKind = "virtual" | "physical";
+
+export interface CardView {
+  id: string;
+  brand: CardBrand;
+  kind: CardKind;
+  status: CardStatus;
+  last4: string;
+  tokenReference: string;
+  asset: "RUB";
+  monthlyLimit: string;
+  createdAt: number;
+  expiresAt: number;
+  updatedAt: number;
+  posting: "none";
+}
+
+export interface CardsView {
+  mode: "test";
+  kyc: KycStatus;
+  cards: readonly CardView[];
+}
+
 export interface CheckStatusEntry {
   status: CheckStatus;
   at: number;

@@ -39,6 +39,7 @@ function notificationsStub(result: CustomerApiNotifications | (() => Promise<Cus
     quotes: async () => ({ status: "not-configured" }),
     exchangeOrders: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
+    cards: async () => ({ status: "not-configured" }),
     notifications: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
