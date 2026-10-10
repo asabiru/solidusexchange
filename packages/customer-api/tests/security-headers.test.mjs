@@ -5,7 +5,7 @@ import { PERMISSIONS_POLICY, SECURITY_HEADERS } from "../src/app.mjs";
 import { OPERATIONS } from "../src/contract.mjs";
 import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
-import { customerHeaders, header, NOW_MS, rawExchange, REQUEST_ID, request, startTestServer, stopServer, verifiedCustomerHeaders } from "./http-client.mjs";
+import { customerHeaders, header, NOW_MS, operatorHeaders, rawExchange, REQUEST_ID, request, startTestServer, stopServer, verifiedCustomerHeaders } from "./http-client.mjs";
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
@@ -17,12 +17,17 @@ function assertSecurityHeaders(response, label, contentType = JSON_TYPE) {
 }
 
 function operationHeaders(operation, overrides = {}) {
-  return operation.authenticated ? verifiedCustomerHeaders(overrides) : customerHeaders({
-    Authorization: null,
-    "X-Client-Version": null,
-    "X-Platform": null,
-    ...overrides
-  });
+  if (!operation.authenticated) {
+    return customerHeaders({
+      Authorization: null,
+      "X-Client-Version": null,
+      "X-Platform": null,
+      ...overrides
+    });
+  }
+  return operation.path.startsWith("/api/v1/operator/")
+    ? operatorHeaders(overrides)
+    : verifiedCustomerHeaders(overrides);
 }
 
 async function withServer(options, run) {
@@ -70,7 +75,7 @@ test("every operation sends the security headers on success and on its error pat
       assertSecurityHeaders(unsupported, `POST ${path} 404`);
 
       if (operation.authenticated) {
-        const anonymous = await request(port, { method, path, headers: customerHeaders({ Authorization: null }) });
+        const anonymous = await request(port, { method, path, headers: operationHeaders(operation, { Authorization: null }) });
         assert.equal(anonymous.status, 401, path);
         assertSecurityHeaders(anonymous, `${method} ${path} 401`);
       }

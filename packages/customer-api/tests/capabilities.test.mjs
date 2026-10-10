@@ -9,7 +9,9 @@ import {
   createSyntheticKycDirectory,
   decisionReasonCode,
   evaluateCapabilities,
+  evaluateOperatorCapabilities,
   KYC_STATUSES,
+  OPERATOR_CAPABILITY_POLICY,
   REASON_CODES
 } from "../src/capabilities.mjs";
 import { OPERATIONS } from "../src/contract.mjs";
@@ -48,9 +50,15 @@ test("only served read operations are ever granted", () => {
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
+    // The operator admin read is authenticated but lives outside the
+    // customer capability surface: customer evaluation never grants
+    // operator.* capabilities.
+    const customerOperations = OPERATIONS.filter(
+      (operation) => operation.authenticated && !operation.path.startsWith("/api/v1/operator/")
+    ).length;
     assert.equal(
       granted.length,
-      OPERATIONS.filter((operation) => operation.authenticated).length - (kycStatus === "verified" ? 0 : gated)
+      customerOperations - (kycStatus === "verified" ? 0 : gated)
     );
   }
 });
@@ -224,6 +232,37 @@ test("reason codes are stable identifiers", () => {
       }
     }
   }
+});
+
+test("operator capabilities are read-tier grants over the operator audience only", () => {
+  assert.deepEqual(
+    OPERATOR_CAPABILITY_POLICY.map((item) => item.capability),
+    ["operator.session.read", "operator.capabilities.read", "operator.admin.read"]
+  );
+  assert.ok(
+    OPERATOR_CAPABILITY_POLICY.every(
+      (item) => item.kind === "read" && !item.requiresVerifiedKyc && item.decisions.length === 0
+    )
+  );
+  assert.ok(Object.isFrozen(OPERATOR_CAPABILITY_POLICY));
+  assert.ok(OPERATOR_CAPABILITY_POLICY.every((item) => Object.isFrozen(item) && Object.isFrozen(item.decisions)));
+  // The audiences never mix: customer policy grants no operator.* capability
+  // and the operator evaluation never touches KYC.
+  assert.ok(CAPABILITY_POLICY.every((item) => !item.capability.startsWith("operator.")));
+  for (const kycStatus of KYC_STATUSES) {
+    assert.ok(
+      evaluateCapabilities({ kycStatus }).granted.every((item) => !item.startsWith("operator.")),
+      kycStatus
+    );
+  }
+  const evaluation = evaluateOperatorCapabilities();
+  assert.deepEqual([...evaluation.granted], [
+    "operator.session.read",
+    "operator.capabilities.read",
+    "operator.admin.read"
+  ]);
+  assert.deepEqual(evaluation.denied, []);
+  assert.equal(evaluation.commandsEnabled, false);
 });
 
 test("policy entries are unique, frozen and within the contract item limits", () => {

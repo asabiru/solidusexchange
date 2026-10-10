@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { connect } from "node:net";
 
 import { createCustomerApiServer } from "../src/app.mjs";
-import { createSyntheticTokenVerifier, mintSyntheticCustomerToken } from "../src/auth.mjs";
+import { createSyntheticTokenVerifier, mintSyntheticCustomerToken, mintSyntheticOperatorToken } from "../src/auth.mjs";
 import { createSyntheticAuthSessionDirectory } from "../src/auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticCardDirectory } from "../src/cards.mjs";
@@ -10,6 +10,7 @@ import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
+import { createSyntheticOperatorDirectory } from "../src/operator.mjs";
 import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticQuoteDirectory } from "../src/quotes.mjs";
@@ -25,6 +26,8 @@ export const REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55a";
 export const NOW_MS = Date.parse("2026-10-01T12:00:00.000Z");
 export const SUBJECT = "syn_cust_00000001";
 export const VERIFIED_SUBJECT = "syn_cust_verified01";
+export const OPERATOR_SUBJECT = "syn_oper_00000001";
+export const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 
 export function token({ subject = SUBJECT, ttlSeconds = 900, key = TEST_KEY } = {}) {
   return mintSyntheticCustomerToken({
@@ -51,6 +54,25 @@ export function verifiedCustomerHeaders(overrides = {}) {
   });
 }
 
+export function operatorToken({ subject = OPERATOR_SUBJECT, ttlSeconds = 900, key = TEST_KEY } = {}) {
+  return mintSyntheticOperatorToken({
+    key,
+    subject,
+    expiresAtSeconds: Math.floor(NOW_MS / 1000) + ttlSeconds
+  });
+}
+
+export function operatorHeaders(overrides = {}) {
+  const base = {
+    Authorization: `Bearer ${operatorToken()}`,
+    "X-Request-Id": REQUEST_ID,
+    "X-Client-Version": "1.0.0",
+    "X-Platform": "operator-web",
+    "X-Device-Id": DEVICE_ID
+  };
+  return Object.entries({ ...base, ...overrides }).filter(([, value]) => value !== null);
+}
+
 export async function startTestServer(options = {}) {
   const clock = () => NOW_MS;
   const server = createCustomerApiServer({
@@ -69,6 +91,7 @@ export async function startTestServer(options = {}) {
     exchangeOrderDirectory: createSyntheticExchangeOrderDirectory(),
     paymentDirectory: createSyntheticPaymentDirectory(),
     cardDirectory: createSyntheticCardDirectory(),
+    operatorDirectory: createSyntheticOperatorDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options
