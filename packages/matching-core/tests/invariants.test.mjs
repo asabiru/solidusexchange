@@ -3,7 +3,7 @@ import { describe, test } from "node:test";
 
 import { parseScaledDecimal } from "../src/decimal.mjs";
 import { createMatchingEngine } from "../src/engine.mjs";
-import { ord, order } from "./helpers.mjs";
+import { marketOrder, ord, order } from "./helpers.mjs";
 
 const BASE_SCALE = 6;
 const PRICE_SCALE = 8;
@@ -30,6 +30,8 @@ function scenario(engine) {
   outputs.push(engine.submitOrder(order(9, { side: "buy", price: "95", quantity: "20", owner: "desk-a" })));
   outputs.push(engine.cancelOrder("USDT/RUB", ord(5)));
   outputs.push(engine.submitOrder(order(10, { side: "buy", price: "94", quantity: "0.000001", owner: "desk-f" })));
+  // A market sell sweeps whatever bids remain and its leftover is rejected.
+  outputs.push(engine.submitOrder(marketOrder(11, { side: "sell", quantity: "30", owner: "desk-g" })));
   return outputs.flat();
 }
 
@@ -88,7 +90,7 @@ describe("matching invariants", () => {
     const limits = new Map();
     const events = scenario(engine);
     for (const event of events) {
-      if (event.type === "accepted") {
+      if (event.type === "accepted" && event.price !== undefined) {
         limits.set(event.order_id, {
           side: event.side,
           price: parseScaledDecimal(event.price, PRICE_SCALE),
@@ -97,6 +99,10 @@ describe("matching invariants", () => {
       if (event.fill_id !== undefined && event.side !== null) {
         const limit = limits.get(event.order_id);
         const fillPrice = parseScaledDecimal(event.price, PRICE_SCALE);
+        if (limit === undefined) {
+          // Market orders have no limit: the pin does not apply to them.
+          continue;
+        }
         if (event.side === "buy") {
           assert.equal(fillPrice <= limit.price, true, `buy fill ${event.price} above limit`);
         } else {
