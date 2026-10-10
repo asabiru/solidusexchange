@@ -245,7 +245,7 @@ describe("enum and label fabrication", () => {
     };
     const html = render(E(TicketDetail, { item: hostile(item) }));
     assert.match(html, /vip/);
-    assert.doesNotMatch(html, /support\.priority\.vip|support\.channel\.constructor|support\.author\.toString/);
+    assert.doesNotMatch(html, /support\.priority\.vip|support\.channel\.|support\.author\.toString/);
   });
 
   it("withdrawal detail renders raw foreign role/decision instead of fabricated keys", () => {
