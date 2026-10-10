@@ -1972,6 +1972,164 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.authSessions("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads the user account record with the canonical headers through the contract seam", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      user_id: "usr_0123456789abcdef01234567",
+      subject,
+      status: "active",
+      flags: {
+        terms_accepted: true,
+        two_factor_enabled: false,
+        marketing_opt_in: true
+      },
+      created_at: "2026-09-01T12:00:00.000Z",
+      updated_at: "2026-10-01T12:00:00.000Z"
+    };
+    await withFakeApi(
+      () => view,
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.users("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.deepEqual(result, { status: "ok", view });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.equal(headers["x-client-version"], "solidchange-miniapp-bff/0.1.0");
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+        assert.equal(headers.accept, "application/json");
+      }
+    );
+  });
+
+  it("maps every users read failure to unavailable, including an upstream 403", async () => {
+    const key = randomBytes(32).toString("hex");
+    // customer.users.read is granted at every upstream session status, so
+    // even a 403 is contract drift, not a real capability denial: there is
+    // no denied arm and every non-200 outcome fails closed to "unavailable".
+    for (const status of [403, 401, 429, 500]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        const result = await client.users("tg-0123456789abcdef", Date.now());
+        assert.equal(result.status, "unavailable", String(status));
+        assert.deepEqual(result, { status: "unavailable" });
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on malformed users bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      user_id: "usr_0123456789abcdef01234567",
+      subject,
+      status: "active",
+      flags: {
+        terms_accepted: true,
+        two_factor_enabled: false,
+        marketing_opt_in: true
+      },
+      created_at: "2026-09-01T12:00:00.000Z",
+      updated_at: "2026-10-01T12:00:00.000Z"
+    };
+    const flags = view.flags;
+    for (const body of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { mode: "test" },
+      // Credential-shaped carriers have no place in an account record — any
+      // extra key fails closed, these spell it out.
+      { ...view, token: "scdev1.syn_cust_x.0000000000.abc" },
+      { ...view, secret: "hmac-secret" },
+      { ...view, user_id: "user_0123456789abcdef01234567" },
+      { ...view, user_id: "usr_0123456789ABCDEF01234567" },
+      { ...view, user_id: 42 },
+      { ...view, subject: "dev-0123456789abcdef" },
+      { ...view, subject: "syn_cust_0123456789abcdef0123456789abcdef0" },
+      { ...view, subject: "syn_cust_short" },
+      // Shape-valid but not the caller's own: the record must echo the
+      // token's subject, like the session envelope does.
+      { ...view, subject: "syn_cust_00000000" },
+      { ...view, subject: 42 },
+      { ...view, status: "locked" },
+      { ...view, status: 42 },
+      { ...view, flags: { ...flags, extra: true } },
+      { ...view, flags: { terms_accepted: true, two_factor_enabled: false } },
+      { ...view, flags: { ...flags, terms_accepted: "yes" } },
+      { ...view, flags: { ...flags, two_factor_enabled: 1 } },
+      { ...view, flags: { ...flags, marketing_opt_in: 0 } },
+      { ...view, flags: {} },
+      { ...view, flags: null },
+      { ...view, created_at: "yesterday" },
+      { ...view, created_at: "2026-09-01T12:00:00Z" },
+      { ...view, updated_at: "2026-13-40T12:00:00.000Z" },
+      // Lifecycle drift: updated before creation, a pending account that was
+      // modified, a non-pending account that never was.
+      { ...view, updated_at: "2026-08-01T12:00:00.000Z" },
+      { ...view, status: "pending", updated_at: "2026-10-01T12:00:00.000Z" },
+      { ...view, status: "active", updated_at: view.created_at },
+      ["view"],
+      42
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.users("tg-0123456789abcdef", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+    const unreachable = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key, timeoutMs: 500 });
+    assert.deepEqual(await unreachable.users("tg-0123456789abcdef", Date.now()), { status: "unavailable" });
+  });
+
+  it("reads the user account record from the dev customer-api without a KYC gate and not-configured when unset", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // customer.users.read is granted at every session status: the dev
+      // customer-api answers 200 with the deterministic synthetic account
+      // record even though its KYC directory marks every subject unverified.
+      const first = await client.users("tg-0123456789abcdef", Date.now());
+      assert.equal(first.status, "ok");
+      if (first.status !== "ok") return;
+      assert.equal(first.view.mode, "test");
+      assert.match(first.view.user_id, /^usr_[0-9a-f]{24}$/);
+      assert.match(first.view.subject, /^syn_cust_[a-z0-9]{8,32}$/);
+      assert.match(first.view.status, /^(pending|active|suspended|closed)$/);
+      assert.equal(typeof first.view.flags.terms_accepted, "boolean");
+      assert.equal(typeof first.view.flags.two_factor_enabled, "boolean");
+      assert.equal(typeof first.view.flags.marketing_opt_in, "boolean");
+      assert.match(first.view.created_at, isoTimestamp);
+      assert.match(first.view.updated_at, isoTimestamp);
+      assert.deepEqual(await client.users("tg-0123456789abcdef", Date.now()), first);
+    });
+    const unconfigured = createCustomerApiClient({});
+    assert.deepEqual(await unconfigured.users("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);
