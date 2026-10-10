@@ -15,6 +15,7 @@ import { createSyntheticPaymentDirectory } from "./payments.mjs";
 import { createSyntheticProfileDirectory } from "./profile.mjs";
 import { createSyntheticQuoteDirectory } from "./quotes.mjs";
 import { createSyntheticSupportDirectory } from "./support.mjs";
+import { createSyntheticUserDirectory } from "./users.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createSyntheticWithdrawalDirectory } from "./withdrawals.mjs";
 import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
@@ -29,6 +30,7 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   profileDirectory?: import("./profile.mjs").ProfileDirectory,
  *   supportDirectory?: import("./support.mjs").SupportDirectory,
  *   authSessionDirectory?: import("./auth-sessions.mjs").AuthSessionDirectory,
+ *   userDirectory?: import("./users.mjs").UserDirectory,
  *   depositDirectory?: import("./deposits.mjs").DepositDirectory,
  *   withdrawalDirectory?: import("./withdrawals.mjs").WithdrawalDirectory,
  *   quoteDirectory?: import("./quotes.mjs").QuoteDirectory,
@@ -40,7 +42,7 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -54,6 +56,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     profileDirectory: profileDirectory ?? createSyntheticProfileDirectory(),
     supportDirectory: supportDirectory ?? createSyntheticSupportDirectory(),
     authSessionDirectory: authSessionDirectory ?? createSyntheticAuthSessionDirectory(),
+    userDirectory: userDirectory ?? createSyntheticUserDirectory(),
     depositDirectory: depositDirectory ?? createSyntheticDepositDirectory(),
     withdrawalDirectory: withdrawalDirectory ?? createSyntheticWithdrawalDirectory(),
     quoteDirectory: quoteDirectory ?? createSyntheticQuoteDirectory(),

@@ -800,6 +800,57 @@
         }
       }
     },
+    "/api/v1/customer/users": {
+      "get": {
+        "operationId": "getCustomerUsers",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the authenticated customer's synthetic user account record",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer user account record in test mode carrying account state only",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/checks/preview": {
       "post": {
         "tags": [
@@ -2458,6 +2509,69 @@
           }
         }
       },
+      "UserView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "user_id",
+          "subject",
+          "status",
+          "flags",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "user_id": {
+            "type": "string",
+            "pattern": "^usr_[0-9a-f]{24}$"
+          },
+          "subject": {
+            "type": "string",
+            "pattern": "^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "active",
+              "suspended",
+              "closed"
+            ]
+          },
+          "flags": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "terms_accepted",
+              "two_factor_enabled",
+              "marketing_opt_in"
+            ],
+            "properties": {
+              "terms_accepted": {
+                "type": "boolean"
+              },
+              "two_factor_enabled": {
+                "type": "boolean"
+              },
+              "marketing_opt_in": {
+                "type": "boolean"
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "CheckPreviewRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -2743,9 +2857,7 @@
   "x-solidchange-financial-commands-enabled": false,
   "x-solidchange-production-providers-enabled": false,
   "x-solidchange-planned-namespaces": {
-    "customer": [
-      "/api/v1/customer/users"
-    ],
+    "customer": [],
     "operator": [
       "/api/v1/operator/admin"
     ]

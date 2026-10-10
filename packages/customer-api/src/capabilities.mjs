@@ -69,6 +69,16 @@ export const CAPABILITY_POLICY = Object.freeze([
   // profile and support reads it stays readable without a verified KYC
   // status.
   entry("customer.auth.read", "read", false, []),
+  // The served users read is the customer's own user account record (an
+  // opaque usr_* handle, the owning auth subject, the account lifecycle
+  // state, account flags and created/updated timestamps — never credentials
+  // or secrets), not a collection read on assets or activity: the miniapp
+  // serves the matching /bff/session account surface to every authenticated
+  // session, kyc-gated included, so a customer must see their own account
+  // record while still unverified. Like the KYC status, profile, support
+  // and auth sessions reads it stays readable without a verified KYC
+  // status.
+  entry("customer.users.read", "read", false, []),
   // The served wallet collection read is KYC-gated but synthetic: it needs no
   // open money-movement decisions (D-001/D-002/D-014 keep gating financial ops).
   entry("customer.wallets.read", "read", true, []),

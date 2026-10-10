@@ -137,6 +137,19 @@ dependency-free Node ESM `node:http` server for local development only.
     `/bff/sessions` to every authenticated session, kyc-gated included —
     like the KYC status, profile and support reads it must stay readable
     while the customer is unverified.
+  - `GET /api/v1/customer/users` (`getCustomerUsers`): the subject's own
+    frozen deterministic synthetic user account record (`usr_*` id, the
+    owning `syn_cust_*` `subject`, the
+    `pending`/`active`/`suspended`/`closed` `status` lifecycle, the
+    `terms_accepted`/`two_factor_enabled`/`marketing_opt_in` boolean
+    `flags`, coherent ISO `created_at`/`updated_at` — `pending` accounts
+    were never modified so `updated_at` equals `created_at`, every other
+    lifecycle state is a later update, `mode: "test"`). Account state only
+    — never credentials, secrets or PII. **Not** KYC-gated: the record is
+    the subject's own account surface and the miniapp likewise serves the
+    matching `/bff/session` account view to every authenticated session,
+    kyc-gated included — like the KYC status, profile, support and auth
+    sessions reads it must stay readable while the customer is unverified.
 - Operator paths, other namespaces, other methods and every non-exact path
   (trailing slash, case variants, encoded characters, dot segments, query
   strings, absolute-form, `*`, `CONNECT`) return `404` with the error envelope
@@ -164,11 +177,12 @@ Only `customer` principals are accepted.
 ## Capabilities
 
 Deny-by-default. `customer.session.read`, `customer.capabilities.read`,
-`customer.kyc.read`, `customer.profile.read`, `customer.support.read` and
-`customer.auth.read` are always granted — the KYC status, profile, support
-tickets and auth sessions reads must stay reachable for unverified
-customers or they could never see their own onboarding, identity,
-service-requests and sign-in state;
+`customer.kyc.read`, `customer.profile.read`, `customer.support.read`,
+`customer.auth.read` and `customer.users.read` are always granted — the
+KYC status, profile, support tickets, auth sessions and user account
+record reads must stay reachable for unverified customers or they could
+never see their own onboarding, identity, service-requests, sign-in and
+account state;
 `customer.wallets.read`, `customer.notifications.read`,
 `customer.deposits.read`, `customer.withdrawals.read`,
 `customer.quotes.read`, `customer.exchange-orders.read`,

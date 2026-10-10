@@ -26,6 +26,7 @@ import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
 import { validSupportTicketsView } from "./support.mjs";
+import { validUserView } from "./users.mjs";
 import { validWalletsView } from "./wallets.mjs";
 import { validWithdrawalsView } from "./withdrawals.mjs";
 
@@ -48,6 +49,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./profile.mjs").ProfileDirectory} profileDirectory
  * @property {import("./support.mjs").SupportDirectory} supportDirectory
  * @property {import("./auth-sessions.mjs").AuthSessionDirectory} authSessionDirectory
+ * @property {import("./users.mjs").UserDirectory} userDirectory
  * @property {import("./deposits.mjs").DepositDirectory} depositDirectory
  * @property {import("./withdrawals.mjs").WithdrawalDirectory} withdrawalDirectory
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
@@ -227,6 +229,7 @@ export function createCustomerApiHandler({
   profileDirectory,
   supportDirectory,
   authSessionDirectory,
+  userDirectory,
   depositDirectory,
   withdrawalDirectory,
   quoteDirectory,
@@ -263,6 +266,9 @@ export function createCustomerApiHandler({
   }
   if (typeof authSessionDirectory?.listFor !== "function") {
     throw new Error("An auth session directory is required");
+  }
+  if (typeof userDirectory?.viewFor !== "function") {
+    throw new Error("A user directory is required");
   }
   if (typeof depositDirectory?.listFor !== "function") {
     throw new Error("A deposit directory is required");
@@ -445,6 +451,23 @@ export function createCustomerApiHandler({
       const view = await authSessionDirectory.listFor(principal.subject);
       if (!validAuthSessionsView(view)) {
         throw new Error("Auth session directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerUsers") {
+      // customer.users.read is granted for every KYC status: the user record
+      // is the subject's own account surface (account state only — never
+      // credentials or secrets) and the miniapp serves the matching
+      // /bff/session account view to kyc-gated sessions too. The check stays
+      // so a served route can never drift from the exposed capabilities.
+      if (!evaluation.granted.includes("customer.users.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await userDirectory.viewFor(principal.subject);
+      if (!validUserView(view)) {
+        throw new Error("User directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

@@ -14,6 +14,7 @@ import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticQuoteDirectory } from "../src/quotes.mjs";
 import { createSyntheticSupportDirectory } from "../src/support.mjs";
+import { createSyntheticUserDirectory } from "../src/users.mjs";
 import { createSyntheticWalletDirectory } from "../src/wallets.mjs";
 import { createSyntheticWithdrawalDirectory } from "../src/withdrawals.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
@@ -61,6 +62,7 @@ export async function startTestServer(options = {}) {
     profileDirectory: createSyntheticProfileDirectory(),
     supportDirectory: createSyntheticSupportDirectory(),
     authSessionDirectory: createSyntheticAuthSessionDirectory(),
+    userDirectory: createSyntheticUserDirectory(),
     depositDirectory: createSyntheticDepositDirectory(),
     withdrawalDirectory: createSyntheticWithdrawalDirectory(),
     quoteDirectory: createSyntheticQuoteDirectory(),

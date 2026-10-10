@@ -50,7 +50,7 @@ describe("end-to-end dev flow: login → customer API → provider quote", () =>
     const profile = await (await fetch(`${base}/bff/profile`, { headers: { cookie } })).json() as ProfileView;
     assert.deepEqual(profile.apiAccess, {
       status: "connected",
-      granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read"],
+      granted: ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"],
       commandsEnabled: false
     });
     // The identity fields come from the customer-api synthetic profile
