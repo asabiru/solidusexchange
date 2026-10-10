@@ -3,6 +3,7 @@ import { formatScaledDecimal, isScaledDecimal, parseScaledDecimal } from "./deci
 import { assertEpochSeconds, createSimulatedClock, toIsoSeconds } from "./deterministic.mjs";
 import {
   isOrderId,
+  isOrderType,
   isOwner,
   isSide,
   ORDER_KEYS,
@@ -16,7 +17,9 @@ import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
  * Pure deterministic matching engine. A submission runs synchronously:
  * validate, emit `accepted`, walk the opposite side in price/time order
  * emitting one `filled`/`partially_filled` event per order per execution,
- * then emit `resting` for whatever remains. Every output is data with
+ * then emit `resting` for whatever remains. Market orders sweep the same
+ * way with no limit check, never rest, and any leftover is `rejected`
+ * `insufficient_liquidity` instead. Every output is data with
  * `posting: "none"` — nothing posts to a ledger, moves balances, settles
  * or talks to anything. Same input sequence always yields the same event
  * sequence, byte-identical.
@@ -37,9 +40,10 @@ import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
  * @property {string} order_id
  * @property {string} instrument
  * @property {"buy" | "sell"} side
+ * @property {"limit" | "market"} order_type
  * @property {string | undefined} owner
- * @property {string} price
- * @property {bigint} price_units
+ * @property {string | null} price `null` on market orders: they carry no price.
+ * @property {bigint | null} price_units
  * @property {string} quantity
  * @property {bigint} quantity_units
  * @property {bigint} remaining_units
@@ -57,13 +61,14 @@ import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
  * @property {string} order_id
  * @property {string} instrument
  * @property {"buy" | "sell"} side
- * @property {string} price
+ * @property {"limit" | "market"} order_type
+ * @property {string | null} price
  * @property {string} quantity
  * @property {string} remaining_quantity
  * @property {string} state
  */
 
-const REQUIRED_ORDER_KEYS = Object.freeze(["instrument", "order_id", "price", "quantity", "side"]);
+const REQUIRED_ORDER_KEYS = Object.freeze(["instrument", "order_id", "quantity", "side"]);
 
 /**
  * @param {unknown} options
@@ -218,10 +223,23 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     if (candidate.owner !== undefined && !isOwner(candidate.owner)) {
       return { ok: false, reason: "invalid_owner" };
     }
-    if (!isScaledDecimal(candidate.price, definition.price_scale)) {
+    if (candidate.type !== undefined && !isOrderType(candidate.type)) {
+      return { ok: false, reason: "invalid_type" };
+    }
+    const orderType = candidate.type === undefined ? "limit" : candidate.type;
+    if (orderType === "market" ? Object.hasOwn(order, "price") : !Object.hasOwn(order, "price")) {
+      // Limit orders require a price; market orders must not carry one.
+      return { ok: false, reason: "invalid_order" };
+    }
+    const priceUnits =
+      orderType === "market"
+        ? null
+        : isScaledDecimal(candidate.price, definition.price_scale)
+          ? parseScaledDecimal(candidate.price, definition.price_scale)
+          : undefined;
+    if (priceUnits === undefined) {
       return { ok: false, reason: "invalid_price" };
     }
-    const priceUnits = parseScaledDecimal(candidate.price, definition.price_scale);
     if (priceUnits === 0n) {
       return { ok: false, reason: "non_positive_price" };
     }
@@ -235,7 +253,10 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     if (tracked.has(candidate.order_id)) {
       return { ok: false, reason: "duplicate_order_id" };
     }
-    const price = formatScaledDecimal(priceUnits, definition.price_scale);
+    const price =
+      orderType === "market"
+        ? null
+        : formatScaledDecimal(/** @type {bigint} */ (priceUnits), definition.price_scale);
     const quantity = formatScaledDecimal(quantityUnits, definition.base_scale);
     return {
       ok: true,
@@ -243,6 +264,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         order_id: candidate.order_id,
         instrument: candidate.instrument,
         side: candidate.side,
+        order_type: orderType,
         owner: candidate.owner,
         price,
         price_units: priceUnits,
@@ -281,8 +303,11 @@ export function createMatchingEngineFromState(index, timeSource, state) {
 
   return Object.freeze({
     /**
-     * Validates and matches one limit order, returning the events it
-     * produced in order. Invalid input produces a single `rejected` event.
+     * Validates and matches one order, returning the events it produced
+     * in order. Invalid input produces a single `rejected` event. Market
+     * orders (`type: "market"`) carry no price, sweep until filled or the
+     * book is exhausted, and never rest: an unfilled remainder — whole or
+     * partial — is `rejected` `insufficient_liquidity`.
      *
      * @param {unknown} input
      * @returns {readonly MatchingEvent[]}
@@ -317,7 +342,8 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         order_id: taker.order_id,
         instrument: taker.instrument,
         side: taker.side,
-        price: taker.price,
+        order_type: taker.order_type,
+        ...(taker.price === null ? {} : { price: taker.price }),
         quantity: taker.quantity,
       });
 
@@ -328,9 +354,10 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         if (
           maker === undefined ||
           taker.remaining_units === 0n ||
-          (taker.side === "buy"
-            ? taker.price_units < maker.price_units
-            : taker.price_units > maker.price_units)
+          (taker.order_type === "limit" &&
+            (taker.side === "buy"
+              ? /** @type {bigint} */ (taker.price_units) < maker.price_units
+              : /** @type {bigint} */ (taker.price_units) > maker.price_units))
         ) {
           break;
         }
@@ -370,14 +397,26 @@ export function createMatchingEngineFromState(index, timeSource, state) {
       }
 
       if (!rejected && taker.remaining_units > 0n) {
-        book.addResting(/** @type {RestingOrder} */ (taker));
-        emit(events, "resting", {
-          order_id: taker.order_id,
-          instrument: taker.instrument,
-          side: taker.side,
-          price: taker.price,
-          quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
-        });
+        if (taker.order_type === "market") {
+          // Market orders never rest: a leftover after the sweep is rejected.
+          taker.state = "rejected";
+          emit(events, "rejected", {
+            order_id: taker.order_id,
+            instrument: taker.instrument,
+            side: taker.side,
+            reason: "insufficient_liquidity",
+            quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
+          });
+        } else {
+          book.addResting(/** @type {RestingOrder} */ (taker));
+          emit(events, "resting", {
+            order_id: taker.order_id,
+            instrument: taker.instrument,
+            side: taker.side,
+            price: taker.price,
+            quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
+          });
+        }
       } else if (!rejected) {
         taker.state = "filled";
       }
@@ -469,6 +508,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         order_id: entry.order_id,
         instrument: entry.instrument,
         side: entry.side,
+        order_type: entry.order_type,
         price: entry.price,
         quantity: entry.quantity,
         remaining_quantity: formatScaledDecimal(entry.remaining_units, definition.base_scale),

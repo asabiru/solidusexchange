@@ -7,7 +7,7 @@ import { restoreMatchingEngine } from "../src/replay.mjs";
 import { SNAPSHOT_KIND, SNAPSHOT_VERSION } from "../src/snapshot.mjs";
 import { fll, mixedScenario, ord, order } from "./helpers.mjs";
 
-const SCENARIO_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21].map(ord);
+const SCENARIO_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 20, 21, 22, 23, 24].map(ord);
 const INSTRUMENTS = ["USDT/RUB", "TON/RUB", "TON/USDT"];
 
 function scenarioEngine() {
@@ -145,7 +145,7 @@ describe("engine snapshot + restoreMatchingEngine", () => {
       [],
       { ...snapshot, extra: true },
       { ...snapshot, kind: "other" },
-      { ...snapshot, version: 2 },
+      { ...snapshot, version: SNAPSHOT_VERSION + 1 },
       { ...snapshot, instruments: "USDT/RUB" },
       { ...snapshot, instruments: [] },
       { ...snapshot, instruments: [...snapshot.instruments, snapshot.instruments[0]] },

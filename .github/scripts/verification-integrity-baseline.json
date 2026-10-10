@@ -1184,7 +1184,7 @@
       "minCases": 20
     },
     "packages/matching-core/tests/invariants.test.mjs": {
-      "minLines": 130,
+      "minLines": 134,
       "minCases": 5
     },
     "packages/matching-core/tests/journal.test.mjs": {
@@ -1210,6 +1210,10 @@
     "packages/api-contracts/tests/check-machinery.test.mjs": {
       "minLines": 372,
       "minCases": 2
+    },
+    "packages/matching-core/tests/market.test.mjs": {
+      "minLines": 350,
+      "minCases": 19
     }
   }
 }

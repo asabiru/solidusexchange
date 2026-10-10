@@ -21,12 +21,14 @@ export const REJECT_REASONS = Object.freeze([
   "unknown_instrument",
   "invalid_side",
   "invalid_owner",
+  "invalid_type",
   "invalid_price",
   "non_positive_price",
   "invalid_quantity",
   "non_positive_quantity",
   "duplicate_order_id",
   "self_trade",
+  "insufficient_liquidity",
   "order_not_resting",
 ]);
 
@@ -44,16 +46,29 @@ export const POSTING = "none";
 export const ORDER_ID_PATTERN = /^ord_[0-9a-f]{24}$/u;
 export const FILL_ID_PATTERN = /^fll_[0-9a-f]{24}$/u;
 export const SIDES = Object.freeze(["buy", "sell"]);
+export const ORDER_TYPES = Object.freeze(["limit", "market"]);
 
 const OWNER_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
-export const ORDER_KEYS = Object.freeze(["instrument", "order_id", "owner", "price", "quantity", "side"]);
+export const ORDER_KEYS = Object.freeze([
+  "instrument",
+  "order_id",
+  "owner",
+  "price",
+  "quantity",
+  "side",
+  "type",
+]);
 
 /**
  * @typedef {object} OrderInput
  * @property {string} order_id `ord_` + 24 lowercase hex.
  * @property {string} instrument Canonical pair, e.g. "USDT/RUB".
  * @property {"buy" | "sell"} side
- * @property {string} price Canonical decimal string, at most instrument price scale.
+ * @property {"limit" | "market"} [type] Order type; absent means "limit".
+ *   Market orders carry no `price` key: they sweep the opposite side from
+ *   the best level outward and never rest.
+ * @property {string} price Canonical decimal string, at most instrument price
+ *   scale. Required for limit orders, forbidden for market orders.
  * @property {string} quantity Canonical decimal string, at most instrument base scale.
  * @property {string} [owner] Optional owner tag used by the self-trade policy.
  */
@@ -66,6 +81,8 @@ export const ORDER_KEYS = Object.freeze(["instrument", "order_id", "owner", "pri
  * @property {string | null} order_id The order the event concerns.
  * @property {string | null} instrument
  * @property {string | null} side
+ * @property {"limit" | "market"} [order_type] Accepted orders only: the
+ *   order's type, recorded once on its `accepted` event.
  * @property {"none"} posting Always "none": events never post to a ledger.
  */
 
@@ -75,6 +92,14 @@ export const ORDER_KEYS = Object.freeze(["instrument", "order_id", "owner", "pri
  */
 export function isSide(value) {
   return value === "buy" || value === "sell";
+}
+
+/**
+ * @param {unknown} value
+ * @returns {value is "limit" | "market"}
+ */
+export function isOrderType(value) {
+  return value === "limit" || value === "market";
 }
 
 /**
