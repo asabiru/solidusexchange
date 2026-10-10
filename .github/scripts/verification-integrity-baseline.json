@@ -1190,6 +1190,10 @@
     "miniapp/src/server/account-upstream.test.ts": {
       "minLines": 264,
       "minCases": 7
+    },
+    "packages/api-contracts/tests/check-machinery.test.mjs": {
+      "minLines": 372,
+      "minCases": 2
     }
   }
 }
