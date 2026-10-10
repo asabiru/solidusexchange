@@ -94,6 +94,7 @@ declare module "@solidchange/provider-simulators" {
     ): { readonly action: InboxAction; readonly status: string | null; readonly appliedStatuses: readonly string[] };
     expire(now: number): string[];
     get(subjectId: string): InboxSubject | undefined;
+    discard(subjectId: string): boolean;
   }
 
   export interface KycSubmission {

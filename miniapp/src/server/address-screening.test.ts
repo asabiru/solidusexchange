@@ -307,6 +307,19 @@ describe("address screening: outage, timeout and late results", () => {
     assert.equal(run.screening.inspect(subject, view.id)?.timedOut, true);
   });
 
+  it("leaves queued completions pending once the signature window has passed", async () => {
+    const run = service("low");
+    const { view } = await run.screening.submit(subject, tonInput());
+    // A single clock jump drains the queue 400s later: every signed delivery
+    // is outside the 300s freshness window, so the queued completion must be
+    // rejected instead of applied with its scheduled receive time.
+    run.advance(400);
+    assert.equal(run.screening.view(subject, view.id)?.status, "pending");
+    const state = run.screening.inspect(subject, view.id);
+    assert.equal(state?.status, "requested");
+    assert.equal(state?.sequence, 0);
+  });
+
   it("keeps a timed-out screening timed out when the completion arrives late", async () => {
     const run = service("late_callback", "miniapp-kyt-test", 60);
     const { view } = await run.screening.submit(subject, tonInput());

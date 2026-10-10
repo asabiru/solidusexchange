@@ -38,6 +38,7 @@ import { isPositiveSequence, sha256Hex } from "./simulator-core.mjs";
  * @property {(payload: Record<string, JsonValue>, options: { receivedAt: number }) => InboxResult} accept
  * @property {(now: number) => string[]} expire
  * @property {(subjectId: string) => Readonly<InboxSubject> | undefined} get
+ * @property {(subjectId: string) => boolean} discard
  */
 
 /**
@@ -55,11 +56,16 @@ import { isPositiveSequence, sha256Hex } from "./simulator-core.mjs";
  *   integer, or event content that cannot be hashed for deduplication:
  *   `invalid_transition` (review).
  *
+ * `discard` drops a dead subject together with the dedup records it produced,
+ * so consumers that retire the underlying resource can keep the inbox bounded
+ * by live subjects. Reopening the same id afterwards starts fresh: the inbox
+ * intentionally forgets that subject's history.
+ *
  * @param {{ subjectField: string, initialStatus: string, transitions: Readonly<Record<string, readonly string[]>> }} options
  * @returns {CallbackInbox}
  */
 export function createCallbackInbox({ subjectField, initialStatus, transitions }) {
-  /** @type {Map<string, InboxSubject & { parked: Map<number, string> }>} */
+  /** @type {Map<string, InboxSubject & { parked: Map<number, string>, eventIds: Set<string> }>} */
   const subjects = new Map();
   /** @type {Map<string, string>} */
   const events = new Map();
@@ -91,6 +97,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
         reviewEvents: 0,
         buffered: 0,
         parked: new Map(),
+        eventIds: new Set(),
       });
     },
 
@@ -131,6 +138,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
         return result("duplicate");
       }
       events.set(eventId, digest);
+      subject.eventIds.add(eventId);
 
       if (subject.timedOut || receivedAt > subject.deadline) {
         subject.lateEvents += 1;
@@ -189,8 +197,22 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
       if (!subject) {
         return undefined;
       }
-      const { parked: _parked, ...view } = subject;
+      const { parked: _parked, eventIds: _eventIds, ...view } = subject;
       return Object.freeze(view);
+    },
+
+    discard(subjectId) {
+      const subject = subjects.get(subjectId);
+      if (!subject) {
+        return false;
+      }
+      subject.parked.clear();
+      for (const eventId of subject.eventIds) {
+        events.delete(eventId);
+      }
+      subject.eventIds.clear();
+      subjects.delete(subjectId);
+      return true;
     },
   });
 }

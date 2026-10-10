@@ -185,8 +185,11 @@ export function createKycService(options: KycServiceOptions): KycService {
   }
 
   function sync(): void {
+    // Deliveries are consumed at drain time, not at their scheduled
+    // deliverAt: the signature staleness window and the inbox deadline are
+    // measured against the real receive time.
     for (const delivery of simulator.drainCallbacks()) {
-      receiveCallback(delivery, delivery.deliverAt);
+      receiveCallback(delivery);
     }
     for (const reference of inbox.expire(nowSeconds())) transitionFor(reference, "timed_out");
   }
@@ -279,8 +282,10 @@ export function createKycService(options: KycServiceOptions): KycService {
       if (record.application) {
         // The attempt is discarded, so its provider-reference index entries
         // must go too: they are permanent otherwise and grow on every reset.
+        // The inbox subject is released for the same reason.
         applicantsByReference.delete(record.application.providerReference);
         subjectsByReference.delete(record.application.providerReference);
+        inbox.discard(record.application.providerReference);
         record.application = undefined;
       }
       record.lastState = undefined;
