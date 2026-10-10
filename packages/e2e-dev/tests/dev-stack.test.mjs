@@ -7,6 +7,7 @@ import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
 import { createSyntheticSupportDirectory } from "../../customer-api/src/support.mjs";
+import { createSyntheticUserDirectory } from "../../customer-api/src/users.mjs";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
 import { customerApiSubject } from "../../../miniapp/.server-dist/server/customer-api-client.js";
 import { signInitData } from "../../../miniapp/.server-dist/server/init-data.js";
@@ -440,6 +441,40 @@ describe("customer journey through the Mini App BFF", () => {
       );
     assert.deepEqual(view.sessions, expected);
     assert.equal(view.sessions.filter((entry) => entry.current).length, 1);
+  });
+
+  it("serves the account record through customer-api synthetic auth", async () => {
+    // /bff/account consults the customer-api contract for every session
+    // (customer.users.read is never denied upstream): the synthetic
+    // directory's account record adapts onto the app's account view — usr_*
+    // handle, syn_cust_* subject linkage, lifecycle status and the three
+    // consent flags — with the snake_case contract fields mapped to the
+    // app's camelCase shape.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticUserDirectory().viewFor(customerApiSubject(devSubject));
+    const view = await getMiniapp("/bff/account", cookie);
+    assert.deepEqual(Object.keys(view).sort(), [
+      "createdAt",
+      "flags",
+      "id",
+      "mode",
+      "status",
+      "subject",
+      "updatedAt"
+    ]);
+    assert.deepEqual(view, {
+      mode: "test",
+      id: upstreamView.user_id,
+      subject: upstreamView.subject,
+      status: upstreamView.status,
+      flags: {
+        termsAccepted: upstreamView.flags.terms_accepted,
+        twoFactorEnabled: upstreamView.flags.two_factor_enabled,
+        marketingOptIn: upstreamView.flags.marketing_opt_in
+      },
+      createdAt: Date.parse(upstreamView.created_at),
+      updatedAt: Date.parse(upstreamView.updated_at)
+    });
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {

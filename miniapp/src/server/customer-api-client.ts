@@ -366,6 +366,37 @@ export type CustomerApiAuthSessions =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** Mirrors the account lifecycle the users contract declares. */
+export type CustomerApiUserStatus = "pending" | "active" | "suspended" | "closed";
+
+export interface CustomerApiUserFlags {
+  terms_accepted: boolean;
+  two_factor_enabled: boolean;
+  marketing_opt_in: boolean;
+}
+
+export interface CustomerApiUserView {
+  mode: "test";
+  user_id: string;
+  subject: string;
+  status: CustomerApiUserStatus;
+  flags: CustomerApiUserFlags;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * The users read has no "denied" arm either: customer.users.read is
+ * granted at every session KYC status upstream (like customer.kyc.read,
+ * customer.profile.read, customer.support.read and customer.auth.read), so
+ * a 403 can only mean contract drift — it maps to "unavailable" with every
+ * other non-200 outcome.
+ */
+export type CustomerApiUsers =
+  | { status: "ok"; view: CustomerApiUserView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess>;
@@ -381,6 +412,7 @@ export interface CustomerApiClient {
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
   support(bffSubject: string, nowMs: number): Promise<CustomerApiSupport>;
   authSessions(bffSubject: string, nowMs: number): Promise<CustomerApiAuthSessions>;
+  users(bffSubject: string, nowMs: number): Promise<CustomerApiUsers>;
 }
 
 /** Maps a BFF pseudonymous subject onto the customer-api synthetic subject space. */
@@ -1379,6 +1411,75 @@ function parseAuthSessionsView(value: unknown): CustomerApiAuthSessionsView | un
   return Object.freeze({ mode: "test", sessions: Object.freeze(sessions) });
 }
 
+const userStatuses: readonly CustomerApiUserStatus[] = ["pending", "active", "suspended", "closed"];
+const userIdPattern = /^usr_[0-9a-f]{24}$/;
+const userSubjectPattern = /^syn_cust_[a-z0-9]{8,32}$/;
+const userFlagKeys = ["terms_accepted", "two_factor_enabled", "marketing_opt_in"] as const;
+const userViewKeys = [
+  "mode",
+  "user_id",
+  "subject",
+  "status",
+  "flags",
+  "created_at",
+  "updated_at"
+] as const;
+
+function parseUserView(value: unknown, expectedSubject: string): CustomerApiUserView | undefined {
+  if (
+    !isRecord(value)
+    // The exact key set is also the account boundary: the contract carries
+    // the synthetic record only, so a credential- or secret-shaped field
+    // (or any other carrier) fails closed here rather than reaching the
+    // app view. flags pins its three declared consent bits exactly.
+    || !hasExactKeys(value, userViewKeys)
+    || value.mode !== "test"
+    || typeof value.user_id !== "string"
+    || !userIdPattern.test(value.user_id)
+    // The record must be the caller's own: like the session envelope's
+    // subject check, an echoed subject that is not the token's subject is
+    // contract drift, shape-valid or not.
+    || value.subject !== expectedSubject
+    || typeof value.status !== "string"
+    || !userStatuses.includes(value.status as CustomerApiUserStatus)
+    || !isRecord(value.flags)
+    || !hasExactKeys(value.flags, userFlagKeys)
+    || typeof value.flags.terms_accepted !== "boolean"
+    || typeof value.flags.two_factor_enabled !== "boolean"
+    || typeof value.flags.marketing_opt_in !== "boolean"
+    || !isIsoTimestamp(value.created_at)
+    || !isIsoTimestamp(value.updated_at)
+  ) {
+    return undefined;
+  }
+  const created = Date.parse(value.created_at);
+  const updated = Date.parse(value.updated_at);
+  // The contract lifecycle: an account cannot be updated before it was
+  // created, a pending account has never been modified (updated equals
+  // created), and leaving pending is itself an update, so any other status
+  // carries a strictly later updated_at.
+  if (
+    updated < created
+    || (value.status === "pending" && updated !== created)
+    || (value.status !== "pending" && updated === created)
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    mode: "test",
+    user_id: value.user_id,
+    subject: value.subject,
+    status: value.status as CustomerApiUserStatus,
+    flags: Object.freeze({
+      terms_accepted: value.flags.terms_accepted,
+      two_factor_enabled: value.flags.two_factor_enabled,
+      marketing_opt_in: value.flags.marketing_opt_in
+    }),
+    created_at: value.created_at,
+    updated_at: value.updated_at
+  });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -1389,14 +1490,14 @@ class CustomerApiHttpError extends Error {
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session, capabilities, wallets, deposits, withdrawals, quotes,
- * exchange-orders, payments, cards, notifications, kyc, profile, support and
- * auth sessions GETs, never sends X-Device-Id and
+ * exchange-orders, payments, cards, notifications, kyc, profile, support,
+ * auth sessions and users GETs, never sends X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
  * maxCustomerApiResponseBytes. An upstream refusal of a collection read (403
- * capability gate) surfaces as "denied"; the KYC status, profile, support
- * and auth sessions reads are never gated upstream, so they report every
- * non-200 outcome as "unavailable".
+ * capability gate) surfaces as "denied"; the KYC status, profile, support,
+ * auth sessions and users reads are never gated upstream, so they report
+ * every non-200 outcome as "unavailable".
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -1416,7 +1517,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
       support: async (): Promise<CustomerApiSupport> => ({ status: "not-configured" }),
-      authSessions: async (): Promise<CustomerApiAuthSessions> => ({ status: "not-configured" })
+      authSessions: async (): Promise<CustomerApiAuthSessions> => ({ status: "not-configured" }),
+      users: async (): Promise<CustomerApiUsers> => ({ status: "not-configured" })
     });
   }
 
@@ -1705,5 +1807,24 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, notifications, kyc, profile, support, authSessions });
+  async function users(bffSubject: string, nowMs: number): Promise<CustomerApiUsers> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/users", token, nowMs);
+      const view = parseUserView(body, subject);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      // No 403 carve-out, like kyc(), profile(), support() and
+      // authSessions(): the read is granted at every upstream session
+      // status, so a refusal is contract drift, not a real denial.
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, notifications, kyc, profile, support, authSessions, users });
 }

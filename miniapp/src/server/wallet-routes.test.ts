@@ -47,7 +47,8 @@ function walletStub(result: CustomerApiWallets | (() => Promise<CustomerApiWalle
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),
     support: async () => ({ status: "not-configured" }),
-    authSessions: async () => ({ status: "not-configured" })
+    authSessions: async () => ({ status: "not-configured" }),
+        users: async () => ({ status: "not-configured" })
   };
   return { client, calls };
 }
