@@ -517,6 +517,31 @@ declare module "@solidchange/customer-api/dev-server" {
           }>;
         }>;
       };
+      cardDirectory?: {
+        listFor(subject: string): Promise<{
+          mode: "test";
+          cards: ReadonlyArray<{
+            card_id: string;
+            brand: "visa" | "mastercard" | "mir";
+            kind: "virtual" | "physical";
+            status:
+              | "pending_activation"
+              | "active"
+              | "frozen"
+              | "blocked"
+              | "expired"
+              | "terminated";
+            last4: string;
+            token_reference: string;
+            asset: "RUB";
+            monthly_limit: string;
+            created_at: string;
+            expires_at: string;
+            updated_at: string;
+            posting: "none";
+          }>;
+        }>;
+      };
       clock?: () => number;
     }
   ): Promise<{ server: Server; verifierKind: string; address: AddressInfo }>;

@@ -63,6 +63,7 @@ import {
   contractSupportRequestsView,
   createSupportDesk
 } from "./support.js";
+import { contractCardsView, cardsView } from "./cards.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
 import { contractPaymentsView, paymentsView } from "./payments.js";
@@ -96,6 +97,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "GET", path: "/bff/exchange-orders" },
   { method: "GET", path: "/bff/payments" },
+  { method: "GET", path: "/bff/cards" },
   { method: "GET", path: "/bff/checks" },
   { method: "GET", path: "/bff/checks/preview" },
   { method: "GET", path: "/bff/checks/:id" },
@@ -992,6 +994,30 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "payments_unavailable" });
+      return;
+    }
+    if (path === "/bff/cards") {
+      // Same gating as /bff/payments: the local KYC gate and the standalone
+      // (unconfigured) dev BFF keep the synthetic cards list; only a
+      // verified session with customer-api access reads the contract view.
+      // An upstream refusal degrades to the same emptied list a gated
+      // session sees (in place); any other upstream failure answers the
+      // sibling *_unavailable error shape. Card issue/activate/block stay
+      // unserved — nothing here wires an upstream command.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, cardsView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.cards(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractCardsView(upstream.cards, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, cardsView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "cards_unavailable" });
       return;
     }
     if (path === "/bff/quotes/preview") {

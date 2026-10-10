@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import type {
+  CardBrand,
+  CardKind,
+  CardStatus,
   CustomerApiAccess,
   DepositStatus,
   ExchangeOrderStatus,
@@ -18,6 +21,15 @@ import type { ScreeningNetwork } from "../shared/address-screening.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
+import {
+  cardIdPattern,
+  cardLast4Pattern,
+  cardRubScale,
+  cardTokenReferencePattern,
+  isCardBrand,
+  isCardKind,
+  isCardStatus
+} from "./cards.js";
 import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
 import {
   contractExchangeOrderAmounts,
@@ -204,6 +216,27 @@ export type CustomerApiPayments =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+export interface CustomerApiCard {
+  card_id: string;
+  brand: CardBrand;
+  kind: CardKind;
+  status: CardStatus;
+  last4: string;
+  token_reference: string;
+  asset: "RUB";
+  monthly_limit: string;
+  created_at: string;
+  expires_at: string;
+  updated_at: string;
+  posting: "none";
+}
+
+export type CustomerApiCards =
+  | { status: "ok"; cards: readonly CustomerApiCard[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -313,6 +346,7 @@ export interface CustomerApiClient {
   quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
+  cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -889,6 +923,93 @@ function parsePaymentsView(value: unknown): readonly CustomerApiPayment[] | unde
   return Object.freeze(payments);
 }
 
+const cardKeys = [
+  "card_id",
+  "brand",
+  "kind",
+  "status",
+  "last4",
+  "token_reference",
+  "asset",
+  "monthly_limit",
+  "created_at",
+  "expires_at",
+  "updated_at",
+  "posting"
+] as const;
+
+function parseCardsView(value: unknown): readonly CustomerApiCard[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "cards"])
+    || value.mode !== "test"
+    || !Array.isArray(value.cards)
+  ) {
+    return undefined;
+  }
+  const cards: CustomerApiCard[] = [];
+  for (const entry of value.cards) {
+    if (
+      !isRecord(entry)
+      // The exact key set is also the PAN boundary: last4 and the tokenized
+      // reference are the only card identifiers the contract may expose, so
+      // any extra field (a pan/card_number-style carrier included) fails
+      // closed here rather than flowing into the app.
+      || !hasExactKeys(entry, cardKeys)
+      || typeof entry.card_id !== "string"
+      || !cardIdPattern.test(entry.card_id)
+      || !isCardBrand(entry.brand)
+      || !isCardKind(entry.kind)
+      || !isCardStatus(entry.status)
+      || typeof entry.last4 !== "string"
+      || !cardLast4Pattern.test(entry.last4)
+      || typeof entry.token_reference !== "string"
+      || !cardTokenReferencePattern.test(entry.token_reference)
+      // Card spend limits settle against the subject's fiat balance: the
+      // only settlement asset in this model is RUB at scale 2.
+      || entry.asset !== "RUB"
+      || !isScaledDecimal(entry.monthly_limit, cardRubScale)
+      || toUnits(entry.monthly_limit, cardRubScale) <= 0n
+      || !isIsoTimestamp(entry.created_at)
+      || !isIsoTimestamp(entry.expires_at)
+      || !isIsoTimestamp(entry.updated_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    const created = Date.parse(entry.created_at);
+    const expires = Date.parse(entry.expires_at);
+    const updated = Date.parse(entry.updated_at);
+    // The contract lifecycle: a card cannot expire before issuance, a
+    // resting unactivated card has never changed, an expired card last
+    // changed exactly at its expiry, and every other observation updates
+    // strictly after creation.
+    if (
+      expires <= created
+      || (entry.status === "pending_activation" && updated !== created)
+      || (entry.status === "expired" && updated !== expires)
+      || (entry.status !== "pending_activation" && entry.status !== "expired" && updated <= created)
+    ) {
+      return undefined;
+    }
+    cards.push(Object.freeze({
+      card_id: entry.card_id,
+      brand: entry.brand,
+      kind: entry.kind,
+      status: entry.status,
+      last4: entry.last4,
+      token_reference: entry.token_reference,
+      asset: "RUB",
+      monthly_limit: entry.monthly_limit,
+      created_at: entry.created_at,
+      expires_at: entry.expires_at,
+      updated_at: entry.updated_at,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(cards);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -1158,7 +1279,7 @@ class CustomerApiHttpError extends Error {
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session, capabilities, wallets, deposits, withdrawals, quotes,
- * exchange-orders, payments, notifications, kyc, profile and support GETs, never sends
+ * exchange-orders, payments, cards, notifications, kyc, profile and support GETs, never sends
  * X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
@@ -1180,6 +1301,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
+      cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -1358,6 +1480,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/cards", token, nowMs);
+      const view = parseCardsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", cards: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -1434,5 +1575,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, notifications, kyc, profile, support });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, notifications, kyc, profile, support });
 }
