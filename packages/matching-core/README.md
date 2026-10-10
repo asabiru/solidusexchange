@@ -27,11 +27,21 @@ immutable audit, ledger effect and reconciliation path).
 
 ## Model
 
-- Limit orders only, identified by `order_id` matching `ord_[0-9a-f]{24}`.
+- Limit and market orders, identified by `order_id` matching
+  `ord_[0-9a-f]{24}`. The optional `type` field is `"limit"` or `"market"`
+  and defaults to `"limit"`; anything else is rejected `invalid_type`.
+- Market orders carry no `price` key — a submission with one is
+  `invalid_order`, just like a limit submission without one. A market
+  order sweeps the opposite side from the best level outward until it is
+  filled or the book is exhausted, then it is done: it never rests and
+  never crosses a later order. Whatever remains unfilled — the whole
+  quantity on an empty book, or the leftover after a partial sweep — is
+  `rejected` with `insufficient_liquidity` and the rejected `quantity`.
 - Price/time priority: a better-priced order always matches first; within a
   price level orders match FIFO in acceptance order.
 - Partial fills are fully supported; an incoming order sweeps as many price
-  levels as its limit allows.
+  levels as its limit allows — a market order sweeps all of them, filling
+  each level at its own (maker) price.
 - Fill price is always the resting (maker) order's price, so price
   improvement is automatic and a fill can never be worse than the limit.
 - Quantities are decimal strings scaled to the instrument's base asset;
@@ -53,12 +63,12 @@ increasing engine-scoped integer; `at` comes from the injected clock
 
 | Type | Meaning | Extra fields |
 | --- | --- | --- |
-| `accepted` | Order passed validation and entered matching | `price`, `quantity` |
+| `accepted` | Order passed validation and entered matching | `order_type`, `quantity`, plus `price` for limit orders only |
 | `filled` | This order's remainder reached zero in one execution | `fill_id`, `maker_order_id`, `taker_order_id`, `price`, `quantity`, `remaining_quantity` |
 | `partially_filled` | This order still has remainder after one execution | same as `filled` |
 | `resting` | Order remainder entered the book | `price`, `quantity` |
 | `cancelled` | Resting order removed by id | `price`, `quantity` (removed remainder) |
-| `rejected` | Submission or cancel refused | `reason` (see below), plus `quantity` for a self-trade remainder |
+| `rejected` | Submission or cancel refused | `reason` (see below), plus `quantity` for a `self_trade` or `insufficient_liquidity` remainder |
 
 Each execution emits at most two events sharing one `fill_id`
 (`fll_` + 24 hex): the maker's event first, then the taker's — each is
@@ -66,9 +76,9 @@ Each execution emits at most two events sharing one `fill_id`
 
 Rejection reasons: `invalid_order`, `invalid_order_id`,
 `invalid_instrument`, `unknown_instrument`, `invalid_side`,
-`invalid_owner`, `invalid_price`, `non_positive_price`,
+`invalid_owner`, `invalid_type`, `invalid_price`, `non_positive_price`,
 `invalid_quantity`, `non_positive_quantity`, `duplicate_order_id`,
-`self_trade`, `order_not_resting`.
+`self_trade`, `insufficient_liquidity`, `order_not_resting`.
 
 Rejected submissions do not consume order ids; a resubmission of the same
 id is judged on its own merits. Cancelling an id that is not resting —
@@ -91,9 +101,11 @@ engine.submitOrder({ order_id: "ord_…", instrument: "USDT/RUB", side: "sell",
                      price: "90.5", quantity: "4", owner: "desk-a" });
 engine.submitOrder({ order_id: "ord_…", instrument: "USDT/RUB", side: "buy",
                      price: "91", quantity: "10" });
+engine.submitOrder({ order_id: "ord_…", instrument: "USDT/RUB", side: "buy",
+                     type: "market", quantity: "6" });   // sweeps asks; leftover rejected
 engine.bookSnapshot("USDT/RUB");   // { instrument, bids: [...], asks: [...] }
 engine.cancelOrder("USDT/RUB", "ord_…");
-engine.orderStatus("ord_…");       // tracked state or null
+engine.orderStatus("ord_…");       // tracked state or null (price: null on market orders)
 ```
 
 `createMatchingEngine({ instruments })` accepts a custom instrument list;
@@ -114,7 +126,8 @@ state, it never writes storage, does I/O, or posts anything.
   fail-closed (`TypeError` with an `invalid engine snapshot:` reason —
   wrong types, unknown keys, duplicate ids, a resting order missing from
   the tracked set, the resting list out of book order, counters below
-  what the recorded orders require) and rebuilds an engine whose
+  what the recorded orders require, a market order carrying a price or
+  resting/cancelled) and rebuilds an engine whose
   `bookSnapshot`/`orderStatus` are byte-identical to the source's.
   `seq`/`fill_id` continue where the snapshot left them; the restored
   `journal()` starts empty — a snapshot carries state, not history.
@@ -124,16 +137,20 @@ state, it never writes storage, does I/O, or posts anything.
   engine could have emitted: contiguous `seq` from 1, non-decreasing
   canonical timestamps, known types and fields only, fill pairs
   consecutive maker-then-taker sharing sequential `fill_id`s, every
-  referenced order accepted by the stream, and fill/cancel arithmetic
-  matching the tracked remainder. Anything else throws `TypeError` with
+  referenced order accepted by the stream, fill/cancel arithmetic
+  matching the tracked remainder, and the market-order rules — no `price`
+  on a market `accepted`, never a `resting` for one, and
+  `insufficient_liquidity` rejections only on market orders with the exact
+  leftover quantity. Anything else throws `TypeError` with
   an `invalid event stream:` reason. The replayed engine's `journal()`
   returns the folded stream.
 
 Replayed and restored engines agree byte-identically with the live
 engine on `bookSnapshot` and `orderStatus` — `tests/replay.test.mjs`
-pins all three paths on one mixed scenario. One honest gap: `accepted`
-events do not carry `owner`, so a replayed engine loses owner tags and
-its self-trade policy has nothing to compare; snapshots preserve owners.
+pins all three paths on one mixed limit+market scenario. One honest gap:
+`accepted` events do not carry `owner`, so a replayed engine loses owner
+tags and its self-trade policy has nothing to compare; snapshots preserve
+owners.
 
 ## Determinism
 

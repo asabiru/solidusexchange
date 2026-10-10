@@ -7,7 +7,7 @@ import { replayMatchingEngine, restoreMatchingEngine } from "../src/replay.mjs";
 import { fll, mixedScenario, ord, order } from "./helpers.mjs";
 
 const AT = "2026-01-01T00:00:00Z";
-const SCENARIO_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 21].map(ord);
+const SCENARIO_IDS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13, 14, 20, 21, 22, 23, 24].map(ord);
 const INSTRUMENTS = ["USDT/RUB", "TON/RUB", "TON/USDT"];
 
 /**

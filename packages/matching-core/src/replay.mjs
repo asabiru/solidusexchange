@@ -45,7 +45,7 @@ const MAX_FILL_NUMBER = BigInt(Number.MAX_SAFE_INTEGER - 1);
 
 /** @type {Record<MatchingEvent["type"], Set<string>>} */
 const EVENT_KEYS = {
-  accepted: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "price", "quantity"]),
+  accepted: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "order_type", "price", "quantity"]),
   resting: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "price", "quantity"]),
   partially_filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
   filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
@@ -362,7 +362,16 @@ export function replayMatchingEngine(options = {}) {
         if (!isSide(event.side)) {
           invalid(`event seq ${event.seq}: invalid side`);
         }
-        const priceUnits = unitsOf(event.price, "price", definition.price_scale);
+        if (event.order_type !== "limit" && event.order_type !== "market") {
+          invalid(`event seq ${event.seq}: invalid order_type`);
+        }
+        if (event.order_type === "market" && Object.hasOwn(event, "price")) {
+          invalid(`event seq ${event.seq}: market orders carry no price`);
+        }
+        const priceUnits =
+          event.order_type === "market"
+            ? null
+            : unitsOf(event.price, "price", definition.price_scale);
         if (priceUnits === 0n) {
           invalid(`event seq ${event.seq}: non-positive price`);
         }
@@ -374,8 +383,12 @@ export function replayMatchingEngine(options = {}) {
           order_id: event.order_id,
           instrument: event.instrument,
           side: event.side,
+          order_type: /** @type {"limit" | "market"} */ (event.order_type),
           owner: undefined,
-          price: formatScaledDecimal(priceUnits, definition.price_scale),
+          price:
+            priceUnits === null
+              ? null
+              : formatScaledDecimal(priceUnits, definition.price_scale),
           price_units: priceUnits,
           quantity: formatScaledDecimal(quantityUnits, definition.base_scale),
           quantity_units: quantityUnits,
@@ -388,6 +401,9 @@ export function replayMatchingEngine(options = {}) {
         const entry = trackedOrder(event);
         if (pendingMaker !== null) {
           invalid(`event seq ${event.seq}: event inside a fill pair`);
+        }
+        if (entry.order_type === "market") {
+          invalid(`event seq ${event.seq}: market orders never rest`);
         }
         if (entry.state !== "resting" || inBook.has(entry.order_id)) {
           invalid(`event seq ${event.seq}: order is not in flight for resting`);
@@ -447,10 +463,13 @@ export function replayMatchingEngine(options = {}) {
         if (event.side !== null && typeof event.side !== "string") {
           invalid(`event seq ${event.seq}: side must be a string or null`);
         }
-        if (event.reason === "self_trade") {
+        if (event.reason === "self_trade" || event.reason === "insufficient_liquidity") {
           const entry = trackedOrder(event);
+          if (event.reason === "insufficient_liquidity" && entry.order_type !== "market") {
+            invalid(`event seq ${event.seq}: insufficient_liquidity only rejects market orders`);
+          }
           if (entry.state !== "resting" || inBook.has(entry.order_id)) {
-            invalid(`event seq ${event.seq}: self-trade order is not in flight`);
+            invalid(`event seq ${event.seq}: ${event.reason} order is not in flight`);
           }
           const definition = /** @type {InstrumentDefinition} */ (index.get(entry.instrument));
           if (unitsOf(event.quantity, "rejected quantity", definition.base_scale) !== entry.remaining_units) {
@@ -458,7 +477,7 @@ export function replayMatchingEngine(options = {}) {
           }
           entry.state = "rejected";
         } else if (event.quantity !== undefined) {
-          invalid(`event seq ${event.seq}: only self_trade rejections carry a quantity`);
+          invalid(`event seq ${event.seq}: only self_trade and insufficient_liquidity rejections carry a quantity`);
         }
         break;
       }
@@ -477,6 +496,7 @@ export function replayMatchingEngine(options = {}) {
       order_id: entry.order_id,
       instrument: entry.instrument,
       side: entry.side,
+      order_type: entry.order_type,
       owner: null,
       price: entry.price,
       quantity: entry.quantity,

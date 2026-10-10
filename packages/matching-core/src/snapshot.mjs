@@ -29,13 +29,17 @@ export function snapshotPlainData(value) {
  */
 
 export const SNAPSHOT_KIND = "matching-engine-snapshot";
-export const SNAPSHOT_VERSION = 1;
+/**
+ * Version 2 records `order_type` on every tracked order (limit orders are
+ * priced as before; market orders carry `price: null` and never rest).
+ */
+export const SNAPSHOT_VERSION = 2;
 
 const SNAPSHOT_KEYS = JSON.stringify(
   ["kind", "version", "instruments", "orders", "resting", "next_seq", "next_fill", "last_at"].sort(),
 );
 const SNAPSHOT_ORDER_KEYS = JSON.stringify(
-  ["instrument", "order_id", "owner", "price", "quantity", "remaining", "side", "state"].sort(),
+  ["instrument", "order_id", "order_type", "owner", "price", "quantity", "remaining", "side", "state"].sort(),
 );
 const TRACKED_STATES = Object.freeze(["resting", "filled", "cancelled", "rejected"]);
 /**
@@ -56,15 +60,17 @@ const MIN_EVENTS_PER_STATE = { resting: 2, filled: 2, cancelled: 3, rejected: 2 
  * @property {string} order_id
  * @property {string} instrument
  * @property {"buy" | "sell"} side
+ * @property {"limit" | "market"} order_type
  * @property {string | null} owner `null` where the engine keeps `undefined`.
- * @property {string} price Canonical exact-scale price.
+ * @property {string | null} price Canonical exact-scale price; `null` on
+ *   market orders, which carry none.
  * @property {string} quantity Canonical exact-scale original quantity.
  * @property {string} remaining Canonical exact-scale remaining quantity.
  * @property {"resting" | "filled" | "cancelled" | "rejected"} state
  *
  * @typedef {object} EngineSnapshot
  * @property {"matching-engine-snapshot"} kind
- * @property {1} version
+ * @property {2} version
  * @property {InstrumentDefinition[]} instruments Engine instrument registry.
  * @property {SnapshotOrder[]} orders Every tracked order in acceptance order.
  * @property {string[]} resting Resting order ids in book-insertion order.
@@ -117,6 +123,7 @@ export function canonicalEngineSnapshot({ index, tracked, nextSeq, nextFill, las
       order_id: entry.order_id,
       instrument: entry.instrument,
       side: entry.side,
+      order_type: entry.order_type,
       owner: entry.owner ?? null,
       price: entry.price,
       quantity: entry.quantity,
@@ -215,15 +222,26 @@ export function parseEngineSnapshot(snapshot) {
     if (!isSide(order.side)) {
       invalid(`order ${order.order_id}: invalid side`);
     }
+    if (order.order_type !== "limit" && order.order_type !== "market") {
+      invalid(`order ${order.order_id}: invalid order_type`);
+    }
     if (order.owner !== null && !isOwner(order.owner)) {
       invalid(`order ${order.order_id}: invalid owner`);
     }
-    if (!isScaledDecimal(order.price, definition.price_scale)) {
-      invalid(`order ${order.order_id}: invalid price`);
-    }
-    const priceUnits = parseScaledDecimal(order.price, definition.price_scale);
-    if (priceUnits === 0n) {
-      invalid(`order ${order.order_id}: non-positive price`);
+    if (order.order_type === "market") {
+      if (order.price !== null) {
+        invalid(`order ${order.order_id}: market orders carry no price`);
+      }
+      if (order.state === "resting" || order.state === "cancelled") {
+        invalid(`order ${order.order_id}: market orders never rest`);
+      }
+    } else {
+      if (!isScaledDecimal(order.price, definition.price_scale)) {
+        invalid(`order ${order.order_id}: invalid price`);
+      }
+      if (parseScaledDecimal(order.price, definition.price_scale) === 0n) {
+        invalid(`order ${order.order_id}: non-positive price`);
+      }
     }
     if (!isScaledDecimal(order.quantity, definition.base_scale)) {
       invalid(`order ${order.order_id}: invalid quantity`);
@@ -340,9 +358,13 @@ export function hydrateEngineState(canonical) {
       order_id: order.order_id,
       instrument: order.instrument,
       side: order.side,
+      order_type: order.order_type,
       owner: order.owner ?? undefined,
       price: order.price,
-      price_units: parseScaledDecimal(order.price, definition.price_scale),
+      price_units:
+        order.order_type === "market"
+          ? null
+          : parseScaledDecimal(/** @type {string} */ (order.price), definition.price_scale),
       quantity: order.quantity,
       quantity_units: parseScaledDecimal(order.quantity, definition.base_scale),
       remaining_units: parseScaledDecimal(order.remaining, definition.base_scale),
