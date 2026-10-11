@@ -153,6 +153,22 @@ const MARKET_KEYS = Object.freeze([
 ]);
 const MARKET_LEVEL_KEYS = Object.freeze(["price", "quantity", "order_count"]);
 const MARKET_LAST_TRADE_KEYS = Object.freeze(["price", "quantity", "executed_at"]);
+const MARKET_DEPTH_VIEW_KEYS = Object.freeze([
+  "mode",
+  "instrument",
+  "base_asset",
+  "quote_asset",
+  "bids",
+  "asks",
+  "last_trade",
+  "depth_levels",
+  "as_of",
+  "posting"
+]);
+// The depth member read serves the full ladder the replay leaves resting,
+// capped at 16 levels per side — the documented contract bound keeps a
+// pathological book from growing the response without limit.
+export const MAX_MARKET_DEPTH_LEVELS = 16;
 const TRADES_VIEW_KEYS = Object.freeze(["mode", "trades"]);
 const TRADE_KEYS = Object.freeze([
   "trade_id",
@@ -383,8 +399,36 @@ for (const pairDef of ORDER_PAIRS) {
  */
 
 /**
+ * The depth member read's row for one instrument — the same replay
+ * projected into the full resting ladder rather than the top level: every
+ * bid level the subject's book still holds, best (highest) price first,
+ * every ask level best (lowest) price first, each capped at
+ * MAX_MARKET_DEPTH_LEVELS so a deeper book truncates rather than growing
+ * the response without bound. `depth_levels` is the deeper side's resting
+ * level count before the cap — it exceeds the served level count exactly
+ * when the book runs deeper than the bound, so a client can tell the
+ * ladder was truncated. `last_trade` and `as_of` carry exactly the markets
+ * read's semantics (the instrument's last fill, the simulated session
+ * close), `posting` stays "none" — nothing here is a ledger entry or
+ * moves money.
+ *
+ * @typedef {object} MarketDepthView
+ * @property {string} mode
+ * @property {string} instrument
+ * @property {string} base_asset
+ * @property {string} quote_asset
+ * @property {readonly MarketLevelView[]} bids
+ * @property {readonly MarketLevelView[]} asks
+ * @property {MarketLastTradeView | null} last_trade
+ * @property {number} depth_levels
+ * @property {string} as_of
+ * @property {string} posting
+ */
+
+/**
  * @typedef {object} MarketDirectory
  * @property {(subject: string) => Promise<MarketsView>} listFor
+ * @property {(subject: string, instrument: string) => Promise<MarketDepthView | null>} depthFor
  */
 
 /**
@@ -1279,36 +1323,8 @@ export function projectExchangeTrades(engine, intents) {
  * @returns {readonly MarketView[]}
  */
 export function projectExchangeMarkets(engine, scenario) {
-  /** @type {Map<string, { price: string, quantity: string, at: string }>} */
-  const lastFills = new Map();
-  for (const event of engine.journal()) {
-    if (event.type !== "partially_filled" && event.type !== "filled") {
-      continue;
-    }
-    const fields = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (event));
-    if (
-      typeof fields.instrument !== "string" ||
-      typeof fields.price !== "string" ||
-      typeof fields.quantity !== "string"
-    ) {
-      // A fill event on this engine always carries its instrument, the
-      // maker price and the executed quantity; anything else is journal
-      // drift the view must not silently re-render as a last trade.
-      continue;
-    }
-    // Both legs of one fill share fill_id, price, quantity and `at`, so
-    // overwriting keeps the latest fill per instrument either way.
-    lastFills.set(fields.instrument, { price: fields.price, quantity: fields.quantity, at: event.at });
-  }
-  // The snapshot moment is the simulated session close — the replay's own
-  // clock end, derived like every other field from the scenario alone.
-  let endSeconds = scenario.start_seconds;
-  for (const step of scenario.steps) {
-    if (step.op === "advance") {
-      endSeconds += step.seconds ?? 0;
-    }
-  }
-  const asOf = new Date(endSeconds * 1_000).toISOString();
+  const lastFills = lastFillsByInstrument(engine);
+  const asOf = new Date(scenarioEndSeconds(scenario) * 1_000).toISOString();
   /** @type {MarketView[]} */
   const rows = [];
   for (const pairDef of ORDER_PAIRS) {
@@ -1357,6 +1373,108 @@ export function projectExchangeMarkets(engine, scenario) {
     );
   }
   return Object.freeze(rows);
+}
+
+/**
+ * The latest fill each instrument recorded in one replayed journal — the
+ * fold the markets read's `last_trade` and the depth read share.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @returns {Map<string, { price: string, quantity: string, at: string }>}
+ */
+function lastFillsByInstrument(engine) {
+  /** @type {Map<string, { price: string, quantity: string, at: string }>} */
+  const lastFills = new Map();
+  for (const event of engine.journal()) {
+    if (event.type !== "partially_filled" && event.type !== "filled") {
+      continue;
+    }
+    const fields = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (event));
+    if (
+      typeof fields.instrument !== "string" ||
+      typeof fields.price !== "string" ||
+      typeof fields.quantity !== "string"
+    ) {
+      // A fill event on this engine always carries its instrument, the
+      // maker price and the executed quantity; anything else is journal
+      // drift the view must not silently re-render as a last trade.
+      continue;
+    }
+    // Both legs of one fill share fill_id, price, quantity and `at`, so
+    // overwriting keeps the latest fill per instrument either way.
+    lastFills.set(fields.instrument, { price: fields.price, quantity: fields.quantity, at: event.at });
+  }
+  return lastFills;
+}
+
+/**
+ * The simulated session close — the replay's own clock end, derived like
+ * every other field from the scenario alone.
+ *
+ * @param {ExchangeOrderScenario} scenario
+ */
+function scenarioEndSeconds(scenario) {
+  let endSeconds = scenario.start_seconds;
+  for (const step of scenario.steps) {
+    if (step.op === "advance") {
+      endSeconds += step.seconds ?? 0;
+    }
+  }
+  return endSeconds;
+}
+
+/**
+ * Folds the same replay into the depth member read: the instrument's full
+ * resting ladder off `bookSnapshot` — bids best (highest) price first,
+ * asks best (lowest) price first — rather than the markets read's top
+ * level. Each side reports at most MAX_MARKET_DEPTH_LEVELS levels, the
+ * documented contract bound a deeper book truncates to. `last_trade` is
+ * the instrument's last fill like the collection read reports it, `as_of`
+ * the simulated session close and `depth_levels` the deeper side's level
+ * count after the cap. `null` answers instruments outside the declared
+ * universe — a malformed or foreign value fails closed to the pinned 404
+ * rather than leaking which instruments exist.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @param {ExchangeOrderScenario} scenario
+ * @param {string} instrument
+ * @returns {MarketDepthView | null}
+ */
+export function projectExchangeMarketDepth(engine, scenario, instrument) {
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === instrument);
+  if (pairDef === undefined) {
+    return null;
+  }
+  const book = engine.bookSnapshot(pairDef.pair);
+  // `bookSnapshot` already reports bids best-first descending and asks
+  // best-first ascending; the projection freezes exactly that ladder,
+  // truncated to the documented per-side bound.
+  const bids = Object.freeze(
+    book.bids.slice(0, MAX_MARKET_DEPTH_LEVELS).map((level) =>
+      Object.freeze({ price: level.price, quantity: level.quantity, order_count: level.order_count })
+    )
+  );
+  const asks = Object.freeze(
+    book.asks.slice(0, MAX_MARKET_DEPTH_LEVELS).map((level) =>
+      Object.freeze({ price: level.price, quantity: level.quantity, order_count: level.order_count })
+    )
+  );
+  const lastFill = lastFillsByInstrument(engine).get(pairDef.pair);
+  return Object.freeze({
+    mode: "test",
+    instrument: pairDef.pair,
+    base_asset: pairDef.base,
+    quote_asset: pairDef.quote,
+    bids,
+    asks,
+    last_trade:
+      lastFill === undefined
+        ? null
+        : Object.freeze({ price: lastFill.price, quantity: lastFill.quantity, executed_at: msIso(lastFill.at) }),
+    depth_levels: Math.max(book.bids.length, book.asks.length),
+    as_of: new Date(scenarioEndSeconds(scenario) * 1_000).toISOString(),
+    posting: "none"
+  });
 }
 
 /** @param {unknown} value */
@@ -1662,6 +1780,126 @@ export function validMarketsView(view) {
   );
 }
 
+/**
+ * Fail-closed member-read check for the depth view: exact keys, the
+ * instrument resolves its declared assets and scales from ORDER_PAIRS,
+ * every level carries a positive price at PRICE_SCALE and a positive
+ * quantity at the pair's base scale, bids are strictly descending and
+ * asks strictly ascending, the top of book is never crossed, no price
+ * level repeats on a side, `depth_levels` stays consistent with the
+ * deeper side's resting level count before the documented cap, and
+ * `last_trade`
+ * is either null or a coherent nested fill stamped inside the replayed
+ * session. Money fields appear only inside the nested level and
+ * last-trade objects — the view itself never carries a bare amount.
+ *
+ * @param {unknown} view
+ */
+export function validMarketDepthView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {MarketDepthView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...MARKET_DEPTH_VIEW_KEYS].sort())) {
+    return false;
+  }
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === candidate.instrument);
+  if (
+    candidate.mode !== "test" ||
+    pairDef === undefined ||
+    candidate.base_asset !== pairDef.base ||
+    candidate.quote_asset !== pairDef.quote ||
+    candidate.posting !== "none"
+  ) {
+    return false;
+  }
+  /**
+   * @param {readonly MarketLevelView[]} levels
+   * @param {boolean} descending
+   */
+  const validSide = (levels, descending) => {
+    if (!Array.isArray(levels) || levels.length > MAX_MARKET_DEPTH_LEVELS) {
+      return false;
+    }
+    const seen = new Set();
+    let previous = null;
+    for (const level of levels) {
+      // A level in a ladder is never null: nullability is the markets
+      // read's empty-side convention, not the depth ladder's.
+      if (level === null || typeof level !== "object" || Array.isArray(level)) {
+        return false;
+      }
+      const entry = /** @type {MarketLevelView} */ (level);
+      if (
+        JSON.stringify(Object.keys(level).sort()) !== JSON.stringify([...MARKET_LEVEL_KEYS].sort()) ||
+        !isScaledDecimal(entry.price, PRICE_SCALE) ||
+        !isScaledDecimal(entry.quantity, pairDef.baseScale) ||
+        parseUnits(entry.price) <= 0n ||
+        parseUnits(entry.quantity) <= 0n ||
+        !Number.isSafeInteger(entry.order_count) ||
+        entry.order_count < 1 ||
+        seen.has(entry.price)
+      ) {
+        return false;
+      }
+      const price = parseUnits(entry.price);
+      if (previous !== null && (descending ? price >= previous : price <= previous)) {
+        return false;
+      }
+      seen.add(entry.price);
+      previous = price;
+    }
+    return true;
+  };
+  if (!validSide(candidate.bids, true) || !validSide(candidate.asks, false)) {
+    return false;
+  }
+  // The engine never rests a crossed book: when both sides hold levels
+  // the best bid stays strictly below the best ask.
+  const bestBid = candidate.bids[0];
+  const bestAsk = candidate.asks[0];
+  if (
+    bestBid !== undefined &&
+    bestAsk !== undefined &&
+    parseUnits(bestBid.price) >= parseUnits(bestAsk.price)
+  ) {
+    return false;
+  }
+  // `depth_levels` reports the book's true level count on the deeper
+  // side before truncation: it must cover every served level and can only
+  // exceed them when a side actually hit the documented cap.
+  const servedLevels = Math.max(candidate.bids.length, candidate.asks.length);
+  if (
+    !Number.isSafeInteger(candidate.depth_levels) ||
+    candidate.depth_levels < servedLevels ||
+    (servedLevels < MAX_MARKET_DEPTH_LEVELS && candidate.depth_levels !== servedLevels)
+  ) {
+    return false;
+  }
+  if (candidate.last_trade !== null) {
+    if (
+      typeof candidate.last_trade !== "object" ||
+      Array.isArray(candidate.last_trade) ||
+      JSON.stringify(Object.keys(candidate.last_trade).sort()) !==
+        JSON.stringify([...MARKET_LAST_TRADE_KEYS].sort()) ||
+      !isScaledDecimal(candidate.last_trade.price, PRICE_SCALE) ||
+      parseUnits(candidate.last_trade.price) <= 0n ||
+      !isScaledDecimal(candidate.last_trade.quantity, pairDef.baseScale) ||
+      parseUnits(candidate.last_trade.quantity) <= 0n ||
+      !isIsoTimestamp(candidate.last_trade.executed_at)
+    ) {
+      return false;
+    }
+  }
+  // A fill can only be recorded inside the replayed session: the reported
+  // last trade never post-dates the snapshot close.
+  return (
+    isIsoTimestamp(candidate.as_of) &&
+    (candidate.last_trade === null ||
+      Date.parse(candidate.last_trade.executed_at) <= Date.parse(candidate.as_of))
+  );
+}
+
 /** @param {unknown} view */
 export function validExchangeOrdersView(view) {
   if (view === null || typeof view !== "object" || Array.isArray(view)) {
@@ -1875,6 +2113,15 @@ export function createSyntheticMarketDirectory() {
       const engine = replayExchangeOrderScenario(scenario);
       const markets = projectExchangeMarkets(engine, scenario);
       return Object.freeze({ mode: "test", markets });
+    },
+    async depthFor(subject, instrument) {
+      // Same request-scoped invariant as listFor and the order member
+      // read: the depth ladder is a fourth projection of the identical
+      // replay — a foreign instrument simply has no pair to project, so
+      // the null answer never leaks existence across the universe.
+      const scenario = exchangeOrderScenario(subject);
+      const engine = replayExchangeOrderScenario(scenario);
+      return projectExchangeMarketDepth(engine, scenario, instrument);
     }
   });
 }
