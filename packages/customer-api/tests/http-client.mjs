@@ -2,18 +2,20 @@ import assert from "node:assert/strict";
 import { connect } from "node:net";
 
 import { createCustomerApiServer } from "../src/app.mjs";
+import { OPERATIONS } from "../src/contract.mjs";
 import { createSyntheticTokenVerifier, mintSyntheticCustomerToken, mintSyntheticOperatorToken } from "../src/auth.mjs";
 import { createSyntheticAuthSessionDirectory } from "../src/auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticCardDirectory } from "../src/cards.mjs";
 import { createSyntheticActivityDirectory } from "../src/activity.mjs";
-import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createSyntheticCheckDirectory } from "../src/checks.mjs";
-import { createSyntheticDepositAddressDirectory } from "../src/deposit-addresses.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
+import { createSyntheticOperationDirectory } from "../src/operations.mjs";
+import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { createSyntheticDepositAddressDirectory } from "../src/deposit-addresses.mjs";
 import { createSyntheticOperatorDirectory } from "../src/operator.mjs";
 import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
@@ -97,6 +99,7 @@ export async function startTestServer(options = {}) {
     cardDirectory: createSyntheticCardDirectory(),
     checkDirectory: createSyntheticCheckDirectory(),
     activityDirectory: createSyntheticActivityDirectory(),
+    operationDirectory: createSyntheticOperationDirectory(),
     depositAddressDirectory: createSyntheticDepositAddressDirectory(),
     addressScreeningDirectory: createSyntheticAddressScreeningDirectory(),
     operatorDirectory: createSyntheticOperatorDirectory(),
@@ -202,4 +205,48 @@ export function assertConforms(method, path, response) {
 export async function checkedRequest(port, options) {
   const response = await request(port, options);
   return assertConforms(options.method ?? "GET", options.path, response);
+}
+
+const PATH_PARAMETER_PATTERN = /^[a-z][a-z0-9_-]{2,127}$/u;
+const TEMPLATED_PATHS = OPERATIONS.filter((operation) => operation.path.includes("{")).map(
+  (operation) => ({ path: operation.path, segments: operation.path.split("/") })
+);
+
+// Maps a concrete request path back to its declared route template
+// ({operationId}) mirroring the server's segment-wise matcher, so observed
+// status reachability keys stay pinned to the contract path. Anything the
+// server would not route keeps the request path.
+export function operationPathFor(requestPath) {
+  const requestSegments = requestPath.split("/");
+  for (const { path, segments } of TEMPLATED_PATHS) {
+    if (segments.length !== requestSegments.length) {
+      continue;
+    }
+    let matched = true;
+    for (let index = 0; index < segments.length; index += 1) {
+      const segment = segments[index];
+      if (segment.startsWith("{") && segment.endsWith("}")) {
+        if (!PATH_PARAMETER_PATTERN.test(requestSegments[index])) {
+          matched = false;
+          break;
+        }
+        continue;
+      }
+      if (segment !== requestSegments[index]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) {
+      return path;
+    }
+  }
+  return requestPath;
+}
+
+// The first minted operation id for a subject. The mint is subject-
+// deterministic, so every synthetic directory instance answers the same id.
+export async function operationIdFor(subject = VERIFIED_SUBJECT) {
+  const view = await createSyntheticOperationDirectory().viewFor(subject);
+  return view.operations[0].operation_id;
 }

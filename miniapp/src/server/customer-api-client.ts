@@ -373,6 +373,67 @@ export type CustomerApiAddressScreeningResult =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** Mirrors the contract kind enum of the served customer operations feed. */
+export type CustomerApiOperationKind = "exchange" | "deposit" | "withdrawal" | "qr";
+
+export interface CustomerApiOperationLeg {
+  asset: AssetCode;
+  amount: string;
+  direction: "in" | "out";
+}
+
+export interface CustomerApiOperationTimelineStep {
+  title: string;
+  detail: string;
+  at: string | null;
+  state: "done" | "current" | "pending" | "blocked";
+}
+
+export interface CustomerApiOperationExchange {
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  rate: string;
+}
+
+export interface CustomerApiOperationItem {
+  operation_id: string;
+  reference: string;
+  kind: CustomerApiOperationKind;
+  status: string;
+  title: string;
+  channel: string;
+  legs: readonly CustomerApiOperationLeg[];
+  fee_amount: string;
+  fee_asset: AssetCode;
+  exchange: CustomerApiOperationExchange | null;
+  note: string;
+  timeline: readonly CustomerApiOperationTimelineStep[];
+  created_at: string;
+  posting: "none";
+}
+
+/**
+ * The operations read is KYC-gated upstream (customer.operations.read sits
+ * in the same asset/activity tier as the other KYC-gated reads), so a
+ * denied evaluation surfaces as "denied" like deposits, checks & co.
+ */
+export type CustomerApiOperations =
+  | { status: "ok"; operations: readonly CustomerApiOperationItem[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+/**
+ * The member read shares the collection's capability and adds a "not-found"
+ * outcome for ids the subject does not own (the contract declares 404).
+ */
+export type CustomerApiOperation =
+  | { status: "ok"; operation: CustomerApiOperationItem }
+  | { status: "denied" }
+  | { status: "not-found" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -548,6 +609,8 @@ export interface CustomerApiClient {
   addressScreenings(bffSubject: string, nowMs: number): Promise<CustomerApiAddressScreenings>;
   addressScreening(bffSubject: string, screeningId: string, nowMs: number): Promise<CustomerApiAddressScreeningResult>;
   activity(bffSubject: string, nowMs: number): Promise<CustomerApiActivity>;
+  operations(bffSubject: string, nowMs: number): Promise<CustomerApiOperations>;
+  operation(bffSubject: string, operationId: string, nowMs: number): Promise<CustomerApiOperation>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -1458,6 +1521,196 @@ function parseActivityView(value: unknown): readonly CustomerApiActivityItem[] |
   return Object.freeze(activity);
 }
 
+const operationItemKeys = [
+  "operation_id",
+  "reference",
+  "kind",
+  "status",
+  "title",
+  "channel",
+  "legs",
+  "fee_amount",
+  "fee_asset",
+  "exchange",
+  "note",
+  "timeline",
+  "created_at",
+  "posting"
+] as const;
+
+const operationLegKeys = ["asset", "amount", "direction"] as const;
+const operationExchangeKeys = ["base_asset", "quote_asset", "rate"] as const;
+const operationTimelineKeys = ["title", "detail", "at", "state"] as const;
+const operationKinds = new Set<string>(["deposit", "exchange", "qr", "withdrawal"]);
+const operationIdContractPattern = /^ope_[0-9a-f]{24}$/u;
+const operationReferencePattern = /^SCX-[0-9]{5,10}$/u;
+const operationStatusPattern = /^[a-z][a-z0-9_]{0,63}$/u;
+const operationChannelPattern = /^[a-z][a-z0-9_-]{1,31}$/u;
+const operationStates = new Set<string>(["blocked", "current", "done", "pending"]);
+
+/**
+ * Strict parse of a served OperationView item: every minted field must
+ * satisfy its contract bound — kind from the contract enum, a `SCX-`
+ * reference, legs in a known asset with a scaled positive amount and an
+ * in/out direction, a non-negative fee at its asset's scale, an exchange
+ * object exactly when kind is "exchange" with a distinct asset pair and a
+ * positive scale-6 rate, and a timeline whose step states pair correctly
+ * with their timestamps (done/current carry an instant, pending/blocked
+ * never do). posting stays "none" on every entry — the feed is a derived
+ * read projection and never carries ledger posting state.
+ */
+function parseOperationItem(value: unknown): CustomerApiOperationItem | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, operationItemKeys)
+    || typeof value.operation_id !== "string"
+    || !operationIdContractPattern.test(value.operation_id)
+    || typeof value.reference !== "string"
+    || !operationReferencePattern.test(value.reference)
+    || typeof value.kind !== "string"
+    || !operationKinds.has(value.kind)
+    || typeof value.status !== "string"
+    || !operationStatusPattern.test(value.status)
+    || typeof value.title !== "string"
+    || value.title.length < 1
+    || value.title.length > 64
+    || typeof value.channel !== "string"
+    || !operationChannelPattern.test(value.channel)
+    || !Array.isArray(value.legs)
+    || value.legs.length < 1
+    || typeof value.fee_amount !== "string"
+    || typeof value.fee_asset !== "string"
+    || !isAssetCode(value.fee_asset)
+    || !isScaledDecimal(value.fee_amount, assets[value.fee_asset as AssetCode].scale)
+    || toUnits(value.fee_amount, assets[value.fee_asset as AssetCode].scale) < 0n
+    || typeof value.note !== "string"
+    || value.note.length > 256
+    || !isIsoTimestamp(value.created_at)
+    || value.posting !== "none"
+  ) {
+    return undefined;
+  }
+  const legs: CustomerApiOperationLeg[] = [];
+  for (const leg of value.legs) {
+    if (
+      !isRecord(leg)
+      || !hasExactKeys(leg, operationLegKeys)
+      || typeof leg.asset !== "string"
+      || !isAssetCode(leg.asset)
+      || typeof leg.amount !== "string"
+      || !isScaledDecimal(leg.amount, assets[leg.asset as AssetCode].scale)
+      || toUnits(leg.amount, assets[leg.asset as AssetCode].scale) <= 0n
+      || (leg.direction !== "in" && leg.direction !== "out")
+    ) {
+      return undefined;
+    }
+    legs.push(Object.freeze({
+      asset: leg.asset as AssetCode,
+      amount: leg.amount,
+      direction: leg.direction
+    }));
+  }
+  let exchange: CustomerApiOperationExchange | null = null;
+  if (value.kind === "exchange") {
+    const raw = value.exchange;
+    if (
+      !isRecord(raw)
+      || !hasExactKeys(raw, operationExchangeKeys)
+      || typeof raw.base_asset !== "string"
+      || !isAssetCode(raw.base_asset)
+      || typeof raw.quote_asset !== "string"
+      || !isAssetCode(raw.quote_asset)
+      || raw.base_asset === raw.quote_asset
+      || typeof raw.rate !== "string"
+      || !isScaledDecimal(raw.rate, 6)
+      || toUnits(raw.rate, 6) <= 0n
+      || legs.length !== 2
+      || legs[0]?.direction !== "out"
+      || legs[1]?.direction !== "in"
+      || legs[0]?.asset !== raw.base_asset
+      || legs[1]?.asset !== raw.quote_asset
+    ) {
+      return undefined;
+    }
+    exchange = Object.freeze({
+      base_asset: raw.base_asset as AssetCode,
+      quote_asset: raw.quote_asset as AssetCode,
+      rate: raw.rate
+    });
+  } else if (value.exchange !== null || legs.length !== 1) {
+    return undefined;
+  }
+  const timeline: CustomerApiOperationTimelineStep[] = [];
+  if (!Array.isArray(value.timeline) || value.timeline.length < 1) {
+    return undefined;
+  }
+  for (const step of value.timeline) {
+    if (
+      !isRecord(step)
+      || !hasExactKeys(step, operationTimelineKeys)
+      || typeof step.title !== "string"
+      || step.title.length < 1
+      || step.title.length > 64
+      || typeof step.detail !== "string"
+      || step.detail.length < 1
+      || step.detail.length > 256
+      || typeof step.state !== "string"
+      || !operationStates.has(step.state)
+    ) {
+      return undefined;
+    }
+    if (step.state === "done" || step.state === "current") {
+      if (typeof step.at !== "string" || !isIsoTimestamp(step.at)) {
+        return undefined;
+      }
+    } else if (step.at !== null) {
+      return undefined;
+    }
+    timeline.push(Object.freeze({
+      title: step.title,
+      detail: step.detail,
+      at: step.at as string | null,
+      state: step.state as CustomerApiOperationTimelineStep["state"]
+    }));
+  }
+  return Object.freeze({
+    operation_id: value.operation_id,
+    reference: value.reference,
+    kind: value.kind as CustomerApiOperationKind,
+    status: value.status,
+    title: value.title,
+    channel: value.channel,
+    legs: Object.freeze(legs),
+    fee_amount: value.fee_amount,
+    fee_asset: value.fee_asset as AssetCode,
+    exchange,
+    note: value.note,
+    timeline: Object.freeze(timeline),
+    created_at: value.created_at,
+    posting: "none"
+  });
+}
+
+function parseOperationsView(value: unknown): readonly CustomerApiOperationItem[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "operations"])
+    || value.mode !== "test"
+    || !Array.isArray(value.operations)
+  ) {
+    return undefined;
+  }
+  const operations: CustomerApiOperationItem[] = [];
+  for (const entry of value.operations) {
+    const item = parseOperationItem(entry);
+    if (item === undefined) {
+      return undefined;
+    }
+    operations.push(item);
+  }
+  return Object.freeze(operations);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -2080,6 +2333,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       addressScreenings: async (): Promise<CustomerApiAddressScreenings> => ({ status: "not-configured" }),
       addressScreening: async (): Promise<CustomerApiAddressScreeningResult> => ({ status: "not-configured" }),
       activity: async (): Promise<CustomerApiActivity> => ({ status: "not-configured" }),
+      operations: async (): Promise<CustomerApiOperations> => ({ status: "not-configured" }),
+      operation: async (): Promise<CustomerApiOperation> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -2379,6 +2634,56 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function operations(bffSubject: string, nowMs: number): Promise<CustomerApiOperations> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/operations", token, nowMs);
+      const view = parseOperationsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", operations: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function operation(
+    bffSubject: string,
+    operationId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperation> {
+    const subject = customerApiSubject(bffSubject);
+    // A malformed route param is a miss before the request ever leaves:
+    // upstream it can only 404, so short-circuit to the same outcome.
+    if (!operationIdContractPattern.test(operationId)) {
+      return { status: "not-found" };
+    }
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(`/api/v1/customer/operations/${encodeURIComponent(operationId)}`, token, nowMs);
+      const item = parseOperationItem(body);
+      return item === undefined ? { status: "unavailable" } : { status: "ok", operation: item };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      if (error instanceof CustomerApiHttpError && error.status === 404) {
+        return { status: "not-found" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -2493,5 +2798,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
 }

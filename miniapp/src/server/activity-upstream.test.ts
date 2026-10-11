@@ -60,6 +60,8 @@ function activityStub(
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
+    operations: async () => ({ status: "not-configured" }),
+    operation: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

@@ -363,6 +363,38 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 404, 429, 500])
   }),
+  // The customer operations feed is KYC-gated like the other asset/activity
+  // collections (see capabilities.mjs): it is a derived-only ledger-style
+  // projection of the subject's own records, not an onboarding or identity
+  // surface. The templated member read declares the same responses as the
+  // contract's checks/{checkId} precedent — 404 included — for ids the
+  // subject does not own.
+  Object.freeze({
+    operationId: "getCustomerOperations",
+    method: "GET",
+    path: "/api/v1/customer/operations",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  Object.freeze({
+    operationId: "getCustomerOperation",
+    method: "GET",
+    path: "/api/v1/customer/operations/{operationId}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 404, 429, 500])
+  }),
   // First operator-namespaced read. Operator operations require the
   // X-Device-Id header and an operator-audience token instead of a customer
   // one; KYC evaluation never applies to them.

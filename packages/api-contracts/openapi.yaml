@@ -1397,6 +1397,120 @@
         }
       }
     },
+    "/api/v1/customer/operations": {
+      "get": {
+        "operationId": "getCustomerOperations",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's own operations (the cross-domain ledger-style feed)",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer operations in test mode carrying no posting state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/operations/{operationId}": {
+      "get": {
+        "operationId": "getCustomerOperation",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read one of the authenticated customer's own operations",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/OperationId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer operation in test mode carrying no posting state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/operator/session": {
       "get": {
         "operationId": "getOperatorSession",
@@ -1655,6 +1769,16 @@
         "schema": {
           "type": "string",
           "pattern": "^scr_[0-9a-f]{32}$"
+        }
+      },
+      "OperationId": {
+        "name": "operationId",
+        "in": "path",
+        "required": true,
+        "description": "Operation identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{2,127}$"
         }
       }
     },
@@ -3448,6 +3572,210 @@
               "string",
               "null"
             ],
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "OperationsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "operations"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperationView"
+            }
+          }
+        }
+      },
+      "OperationView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "operation_id",
+          "reference",
+          "kind",
+          "status",
+          "title",
+          "channel",
+          "legs",
+          "fee_amount",
+          "fee_asset",
+          "exchange",
+          "note",
+          "timeline",
+          "created_at",
+          "posting"
+        ],
+        "properties": {
+          "operation_id": {
+            "type": "string",
+            "pattern": "^ope_[0-9a-f]{24}$"
+          },
+          "reference": {
+            "type": "string",
+            "pattern": "^SCX-[0-9]{5,10}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "exchange",
+              "deposit",
+              "withdrawal",
+              "qr"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "cancelled",
+              "expired",
+              "rejected",
+              "awaiting_payment",
+              "payment_received",
+              "partial_payment",
+              "duplicate_payment",
+              "payment_reversed",
+              "expired_no_payment",
+              "draft",
+              "screened",
+              "pending_maker_approval",
+              "pending_checker_approval",
+              "unsigned_intent_ready",
+              "broadcast",
+              "confirmed",
+              "created",
+              "processing",
+              "completed",
+              "failed",
+              "reversed"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "channel": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "legs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "asset",
+                "amount",
+                "direction"
+              ],
+              "properties": {
+                "asset": {
+                  "$ref": "#/$defs/assetCode"
+                },
+                "amount": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out"
+                  ]
+                }
+              }
+            }
+          },
+          "fee_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "fee_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "exchange": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "base_asset",
+              "quote_asset",
+              "rate"
+            ],
+            "properties": {
+              "base_asset": {
+                "$ref": "#/$defs/assetCode"
+              },
+              "quote_asset": {
+                "$ref": "#/$defs/assetCode"
+              },
+              "rate": {
+                "$ref": "#/$defs/decimalAmount"
+              }
+            }
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "timeline": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "title",
+                "detail",
+                "at",
+                "state"
+              ],
+              "properties": {
+                "title": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                "detail": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 256
+                },
+                "at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "done",
+                    "current",
+                    "pending",
+                    "blocked"
+                  ]
+                }
+              }
+            }
+          },
+          "created_at": {
+            "type": "string",
             "format": "date-time"
           },
           "posting": {

@@ -69,6 +69,7 @@ import {
 import { contractCardsView, cardsView } from "./cards.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
+import { contractOperationDetail, contractOperationsView } from "./operations.js";
 import { contractPaymentsView, paymentsView } from "./payments.js";
 import { contractWithdrawalsView, withdrawalsView } from "./withdrawals.js";
 import { contractDepositAddressView, syntheticData, walletView } from "./synthetic.js";
@@ -810,16 +811,57 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/operations") {
-      json(response, 200, { operations: syntheticData.operations(session.kyc) });
+      // customer.operations.read sits in the KYC-gated asset/activity tier
+      // upstream: unconfigured and gated sessions degrade in place to the
+      // local synthetic view (empty for a gated subject), an upstream
+      // refusal degrades the same way, and every other non-ok upstream
+      // outcome fails closed as operations_unavailable.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, { operations: syntheticData.operations(session.kyc) });
+        return;
+      }
+      const upstream = await customerApi.operations(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, { operations: contractOperationsView(upstream.operations) });
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, { operations: syntheticData.operations("kyc-gated") });
+        return;
+      }
+      json(response, 503, { error: "operations_unavailable" });
       return;
     }
     if (path.startsWith("/bff/operations/")) {
-      const operation = syntheticData.operation(session.kyc, path.slice("/bff/operations/".length));
-      if (!operation) {
+      const id = path.slice("/bff/operations/".length);
+      const local = (kyc: KycStatus) => {
+        const operation = syntheticData.operation(kyc, id);
+        if (!operation) {
+          json(response, 404, { error: "not_found" });
+          return;
+        }
+        json(response, 200, operation);
+      };
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        local(session.kyc);
+        return;
+      }
+      const upstream = await customerApi.operation(session.subject, id, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractOperationDetail(upstream.operation));
+        return;
+      }
+      if (upstream.status === "denied") {
+        // Denied degrades in place: the gated local detail is always absent,
+        // so the local 404 semantics carry over exactly.
+        local("kyc-gated");
+        return;
+      }
+      if (upstream.status === "not-found") {
         json(response, 404, { error: "not_found" });
         return;
       }
-      json(response, 200, operation);
+      json(response, 503, { error: "operations_unavailable" });
       return;
     }
     if (path === "/bff/profile") {

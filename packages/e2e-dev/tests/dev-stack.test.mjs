@@ -7,6 +7,7 @@ import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth
 import { createSyntheticActivityDirectory, validActivityView } from "../../customer-api/src/activity.mjs";
 import { createSyntheticCheckDirectory, validChecksView } from "../../customer-api/src/checks.mjs";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
+import { createSyntheticOperationDirectory, validOperationsView } from "../../customer-api/src/operations.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
 import { createSyntheticSupportDirectory } from "../../customer-api/src/support.mjs";
 import { createSyntheticUserDirectory } from "../../customer-api/src/users.mjs";
@@ -535,6 +536,25 @@ describe("customer journey through the Mini App BFF", () => {
       assert.equal(upstreamIds.has(item.id), false);
       assert.notEqual(item.kind, "contract");
     }
+  });
+
+  it("keeps the operations feed on the local synthetic view while customer.operations.read is denied upstream", async () => {
+    // customer.operations.read is KYC-gated like the other asset/activity
+    // reads and the upstream KYC directory marks every subject unverified,
+    // so the verified dev session's upstream read is refused: /bff/operations
+    // degrades in place to the local synthetic view (empty for a gated
+    // subject) and the member route keeps its local 404. The upstream
+    // directory still answers a deterministic, contract-valid view for the
+    // same subject — nothing here leaks into the app surface.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticOperationDirectory().viewFor(customerApiSubject(devSubject));
+    assert.equal(validOperationsView(upstreamView), true);
+    assert.ok(upstreamView.operations.length >= 1);
+    assert.deepEqual(upstreamView, await createSyntheticOperationDirectory().viewFor(customerApiSubject(devSubject)));
+    const list = await getMiniapp("/bff/operations", cookie);
+    assert.deepEqual(list, { operations: [] });
+    const detail = await fetch(`${miniappBase}/bff/operations/${upstreamView.operations[0].operation_id}`, { headers: { cookie } });
+    assert.equal(detail.status, 404);
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {

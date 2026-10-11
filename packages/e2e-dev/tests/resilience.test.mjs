@@ -147,6 +147,32 @@ describe("Mini App BFF with a failing customer-api", () => {
     return Number.isFinite(seconds) ? new Date(seconds * 1_000).toISOString() : "1970-01-01T00:00:00.000Z";
   }
 
+  // The operations feed fixture: one served OperationView item shared by the
+  // list arm and the member arm (the member 404s every other id).
+  const operationFixture = {
+    operation_id: "ope_0123456789abcdef01234567",
+    reference: "SCX-01234",
+    kind: "exchange",
+    status: "open",
+    title: "Exchange USDT → RUB",
+    channel: "miniapp",
+    legs: [
+      { asset: "USDT", amount: "10.000000", direction: "out" },
+      { asset: "RUB", amount: "950.00", direction: "in" }
+    ],
+    fee_amount: "0.050000",
+    fee_asset: "USDT",
+    exchange: { base_asset: "USDT", quote_asset: "RUB", rate: "95.000000" },
+    note: "Synthetic exchange operation",
+    timeline: [
+      { title: "Draft", detail: "Operation created", at: "2026-10-08T09:15:00.000Z", state: "done" },
+      { title: "Review", detail: "Awaiting confirmation", at: "2026-10-08T09:16:00.000Z", state: "current" },
+      { title: "Settled", detail: "Legs settle", at: null, state: "pending" }
+    ],
+    created_at: "2026-10-08T09:15:00.000Z",
+    posting: "none"
+  };
+
   // Every customer-api operation the BFF calls must have an explicit arm here;
   // an unmatched path means harness drift and answers 404 like the real
   // router — never a successful default body.
@@ -463,6 +489,16 @@ describe("Mini App BFF with a failing customer-api", () => {
         ],
         ...extra
       };
+    }
+    if (request.url.includes("/operations/ope_")) {
+      const id = request.url.slice(request.url.indexOf("/operations/") + "/operations/".length);
+      if (id !== "ope_0123456789abcdef01234567") {
+        return undefined;
+      }
+      return { ...operationFixture, ...extra };
+    }
+    if (request.url.endsWith("/operations")) {
+      return { mode: "test", operations: [operationFixture], ...extra };
     }
     if (request.url.endsWith("/notifications")) {
       return {
@@ -882,6 +918,37 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(gatedText.includes(key), false, label);
     assert.equal(gatedText.includes("syn_cust_"), false, label);
     assert.equal(JSON.parse(gatedText).mode, "test", label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function operationsFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    for (const path of ["/bff/operations", "/bff/operations/ope_0123456789abcdef01234567"]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, label);
+      const text = await response.text();
+      assert.equal(text.includes(marker), false, label);
+      assert.equal(text.includes(key), false, label);
+      assert.equal(text.includes("syn_cust_"), false, label);
+      assert.equal(text.includes("ope_"), false, label);
+      assert.deepEqual(JSON.parse(text), { error: "operations_unavailable" }, label);
+    }
+    const elapsed = Date.now() - startedAt;
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session never consults upstream: its local operations view
+    // (empty for a gated subject) stays intact and leak-free.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/operations", { cookie });
+    assert.equal(gatedResponse.status, 200, label);
+    const gatedText = await gatedResponse.text();
+    assert.equal(gatedText.includes(marker), false, label);
+    assert.equal(gatedText.includes(key), false, label);
+    assert.equal(gatedText.includes("syn_cust_"), false, label);
+    assert.equal(gatedText.includes("ope_"), false, label);
+    assert.deepEqual(JSON.parse(gatedText), { operations: [] }, label);
     assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
     return elapsed;
   }
@@ -1618,6 +1685,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await screeningsFailsClosed(name);
       await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
+      await operationsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -1646,6 +1714,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await screeningsFailsClosed(name);
       await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
+      await operationsFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);

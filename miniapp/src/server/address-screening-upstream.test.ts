@@ -84,6 +84,8 @@ function screeningStub(
       return typeof detail === "function" ? detail(screeningId) : detail;
     },
     activity: async () => ({ status: "not-configured" }),
+    operations: async () => ({ status: "not-configured" }),
+    operation: async () => ({ status: "not-configured" }),
     notifications: async () => ({ status: "not-configured" }),
     kyc: async () => ({ status: "not-configured" }),
     profile: async () => ({ status: "not-configured" }),

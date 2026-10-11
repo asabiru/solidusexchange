@@ -235,6 +235,13 @@ export const CAPABILITY_POLICY = Object.freeze([
   // session-security events — never a posting source — so it reads with
   // the same verified-KYC gate and no write capability exists.
   entry("customer.activity.read", "read", true, []),
+  // The served customer operations feed is KYC-gated like the other asset
+  // collections: it is a derived-only ledger-style projection over the
+  // subject's own exchange, deposit, withdrawal and QR payment records —
+  // never a posting source (posting stays "none") — so it reads with the
+  // same verified-KYC gate. The collection and its templated member read
+  // share this one capability; no write capability exists.
+  entry("customer.operations.read", "read", true, []),
   // Previewing a check is the issuance-side rate/terms command for the
   // chat flow: it stays denied under the financial-commands gate like the
   // claim and cancel commands, with the in-chat checks decision D-019

@@ -1107,6 +1107,117 @@ const pinnedResponseSchemas = {
       resolved_at: { type: ["string", "null"], format: "date-time" },
       posting: { const: "none" }
     }
+  },
+  OperationsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "operations"],
+    properties: {
+      mode: { const: "test" },
+      operations: {
+        type: "array",
+        items: { $ref: "#/components/schemas/OperationView" }
+      }
+    }
+  },
+  OperationView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "operation_id",
+      "reference",
+      "kind",
+      "status",
+      "title",
+      "channel",
+      "legs",
+      "fee_amount",
+      "fee_asset",
+      "exchange",
+      "note",
+      "timeline",
+      "created_at",
+      "posting"
+    ],
+    properties: {
+      operation_id: { type: "string", pattern: "^ope_[0-9a-f]{24}$" },
+      reference: { type: "string", pattern: "^SCX-[0-9]{5,10}$" },
+      kind: {
+        type: "string",
+        enum: ["exchange", "deposit", "withdrawal", "qr"]
+      },
+      status: {
+        type: "string",
+        enum: [
+          "open",
+          "cancelled",
+          "expired",
+          "rejected",
+          "awaiting_payment",
+          "payment_received",
+          "partial_payment",
+          "duplicate_payment",
+          "payment_reversed",
+          "expired_no_payment",
+          "draft",
+          "screened",
+          "pending_maker_approval",
+          "pending_checker_approval",
+          "unsigned_intent_ready",
+          "broadcast",
+          "confirmed",
+          "created",
+          "processing",
+          "completed",
+          "failed",
+          "reversed"
+        ]
+      },
+      title: { type: "string", minLength: 1, maxLength: 128 },
+      channel: { type: "string", minLength: 1, maxLength: 64 },
+      legs: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["asset", "amount", "direction"],
+          properties: {
+            asset: { $ref: "#/$defs/assetCode" },
+            amount: { $ref: "#/$defs/decimalAmount" },
+            direction: { type: "string", enum: ["in", "out"] }
+          }
+        }
+      },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      fee_asset: { $ref: "#/$defs/assetCode" },
+      exchange: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["base_asset", "quote_asset", "rate"],
+        properties: {
+          base_asset: { $ref: "#/$defs/assetCode" },
+          quote_asset: { $ref: "#/$defs/assetCode" },
+          rate: { $ref: "#/$defs/decimalAmount" }
+        }
+      },
+      note: { type: "string", minLength: 1, maxLength: 256 },
+      timeline: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["title", "detail", "at", "state"],
+          properties: {
+            title: { type: "string", minLength: 1, maxLength: 64 },
+            detail: { type: "string", minLength: 1, maxLength: 256 },
+            at: { type: ["string", "null"], format: "date-time" },
+            state: { type: "string", enum: ["done", "current", "pending", "blocked"] }
+          }
+        }
+      },
+      created_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
   }
 };
 
@@ -1123,13 +1234,18 @@ const pinnedParameterNames = new Set([
   "ClientVersion",
   "DeviceId",
   "IdempotencyKey",
+  "OperationId",
   "Platform",
   "RequestId",
   "ScreeningId"
 ]);
 
+// Templated paths bind exactly one canonical path parameter per placeholder
+// name: {checkId} -> CheckId, {operationId} -> OperationId,
+// {screeningId} -> ScreeningId.
 const canonicalPathParameters = new Map([
   ["checkId", "#/components/parameters/CheckId"],
+  ["operationId", "#/components/parameters/OperationId"],
   ["screeningId", "#/components/parameters/ScreeningId"]
 ]);
 
@@ -1159,11 +1275,11 @@ function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
     );
     const resolved = parameter.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter;
     if (resolved?.in === "path") {
-      const canonicalPathParameter = canonicalPathParameters.get(String(resolved?.name ?? ""));
+      const canonical = canonicalPathParameters.get(String(resolved?.name ?? ""));
       assert(
-        canonicalPathParameter !== undefined &&
-          canonicalJson(parameter) === canonicalJson({ $ref: canonicalPathParameter }),
-        `Path parameter ${JSON.stringify(resolved?.name)} must use only its canonical parameter: ${label}`
+        canonical !== undefined
+          && canonicalJson(parameter) === canonicalJson({ $ref: canonical }),
+        `Path parameter must use only its canonical component parameter: ${label}`
       );
       continue;
     }
@@ -1298,6 +1414,8 @@ function checkOpenApi() {
     ["getOperatorAdmin", "/api/v1/operator/admin"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
+    ["getCustomerOperations", "/api/v1/customer/operations"],
+    ["getCustomerOperation", "/api/v1/customer/operations/{operationId}"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
     ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
     ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
@@ -1351,6 +1469,8 @@ function checkOpenApi() {
     ["getOperatorAdmin", readStatuses],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
+    ["getCustomerOperations", gatedReadStatuses],
+    ["getCustomerOperation", ["200", "401", "403", "404", "429", "500"]],
     ["previewCustomerCheck", gatedReadStatuses],
     ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
     ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
@@ -1381,6 +1501,8 @@ function checkOpenApi() {
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
+    ["getCustomerOperations", "#/components/schemas/OperationsView"],
+    ["getCustomerOperation", "#/components/schemas/OperationView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
     ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
     ["claimCustomerCheck", "#/components/schemas/CheckView"],
@@ -1481,6 +1603,16 @@ function checkOpenApi() {
           `${parameterName} path parameter must be bound exactly on its templated paths: ${operation.operationId}`
         );
       }
+      const isCheckPath = pathName.includes("{checkId}");
+      assert(
+        isCheckPath === requestHeaders.has("#/components/parameters/CheckId"),
+        `checkId path parameter must be bound exactly on templated check paths: ${operation.operationId}`
+      );
+      const isOperationPath = pathName.includes("{operationId}");
+      assert(
+        isOperationPath === requestHeaders.has("#/components/parameters/OperationId"),
+        `operationId path parameter must be bound exactly on templated operation paths: ${operation.operationId}`
+      );
       if (commandOperation) {
         assert(
           requestHeaders.has("#/components/parameters/IdempotencyKey"),
@@ -1679,6 +1811,17 @@ function checkOpenApi() {
       pattern: "^scr_[0-9a-f]{32}$"
     }),
     "Canonical ScreeningId constraints must remain pinned"
+  );
+  const operationIdParameter = parameters.OperationId;
+  assert(operationIdParameter?.required === true, "OperationId must be required when used");
+  assert(operationIdParameter?.in === "path", "OperationId must remain a path parameter");
+  assert(operationIdParameter?.name === "operationId", "OperationId must use operationId");
+  assert(
+    canonicalJson(operationIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^[a-z][a-z0-9_-]{2,127}$"
+    }),
+    "Canonical OperationId constraints must remain pinned"
   );
   for (const name of ["decimalAmount", "assetCode"]) {
     assert(
