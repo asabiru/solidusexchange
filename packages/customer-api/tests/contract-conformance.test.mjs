@@ -49,6 +49,9 @@ const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const ADMIN = "/api/v1/operator/admin";
+const OPERATOR_SESSION = "/api/v1/operator/session";
+const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -82,11 +85,11 @@ test("served operations match the contract exactly; unserved operator and checks
       contractOperations.push({ path, method: method.toUpperCase(), operation });
     }
   }
-  // Operator routes other than the served admin read and every checks command
-  // path remain declared-but-unserved.
+  // Operator routes other than the three served reads and every checks
+  // command path remain declared-but-unserved.
   const unserved = (path) =>
     path.startsWith("/api/v1/customer/checks/") ||
-    (path.startsWith("/api/v1/operator/") && path !== "/api/v1/operator/admin");
+    (path.startsWith("/api/v1/operator/") && !OPERATOR_PATHS.includes(path));
   const expected = contractOperations.filter(({ path }) => !unserved(path));
   assert.equal(OPERATIONS.length, expected.length);
   for (const { path, method, operation } of expected) {
@@ -222,13 +225,15 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
     const limitedScreening = await observe(port, { path: screeningPath, headers: verifiedCustomerHeaders() });
     assert.equal(limitedScreening.status, 429);
     assert.equal(JSON.parse(limitedScreening.body).code, "RATE_LIMITED");
-    now += 61_000;
-    assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders() })).status, 200);
-    assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders({ Authorization: null }) })).status, 401);
-    const limitedAdmin = await observe(port, { path: ADMIN, headers: operatorHeaders() });
-    assert.equal(limitedAdmin.status, 429);
-    assert.equal(JSON.parse(limitedAdmin.body).code, "RATE_LIMITED");
-    assert.equal(header(limitedAdmin, "retry-after"), "60");
+    for (const path of OPERATOR_PATHS) {
+      now += 61_000;
+      assert.equal((await observe(port, { path, headers: operatorHeaders() })).status, 200);
+      assert.equal((await observe(port, { path, headers: operatorHeaders({ Authorization: null }) })).status, 401);
+      const limited = await observe(port, { path, headers: operatorHeaders() });
+      assert.equal(limited.status, 429);
+      assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
+      assert.equal(header(limited, "retry-after"), "60");
+    }
     const meta = await observe(port, { path: META, headers: metaHeaders });
     assert.equal(meta.status, 200);
   });
@@ -394,6 +399,25 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
+  // An operator principal outside the token grammar (here a subject that
+  // never matches syn_oper_*) fails the session view's fail-closed
+  // validation: the served route answers the client-safe 500 envelope.
+  const badPrincipal = {
+    async verify() {
+      return { subject: "syn_operator_1", actorType: "operator", scopes: [], expiresAt: "2026-10-01T13:00:00.000Z" };
+    }
+  };
+  await withServer({ verifier: badPrincipal }, async (port) => {
+    const response = await observe(port, { path: OPERATOR_SESSION, headers: operatorHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+  });
+  await withServer({ verifier: { async verify() { throw new Error("idp exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: OPERATOR_CAPABILITIES, headers: operatorHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
 });
 
 test("metadata drift fails closed with a 500 envelope", async () => {
@@ -508,6 +532,43 @@ test("GET /api/v1/operator/admin serves the operator's own admin overview to the
     });
     assert.equal(operatorOnCustomerPath.status, 401);
     assert.equal(JSON.parse(operatorOnCustomerPath.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("GET /api/v1/operator/session returns an OperatorSessionView for a synthetic operator token", async () => {
+  await withServer({}, async (port) => {
+    const response = await observe(port, { path: OPERATOR_SESSION, headers: operatorHeaders() });
+    assert.equal(response.status, 200);
+    assert.deepEqual(JSON.parse(response.body), {
+      subject: OPERATOR_SUBJECT,
+      actor_type: "operator",
+      scopes: ["operator.session.read", "operator.capabilities.read"],
+      expires_at: new Date(Math.floor(NOW_MS / 1000) * 1000 + 900_000).toISOString(),
+      device_bound: true
+    });
+    const customer = await observe(port, {
+      path: OPERATOR_SESSION,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("GET /api/v1/operator/capabilities grants exactly the operator read tier", async () => {
+  await withServer({}, async (port) => {
+    const response = await observe(port, { path: OPERATOR_CAPABILITIES, headers: operatorHeaders() });
+    assert.equal(response.status, 200);
+    assert.deepEqual(JSON.parse(response.body), {
+      capabilities: ["operator.session.read", "operator.capabilities.read", "operator.admin.read"],
+      commands_enabled: false
+    });
+    const customer = await observe(port, {
+      path: OPERATOR_CAPABILITIES,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
   });
 });
 

@@ -139,6 +139,102 @@ export function validOperatorAdminView(view) {
   return Date.parse(candidate.updated_at) >= Date.parse(candidate.created_at);
 }
 
+// The operator meta pair. The session view is the token principal's own
+// metadata — the operator subject, its audience, the granted scopes, the
+// token expiry and the device binding every operator operation requires —
+// never credentials or secrets. The capabilities view projects the operator
+// policy evaluation onto the shared wire shape (granted names only, like the
+// customer capabilities read: denial reasons are not a client surface).
+const SESSION_VIEW_KEYS = Object.freeze([
+  "subject",
+  "actor_type",
+  "scopes",
+  "expires_at",
+  "device_bound"
+]);
+const CAPABILITIES_VIEW_KEYS = Object.freeze(["capabilities", "commands_enabled"]);
+
+/**
+ * @typedef {object} OperatorSessionView
+ * @property {string} subject
+ * @property {string} actor_type
+ * @property {readonly string[]} scopes
+ * @property {string} expires_at
+ * @property {boolean} device_bound
+ */
+
+/**
+ * @typedef {object} OperatorCapabilitiesView
+ * @property {readonly string[]} capabilities
+ * @property {boolean} commands_enabled
+ */
+
+/**
+ * @param {import("./auth.mjs").Principal} principal
+ * @returns {OperatorSessionView}
+ */
+export function operatorSessionViewFor(principal) {
+  return Object.freeze({
+    subject: principal.subject,
+    actor_type: "operator",
+    scopes: Object.freeze([...principal.scopes]),
+    expires_at: principal.expiresAt,
+    // X-Device-Id is mandatory on every operator operation, so a served
+    // operator session is always bound to a workstation device identifier.
+    device_bound: true
+  });
+}
+
+/**
+ * @param {Readonly<{ granted: readonly string[], commandsEnabled: boolean }>} evaluation
+ * @returns {OperatorCapabilitiesView}
+ */
+export function operatorCapabilitiesViewFor(evaluation) {
+  return Object.freeze({
+    capabilities: Object.freeze([...evaluation.granted]),
+    commands_enabled: evaluation.commandsEnabled
+  });
+}
+
+/** @param {unknown} scopes */
+function validScopes(scopes) {
+  return (
+    Array.isArray(scopes) &&
+    new Set(scopes).size === scopes.length &&
+    scopes.every((scope) => typeof scope === "string" && scope.length >= 1 && scope.length <= 128)
+  );
+}
+
+/** @param {unknown} view */
+export function validOperatorSessionView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorSessionView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...SESSION_VIEW_KEYS].sort())) {
+    return false;
+  }
+  return (
+    SUBJECT_PATTERN.test(candidate.subject) &&
+    candidate.actor_type === "operator" &&
+    validScopes(candidate.scopes) &&
+    isIsoTimestamp(candidate.expires_at) &&
+    candidate.device_bound === true
+  );
+}
+
+/** @param {unknown} view */
+export function validOperatorCapabilitiesView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorCapabilitiesView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...CAPABILITIES_VIEW_KEYS].sort())) {
+    return false;
+  }
+  return validScopes(candidate.capabilities) && candidate.commands_enabled === false;
+}
+
 /** @returns {OperatorDirectory} */
 export function createSyntheticOperatorDirectory() {
   const cache = new Map();

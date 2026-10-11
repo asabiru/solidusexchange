@@ -27,7 +27,13 @@ import {
   metricsRequestAllowed
 } from "./observability.mjs";
 import { validNotificationsView } from "./notifications.mjs";
-import { validOperatorAdminView } from "./operator.mjs";
+import {
+  operatorCapabilitiesViewFor,
+  operatorSessionViewFor,
+  validOperatorAdminView,
+  validOperatorCapabilitiesView,
+  validOperatorSessionView
+} from "./operator.mjs";
 import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
 import { generateUuidV7, isUuidV7 } from "./request-id.mjs";
@@ -492,6 +498,41 @@ export function createCustomerApiHandler({
         },
         requestId
       );
+      return;
+    }
+
+    if (operation.operationId === "getOperatorSession") {
+      // operator.session.read is granted to the operator audience by policy:
+      // the operator token and device identifier are the gate, KYC never
+      // applies to staff surfaces. The check stays so a served route can
+      // never drift from the capabilities the service exposes.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.session.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = operatorSessionViewFor(principal);
+      if (!validOperatorSessionView(view)) {
+        throw new Error("Operator session view failed validation");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorCapabilities") {
+      // operator.capabilities.read is granted to the operator audience by
+      // policy like the session and admin reads. The check stays so a served
+      // route can never drift from the capabilities the service exposes.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.capabilities.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = operatorCapabilitiesViewFor(operatorEvaluation);
+      if (!validOperatorCapabilitiesView(view)) {
+        throw new Error("Operator capabilities view failed validation");
+      }
+      send(response, 200, { ...view }, requestId);
       return;
     }
 

@@ -24,7 +24,7 @@ const FORBIDDEN_CALLS = [
 // the served operator read. Any other /api/v1/operator* reference (served or
 // planned upstream surfaces) keeps the package forbidden from calling or
 // impersonating the operator API.
-const ALLOWED_OPERATOR_PATHS = ["/api/v1/operator/admin"];
+const ALLOWED_OPERATOR_PATHS = ["/api/v1/operator/admin", "/api/v1/operator/capabilities", "/api/v1/operator/session"];
 const OPERATOR_PATH_REFERENCE = /\/api\/v1\/operator[a-z0-9_/-]*/gu;
 
 // The only runtime dependency is the PostgreSQL driver behind the dev-only
@@ -113,7 +113,7 @@ for (const flag of ["financial_commands_enabled: false", "production_providers_e
   }
 }
 const paths = [...contractSource.matchAll(/path: "([^"]+)"/gu)].map((match) => match[1]).sort();
-const expected = ["/api/v1/customer/activity", "/api/v1/customer/address-screenings", "/api/v1/customer/address-screenings/{screeningId}", "/api/v1/customer/auth", "/api/v1/customer/capabilities", "/api/v1/customer/cards", "/api/v1/customer/checks", "/api/v1/customer/deposit-addresses", "/api/v1/customer/deposits", "/api/v1/customer/exchange-orders", "/api/v1/customer/kyc", "/api/v1/customer/notifications", "/api/v1/customer/operations", "/api/v1/customer/operations/{operationId}", "/api/v1/customer/payments", "/api/v1/customer/profile", "/api/v1/customer/quotes", "/api/v1/customer/session", "/api/v1/customer/support", "/api/v1/customer/users", "/api/v1/customer/wallets", "/api/v1/customer/withdrawals", "/api/v1/meta", "/api/v1/operator/admin"];
+const expected = ["/api/v1/customer/activity", "/api/v1/customer/address-screenings", "/api/v1/customer/address-screenings/{screeningId}", "/api/v1/customer/auth", "/api/v1/customer/capabilities", "/api/v1/customer/cards", "/api/v1/customer/checks", "/api/v1/customer/deposit-addresses", "/api/v1/customer/deposits", "/api/v1/customer/exchange-orders", "/api/v1/customer/kyc", "/api/v1/customer/notifications", "/api/v1/customer/operations", "/api/v1/customer/operations/{operationId}", "/api/v1/customer/payments", "/api/v1/customer/profile", "/api/v1/customer/quotes", "/api/v1/customer/session", "/api/v1/customer/support", "/api/v1/customer/users", "/api/v1/customer/wallets", "/api/v1/customer/withdrawals", "/api/v1/meta", "/api/v1/operator/admin", "/api/v1/operator/capabilities", "/api/v1/operator/session"];
 if (JSON.stringify(paths) !== JSON.stringify(expected)) {
   errors.push(`src/contract.mjs must serve exactly ${expected.join(", ")}`);
 }
