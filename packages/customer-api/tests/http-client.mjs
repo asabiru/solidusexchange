@@ -10,7 +10,7 @@ import { createSyntheticCardDirectory } from "../src/cards.mjs";
 import { createSyntheticActivityDirectory } from "../src/activity.mjs";
 import { createSyntheticCheckDirectory } from "../src/checks.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
-import { createSyntheticExchangeOrderDirectory, createSyntheticTradeDirectory } from "../src/exchange-orders.mjs";
+import { createSyntheticExchangeOrderDirectory, createSyntheticMarketDirectory, createSyntheticTradeDirectory } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticOperationDirectory } from "../src/operations.mjs";
@@ -96,6 +96,7 @@ export async function startTestServer(options = {}) {
     quoteDirectory: createSyntheticQuoteDirectory(),
     exchangeOrderDirectory: createSyntheticExchangeOrderDirectory(),
     tradeDirectory: createSyntheticTradeDirectory(),
+    marketDirectory: createSyntheticMarketDirectory(),
     paymentDirectory: createSyntheticPaymentDirectory(),
     cardDirectory: createSyntheticCardDirectory(),
     checkDirectory: createSyntheticCheckDirectory(),

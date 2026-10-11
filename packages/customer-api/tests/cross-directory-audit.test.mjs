@@ -33,9 +33,10 @@ import {
 import { createSyntheticQuoteDirectory, validQuotesView } from "../src/quotes.mjs";
 import {
   createSyntheticExchangeOrderDirectory,
+  createSyntheticMarketDirectory,
   createSyntheticTradeDirectory,
   validExchangeOrdersView,
-  validTradesView
+  validMarketsView, validTradesView
 } from "../src/exchange-orders.mjs";
 import { createSyntheticPaymentDirectory, validPaymentsView } from "../src/payments.mjs";
 import { createSyntheticCardDirectory, validCardsView } from "../src/cards.mjs";
@@ -140,6 +141,12 @@ const DIRECTORIES = [
     // excludes it (the cross-subject leak check still sees it: the ord_*
     // digest is subject-scoped either way).
     references: new Set(["order_id"])
+  },
+  {
+    name: "markets",
+    make: () => createSyntheticMarketDirectory(),
+    call: (directory, subject) => directory.listFor(subject),
+    valid: validMarketsView
   },
   {
     name: "payments",

@@ -46,6 +46,7 @@ function paymentsStub(
     quotes: async () => ({ status: "not-configured" }),
     exchangeOrders: async () => ({ status: "not-configured" }),
     trades: async () => ({ status: "not-configured" }),
+    markets: async () => ({ status: "not-configured" }),
     payments: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
