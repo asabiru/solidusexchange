@@ -239,7 +239,11 @@ export function parseEngineSnapshot(snapshot) {
       if (!isScaledDecimal(order.price, definition.price_scale)) {
         invalid(`order ${order.order_id}: invalid price`);
       }
-      if (parseScaledDecimal(order.price, definition.price_scale) === 0n) {
+      const priceUnits = parseScaledDecimal(order.price, definition.price_scale);
+      if (order.price !== formatScaledDecimal(priceUnits, definition.price_scale)) {
+        invalid(`order ${order.order_id}: price must be in exact-scale form`);
+      }
+      if (priceUnits === 0n) {
         invalid(`order ${order.order_id}: non-positive price`);
       }
     }
@@ -247,6 +251,9 @@ export function parseEngineSnapshot(snapshot) {
       invalid(`order ${order.order_id}: invalid quantity`);
     }
     const quantityUnits = parseScaledDecimal(order.quantity, definition.base_scale);
+    if (order.quantity !== formatScaledDecimal(quantityUnits, definition.base_scale)) {
+      invalid(`order ${order.order_id}: quantity must be in exact-scale form`);
+    }
     if (quantityUnits === 0n) {
       invalid(`order ${order.order_id}: non-positive quantity`);
     }
@@ -254,6 +261,9 @@ export function parseEngineSnapshot(snapshot) {
       invalid(`order ${order.order_id}: invalid remaining`);
     }
     const remainingUnits = parseScaledDecimal(order.remaining, definition.base_scale);
+    if (order.remaining !== formatScaledDecimal(remainingUnits, definition.base_scale)) {
+      invalid(`order ${order.order_id}: remaining must be in exact-scale form`);
+    }
     if (remainingUnits > quantityUnits) {
       invalid(`order ${order.order_id}: remaining exceeds quantity`);
     }

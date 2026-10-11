@@ -1230,6 +1230,10 @@
     "miniapp/src/server/checks-upstream.test.ts": {
       "minLines": 309,
       "minCases": 7
+    },
+    "packages/matching-core/tests/audit.test.mjs": {
+      "minLines": 282,
+      "minCases": 12
     }
   }
 }
