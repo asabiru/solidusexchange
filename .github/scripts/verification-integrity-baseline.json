@@ -1377,8 +1377,8 @@
       "minCases": 19
     },
     "packages/matching-core/tests/postgres-journal-contract.mjs": {
-      "minLines": 190,
-      "minCases": 10
+      "minLines": 269,
+      "minCases": 15
     },
     "packages/matching-core/tests/postgres-journal.sh": {
       "minLines": 32,
@@ -1483,6 +1483,10 @@
     "backoffice/src/data/operator.test.ts": {
       "minLines": 190,
       "minCases": 10
+    },
+    "packages/matching-core/tests/snapshot-replay-audit.test.mjs": {
+      "minLines": 431,
+      "minCases": 46
     }
   }
 }

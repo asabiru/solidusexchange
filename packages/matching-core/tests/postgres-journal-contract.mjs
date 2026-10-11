@@ -12,6 +12,7 @@ import test from "node:test";
 
 import {
   StoreConfigError,
+  StoreError,
   StoreUnavailableError,
 } from "../src/journal-store.mjs";
 import { createPostgresJournalStore } from "../src/postgres-journal-store.mjs";
@@ -224,4 +225,104 @@ test("an unreachable database surfaces as unavailable, not a hang", async () => 
 test("operations before initialize fail closed", async () => {
   const store = createPostgresJournalStore({ dsn, namespace: "uninitialized_check" });
   await assert.rejects(() => store.load(), StoreUnavailableError);
+});
+
+// Continuation parity with the memory backend: seq shape and batch-internal
+// contiguity are enforced identically before storage is touched, and
+// storage-side rejections of the batch surface as non-latching StoreError.
+// A caller bug must never poison the durable stream or the store.
+
+test("a batch with a string seq is rejected identically to the memory backend", async (t) => {
+  const store = await postgresStore("parity_string_seq");
+  t.after(() => store.close());
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  // Client-side rejections throw synchronously, identical to memory.
+  assert.throws(
+    () => store.append(batch.map((e) => ({ ...e, seq: String(e.seq) }))),
+    StoreError,
+  );
+  assert.throws(
+    () => store.append(batch.map((e) => ({ ...e, seq: e.seq + 0.5 }))),
+    StoreError,
+  );
+  // Caller bugs do not latch: the store keeps working.
+  await store.append(batch);
+  assert.equal((await store.load()).length, batch.length);
+});
+
+test("a batch with an internal seq gap is rejected and lands nothing", async (t) => {
+  const store = await postgresStore("parity_internal_gap");
+  t.after(() => store.close());
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  const gapped = batch.map((e, i) => ({ ...e, seq: e.seq + (i === 0 ? 0 : 9) }));
+  assert.throws(() => store.append(gapped), StoreError);
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  const { rows } = await pool.query(
+    `SELECT count(*) AS n FROM matching_core.matching_journal WHERE namespace = $1`,
+    ["parity_internal_gap"],
+  );
+  assert.equal(rows[0].n, "0");
+});
+
+test("a mid-stream batch rejection does not latch the store", async (t) => {
+  const store = await postgresStore("parity_mid_stream");
+  t.after(() => store.close());
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  await store.append(batch);
+  // Internally contiguous but continuing from a consumed seq: the
+  // storage-side check rejects it as a caller bug, not a write failure.
+  await assert.rejects(() => store.append(batch), StoreError);
+  const next = engine.submitOrder(order(2, { side: "buy", price: "91", quantity: "1" }));
+  await store.append(next);
+  assert.equal((await store.load()).length, batch.length + next.length);
+});
+
+test("the failure latch locks every later operation while close stays usable", async (t) => {
+  const namespace = "latch_probe";
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  // Cleanup runs in registration order: drop first, then end the pool.
+  t.after(async () => {
+    await pool.query(`
+      DROP TRIGGER IF EXISTS audit_latch_probe ON matching_core.matching_journal;
+      DROP FUNCTION IF EXISTS matching_core.audit_latch_probe();
+    `);
+    await pool.end();
+  });
+  await pool.query(`
+    CREATE OR REPLACE FUNCTION matching_core.audit_latch_probe() RETURNS trigger
+      LANGUAGE plpgsql AS $f$ BEGIN RAISE EXCEPTION 'latch probe failure'; END; $f$;
+    CREATE TRIGGER audit_latch_probe BEFORE INSERT ON matching_core.matching_journal
+      FOR EACH ROW WHEN (NEW.namespace = '${namespace}')
+      EXECUTE FUNCTION matching_core.audit_latch_probe();
+  `);
+  const store = await postgresStore(namespace);
+  t.after(() => store.close().catch(() => undefined));
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  const first = await store.append(batch).then(() => null, (e) => e);
+  assert.ok(first instanceof StoreUnavailableError);
+  // First failure latches: append and load rethrow it.
+  const second = await store.append(batch).then(() => null, (e) => e);
+  assert.ok(second === first);
+  const loadFailure = await store.load().then(() => null, (e) => e);
+  assert.ok(loadFailure === first);
+});
+
+test("a replayed engine snapshots byte-identically through the durable rows", async (t) => {
+  const namespace = "snapshot_parity";
+  const store = await postgresStore(namespace);
+  t.after(() => store.close());
+  const engine = createMatchingEngine({ journalStore: store });
+  engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "2", owner: "desk-a" }));
+  engine.submitOrder(order(2, { side: "buy", price: "90", quantity: "1", owner: "desk-b" }));
+  await store.load();
+  const replayed = await replayMatchingJournalStore(await postgresStore(namespace));
+  assert.equal(
+    JSON.stringify(replayed.snapshot()),
+    JSON.stringify(engine.snapshot()),
+  );
 });
