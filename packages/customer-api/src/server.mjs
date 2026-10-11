@@ -7,6 +7,7 @@ import { createSyntheticAuthSessionDirectory } from "./auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createSyntheticCardDirectory } from "./cards.mjs";
+import { createSyntheticActivityDirectory } from "./activity.mjs";
 import { createSyntheticCheckDirectory } from "./checks.mjs";
 import { createSyntheticDepositDirectory } from "./deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "./exchange-orders.mjs";
@@ -42,6 +43,7 @@ import { createPostgresStore } from "./postgres-store.mjs";
  *   paymentDirectory?: import("./payments.mjs").PaymentDirectory,
  *   cardDirectory?: import("./cards.mjs").CardDirectory,
  *   checkDirectory?: import("./checks.mjs").CheckDirectory,
+ *   activityDirectory?: import("./activity.mjs").ActivityDirectory,
  *   operatorDirectory?: import("./operator.mjs").OperatorDirectory,
  *   store?: import("./store.mjs").CustomerApiStore,
  *   rateLimiter?: import("./rate-limit.mjs").RateLimiter,
@@ -50,7 +52,7 @@ import { createPostgresStore } from "./postgres-store.mjs";
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, operatorDirectory, store: injectedStore, rateLimiter: injectedRateLimiter, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operatorDirectory, store: injectedStore, rateLimiter: injectedRateLimiter, clock, logSink, timer } = {}) {
   // Store selection happens once at construction: the memory backend is the
   // default and reproduces today's behavior, `postgres` requires a valid DSN
   // (validated in loadConfig) and probes its schema before the server
@@ -83,6 +85,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     paymentDirectory: paymentDirectory ?? createSyntheticPaymentDirectory(),
     cardDirectory: cardDirectory ?? createSyntheticCardDirectory(),
     checkDirectory: checkDirectory ?? createSyntheticCheckDirectory(),
+    activityDirectory: activityDirectory ?? createSyntheticActivityDirectory(),
     operatorDirectory: operatorDirectory ?? createSyntheticOperatorDirectory(),
     rateLimiter:
       injectedRateLimiter ??

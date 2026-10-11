@@ -2,13 +2,16 @@ import { createHash, randomBytes } from "node:crypto";
 import type {
   ActivityItem,
   ActivityKind,
+  ActivityView,
   AddressScreeningStatus,
   AddressScreeningView,
+  ContractActivity,
   KycVerificationState,
   QuotePreview,
   SessionSource
 } from "../shared/api.js";
 import type { SupportCategory } from "../shared/support.js";
+import type { CustomerApiActivityItem } from "./customer-api-client.js";
 
 export const activityIdPattern = /^act_[0-9a-f]{24}$/;
 export const maxActivityPerSubject = 50;
@@ -166,4 +169,37 @@ export function createActivityLog(options: ActivityLogOptions): ActivityLog {
       return logs.size;
     }
   });
+}
+
+/**
+ * Projects the served customer activity feed onto the BFF view shape. The
+ * upstream kind rides along under `contract` (the feed is a derived-only
+ * cross-domain projection, so it never maps onto the locally recorded
+ * event kinds); monetary items carry their {amount, asset} pair through as
+ * `amount`/`asset` and non-money kinds carry none. The served view is
+ * already newest-first and bounded — the limit trims it exactly like the
+ * local `list`, so the cap semantics stay identical for both arms.
+ */
+export function contractActivityView(
+  upstream: readonly CustomerApiActivityItem[],
+  limit = maxActivityPerSubject
+): ActivityView {
+  const count = Math.min(Math.floor(limit), maxActivityPerSubject);
+  const items: ContractActivity[] = [];
+  if (count >= 1) {
+    for (const item of upstream.slice(0, count)) {
+      items.push(Object.freeze({
+        id: item.activity_id,
+        at: Date.parse(item.created_at),
+        kind: "contract" as const,
+        contract: item.kind,
+        status: item.status,
+        title: item.title,
+        detail: item.detail,
+        ...(item.money === null ? {} : { amount: item.money.amount, asset: item.money.asset }),
+        executable: false as const
+      }));
+    }
+  }
+  return Object.freeze({ mode: "test" as const, items: Object.freeze(items), executable: false as const });
 }

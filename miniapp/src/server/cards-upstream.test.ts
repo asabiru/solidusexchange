@@ -51,6 +51,7 @@ function cardsStub(
     profile: async () => ({ status: "not-configured" }),
     support: async () => ({ status: "not-configured" }),
     authSessions: async () => ({ status: "not-configured" }),
+        activity: async () => ({ status: "not-configured" }),
         users: async () => ({ status: "not-configured" })
   };
   return { client, calls };

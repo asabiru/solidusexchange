@@ -380,6 +380,34 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/activity")) {
+      return {
+        mode: "test",
+        activity: [
+          {
+            activity_id: "act_0123456789abcdef01234567",
+            kind: "deposit",
+            status: "confirmed",
+            title: "Deposit · confirmed",
+            detail: "dep_0123456789abcdef01234567 confirmed",
+            money: { amount: "10.000000", asset: "USDT" },
+            created_at: "2026-10-08T09:15:00.000Z",
+            posting: "none"
+          },
+          {
+            activity_id: "act_fedcba9876543210fedcba98",
+            kind: "security",
+            status: "login",
+            title: "Security · signed in",
+            detail: "ses_fedcba9876543210fedcba98 login",
+            money: null,
+            created_at: "2026-10-08T08:15:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
     if (request.url.endsWith("/notifications")) {
       return {
         mode: "test",
@@ -718,6 +746,34 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(gatedText.includes(key), false, label);
     assert.equal(gatedText.includes("syn_cust_"), false, label);
     assert.equal(gatedText.includes("syn_peer_"), false, label);
+    assert.equal(JSON.parse(gatedText).mode, "test", label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function activityFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/activity", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("act_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "activity_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session never consults upstream: its local activity log view
+    // stays intact (and leak-free) while the verified session fails closed.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/activity", { cookie });
+    assert.equal(gatedResponse.status, 200, label);
+    const gatedText = await gatedResponse.text();
+    assert.equal(gatedText.includes(marker), false, label);
+    assert.equal(gatedText.includes(key), false, label);
+    assert.equal(gatedText.includes("syn_cust_"), false, label);
     assert.equal(JSON.parse(gatedText).mode, "test", label);
     assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
     return elapsed;
@@ -1165,6 +1221,53 @@ describe("Mini App BFF with a failing customer-api", () => {
     const gatedChecks = await getJson(app, "/bff/checks", cookie);
     assert.equal(gatedChecks.mode, "test");
     assert.equal(gatedChecks.checks.length, 5);
+    // The activity feed carries the same KYC gate: only the verified
+    // session consults upstream, and the adapted view keeps the served
+    // item's id/title/detail/status verbatim under the "contract" kind —
+    // the upstream snake_case fields never leak into the app view.
+    const activity = await getJson(app, "/bff/activity", verifiedCookie);
+    assert.equal(activity.mode, "test");
+    assert.equal(activity.executable, false);
+    assert.deepEqual(Object.keys(activity).sort(), ["executable", "items", "mode"]);
+    assert.equal(activity.items.length, 2);
+    assert.deepEqual(Object.keys(activity.items[0]).sort(), [
+      "amount",
+      "asset",
+      "at",
+      "contract",
+      "detail",
+      "executable",
+      "id",
+      "kind",
+      "status",
+      "title"
+    ]);
+    assert.equal(activity.items[0].kind, "contract");
+    assert.equal(activity.items[0].id, "act_0123456789abcdef01234567");
+    assert.equal(activity.items[0].contract, "deposit");
+    assert.equal(activity.items[0].status, "confirmed");
+    assert.equal(activity.items[0].title, "Deposit · confirmed");
+    assert.equal(activity.items[0].detail, "dep_0123456789abcdef01234567 confirmed");
+    assert.equal(activity.items[0].amount, "10.000000");
+    assert.equal(activity.items[0].asset, "USDT");
+    assert.equal(activity.items[0].at, Date.parse("2026-10-08T09:15:00.000Z"));
+    assert.equal(activity.items[0].executable, false);
+    assert.deepEqual(Object.keys(activity.items[1]).sort(), [
+      "at",
+      "contract",
+      "detail",
+      "executable",
+      "id",
+      "kind",
+      "status",
+      "title"
+    ]);
+    assert.equal(activity.items[1].contract, "security");
+    assert.equal(activity.items[1].id, "act_fedcba9876543210fedcba98");
+    const gatedActivity = await getJson(app, "/bff/activity", cookie);
+    assert.equal(gatedActivity.mode, "test");
+    assert.equal(gatedActivity.executable, false);
+    assert.ok(gatedActivity.items.every((item) => item.kind !== "contract"));
     // The KYC status surface consults upstream for gated sessions too (the
     // read is never KYC-gated): the adapted view carries the upstream verdict
     // sessionKyc="kyc-gated" (stub's session_kyc is "unverified") for both.
@@ -1405,6 +1508,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await activityFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
@@ -1430,6 +1534,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await activityFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
