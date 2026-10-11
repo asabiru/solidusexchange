@@ -883,8 +883,13 @@ export function replayExchangeOrderScenario(scenario) {
       clock.advance(step.seconds ?? 0);
     } else if (step.op === "submit") {
       engine.submitOrder(step.input);
-    } else {
+    } else if (step.op === "cancel") {
       engine.cancelOrder(step.instrument, step.order_id);
+    } else {
+      // Unknown operations fail closed instead of being silently mapped
+      // onto a cancel: a scenario carrying a new or mistyped op replays
+      // nothing rather than the wrong thing.
+      throw new TypeError(`unknown scenario step op: ${String(step.op)}`);
     }
   }
   return engine;
@@ -930,8 +935,15 @@ function orderTrails(engine) {
         });
       }
     } else if (event.type === "cancelled" || event.type === "rejected") {
+      // `updated_at` follows the last terminal-type event about the order
+      // (a redundant cancel or duplicate id emits a terminal echo too),
+      // while the displayed remainder is the quantity a terminal event
+      // actually removed or refused — a quantity-less echo must never
+      // erase a remainder already recorded by a real removal.
       trail.terminalAt = event.at;
-      trail.terminalQuantity = typeof fields.quantity === "string" ? fields.quantity : null;
+      if (typeof fields.quantity === "string") {
+        trail.terminalQuantity = fields.quantity;
+      }
     }
   }
   return trails;
@@ -1415,6 +1427,12 @@ function validOrder(order) {
   if (!isIsoTimestamp(candidate.created_at) || !isIsoTimestamp(candidate.updated_at)) {
     return false;
   }
+  // A market order never rests and is never cancelled: it either fills
+  // (and the contract excludes filled orders) or ends rejected, so the
+  // only market row the projection can emit is a rejected one.
+  if (candidate.order_type === "market" && candidate.status !== "rejected") {
+    return false;
+  }
   const created = Date.parse(candidate.created_at);
   const updated = Date.parse(candidate.updated_at);
   // Lifecycle coherence mirrors the synthetic build: a resting open order
@@ -1516,7 +1534,12 @@ export function validTradesView(view) {
   if (candidate.mode !== "test" || !Array.isArray(candidate.trades)) {
     return false;
   }
-  return candidate.trades.every(validTrade);
+  // A trade id is minted once per (order, fill) pair: a repeated id means
+  // two rows claiming one execution record.
+  return (
+    candidate.trades.every(validTrade) &&
+    new Set(candidate.trades.map((trade) => trade.trade_id)).size === candidate.trades.length
+  );
 }
 
 /**
@@ -1604,7 +1627,13 @@ function validMarket(market) {
       return false;
     }
   }
-  return isIsoTimestamp(candidate.as_of);
+  // A fill can only be recorded inside the replayed session: the reported
+  // last trade never post-dates the snapshot close.
+  return (
+    isIsoTimestamp(candidate.as_of) &&
+    (candidate.last_trade === null ||
+      Date.parse(candidate.last_trade.executed_at) <= Date.parse(candidate.as_of))
+  );
 }
 
 /** @param {unknown} view */
@@ -1645,7 +1674,12 @@ export function validExchangeOrdersView(view) {
   if (candidate.mode !== "test" || !Array.isArray(candidate.orders)) {
     return false;
   }
-  return candidate.orders.every(validOrder);
+  // An order id is minted once per submission: a repeated id means two
+  // rows claiming one order record.
+  return (
+    candidate.orders.every(validOrder) &&
+    new Set(candidate.orders.map((order) => order.order_id)).size === candidate.orders.length
+  );
 }
 
 /**

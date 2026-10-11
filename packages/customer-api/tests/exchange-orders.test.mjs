@@ -145,7 +145,7 @@ test("validExchangeOrdersView fails closed on directory drift", () => {
     base_asset: "USDT",
     quote_asset: "RUB",
     side: "buy",
-    order_type: "market",
+    order_type: "limit",
     base_amount: "100.000000",
     price: "90.00000000",
     quote_amount: "9000.00",
