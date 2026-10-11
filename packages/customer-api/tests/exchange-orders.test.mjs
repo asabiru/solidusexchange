@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { createMatchingEngine, createSimulatedClock } from "../../matching-core/src/index.mjs";
+import { createSimulatedClock } from "../../matching-core/src/deterministic.mjs";
+import { createMatchingEngine } from "../../matching-core/src/engine.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {

@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
-import {
-  createMatchingEngine,
-  createSimulatedClock,
-  INSTRUMENTS
-} from "../../matching-core/src/index.mjs";
+import { createSimulatedClock } from "../../matching-core/src/deterministic.mjs";
+import { createMatchingEngine } from "../../matching-core/src/engine.mjs";
+import { INSTRUMENTS } from "../../matching-core/src/instruments.mjs";
 
 // Deterministic synthetic exchange-order source. A future exchange adapter
 // replaces it behind `listFor(subject) -> Promise<ExchangeOrdersView>`;
@@ -54,7 +52,10 @@ import {
 // where the symlinked consumers (miniapp, backoffice, e2e-dev — their CI
 // never runs `npm ci` inside this package) cannot resolve a bare
 // `@solidchange/matching-core` specifier. The relative path resolves in
-// every checkout and is allowlisted in scripts/check-boundary.mjs.
+// every checkout and is allowlisted in scripts/check-boundary.mjs. The
+// leaf modules are imported rather than the package barrel: index.mjs
+// type-references the PostgreSQL journal store, which would drag the pg
+// driver into this package's module graph and typecheck.
 //
 // Determinism / cross-directory-audit invariants: the scenario is a pure
 // function of the subject, and the engine instance is request-scoped —

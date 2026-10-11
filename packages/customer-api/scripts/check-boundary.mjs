@@ -43,7 +43,11 @@ const POSTGRES_STORE_SOURCES = new Set(["postgres-store.mjs"]);
 // reached by repo-relative path because a `file:` dependency cannot
 // resolve under this package's realpathed symlink consumers (miniapp,
 // backoffice, e2e-dev never run `npm ci` inside packages/customer-api).
-const ALLOWED_CROSS_PACKAGE = new Set(["../../matching-core/src/index.mjs"]);
+const ALLOWED_CROSS_PACKAGE = new Set([
+  "../../matching-core/src/deterministic.mjs",
+  "../../matching-core/src/engine.mjs",
+  "../../matching-core/src/instruments.mjs"
+]);
 // Verification scripts additionally read files and assert invariants.
 const SCRIPT_ONLY_IMPORTS = new Set(["node:assert/strict", "node:fs"]);
 
