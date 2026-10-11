@@ -21,7 +21,9 @@ import { createSyntheticSupportDirectory } from "./support.mjs";
 import { createSyntheticUserDirectory } from "./users.mjs";
 import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createSyntheticWithdrawalDirectory } from "./withdrawals.mjs";
-import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
+import { createStoredRateLimiter } from "./rate-limit.mjs";
+import { createMemoryStore } from "./store.mjs";
+import { createPostgresStore } from "./postgres-store.mjs";
 
 /**
  * @param {import("./config.mjs").CustomerApiConfig} config
@@ -43,12 +45,25 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   checkDirectory?: import("./checks.mjs").CheckDirectory,
  *   activityDirectory?: import("./activity.mjs").ActivityDirectory,
  *   operatorDirectory?: import("./operator.mjs").OperatorDirectory,
+ *   store?: import("./store.mjs").CustomerApiStore,
+ *   rateLimiter?: import("./rate-limit.mjs").RateLimiter,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operatorDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operatorDirectory, store: injectedStore, rateLimiter: injectedRateLimiter, clock, logSink, timer } = {}) {
+  // Store selection happens once at construction: the memory backend is the
+  // default and reproduces today's behavior, `postgres` requires a valid DSN
+  // (validated in loadConfig) and probes its schema before the server
+  // listens, so a misconfigured backend fails fast at startup.
+  const ownsStore = injectedStore === undefined;
+  const store =
+    injectedStore ??
+    (config.store?.mode === "postgres"
+      ? createPostgresStore({ dsn: config.store.dsn })
+      : createMemoryStore());
+  await store.initialize?.();
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -72,7 +87,9 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     checkDirectory: checkDirectory ?? createSyntheticCheckDirectory(),
     activityDirectory: activityDirectory ?? createSyntheticActivityDirectory(),
     operatorDirectory: operatorDirectory ?? createSyntheticOperatorDirectory(),
-    rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
+    rateLimiter:
+      injectedRateLimiter ??
+      createStoredRateLimiter({ store, limit: config.rateLimitPerMinute, clock }),
     clock,
     observability: { log: config.log ?? "off", metrics: config.metrics ?? "off" },
     logSink,
@@ -89,20 +106,26 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     })
   );
 
+  if (ownsStore) {
+    server.once("close", () => {
+      void store.close().catch(() => undefined);
+    });
+  }
+
   const address = server.address();
   if (typeof address !== "object" || address === null || !isLoopbackAddress(address.address)) {
     await new Promise((resolve) => server.close(resolve));
     throw new Error("customer-api must only listen on a loopback address");
   }
-  return { server, verifierKind: verifier.kind, address };
+  return { server, verifierKind: verifier.kind, address, store };
 }
 
 async function main() {
   try {
     const config = loadConfig(process.env);
-    const { address, verifierKind } = await startCustomerApi(config);
+    const { address, verifierKind, store } = await startCustomerApi(config);
     const host = address.family === "IPv6" ? `[${address.address}]` : address.address;
-    console.log(`customer-api (dev-only) listening on http://${host}:${address.port} auth=${verifierKind}`);
+    console.log(`customer-api (dev-only) listening on http://${host}:${address.port} auth=${verifierKind} store=${store.kind}`);
   } catch (error) {
     console.error(error instanceof Error ? error.message : "customer-api failed to start");
     process.exitCode = 1;

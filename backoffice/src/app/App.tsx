@@ -682,7 +682,7 @@ export function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; provi
       <WorkflowChecks checks={arrayOf(item.screenings)} />
       <h3 className="detail-section-title">{t("aml.riskFactors")}</h3>
       <ul className="factor-list">
-        {arrayOf(item.riskFactors).map((factor, index) => <li key={index}>{textOf(factor)}</li>)}
+        {arrayOf(item.riskFactors).map((factor) => <li key={textOf(factor)}>{textOf(factor)}</li>)}
       </ul>
       <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={arrayOf(item.evidenceItems)} />
@@ -697,7 +697,7 @@ export function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; provi
 export function LinkedRecords({ values }: { values: readonly string[] }) {
   return (
     <div className="linked-records">
-      {arrayOf(values).map((value, index) => <span key={index}>{textOf(value)}</span>)}
+      {arrayOf(values).map((value) => <span key={textOf(value)}>{textOf(value)}</span>)}
     </div>
   );
 }
@@ -794,7 +794,7 @@ export function InvestigationDetail({ item }: { item: InvestigationCase }) {
       <LinkedRecords values={[...arrayOf<unknown>(item.relatedAlertIds), ...arrayOf<unknown>(item.relatedCaseIds)] as string[]} />
       <h3 className="detail-section-title">{t("investigations.hypotheses")}</h3>
       <ul className="factor-list">
-        {arrayOf(item.hypotheses).map((hypothesis, index) => <li key={index}>{textOf(hypothesis)}</li>)}
+        {arrayOf(item.hypotheses).map((hypothesis) => <li key={textOf(hypothesis)}>{textOf(hypothesis)}</li>)}
       </ul>
       <h3 className="detail-section-title">{t("investigations.timeline")}</h3>
       <div className="timeline-list">
@@ -1224,8 +1224,8 @@ export function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) 
         <div><dt>{t("preview.auditAnchor")}</dt><dd>#{textOf(auditAnchor.sequence)} · {truncatedOf(auditAnchor.hash, 10)}</dd></div>
       </dl>
       <ul>
-        {arrayOf(policy.blockers).map((blocker, index) => (
-          <li key={index}>{blockerLabel(blocker)}</li>
+        {arrayOf(policy.blockers).map((blocker) => (
+          <li key={blockerLabel(blocker)}>{blockerLabel(blocker)}</li>
         ))}
       </ul>
     </section>
@@ -1471,14 +1471,17 @@ export function ReportsView({ data }: { data: ReportListPayload }) {
                   <TableShell key={`${textOf(table.id)}:${tableIndex}`} label={textOf(table.title)}>
                     <table>
                       <thead>
-                        <tr>{columns.map((column, columnIndex) => <th scope="col" key={columnIndex}>{textOf(column)}</th>)}</tr>
+                        <tr>{columns.map((column) => <th scope="col" key={textOf(column)}>{textOf(column)}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {arrayOf<unknown>(recordOf(table).rows).map((row, rowIndex) => (
-                          <tr key={rowIndex}>
-                            {arrayOf<unknown>(row).map((cell, cellIndex) => <td key={cellIndex}>{textOf(cell)}</td>)}
-                          </tr>
-                        ))}
+                        {arrayOf<unknown>(recordOf(table).rows).map((row) => {
+                          const cells = arrayOf<unknown>(row);
+                          return (
+                            <tr key={cells.map((cell) => textOf(cell)).join("\u001f")}>
+                              {cells.map((cell) => <td key={textOf(cell)}>{textOf(cell)}</td>)}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </TableShell>

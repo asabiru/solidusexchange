@@ -55,6 +55,31 @@ export function loadConfig(env) {
     throw new Error('CUSTOMER_API_METRICS must be unset, "off" or "loopback"');
   }
 
+  // Dev-only persistence seam for the mutable rate-limit control state.
+  // Unset or "memory" reproduces today's in-process behavior; "postgres"
+  // requires a connection DSN and fails fast rather than falling back.
+  const storeMode = env.CUSTOMER_API_STORE ?? "memory";
+  if (storeMode !== "memory" && storeMode !== "postgres") {
+    throw new Error('CUSTOMER_API_STORE must be unset, "memory" or "postgres"');
+  }
+  const storeDsn = env.CUSTOMER_API_STORE_DSN;
+  if (storeMode === "postgres") {
+    if (typeof storeDsn !== "string" || storeDsn.length === 0) {
+      throw new Error("CUSTOMER_API_STORE_DSN is required when CUSTOMER_API_STORE=postgres");
+    }
+    let dsnUrl;
+    try {
+      dsnUrl = new URL(storeDsn);
+    } catch {
+      throw new Error("CUSTOMER_API_STORE_DSN must be a valid PostgreSQL connection URL");
+    }
+    if (dsnUrl.protocol !== "postgres:" && dsnUrl.protocol !== "postgresql:") {
+      throw new Error("CUSTOMER_API_STORE_DSN must be a valid PostgreSQL connection URL");
+    }
+  } else if (storeDsn !== undefined) {
+    throw new Error("CUSTOMER_API_STORE_DSN requires CUSTOMER_API_STORE=postgres");
+  }
+
   return Object.freeze({
     host,
     port: Number(portText),
@@ -62,6 +87,10 @@ export function loadConfig(env) {
     authMode: authMode === "synthetic" ? "synthetic-dev" : "deny-all",
     devTokenKey: authMode === "synthetic" ? key : null,
     log,
-    metrics
+    metrics,
+    store: Object.freeze({
+      mode: storeMode,
+      dsn: storeMode === "postgres" ? storeDsn : null
+    })
   });
 }

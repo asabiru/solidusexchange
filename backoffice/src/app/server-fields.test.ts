@@ -115,7 +115,7 @@ describe("toneOf whitelists data-tone values", () => {
 
 describe("prototype-key lookups fail closed", () => {
   it("subjectEntryLinkOf never resolves inherited Object.prototype members", () => {
-    for (const hostile of ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf", "check ".trimEnd() + "x", {}, [], null, undefined]) {
+    for (const hostile of ["__proto__", "constructor", "toString", "hasOwnProperty", "valueOf", `${"check ".trimEnd()}x`, {}, [], null, undefined]) {
       assert.equal(subjectEntryLinkOf(hostile), undefined);
     }
     assert.deepEqual(subjectEntryLinkOf("check"), { screen: "checks", capability: "checks:read" });

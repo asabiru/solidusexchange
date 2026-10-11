@@ -375,7 +375,7 @@ export function createCustomerApiHandler({
       return;
     }
 
-    const limit = rateLimiter.consume(rateLimitKey(request.socket.remoteAddress));
+    const limit = await rateLimiter.consume(rateLimitKey(request.socket.remoteAddress));
     if (!limit.allowed) {
       fail(429, "RATE_LIMITED", undefined, { "retry-after": String(limit.retryAfterSeconds) });
       return;

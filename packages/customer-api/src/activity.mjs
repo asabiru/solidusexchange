@@ -40,6 +40,7 @@ export const ACTIVITY_KINDS = Object.freeze([
 // sets. KYC events mirror the miniapp's activity states (every application
 // status but not_started); security events mirror the miniapp's
 // session_login / session_revoked pair.
+/** @type {Readonly<Record<string, readonly string[]>>} */
 export const ACTIVITY_STATUSES = Object.freeze({
   deposit: DEPOSIT_STATUSES,
   withdrawal: WITHDRAWAL_STATUSES,
@@ -62,6 +63,7 @@ const ACTIVITY_ASSET_SCALES = new Map(Object.entries(ACTIVITY_ASSETS));
 // The domain id prefix a detail line cites for each money/domain kind —
 // the same prefixes the sibling collections mint (qte_* for quotes); kyc
 // and security entries carry no domain reference.
+/** @type {Readonly<Record<string, string | undefined>>} */
 const KIND_REF_PREFIX = Object.freeze({
   deposit: "dep_",
   withdrawal: "wdr_",
@@ -71,6 +73,7 @@ const KIND_REF_PREFIX = Object.freeze({
   card: "crd_",
   check: "chk_"
 });
+/** @type {Readonly<Record<string, string>>} */
 const KIND_TITLE = Object.freeze({
   deposit: "Deposit",
   withdrawal: "Withdrawal",
@@ -82,6 +85,7 @@ const KIND_TITLE = Object.freeze({
   kyc: "Identity verification",
   security: "Session security"
 });
+/** @type {Readonly<Record<string, string>>} */
 const SECURITY_TITLES = Object.freeze({ login: "Session login", revoked: "Session revoked" });
 const DOMAIN_ID_PATTERN = /(?:dep|wdr|qte|ord|pay|crd|chk)_[0-9a-f]{24}/u;
 
@@ -173,7 +177,7 @@ function buildActivityItem(subject, index) {
   const monetary = MONEY_KINDS.has(kind);
   const [asset, scale] = monetary
     ? ACTIVITY_ASSET_ENTRIES[Number(units(subject, `asset:${index}`, BigInt(ACTIVITY_ASSET_ENTRIES.length)))]
-    : [null, 0];
+    : ["", 0];
   const money = monetary
     ? Object.freeze({ amount: decimal(1_000_000n + units(subject, `amount:${index}`, 9_999_000_001n), scale), asset })
     : null;

@@ -212,6 +212,46 @@ exists in `Documentation/regulated-core/decision-register.md` and is still `Open
   source address does not reset the limit.
 - Unexpected failures return a generic `500 INTERNAL_ERROR` without internals.
 
+## Dev store seam
+
+The only state worth persisting is the rate-limit bucket map: a restart
+currently resets every per-peer counter. Everything else stays in-memory —
+the synthetic directories are deterministic `viewFor`/`listFor`/`statusFor`
+derivations that regenerate identically, the token verifier is stateless,
+and metrics are observability data expected to reset.
+
+`src/store.mjs` defines a narrow seam — `initialize()`, one atomic
+`consumeRateLimit(command)` and `close()` — selected once at startup via
+`CUSTOMER_API_STORE`:
+
+- `memory` (default, also when unset): today's in-process bucket map.
+- `postgres`: `src/postgres-store.mjs` over the `pg` driver; requires
+  `CUSTOMER_API_STORE_DSN` with a `postgres://` or `postgresql://` URL and
+  probes `customer_api.schema_migrations` before listening — an unreachable
+  or unmigrated database fails startup, never falls back. A DSN without
+  `CUSTOMER_API_STORE=postgres` is a startup error too. Buckets are scoped
+  per `namespace` (default `rate-limit`) so the per-limiter bound mirrors
+  the memory map's per-instance isolation.
+
+The schema lives in `migrations/0001_customer_api_store.sql` (schema
+`customer_api`: `rate_limit_buckets` plus an append-only, sequence-checked
+`schema_migrations` history table, `REVOKE ALL ... FROM PUBLIC`), pinned by
+`scripts/verify-postgres-migration-source-{catalog,policy}.mjs`. Apply and
+exercise it end to end against the repo's pinned PostgreSQL image:
+
+```bash
+npm run verify:migrations            # source catalog + policy
+# against a running postgres:16.10 dev database:
+PSQL_DOCKER_IMAGE=postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297 \
+  bash tests/postgres-store.sh       # migrations + store contract over pg
+```
+
+`tests/store-contract.mjs` is the shared consume contract; it runs against
+both backends (`tests/store.test.mjs` memory arm inside `npm test`,
+`tests/postgres-store-contract.mjs` postgres arm inside the shell script —
+deliberately not matched by `tests/*.test.mjs` so environments without a
+database stay self-contained).
+
 ## Dev observability
 
 - `CUSTOMER_API_LOG=json` writes one JSON line per completed request to stdout:
@@ -245,15 +285,19 @@ curl -s http://127.0.0.1:8790/api/v1/customer/capabilities \
 ```
 
 Other settings: `CUSTOMER_API_HOST` (loopback only), `CUSTOMER_API_PORT`,
-`CUSTOMER_API_RATE_LIMIT_PER_MINUTE`.
+`CUSTOMER_API_RATE_LIMIT_PER_MINUTE`, `CUSTOMER_API_STORE`,
+`CUSTOMER_API_STORE_DSN` (see above).
 
 ## No build step
 
 The package is plain Node ESM (`.mjs`) and runs directly from `src/`, so there
 is no `build` script and nothing to compile or bundle. Types are JSDoc
 annotations checked by `npm run typecheck` (`tsconfig.json`, `noEmit`). The
-only devDependencies are the exact `typescript` and `@types/node` versions
-pinned by `scripts/check-boundary.mjs`; runtime dependencies stay forbidden.
+only runtime dependency is `pg`, pinned by `scripts/check-boundary.mjs` and
+lazy-loaded only inside the PostgreSQL store's `initialize()` — consumers
+importing the package in memory mode never touch the driver; the only
+devDependencies are the exact `typescript`, `@types/node` and `@types/pg`
+versions the boundary checker pins.
 
 ## Conformance tests
 
