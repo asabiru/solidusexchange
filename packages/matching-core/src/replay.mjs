@@ -11,6 +11,7 @@ import {
   REJECT_REASONS,
 } from "./events.mjs";
 import { INSTRUMENTS, instrumentIndex } from "./instruments.mjs";
+import { validJournalStore } from "./journal-store.mjs";
 import {
   hydrateEngineState,
   parseEngineSnapshot,
@@ -40,6 +41,7 @@ import {
  * @typedef {import("./engine.mjs").TrackedOrder} TrackedOrder
  * @typedef {import("./events.mjs").MatchingEvent} MatchingEvent
  * @typedef {import("./instruments.mjs").InstrumentDefinition} InstrumentDefinition
+ * @typedef {import("./journal-store.mjs").MatchingJournalStore} MatchingJournalStore
  * @typedef {import("./snapshot.mjs").EngineSnapshot} EngineSnapshot
  */
 
@@ -125,10 +127,10 @@ function validClock(clock) {
  * folded events; submitting afterwards continues `seq`/`fill_id` numbering
  * where the stream ended.
  *
- * @param {{ instruments?: InstrumentDefinition[], events?: readonly MatchingEvent[], clock?: SimulatedClock }} [options]
+ * @param {{ instruments?: InstrumentDefinition[], events?: readonly MatchingEvent[], clock?: SimulatedClock, journalStore?: MatchingJournalStore }} [options]
  */
 export function replayMatchingEngine(options = {}) {
-  const candidate = plainOptions(options, ["instruments", "events", "clock"]);
+  const candidate = plainOptions(options, ["instruments", "events", "clock", "journalStore"]);
   if (candidate.instruments !== undefined && !Array.isArray(candidate.instruments)) {
     throw new TypeError("instruments must be an array of instrument definitions");
   }
@@ -136,6 +138,8 @@ export function replayMatchingEngine(options = {}) {
     /** @type {InstrumentDefinition[] | undefined} */ (candidate.instruments) ?? INSTRUMENTS,
   );
   const clock = validClock(candidate.clock);
+  const journalStore =
+    candidate.journalStore === undefined ? undefined : validJournalStore(candidate.journalStore);
   const events = snapshotPlainData(candidate.events);
   if (!Array.isArray(events)) {
     invalid("events must be an array");
@@ -584,6 +588,34 @@ export function replayMatchingEngine(options = {}) {
     nextSeq: hydrated.nextSeq,
     nextFill: hydrated.nextFill,
     lastAt: hydrated.lastAt,
+  }, journalStore);
+}
+
+/**
+ * The journal store's restore path — the only way recorded events reach
+ * an engine. `store.load()` returns the raw durable stream and this
+ * function folds it through `replayMatchingEngine`'s fail-closed
+ * validation: contiguous `seq`, canonical timestamps, known fields, fill
+ * pairing and tracked-order arithmetic must all hold or a corrupted or
+ * hostile row fails here, before any engine exists. The replayed engine
+ * keeps appending to the same store, so new submissions continue the
+ * recorded `seq` contiguously.
+ *
+ * @param {MatchingJournalStore} store
+ * @param {{ instruments?: InstrumentDefinition[], clock?: SimulatedClock }} [options]
+ */
+export async function replayMatchingJournalStore(store, options = {}) {
+  validJournalStore(store);
+  const candidate = plainOptions(options, ["instruments", "clock"]);
+  if (candidate.instruments !== undefined && !Array.isArray(candidate.instruments)) {
+    throw new TypeError("instruments must be an array of instrument definitions");
+  }
+  const events = await store.load();
+  return replayMatchingEngine({
+    instruments: candidate.instruments,
+    events,
+    clock: validClock(candidate.clock),
+    journalStore: store,
   });
 }
 

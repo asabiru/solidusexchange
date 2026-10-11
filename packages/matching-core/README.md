@@ -186,6 +186,50 @@ state, it never writes storage, does I/O, or posts anything.
   an `invalid event stream:` reason. The replayed engine's `journal()`
   returns the folded stream.
 
+## Journal persistence seam (dev-only)
+
+The engine can mirror every emitted event batch into a `MatchingJournalStore`
+— the dev-only durability seam, same shape as `customer-api`'s store:
+`{ kind, initialize?(), append(events), load(), close() }`. `posting: "none"`
+is untouched: this is data durability only, never ledger posting.
+
+- `createMatchingEngine({ instruments?, clock?, journalStore? })` attaches a
+  store; each operation mirrors its emitted batch via `append(events)`
+  before returning. The engine's in-memory `journal()` stays the live
+  record, unchanged.
+- `createMemoryJournalStore()` is the default backend: in-process only,
+  synchronous appends, contiguous-`seq` enforced per batch.
+- `createPostgresJournalStore({ dsn, namespace })` is the durable backend:
+  `MATCHING_CORE_STORE=postgres` + `MATCHING_CORE_STORE_DSN=postgres://…`
+  select it, resolved fail-closed by `resolveJournalStoreEnv` (unset →
+  memory; unknown kind or missing/invalid DSN → `StoreConfigError` at
+  startup, never silently degraded). The `pg` driver is lazy-loaded inside
+  `initialize()` — importing this module without the dependency installed
+  still works. Every `append` is ONE statement —
+  `matching_core.append_matching_journal` advisory-locks the namespace,
+  checks contiguous-`seq` continuation, and inserts atomically — and a
+  caller that cannot await treats the store's next awaited operation as
+  the durability boundary: the first write failure is latched and every
+  later `append`/`load`/`close` rethrows it.
+- `replayMatchingJournalStore(store, { instruments?, clock? })` is the only
+  engine-facing restore path: `store.load()` returns the raw recorded
+  stream and it is folded through `replayMatchingEngine`'s fail-closed
+  validation — a corrupted or hostile row fails at restore and never
+  reaches an engine. The replayed engine keeps appending to the same
+  store, continuing `seq` contiguously.
+- `migrations/0001_matching_journal.sql` creates the `matching_core`
+  schema: append-only `schema_migrations` history, the
+  `matching_journal` table (`namespace,seq` PK; `at`, `type`, `payload`
+  jsonb self-consistent via CHECKs), append-only row triggers, contiguous
+  `seq` per namespace enforced at insert, and the
+  `append_matching_journal` function. `npm run verify:migrations` runs the
+  source catalog and policy verifiers; `tests/postgres-journal.sh` is the
+  pg arm (mirrors `customer-api/tests/postgres-store.sh`: applies
+  migrations via host `psql` or `PSQL_DOCKER_IMAGE`, exports
+  `MATCHING_CORE_STORE_DSN`, runs `tests/postgres-journal-contract.mjs` —
+  deliberately not a `*.test.mjs` so `npm test` stays docker-free, and it
+  fails hard without the DSN).
+
 Replayed and restored engines agree byte-identically with the live
 engine on `bookSnapshot` and `orderStatus` — `tests/replay.test.mjs`
 pins all three paths on one mixed limit+market scenario. One honest gap:
@@ -209,4 +253,6 @@ npm run verify   # check + lint + typecheck + test + build
 ```
 
 Individual scripts: `npm run check`, `npm run lint`, `npm run typecheck`,
-`npm test`, `npm run build` (emits `.d.mts` declarations to `dist/`).
+`npm test`, `npm run build` (emits `.d.mts` declarations to `dist/`),
+`npm run verify:migrations`, and `bash tests/postgres-journal.sh` for the
+docker-backed PostgreSQL contract.
