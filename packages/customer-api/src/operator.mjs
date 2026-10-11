@@ -390,9 +390,43 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  */
 
 /**
+ * @typedef {object} OperatorQueueItem
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} display_name
+ * @property {string} submitted_at
+ * @property {string} sla_due_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ */
+
+/**
+ * @typedef {object} OperatorQueueSummary
+ * @property {number} count
+ * @property {{ pending: number, in_review: number, escalated: number }} by_state
+ */
+
+/**
+ * @typedef {object} OperatorQueueSection
+ * @property {string} kind
+ * @property {readonly OperatorQueueItem[]} items
+ * @property {OperatorQueueSummary} summary
+ * @property {string} posting
+ */
+
+/**
+ * @typedef {object} OperatorQueueView
+ * @property {string} mode
+ * @property {OperatorQueueSection} queue
+ */
+
+/**
  * @typedef {object} OperatorSubjectsDirectory
  * @property {() => Promise<OperatorSubjectsView>} subjectsFor
  * @property {(subjectId: string) => Promise<OperatorSubjectDetailView | null>} subjectFor
+ * @property {() => Promise<OperatorQueueView>} queueFor
  */
 
 /**
@@ -664,6 +698,282 @@ export function createSyntheticOperatorSubjectsDirectory() {
         mode: "test",
         subject: buildSubjectDetail(buildSubjectRow(index))
       });
+    },
+    // The queue is a read-only projection of the same roster this directory
+    // already owns, so it shares the directory seam instead of minting a
+    // third one.
+    async queueFor() {
+      return buildOperatorQueueView();
     }
   });
+}
+
+// The operator KYC work queue is a read-only projection of the shared
+// customer universe: every subject whose kyc_status is anything but
+// "verified" occupies the queue — a "pending" application and a still
+// "unverified" file both await operator attention here, and a verified
+// subject leaves it. An item carries only deterministic queue metadata:
+// the opaque qky_* id, the submission timestamp (clamped to never precede
+// the subject's own registration), the SLA deadline at a deterministic 2-5
+// day offset, the review state ("escalated" whenever the roster flags the
+// subject for escalation, "in_review" for a submitted application, else
+// "pending"), the priority that follows it, the assignee that stays null
+// while the item is unclaimed and the age against the pinned snapshot
+// instant. Nothing here mints or implies an approval state change — a
+// queue read is a projection, never a decision surface.
+const QUEUE_KIND = "kyc";
+const QUEUE_VIEW_KEYS = Object.freeze(["mode", "queue"]);
+const QUEUE_KEYS = Object.freeze(["items", "kind", "posting", "summary"]);
+const QUEUE_ITEM_KEYS = Object.freeze([
+  "age_ms",
+  "assignee",
+  "display_name",
+  "priority",
+  "queue_id",
+  "sla_due_at",
+  "state",
+  "subject_id",
+  "submitted_at"
+]);
+const QUEUE_SUMMARY_KEYS = Object.freeze(["by_state", "count"]);
+export const OPERATOR_QUEUE_STATES = Object.freeze(["pending", "in_review", "escalated"]);
+const QUEUE_STATE_KEYS = Object.freeze([...OPERATOR_QUEUE_STATES].sort());
+export const OPERATOR_QUEUE_PRIORITIES = Object.freeze(["normal", "high", "urgent"]);
+const QUEUE_ASSIGNEE_KEYS = Object.freeze(["subject"]);
+const QUEUE_ID_PATTERN = /^qky_[0-9a-f]{24}$/u;
+const QUEUE_MAX_ITEMS = 64;
+// The pinned snapshot instant the queue ages against. The read is a pure
+// function, so its "now" is part of the derivation — it lands after every
+// roster registration (the registered window is 120 days from BASE_MS),
+// which keeps every item's age non-negative.
+const QUEUE_SNAPSHOT_MS = BASE_MS + 150 * 86_400_000;
+const QUEUE_AGE_WINDOW_MS = 21 * 86_400_000;
+const QUEUE_SLA_BASE_MS = 2 * 86_400_000;
+const QUEUE_SLA_JITTER_MS = 3 * 86_400_000;
+const QUEUE_ESCALATION_FLAGS_MIN = 4;
+const QUEUE_HIGH_FLAGS_MIN = 2;
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @returns {string}
+ */
+function queueItemState(row) {
+  // An escalated item is a flagged one: the roster's open flag count is the
+  // escalation driver, so a queue item can never disagree with the flags a
+  // subject row already exposes.
+  if (row.flags >= QUEUE_ESCALATION_FLAGS_MIN) {
+    return "escalated";
+  }
+  // A submitted application sits in review; everything else is an awaiting
+  // item no operator has picked up yet.
+  return row.kyc_status === "pending" ? "in_review" : "pending";
+}
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @param {string} state
+ * @returns {string}
+ */
+function queueItemPriority(row, state) {
+  if (state === "escalated") {
+    return "urgent";
+  }
+  return row.flags >= QUEUE_HIGH_FLAGS_MIN ? "high" : "normal";
+}
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @returns {OperatorQueueItem}
+ */
+function buildQueueItem(row) {
+  const subjectId = row.subject_id;
+  const registeredMs = Date.parse(row.registered_at);
+  // An application can never be submitted before the account exists: the
+  // deterministic age draw is clamped to the subject's own registration.
+  const submittedMs = Math.max(
+    registeredMs,
+    QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
+  );
+  const slaDueMs =
+    submittedMs + QUEUE_SLA_BASE_MS + Number(subjectsUnits(subjectId, "sla", BigInt(QUEUE_SLA_JITTER_MS)));
+  const state = queueItemState(row);
+  return Object.freeze({
+    queue_id: `qky_${subjectsDigest(subjectId, "queue").toString("hex").slice(0, 24)}`,
+    subject_id: subjectId,
+    display_name: row.display_name,
+    submitted_at: new Date(submittedMs).toISOString(),
+    sla_due_at: new Date(slaDueMs).toISOString(),
+    state,
+    priority: queueItemPriority(row, state),
+    // An awaiting item is unclaimed; once an operator picks it up the
+    // assignee is a deterministic syn_oper_* staff ref inside the nested
+    // slot (nullable only inside a nested object, per the money precedent).
+    assignee: state === "pending"
+      ? null
+      : Object.freeze({
+          subject: `syn_oper_${subjectsDigest(subjectId, "assignee").toString("hex").slice(0, 16)}`
+        }),
+    age_ms: QUEUE_SNAPSHOT_MS - submittedMs
+  });
+}
+
+/** @returns {readonly OperatorQueueItem[]} */
+function expectedQueueItems() {
+  const items = [];
+  for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
+    const row = buildSubjectRow(index);
+    if (row.kyc_status === "verified") {
+      continue;
+    }
+    items.push(buildQueueItem(row));
+  }
+  // Most overdue work first; the id breaks ties so the order is total.
+  items.sort((left, right) =>
+    left.sla_due_at === right.sla_due_at
+      ? left.queue_id.localeCompare(right.queue_id)
+      : left.sla_due_at.localeCompare(right.sla_due_at)
+  );
+  return items;
+}
+
+/**
+ * @param {readonly OperatorQueueItem[]} items
+ * @returns {OperatorQueueSummary}
+ */
+function queueSummary(items) {
+  const byState = { pending: 0, in_review: 0, escalated: 0 };
+  for (const item of items) {
+    byState[/** @type {"pending" | "in_review" | "escalated"} */ (item.state)] += 1;
+  }
+  return Object.freeze({ count: items.length, by_state: Object.freeze(byState) });
+}
+
+/** @returns {OperatorQueueView} */
+function buildOperatorQueueView() {
+  const items = expectedQueueItems();
+  return Object.freeze({
+    mode: "test",
+    queue: Object.freeze({
+      kind: QUEUE_KIND,
+      items: Object.freeze(items),
+      summary: queueSummary(items),
+      posting: "none"
+    })
+  });
+}
+
+/** @param {unknown} item */
+function validQueueItemShape(item) {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorQueueItem} */ (item);
+  if (JSON.stringify(Object.keys(item).sort()) !== JSON.stringify([...QUEUE_ITEM_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !QUEUE_ID_PATTERN.test(candidate.queue_id) ||
+    !CUSTOMER_SUBJECT_PATTERN.test(candidate.subject_id) ||
+    !DISPLAY_NAME_PATTERN.test(candidate.display_name) ||
+    !OPERATOR_QUEUE_STATES.includes(candidate.state) ||
+    !OPERATOR_QUEUE_PRIORITIES.includes(candidate.priority) ||
+    !Number.isInteger(candidate.age_ms) ||
+    candidate.age_ms < 0
+  ) {
+    return false;
+  }
+  if (!isIsoTimestamp(candidate.submitted_at) || !isIsoTimestamp(candidate.sla_due_at)) {
+    return false;
+  }
+  if (Date.parse(candidate.sla_due_at) <= Date.parse(candidate.submitted_at)) {
+    return false;
+  }
+  if (candidate.assignee === null) {
+    return true;
+  }
+  if (typeof candidate.assignee !== "object" || Array.isArray(candidate.assignee)) {
+    return false;
+  }
+  const assignee = /** @type {{ subject: unknown }} */ (candidate.assignee);
+  return (
+    JSON.stringify(Object.keys(candidate.assignee).sort()) ===
+      JSON.stringify([...QUEUE_ASSIGNEE_KEYS].sort()) &&
+    typeof assignee.subject === "string" &&
+    SUBJECT_PATTERN.test(assignee.subject)
+  );
+}
+
+/** @param {unknown} view */
+export function validOperatorQueueView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorQueueView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...QUEUE_VIEW_KEYS].sort())) {
+    return false;
+  }
+  if (candidate.mode !== "test") {
+    return false;
+  }
+  const queue = /** @type {unknown} */ (candidate.queue);
+  if (queue === null || typeof queue !== "object" || Array.isArray(queue)) {
+    return false;
+  }
+  const section = /** @type {OperatorQueueSection} */ (queue);
+  if (JSON.stringify(Object.keys(queue).sort()) !== JSON.stringify([...QUEUE_KEYS].sort())) {
+    return false;
+  }
+  if (section.kind !== QUEUE_KIND || section.posting !== "none") {
+    return false;
+  }
+  if (!Array.isArray(section.items) || section.items.length > QUEUE_MAX_ITEMS) {
+    return false;
+  }
+  if (!section.items.every(validQueueItemShape)) {
+    return false;
+  }
+  const summary = /** @type {unknown} */ (section.summary);
+  if (summary === null || typeof summary !== "object" || Array.isArray(summary)) {
+    return false;
+  }
+  if (JSON.stringify(Object.keys(summary).sort()) !== JSON.stringify([...QUEUE_SUMMARY_KEYS].sort())) {
+    return false;
+  }
+  const byState = /** @type {unknown} */ (section.summary.by_state);
+  if (byState === null || typeof byState !== "object" || Array.isArray(byState)) {
+    return false;
+  }
+  if (JSON.stringify(Object.keys(byState).sort()) !== JSON.stringify([...QUEUE_STATE_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !Number.isInteger(section.summary.count) ||
+    section.summary.count < 0 ||
+    !Object.values(section.summary.by_state).every(
+      (value) => Number.isInteger(value) && value >= 0
+    )
+  ) {
+    return false;
+  }
+  // The queue is a pure function of the shared roster: the item set must
+  // equal the deterministic membership derivation verbatim — membership,
+  // order and every derived field — and the summary must equal the counts
+  // recomputed over it. Anything else is a fabricated read and fails
+  // closed.
+  const expected = expectedQueueItems();
+  if (section.items.length !== expected.length) {
+    return false;
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    if (JSON.stringify(section.items[index]) !== JSON.stringify(expected[index])) {
+      return false;
+    }
+  }
+  const recomputed = queueSummary(expected);
+  return (
+    section.summary.count === recomputed.count &&
+    section.summary.by_state.pending === recomputed.by_state.pending &&
+    section.summary.by_state.in_review === recomputed.by_state.in_review &&
+    section.summary.by_state.escalated === recomputed.by_state.escalated
+  );
 }

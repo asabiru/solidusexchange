@@ -537,6 +537,24 @@ export const OPERATIONS = Object.freeze([
       "x-device-id"
     ]),
     statuses: Object.freeze([200, 401, 404, 429, 500])
+  }),
+  // The operator queue read is the staff KYC work-queue projection of the
+  // same shared customer universe the subjects directory already exposes:
+  // an unconditional operator read-tier grant like its siblings, so it
+  // declares no 403.
+  Object.freeze({
+    operationId: "getOperatorQueue",
+    method: "GET",
+    path: "/api/v1/operator/queue",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 

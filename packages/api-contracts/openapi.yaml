@@ -1954,6 +1954,60 @@
           }
         }
       }
+    },
+    "/api/v1/operator/queue": {
+      "get": {
+        "operationId": "getOperatorQueue",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read the operator KYC work queue projected from the shared subject roster",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator KYC work queue",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2470,6 +2524,155 @@
                 "maximum": 8
               }
             }
+          }
+        }
+      },
+      "OperatorQueueView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "queue"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "queue": {
+            "$ref": "#/components/schemas/OperatorQueue"
+          }
+        }
+      },
+      "OperatorQueue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kind",
+          "items",
+          "summary",
+          "posting"
+        ],
+        "properties": {
+          "kind": {
+            "const": "kyc"
+          },
+          "items": {
+            "type": "array",
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OperatorQueueItem"
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "count",
+              "by_state"
+            ],
+            "properties": {
+              "count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "by_state": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pending",
+                  "in_review",
+                  "escalated"
+                ],
+                "properties": {
+                  "pending": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "in_review": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "escalated": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "OperatorQueueItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "queue_id",
+          "subject_id",
+          "display_name",
+          "submitted_at",
+          "sla_due_at",
+          "state",
+          "priority",
+          "assignee",
+          "age_ms"
+        ],
+        "properties": {
+          "queue_id": {
+            "type": "string",
+            "pattern": "^qky_[0-9a-f]{24}$"
+          },
+          "subject_id": {
+            "type": "string",
+            "pattern": "^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sla_due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_review",
+              "escalated"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "high",
+              "urgent"
+            ]
+          },
+          "assignee": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ],
+            "properties": {
+              "subject": {
+                "type": "string",
+                "pattern": "^syn_oper_[a-z0-9]{8,32}$"
+              }
+            }
+          },
+          "age_ms": {
+            "type": "integer",
+            "minimum": 0
           }
         }
       },
