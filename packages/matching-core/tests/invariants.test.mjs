@@ -10,7 +10,8 @@ const PRICE_SCALE = 8;
 
 /**
  * A busy deterministic scenario exercising fills at several levels, partial
- * fills, cancels and a self-trade rejection.
+ * fills, cancels, a self-trade rejection and order amendments on every
+ * priority path.
  *
  * @param {ReturnType<typeof createMatchingEngine>} engine
  */
@@ -24,6 +25,13 @@ function scenario(engine) {
     order(6, { side: "buy", price: "89", quantity: "1", owner: "desk-e" }),
   ];
   const outputs = submissions.map((submission) => engine.submitOrder(submission));
+  // Amendments: a quantity decrease keeps ord 3's slot, a quantity increase
+  // and a price change re-queue ords 4 and 2, and ord 5's price amend crosses
+  // the book so it sweeps the asks as a taker.
+  outputs.push(engine.amendOrder({ order_id: ord(3), quantity: "4" }));
+  outputs.push(engine.amendOrder({ order_id: ord(4), quantity: "6" }));
+  outputs.push(engine.amendOrder({ order_id: ord(2), price: "91" }));
+  outputs.push(engine.amendOrder({ order_id: ord(5), price: "91" }));
   outputs.push(engine.submitOrder(order(7, { side: "buy", price: "92", quantity: "9", owner: "desk-e" })));
   outputs.push(engine.cancelOrder("USDT/RUB", ord(6)));
   outputs.push(engine.submitOrder(order(8, { side: "sell", price: "88", quantity: "6", owner: "desk-c" })));
@@ -61,6 +69,13 @@ function conserved(events) {
     if (event.type === "resting" || event.type === "cancelled") {
       remainder.set(event.order_id, parseScaledDecimal(event.quantity, BASE_SCALE));
     }
+    if (event.type === "amended") {
+      // The event carries the new TOTAL quantity: the remainder becomes the
+      // total minus what the order already filled.
+      const total = parseScaledDecimal(event.quantity, BASE_SCALE);
+      submitted.set(event.order_id, total);
+      remainder.set(event.order_id, total - filledBy.get(event.order_id));
+    }
     if (event.type === "rejected" && event.quantity !== undefined) {
       remainder.set(event.order_id, 0n);
       filledBy.set(
@@ -91,6 +106,12 @@ describe("matching invariants", () => {
     const events = scenario(engine);
     for (const event of events) {
       if (event.type === "accepted" && event.price !== undefined) {
+        limits.set(event.order_id, {
+          side: event.side,
+          price: parseScaledDecimal(event.price, PRICE_SCALE),
+        });
+      }
+      if (event.type === "amended") {
         limits.set(event.order_id, {
           side: event.side,
           price: parseScaledDecimal(event.price, PRICE_SCALE),

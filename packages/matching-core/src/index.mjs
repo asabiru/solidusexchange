@@ -14,6 +14,7 @@ export {
 } from "./deterministic.mjs";
 export { createMatchingEngine } from "./engine.mjs";
 export {
+  AMEND_KEYS,
   EVENT_TYPES,
   FILL_ID_PATTERN,
   isOrderId,

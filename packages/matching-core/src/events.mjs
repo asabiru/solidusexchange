@@ -11,6 +11,7 @@ export const EVENT_TYPES = Object.freeze([
   "partially_filled",
   "filled",
   "cancelled",
+  "amended",
   "rejected",
 ]);
 
@@ -30,6 +31,8 @@ export const REJECT_REASONS = Object.freeze([
   "self_trade",
   "insufficient_liquidity",
   "order_not_resting",
+  "no_change",
+  "quantity_below_filled",
 ]);
 
 /**
@@ -59,6 +62,8 @@ export const ORDER_KEYS = Object.freeze([
   "type",
 ]);
 
+export const AMEND_KEYS = Object.freeze(["order_id", "price", "quantity"]);
+
 /**
  * @typedef {object} OrderInput
  * @property {string} order_id `ord_` + 24 lowercase hex.
@@ -74,6 +79,15 @@ export const ORDER_KEYS = Object.freeze([
  */
 
 /**
+ * @typedef {object} AmendInput
+ * @property {string} order_id The resting order to replace.
+ * @property {string} [price] New limit price; absent keeps the current one.
+ * @property {string} [quantity] New TOTAL order quantity — the FIX
+ *   OrderCancelReplace `OrderQty` convention — so it includes whatever
+ *   already executed. Absent keeps the current total.
+ */
+
+/**
  * @typedef {object} MatchingEvent
  * @property {number} seq Engine-scoped strictly increasing sequence.
  * @property {string} at Canonical UTC timestamp from the injected clock.
@@ -83,6 +97,10 @@ export const ORDER_KEYS = Object.freeze([
  * @property {string | null} side
  * @property {"limit" | "market"} [order_type] Accepted orders only: the
  *   order's type, recorded once on its `accepted` event.
+ * @property {string} [previous_price] `amended` events only: the price the
+ *   order carried before the amendment.
+ * @property {string} [previous_quantity] `amended` events only: the total
+ *   quantity the order carried before the amendment.
  * @property {"none"} posting Always "none": events never post to a ledger.
  */
 

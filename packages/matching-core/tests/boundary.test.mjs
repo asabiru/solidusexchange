@@ -28,6 +28,7 @@ describe("library boundary", () => {
       "partially_filled",
       "filled",
       "cancelled",
+      "amended",
       "rejected",
     ]);
   });
@@ -37,9 +38,12 @@ describe("library boundary", () => {
     const events = [
       ...engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "5", owner: "a" })),
       ...engine.submitOrder(order(2, { side: "buy", price: "91", quantity: "6", owner: "a" })),
+      ...engine.amendOrder({ order_id: ord(2), price: "92" }),
       ...engine.submitOrder(order(3, { side: "buy", price: "x" })),
+      ...engine.amendOrder({ order_id: ord(1), quantity: "7" }),
       ...engine.cancelOrder("USDT/RUB", ord(1)),
       ...engine.submitOrder(order(4)),
+      ...engine.amendOrder({ order_id: ord(4), quantity: "0.5" }),
       ...engine.cancelOrder("USDT/RUB", ord(4)),
     ];
     for (const event of events) {
