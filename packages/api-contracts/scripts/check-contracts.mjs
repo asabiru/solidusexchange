@@ -363,7 +363,7 @@ const pinnedResponseSchemas = {
     additionalProperties: false,
     required: ["kind", "items", "summary", "posting"],
     properties: {
-      kind: { const: "kyc" },
+      kind: { type: "string", enum: ["kyc", "aml", "tickets"] },
       items: {
         type: "array",
         maxItems: 64,
@@ -378,14 +378,22 @@ const pinnedResponseSchemas = {
           // The item tally is "count", not "total": the money-field
           // convention pins every *total* name to decimalAmount.
           count: { type: "integer", minimum: 0 },
+          // The by_state vocabulary is the union of every kind's states:
+          // kyc and aml items report pending|in_review|escalated, tickets
+          // items report open|waiting|escalated. Only "escalated" exists
+          // in every kind's vocabulary, so the per-kind key sets stay
+          // enforced by the served validator — the contract schema is the
+          // wire ceiling across kinds.
           by_state: {
             type: "object",
             additionalProperties: false,
-            required: ["pending", "in_review", "escalated"],
+            required: ["escalated"],
             properties: {
               pending: { type: "integer", minimum: 0 },
               in_review: { type: "integer", minimum: 0 },
-              escalated: { type: "integer", minimum: 0 }
+              escalated: { type: "integer", minimum: 0 },
+              open: { type: "integer", minimum: 0 },
+              waiting: { type: "integer", minimum: 0 }
             }
           }
         }
@@ -393,27 +401,39 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  // The queue item is the merged kind ceiling: every kind shares the
+  // queue_id/subject_id/state/priority/assignee/age_ms core, and the
+  // per-kind fields (kyc: display_name, submitted_at, sla_due_at; aml:
+  // alert_type, evidence_refs, sla_due_at; tickets: category, opened_at)
+  // stay optional here because the schema cannot express the per-kind
+  // required sets — the served validator enforces them verbatim.
   OperatorQueueItem: {
     type: "object",
     additionalProperties: false,
     required: [
       "queue_id",
       "subject_id",
-      "display_name",
-      "submitted_at",
-      "sla_due_at",
       "state",
       "priority",
       "assignee",
       "age_ms"
     ],
     properties: {
-      queue_id: { type: "string", pattern: "^qky_[0-9a-f]{24}$" },
+      queue_id: { type: "string", pattern: "^(qky|qml|qtick)_[0-9a-f]{24}$" },
       subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
       display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
       submitted_at: { type: "string", format: "date-time" },
       sla_due_at: { type: "string", format: "date-time" },
-      state: { type: "string", enum: ["pending", "in_review", "escalated"] },
+      opened_at: { type: "string", format: "date-time" },
+      alert_type: { type: "string", enum: ["structuring", "velocity", "geo_mismatch"] },
+      evidence_refs: {
+        type: "array",
+        maxItems: 8,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^evd_[0-9a-f]{24}$" }
+      },
+      category: { type: "string", enum: ["question", "operation_problem", "complaint", "data_request"] },
+      state: { type: "string", enum: ["pending", "in_review", "escalated", "open", "waiting"] },
       priority: { type: "string", enum: ["normal", "high", "urgent"] },
       assignee: {
         type: ["object", "null"],

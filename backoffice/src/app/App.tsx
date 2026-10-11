@@ -86,11 +86,11 @@ import type {
   ProviderEvidenceFeed
 } from "../data/provider-evidence.js";
 import {
+  type OperatorQueueView,
   parseOperatorQueueView,
   parseOperatorSubjectView,
   parseOperatorSubjectsView,
   type OperatorQueueItem,
-  type OperatorQueueView,
   type OperatorSubjectDetail,
   type OperatorSubjectRow
 } from "../data/operator.js";
@@ -657,14 +657,22 @@ export function ProviderEvidencePanel<T extends KycProviderEvidence | KytProvide
 
 export function KycView({ query, data, operatorQueue }: { query: string; data: KycPayload; operatorQueue?: unknown }) {
   const upstream = useMemo(() => parseOperatorQueueView(operatorQueue), [operatorQueue]);
-  if (upstream !== undefined) {
+  // The KYC screen renders only the kyc-kind projection; any other kind is
+  // a different view's payload and falls back to the local demo rows.
+  if (upstream !== undefined && upstream.queue.kind === "kyc") {
     return <OperatorQueueScreen query={query} queue={upstream.queue} />;
   }
   return <DemoKycView query={query} data={data} />;
 }
 
 /** Live mode: the signed operator KYC work queue; detail shows the item fields only. */
-function OperatorQueueScreen({ query, queue }: { query: string; queue: OperatorQueueView["queue"] }) {
+function OperatorQueueScreen({
+  query,
+  queue
+}: {
+  query: string;
+  queue: Extract<OperatorQueueView["queue"], { kind: "kyc" }>;
+}) {
   const { t, count, date } = useI18n();
   const rows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
