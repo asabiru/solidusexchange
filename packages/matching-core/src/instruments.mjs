@@ -39,6 +39,11 @@ export function validInstrumentDefinition(definition) {
   if (JSON.stringify(keys) !== JSON.stringify(["base_asset", "base_scale", "instrument", "price_scale", "quote_asset", "quote_scale"].sort())) {
     return false;
   }
+  if (Object.getOwnPropertySymbols(definition).length !== 0) {
+    // Symbol keys survive structuredClone but not JSON: a definition that
+    // carried one could never round-trip through a canonical snapshot.
+    return false;
+  }
   if (
     typeof candidate.instrument !== "string" ||
     typeof candidate.base_asset !== "string" ||

@@ -168,6 +168,9 @@ export function parseEngineSnapshot(snapshot) {
   if (JSON.stringify(Object.keys(candidate).sort()) !== SNAPSHOT_KEYS) {
     invalid("unexpected snapshot keys");
   }
+  if (Object.getOwnPropertySymbols(candidate).length !== 0) {
+    invalid("snapshot must not carry symbol keys");
+  }
   if (candidate.kind !== SNAPSHOT_KIND) {
     invalid("kind must be matching-engine-snapshot");
   }
@@ -194,7 +197,7 @@ export function parseEngineSnapshot(snapshot) {
   if (!Array.isArray(candidate.orders)) {
     invalid("orders must be an array");
   }
-  /** @type {Map<string, { order: SnapshotOrder, remaining_units: bigint, quantity_units: bigint }>} */
+  /** @type {Map<string, { order: SnapshotOrder, remaining_units: bigint, quantity_units: bigint, price_units: bigint | null }>} */
   const tracked = new Map();
   /** @type {string[]} */
   const restingExpected = [];
@@ -205,6 +208,9 @@ export function parseEngineSnapshot(snapshot) {
     const order = /** @type {Record<string, unknown>} */ (record);
     if (JSON.stringify(Object.keys(order).sort()) !== SNAPSHOT_ORDER_KEYS) {
       invalid(`order ${String(order.order_id)}: unexpected keys`);
+    }
+    if (Object.getOwnPropertySymbols(record).length !== 0) {
+      invalid(`order ${String(order.order_id)}: must not carry symbol keys`);
     }
     if (!isOrderId(order.order_id)) {
       invalid("order id must match ord_[0-9a-f]{24}");
@@ -228,6 +234,7 @@ export function parseEngineSnapshot(snapshot) {
     if (order.owner !== null && !isOwner(order.owner)) {
       invalid(`order ${order.order_id}: invalid owner`);
     }
+    let priceUnits = null;
     if (order.order_type === "market") {
       if (order.price !== null) {
         invalid(`order ${order.order_id}: market orders carry no price`);
@@ -239,7 +246,7 @@ export function parseEngineSnapshot(snapshot) {
       if (!isScaledDecimal(order.price, definition.price_scale)) {
         invalid(`order ${order.order_id}: invalid price`);
       }
-      const priceUnits = parseScaledDecimal(order.price, definition.price_scale);
+      priceUnits = parseScaledDecimal(order.price, definition.price_scale);
       if (order.price !== formatScaledDecimal(priceUnits, definition.price_scale)) {
         invalid(`order ${order.order_id}: price must be in exact-scale form`);
       }
@@ -287,6 +294,7 @@ export function parseEngineSnapshot(snapshot) {
       order: snapshotOrder,
       remaining_units: remainingUnits,
       quantity_units: quantityUnits,
+      price_units: priceUnits,
     });
     if (order.state === "resting") {
       restingExpected.push(order.order_id);
@@ -317,6 +325,31 @@ export function parseEngineSnapshot(snapshot) {
     }
   }
 
+  // A live book is never crossed: an order only rests after the sweep
+  // leaves nothing it could match, so no snapshot the engine produced can
+  // hold a resting bid at or above a resting ask on one instrument.
+  /** @type {Map<string, { bid: bigint | null, ask: bigint | null }>} */
+  const bestByInstrument = new Map();
+  for (const orderId of restingExpected) {
+    const entry = /** @type {{ order: SnapshotOrder, price_units: bigint | null }} */ (
+      tracked.get(orderId)
+    );
+    const agg =
+      bestByInstrument.get(entry.order.instrument) ?? { bid: null, ask: null };
+    const priceUnits = /** @type {bigint} */ (entry.price_units);
+    if (entry.order.side === "buy") {
+      agg.bid = agg.bid === null || priceUnits > agg.bid ? priceUnits : agg.bid;
+    } else {
+      agg.ask = agg.ask === null || priceUnits < agg.ask ? priceUnits : agg.ask;
+    }
+    bestByInstrument.set(entry.order.instrument, agg);
+  }
+  for (const { bid, ask } of bestByInstrument.values()) {
+    if (bid !== null && ask !== null && bid >= ask) {
+      invalid("resting orders form a crossed book");
+    }
+  }
+
   if (!Number.isSafeInteger(candidate.next_seq) || /** @type {number} */ (candidate.next_seq) < 1) {
     invalid("next_seq must be a positive integer");
   }
@@ -329,6 +362,17 @@ export function parseEngineSnapshot(snapshot) {
     } catch {
       invalid("last_at must be null or integer epoch seconds");
     }
+  }
+  // The counters tell one story: an engine with no emitted events holds
+  // `last_at: null`, `next_seq: 1` and `next_fill: 1`, and any emitted
+  // event stamps `last_at`. Combinations the engine cannot produce — a
+  // stamp with no events, events with no stamp, consumed fills with no
+  // events — are rejected.
+  if ((candidate.last_at === null) !== (candidate.next_seq === 1)) {
+    invalid("last_at must be null exactly when no events were emitted");
+  }
+  if (candidate.next_seq === 1 && candidate.next_fill !== 1) {
+    invalid("next_fill claims fills the stream never emitted");
   }
   let minimumSeq = 1;
   let touched = 0;

@@ -1,4 +1,4 @@
-import { StoreConfigError, StoreUnavailableError } from "./journal-store.mjs";
+import { StoreConfigError, StoreError, StoreUnavailableError } from "./journal-store.mjs";
 import { snapshotPlainData } from "./snapshot.mjs";
 
 // PostgreSQL backend for the matching journal seam (`MATCHING_CORE_STORE=
@@ -88,7 +88,23 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
     if (pool === null) {
       throw new StoreUnavailableError("matching journal store is not initialized");
     }
-    await pool.query(APPEND_SQL, [namespace, JSON.stringify(batch)]);
+    try {
+      await pool.query(APPEND_SQL, [namespace, JSON.stringify(batch)]);
+    } catch (error) {
+      // SQLSTATE classes 22 (data exceptions) and 23 (integrity
+      // constraint violations) are deterministic rejections of the batch
+      // itself — a caller bug, not a durability failure. The recorded
+      // stream was not touched, so the rejection surfaces as StoreError
+      // without latching, identical to the memory backend.
+      const code =
+        error !== null && typeof error === "object"
+          ? /** @type {{ code?: unknown }} */ (error).code
+          : undefined;
+      if (typeof code === "string" && (code.startsWith("22") || code.startsWith("23"))) {
+        throw new StoreError("journal append was rejected by storage");
+      }
+      throw error;
+    }
   }
 
   return Object.freeze({
@@ -134,12 +150,34 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
       const batch = /** @type {import("./events.mjs").MatchingEvent[]} */ (
         snapshotPlainData(events)
       );
+      // The local half of the continuation rule the memory backend
+      // enforces inline: seqs must be positive safe integers contiguous
+      // inside the batch. The server-side half — the batch's first seq
+      // must continue the recorded tail — stays in storage. A malformed
+      // batch is a caller bug: it fails here synchronously as StoreError,
+      // never queued, never latched, identical to the memory store.
+      for (const [index, event] of batch.entries()) {
+        const seq = event === null || typeof event !== "object" ? undefined : event.seq;
+        if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 1) {
+          throw new StoreError("journal append events must carry positive integer seq values");
+        }
+        const first = /** @type {number} */ (batch[0].seq);
+        if (seq !== first + index) {
+          throw new StoreError("journal append must continue the recorded stream contiguously");
+        }
+      }
       const write = tail.then(() => writeBatch(batch));
       tail = write.then(
         () => undefined,
         () => undefined
       );
       return write.catch((error) => {
+        // StoreError rejections (caller bugs, deterministic storage-side
+        // constraint violations) do not latch: only failures the store
+        // cannot attribute to the batch itself poison durability.
+        if (error instanceof StoreError) {
+          throw error;
+        }
         failure = unavailable(error);
         throw failure;
       });

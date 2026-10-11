@@ -152,12 +152,21 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
 
   /**
    * Closes one operation: mirrors the emitted batch into the attached
-   * journal store, then seals the returned array. A synchronous append
-   * result is ignored (the memory backend appends inline); a thenable
-   * result is settled on its own — a durable backend serializes and
-   * latches write failures, surfacing them on its next awaited operation
-   * (`load`, a later `append`, `close`), which a synchronous emit cannot
-   * await without changing the engine's atomic-call contract.
+   * journal store, lands the whole batch on the in-memory journal, commits
+   * the counters the operation consumed, then seals the returned array.
+   * The journal and counters only ever advance here, once the operation
+   * has fully emitted — an operation that throws mid-way leaves the
+   * recorded stream on an operation boundary, so replay never meets a
+   * truncated batch.
+   *
+   * A synchronous append result is ignored (the memory backend appends
+   * inline); a thenable result is settled on its own — a durable backend
+   * serializes and latches write failures, surfacing them on its next
+   * awaited operation (`load`, a later `append`, `close`), which a
+   * synchronous emit cannot await without changing the engine's
+   * atomic-call contract. The append runs first so even a compliant
+   * store's synchronous rejection cannot leave journal entries no durable
+   * batch covers.
    *
    * @param {MatchingEvent[]} events
    * @returns {readonly MatchingEvent[]}
@@ -172,6 +181,9 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
         );
       }
     }
+    journal.push(...events);
+    state.nextSeq = opSeq;
+    state.nextFill = opFill;
     return Object.freeze(events);
   }
 
@@ -191,10 +203,14 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
   }
 
   /**
-   * Reads and validates the injected clock once per operation. A submission
-   * or cancel is atomic — every event it produces shares one timestamp — so
-   * a backwards or malformed clock throws before any book or tracked-order
-   * state is touched and can never leave a half-applied operation behind.
+   * Reads and validates the injected clock once per operation and opens
+   * the operation's seq/fill counters. A submission or cancel is atomic —
+   * every event it produces shares one timestamp — so a backwards or
+   * malformed clock throws before any book or tracked-order state is
+   * touched and can never leave a half-applied operation behind. An
+   * engine whose journal consumed the whole safe-integer seq space also
+   * fails here, so emission counters stay inside the bounds restore
+   * accepts back.
    */
   function beginOperation() {
     const now = timeSource.now();
@@ -202,18 +218,30 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
     if (now < state.lastAt) {
       throw new RangeError("clock must not go backwards");
     }
+    if (state.nextSeq >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError("journal sequence space exhausted");
+    }
     state.lastAt = now;
     operationAt = toIsoSeconds(now);
+    opSeq = state.nextSeq;
+    opFill = state.nextFill;
   }
 
   /** @type {string | null} */
   let operationAt = null;
+  /** Seq the next emitted event of this operation takes; committed by finish(). */
+  let opSeq = 1;
+  /** Fill number the next pair of this operation takes; committed by finish(). */
+  let opFill = 1;
 
   function stamp() {
     if (operationAt === null) {
       beginOperation();
     }
-    return { seq: state.nextSeq++, at: /** @type {string} */ (operationAt) };
+    if (opSeq >= Number.MAX_SAFE_INTEGER) {
+      throw new RangeError("journal sequence space exhausted");
+    }
+    return { seq: opSeq++, at: /** @type {string} */ (operationAt) };
   }
 
   /**
@@ -226,7 +254,6 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
       Object.freeze({ ...stamp(), ...fields, type, posting: POSTING })
     );
     events.push(event);
-    journal.push(event);
   }
 
   /**
@@ -405,8 +432,13 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
         taker.remaining_units < maker.remaining_units
           ? taker.remaining_units
           : maker.remaining_units;
-      const fillId = `fll_${state.nextFill.toString(16).padStart(24, "0")}`;
-      state.nextFill += 1;
+      if (opFill > Number.MAX_SAFE_INTEGER - 1) {
+        // Fill ids stop where replay's MAX_FILL_NUMBER begins, so every
+        // stream the engine emits still folds back.
+        throw new RangeError("fill id space exhausted");
+      }
+      const fillId = `fll_${opFill.toString(16).padStart(24, "0")}`;
+      opFill += 1;
       maker.remaining_units -= quantityUnits;
       taker.remaining_units -= quantityUnits;
       emitFill(events, taker, maker, fillId, quantityUnits, definition.base_scale);
@@ -488,6 +520,7 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
         instrument: taker.instrument,
         side: taker.side,
         order_type: taker.order_type,
+        ...(taker.owner === undefined ? {} : { owner: taker.owner }),
         ...(taker.price === null ? {} : { price: taker.price }),
         quantity: taker.quantity,
       });

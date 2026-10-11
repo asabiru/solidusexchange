@@ -6,6 +6,7 @@ import {
   EVENT_TYPES,
   FILL_ID_PATTERN,
   isOrderId,
+  isOwner,
   isSide,
   POSTING,
   REJECT_REASONS,
@@ -49,7 +50,7 @@ const MAX_FILL_NUMBER = BigInt(Number.MAX_SAFE_INTEGER - 1);
 
 /** @type {Record<MatchingEvent["type"], Set<string>>} */
 const EVENT_KEYS = {
-  accepted: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "order_type", "price", "quantity"]),
+  accepted: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "order_type", "owner", "price", "quantity"]),
   resting: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "price", "quantity"]),
   partially_filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
   filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
@@ -331,6 +332,9 @@ export function replayMatchingEngine(options = {}) {
   for (const record of events) {
     requireObject(record, "each event must be a plain object");
     const event = /** @type {Record<string, unknown>} */ (record);
+    if (Object.getOwnPropertySymbols(record).length !== 0) {
+      invalid(`event seq ${String(event.seq)}: must not carry symbol keys`);
+    }
     if (event.seq !== expectedSeq) {
       invalid("seq must be contiguous from 1 with no gaps");
     }
@@ -381,6 +385,9 @@ export function replayMatchingEngine(options = {}) {
         if (event.order_type === "market" && Object.hasOwn(event, "price")) {
           invalid(`event seq ${event.seq}: market orders carry no price`);
         }
+        if (event.owner !== undefined && !isOwner(event.owner)) {
+          invalid(`event seq ${event.seq}: invalid owner`);
+        }
         const priceUnits =
           event.order_type === "market"
             ? null
@@ -397,7 +404,7 @@ export function replayMatchingEngine(options = {}) {
           instrument: event.instrument,
           side: event.side,
           order_type: /** @type {"limit" | "market"} */ (event.order_type),
-          owner: undefined,
+          owner: event.owner === undefined ? undefined : /** @type {string} */ (event.owner),
           price:
             priceUnits === null
               ? null
@@ -556,7 +563,7 @@ export function replayMatchingEngine(options = {}) {
       instrument: entry.instrument,
       side: entry.side,
       order_type: entry.order_type,
-      owner: null,
+      owner: entry.owner ?? null,
       price: entry.price,
       quantity: entry.quantity,
       remaining: formatScaledDecimal(entry.remaining_units, definition.base_scale),
