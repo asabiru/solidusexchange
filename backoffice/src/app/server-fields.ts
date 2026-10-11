@@ -1,5 +1,11 @@
 import type { Capability, OperatorRole } from "../auth/access.js";
 import type {
+  OperatorAccountStatus,
+  OperatorKycStatus,
+  OperatorQueuePriority,
+  OperatorQueueState
+} from "../data/operator.js";
+import type {
   CheckStatus,
   SubjectTimelineKind,
   SupportTicketChannel,
@@ -241,4 +247,45 @@ export function operatorRoleOf(value: unknown): OperatorRole | undefined {
 
 export function operatorRoleKeyOf(value: unknown): MessageKey | undefined {
   return member(operatorRoles, textOf(value, ""));
+}
+
+const operatorKycStatuses: Readonly<Record<OperatorKycStatus, MessageKey>> = {
+  unverified: "customers.kycStatus.unverified",
+  pending: "customers.kycStatus.pending",
+  verified: "customers.kycStatus.verified"
+};
+
+export function operatorKycStatusKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorKycStatuses, textOf(value, ""));
+}
+
+const operatorAccountStatuses: Readonly<Record<OperatorAccountStatus, MessageKey>> = {
+  active: "customers.account.active",
+  closed: "customers.account.closed",
+  dormant: "customers.account.dormant",
+  restricted: "customers.account.restricted"
+};
+
+export function operatorAccountStatusKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorAccountStatuses, textOf(value, ""));
+}
+
+const operatorQueueStates: Readonly<Record<OperatorQueueState, MessageKey>> = {
+  pending: "kyc.queueState.pending",
+  in_review: "kyc.queueState.inReview",
+  escalated: "kyc.queueState.escalated"
+};
+
+export function operatorQueueStateKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorQueueStates, textOf(value, ""));
+}
+
+const operatorQueuePriorities: Readonly<Record<OperatorQueuePriority, MessageKey>> = {
+  normal: "kyc.queuePriority.normal",
+  high: "kyc.queuePriority.high",
+  urgent: "kyc.queuePriority.urgent"
+};
+
+export function operatorQueuePriorityKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorQueuePriorities, textOf(value, ""));
 }
