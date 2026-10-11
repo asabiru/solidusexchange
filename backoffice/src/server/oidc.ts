@@ -83,10 +83,11 @@ export async function exchangeAuthorizationCode(
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: form,
+    redirect: "error",
     signal: AbortSignal.timeout(8_000)
   });
   if (!response.ok) throw new Error("OIDC token exchange failed");
-  const payload: unknown = await response.json();
+  const payload: unknown = await readBoundedJson(response);
   if (!payload || typeof payload !== "object" || !("id_token" in payload)) {
     throw new Error("OIDC token response is missing id_token");
   }
@@ -96,10 +97,30 @@ export async function exchangeAuthorizationCode(
 }
 
 const maxIdTokenLength = 16_384;
+const maxOidcResponseBytes = 65_536;
 const minRsaModulusBits = 2048;
 const base64UrlSegment = /^[A-Za-z0-9_-]+$/;
 const privateJwkMembers = ["d", "p", "q", "dp", "dq", "qi", "oth", "k"] as const;
 const unsupportedHeaderParameters = ["jku", "jwk", "x5u", "x5c", "b64"] as const;
+
+async function readBoundedJson(response: Response): Promise<unknown> {
+  const body = response.body;
+  if (!body) throw new Error("OIDC response is malformed");
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxOidcResponseBytes) {
+      await reader.cancel();
+      throw new Error("OIDC response is too large");
+    }
+    chunks.push(value);
+  }
+  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+}
 
 function decodeSegment(value: string): Buffer {
   const bytes = Buffer.from(value, "base64url");
@@ -167,7 +188,10 @@ function validateClaims(
     || typeof claims.sub !== "string"
     || claims.sub.length === 0
     || claims.sub.length > 255
-    || [...claims.sub].some((character) => character.charCodeAt(0) > 0x7f)
+    || [...claims.sub].some((character) => {
+      const code = character.charCodeAt(0);
+      return code < 0x20 || code > 0x7e;
+    })
     || typeof claims.exp !== "number"
     || !Number.isFinite(claims.exp)
     || typeof claims.iat !== "number"
@@ -251,10 +275,11 @@ export async function verifyIdToken(
 
   const jwks: JsonWebKeySet = suppliedJwks ?? await fetch(config.jwksUri, {
       headers: { accept: "application/json" },
+      redirect: "error",
       signal: AbortSignal.timeout(8_000)
     }).then(async (response) => {
       if (!response.ok) throw new Error("OIDC JWKS request failed");
-      return await response.json() as JsonWebKeySet;
+      return await readBoundedJson(response) as JsonWebKeySet;
     });
   if (!isRecord(jwks) || !Array.isArray(jwks.keys)) throw new Error("OIDC JWKS is malformed");
   const matchingKeys = jwks.keys.filter(
