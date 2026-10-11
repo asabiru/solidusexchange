@@ -61,10 +61,21 @@ import { isPositiveSequence, sha256Hex } from "./simulator-core.mjs";
  * by live subjects. Reopening the same id afterwards starts fresh: the inbox
  * intentionally forgets that subject's history.
  *
- * @param {{ subjectField: string, initialStatus: string, transitions: Readonly<Record<string, readonly string[]>> }} options
+ * The inbox itself is bounded too: `maxSubjects` caps live subjects and
+ * `maxEventIds` caps the dedup records one subject may accumulate; a delivery
+ * that would grow either past its bound is refused (subjects) or held for
+ * review as `invalid_transition` (dedup records).
+ *
+ * @param {{ subjectField: string, initialStatus: string, transitions: Readonly<Record<string, readonly string[]>>, maxSubjects?: number, maxEventIds?: number }} options
  * @returns {CallbackInbox}
  */
-export function createCallbackInbox({ subjectField, initialStatus, transitions }) {
+export function createCallbackInbox({ subjectField, initialStatus, transitions, maxSubjects = 10_000, maxEventIds = 1_024 }) {
+  if (!Number.isSafeInteger(maxSubjects) || maxSubjects < 1) {
+    throw new RangeError("maxSubjects must be a positive integer");
+  }
+  if (!Number.isSafeInteger(maxEventIds) || maxEventIds < 1) {
+    throw new RangeError("maxEventIds must be a positive integer");
+  }
   /** @type {Map<string, InboxSubject & { parked: Map<number, string>, eventIds: Set<string> }>} */
   const subjects = new Map();
   /** @type {Map<string, string>} */
@@ -87,6 +98,9 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
       }
       if (!Number.isSafeInteger(deadline)) {
         throw new TypeError("deadline must be integer epoch seconds");
+      }
+      if (subjects.size >= maxSubjects) {
+        throw new TypeError("inbox subject capacity reached");
       }
       subjects.set(subjectId, {
         status: initialStatus,
@@ -136,6 +150,10 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions }
           return result("conflict");
         }
         return result("duplicate");
+      }
+      if (subject.eventIds.size >= maxEventIds) {
+        subject.reviewEvents += 1;
+        return result("invalid_transition");
       }
       events.set(eventId, digest);
       subject.eventIds.add(eventId);

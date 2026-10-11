@@ -8,6 +8,7 @@ import {
   SIMULATOR_ENVIRONMENT,
 } from "./signing.mjs";
 import {
+  capacityError,
   DeliveryQueue,
   exactKeys,
   IdempotencyRegistry,
@@ -15,6 +16,7 @@ import {
   isIsoSeconds,
   isPositiveSequence,
   isStringMatching,
+  maxResourcesOf,
   oneOf,
   outageError,
   resolveScenario,
@@ -77,51 +79,55 @@ import {
  */
 
 export const KYT_SCENARIOS = Object.freeze({
-  low: { risk: "low", sanctions: false, delivery: "normal" },
-  medium: { risk: "medium", sanctions: false, delivery: "normal" },
-  high: { risk: "high", sanctions: false, delivery: "normal" },
-  severe: { risk: "severe", sanctions: false, delivery: "normal" },
-  sanctions_hit: { risk: "severe", sanctions: true, delivery: "normal" },
-  pending_timeout: { risk: null, sanctions: false, delivery: "normal" },
-  provider_outage: { risk: null, sanctions: false, delivery: "none" },
-  duplicate_callback: { risk: "medium", sanctions: false, delivery: "duplicate" },
-  out_of_order_callback: { risk: "medium", sanctions: false, delivery: "out_of_order" },
-  late_callback: { risk: "medium", sanctions: false, delivery: "late" },
+  low: Object.freeze({ risk: "low", sanctions: false, delivery: "normal" }),
+  medium: Object.freeze({ risk: "medium", sanctions: false, delivery: "normal" }),
+  high: Object.freeze({ risk: "high", sanctions: false, delivery: "normal" }),
+  severe: Object.freeze({ risk: "severe", sanctions: false, delivery: "normal" }),
+  sanctions_hit: Object.freeze({ risk: "severe", sanctions: true, delivery: "normal" }),
+  pending_timeout: Object.freeze({ risk: null, sanctions: false, delivery: "normal" }),
+  provider_outage: Object.freeze({ risk: null, sanctions: false, delivery: "none" }),
+  duplicate_callback: Object.freeze({ risk: "medium", sanctions: false, delivery: "duplicate" }),
+  out_of_order_callback: Object.freeze({ risk: "medium", sanctions: false, delivery: "out_of_order" }),
+  late_callback: Object.freeze({ risk: "medium", sanctions: false, delivery: "late" }),
 });
 
 /** @typedef {keyof typeof KYT_SCENARIOS} KytScenario */
 
 const SCENARIO_NAMES = /** @type {KytScenario[]} */ (Object.keys(KYT_SCENARIOS));
-const RISK_LEVELS = /** @type {const} */ (["low", "medium", "high", "severe"]);
+const RISK_LEVELS = Object.freeze(/** @type {const} */ (["low", "medium", "high", "severe"]));
 const RISK_SCORE_RANGES = Object.freeze({
-  low: [0, 24],
-  medium: [25, 49],
-  high: [50, 74],
-  severe: [75, 100],
+  low: Object.freeze([0, 24]),
+  medium: Object.freeze([25, 49]),
+  high: Object.freeze([50, 74]),
+  severe: Object.freeze([75, 100]),
 });
 const RISK_CATEGORIES = Object.freeze({
-  low: [],
-  medium: ["SIM_UNVERIFIED_SERVICE"],
-  high: ["SIM_MIXER_EXPOSURE"],
-  severe: ["SIM_DARKNET_EXPOSURE"],
+  low: Object.freeze([]),
+  medium: Object.freeze(["SIM_UNVERIFIED_SERVICE"]),
+  high: Object.freeze(["SIM_MIXER_EXPOSURE"]),
+  severe: Object.freeze(["SIM_DARKNET_EXPOSURE"]),
 });
-const ALL_CATEGORIES = ["SIM_DARKNET_EXPOSURE", "SIM_MIXER_EXPOSURE", "SIM_SANCTIONS", "SIM_UNVERIFIED_SERVICE"];
+const ALL_CATEGORIES = Object.freeze(/** @type {const} */ (["SIM_DARKNET_EXPOSURE", "SIM_MIXER_EXPOSURE", "SIM_SANCTIONS", "SIM_UNVERIFIED_SERVICE"]));
 /** Testnet-only pairs; mirrors `packages/custody-core/custody-policy.json`. */
 export const KYT_ASSET_NETWORKS = Object.freeze([
   Object.freeze({ asset: "TON", network: "TON_TESTNET" }),
   Object.freeze({ asset: "USDT", network: "TON_TESTNET" }),
   Object.freeze({ asset: "USDT", network: "TRON_TESTNET" }),
 ]);
-const DIRECTIONS = /** @type {const} */ (["inbound", "outbound"]);
+const DIRECTIONS = Object.freeze(/** @type {const} */ (["inbound", "outbound"]));
 
+/**
+ * The evaluation step is mandatory: a screening can only ever leave
+ * `requested` into `pending`, matching exactly what this simulator emits.
+ */
 export const KYT_TRANSITIONS = Object.freeze({
-  requested: Object.freeze(["pending", "completed"]),
+  requested: Object.freeze(["pending"]),
   pending: Object.freeze(["completed"]),
   completed: Object.freeze([]),
 });
 
 export const KYT_CALLBACK_SCHEMA = "solidchange.sim.kyt.callback.v1";
-const CALLBACK_KEYS = [
+const CALLBACK_KEYS = Object.freeze([
   "assessment_id",
   "binding",
   "binding_digest",
@@ -136,8 +142,8 @@ const CALLBACK_KEYS = [
   "schema",
   "sequence",
   "status",
-];
-const BINDING_KEYS = ["address", "amount", "asset", "direction", "network", "tx_ref"];
+]);
+const BINDING_KEYS = Object.freeze(["address", "amount", "asset", "direction", "network", "tx_ref"]);
 
 /**
  * @param {KytBinding} binding
@@ -178,7 +184,9 @@ export function validateKytCallback(payload) {
   if (
     !Array.isArray(categories) ||
     new Set(categories).size !== categories.length ||
-    !categories.every((item) => typeof item === "string" && ALL_CATEGORIES.includes(item))
+    !categories.every(
+      (item) => typeof item === "string" && /** @type {readonly string[]} */ (ALL_CATEGORIES).includes(item),
+    )
   ) {
     return "invalid categories";
   }
@@ -259,6 +267,7 @@ export function createKytCallbackInbox() {
  * @property {Record<string, KytScenario>} [scenarios] address → scenario.
  * @property {KytScenario} [defaultScenario]
  * @property {number} [screeningTimeoutSeconds]
+ * @property {number} [maxResources] Simultaneous assessments kept in memory.
  */
 
 /**
@@ -273,12 +282,16 @@ export function createKytSimulator(options) {
     throw new TypeError("unknown default KYT scenario");
   }
   const screeningTimeoutSeconds = options.screeningTimeoutSeconds ?? 900;
-  if (!Number.isSafeInteger(screeningTimeoutSeconds) || screeningTimeoutSeconds < 60) {
-    throw new RangeError("screeningTimeoutSeconds must be an integer of at least 60");
+  if (!Number.isSafeInteger(screeningTimeoutSeconds) || screeningTimeoutSeconds < 60 || screeningTimeoutSeconds > 86_400) {
+    throw new RangeError("screeningTimeoutSeconds must be an integer between 60 and 86400");
   }
-  const queue = new DeliveryQueue(createCallbackSigner({ key: options.key, domain: "kyt", random }));
+  const maxResources = maxResourcesOf(options);
+  const queue = new DeliveryQueue(
+    createCallbackSigner({ key: options.key, domain: "kyt", random }),
+    { maxPending: maxResources * 16 },
+  );
   /** @type {IdempotencyRegistry<KytAssessment & { screening_deadline: string }>} */
-  const idempotency = new IdempotencyRegistry();
+  const idempotency = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {Map<string, { final: KytAssessment, completedAt: number, pending: KytAssessment }>} */
   const assessments = new Map();
 
@@ -315,11 +328,15 @@ export function createKytSimulator(options) {
         throw outageError(30);
       }
       return idempotency.run(key, input, () => {
+        if (assessments.size >= maxResources) {
+          throw capacityError("KYT assessment");
+        }
         const now = clock.now();
         const plan = KYT_SCENARIOS[scenario];
         const assessmentId = random.id("kytasm", "kyt-assessment");
         const bindingDigest = kytBindingDigest(binding);
         const deadline = now + screeningTimeoutSeconds;
+        const deadlineIso = toIsoSeconds(deadline);
         /** @type {KytAssessment} */
         const pending = {
           assessment_id: assessmentId,
@@ -381,7 +398,7 @@ export function createKytSimulator(options) {
           plan.delivery === "late" ? "normal" : /** @type {import("./simulator-core.mjs").DeliveryMode} */ (plan.delivery),
           random,
         );
-        return { ...pending, screening_deadline: toIsoSeconds(deadline) };
+        return { ...pending, screening_deadline: deadlineIso };
       });
     },
 

@@ -1440,6 +1440,10 @@
       "minLines": 138,
       "minCases": 11
     },
+    "packages/provider-simulators/tests/machinery-audit-wave58.test.mjs": {
+      "minLines": 412,
+      "minCases": 16
+    },
     "packages/provider-simulators/tests/quotes.test.mjs": {
       "minLines": 182,
       "minCases": 13
