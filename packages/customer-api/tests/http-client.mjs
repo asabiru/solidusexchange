@@ -220,7 +220,8 @@ const TEMPLATED_PATHS = OPERATIONS.filter((operation) => operation.path.includes
 // status reachability keys stay pinned to the contract path. Anything the
 // server would not route keeps the request path.
 export function operationPathFor(requestPath) {
-  const requestSegments = requestPath.split("/");
+  const questionMark = requestPath.indexOf("?");
+  const requestSegments = (questionMark === -1 ? requestPath : requestPath.slice(0, questionMark)).split("/");
   for (const { path, segments } of TEMPLATED_PATHS) {
     if (segments.length !== requestSegments.length) {
       continue;

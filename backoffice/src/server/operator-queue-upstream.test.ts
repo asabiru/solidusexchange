@@ -76,18 +76,19 @@ async function devSession(baseUrl: string, deviceId?: string): Promise<string> {
 interface SeenCall {
   subject: string;
   deviceId: string;
+  kind: string;
 }
 
-function stubClient(result: CustomerApiOperatorQueue): { client: CustomerApiClient; seen: SeenCall[] } {
+function stubClient(result: CustomerApiOperatorQueue | ((kind: string) => CustomerApiOperatorQueue)): { client: CustomerApiClient; seen: SeenCall[] } {
   const seen: SeenCall[] = [];
   const client: CustomerApiClient = {
     configured: true,
     operatorAdmin: async () => ({ status: "not-configured" }),
     operatorSubjects: async () => ({ status: "not-configured" }),
     operatorSubject: async () => ({ status: "not-configured" }),
-    operatorQueue: async (subject: string, deviceId: string): Promise<CustomerApiOperatorQueue> => {
-      seen.push({ subject, deviceId });
-      return result;
+    operatorQueue: async (subject: string, deviceId: string, kind: "kyc" | "aml" | "tickets"): Promise<CustomerApiOperatorQueue> => {
+      seen.push({ subject, deviceId, kind });
+      return typeof result === "function" ? result(kind) : result;
     }
   };
   return { client, seen };
@@ -134,10 +135,70 @@ function contractView(): CustomerApiOperatorQueue {
   };
 }
 
-async function operatorQueueEnvelope(baseUrl: string, cookie: string) {
-  const response = await fetch(`${baseUrl}/bff/api/operator/queue`, { headers: { cookie, origin } });
+async function operatorQueueEnvelope(baseUrl: string, cookie: string, kind?: string) {
+  const query = kind === undefined ? "" : `?kind=${kind}`;
+  const response = await fetch(`${baseUrl}/bff/api/operator/queue${query}`, { headers: { cookie, origin } });
   const body = await response.json() as { resource?: string; payload?: Record<string, unknown>; error?: string };
   return { response, body };
+}
+
+function amlView(): CustomerApiOperatorQueue {
+  return {
+    status: "ok",
+    view: {
+      mode: "test",
+      queue: {
+        kind: "aml",
+        items: [
+          {
+            queue_id: "qml_00112233445566778899aabb",
+            subject_id: "syn_cust_00112233445566778899aabb",
+            alert_type: "structuring",
+            evidence_refs: ["evd_00112233445566778899aabb", "evd_bbccddee00112233445566"],
+            sla_due_at: "2026-09-23T00:00:00.000Z",
+            state: "in_review",
+            priority: "high",
+            assignee: { subject: "syn_oper_0011223344556677" },
+            age_ms: 1_000_000
+          }
+        ],
+        summary: {
+          count: 1,
+          by_state: { pending: 0, in_review: 1, escalated: 0 }
+        },
+        posting: "none"
+      }
+    }
+  };
+}
+
+function ticketsView(): CustomerApiOperatorQueue {
+  return {
+    status: "ok",
+    view: {
+      mode: "test",
+      queue: {
+        kind: "tickets",
+        items: [
+          {
+            queue_id: "qtick_00112233445566778899aabb",
+            subject_id: "syn_cust_00112233445566778899aabb",
+            category: "operation_problem",
+            opened_at: "2026-09-19T00:00:00.000Z",
+            state: "escalated",
+            priority: "urgent",
+            assignee: { subject: "syn_oper_0011223344556677" },
+            age_ms: 2_000_000
+          }
+        ],
+        summary: {
+          count: 1,
+          by_state: { open: 0, waiting: 0, escalated: 1 }
+        },
+        posting: "none"
+      }
+    }
+  };
 }
 
 describe("operator queue BFF surface", () => {
@@ -244,7 +305,130 @@ describe("operator queue BFF surface", () => {
       }
     });
     // The session's bound workstation device is what propagates upstream.
-    assert.deepEqual(seen, [{ subject: "dev:compliance-lead", deviceId: testDeviceId }]);
+    assert.deepEqual(seen, [{ subject: "dev:compliance-lead", deviceId: testDeviceId, kind: "kyc" }]);
+  });
+
+  it("passes the kind query through to the upstream read and maps each projection", async () => {
+    const { client, seen } = stubClient((kind) =>
+      kind === "aml" ? amlView() : kind === "tickets" ? ticketsView() : contractView()
+    );
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const cookie = `${session}; solidchange_bo_device=${testDeviceId}`;
+
+    const aml = await operatorQueueEnvelope(baseUrl, cookie, "aml");
+    assert.equal(aml.response.status, 200);
+    assert.deepEqual(aml.body.payload, {
+      mode: "test",
+      queue: {
+        kind: "aml",
+        items: [
+          {
+            queueId: "qml_00112233445566778899aabb",
+            subjectId: "syn_cust_00112233445566778899aabb",
+            alertType: "structuring",
+            evidenceRefs: ["evd_00112233445566778899aabb", "evd_bbccddee00112233445566"],
+            slaDueAt: "2026-09-23T00:00:00.000Z",
+            state: "in_review",
+            priority: "high",
+            assignee: { subject: "syn_oper_0011223344556677" },
+            ageMs: 1_000_000
+          }
+        ],
+        summary: { count: 1, byState: { pending: 0, inReview: 1, escalated: 0 } },
+        posting: "none"
+      }
+    });
+
+    const tickets = await operatorQueueEnvelope(baseUrl, cookie, "tickets");
+    assert.equal(tickets.response.status, 200);
+    assert.deepEqual(tickets.body.payload, {
+      mode: "test",
+      queue: {
+        kind: "tickets",
+        items: [
+          {
+            queueId: "qtick_00112233445566778899aabb",
+            subjectId: "syn_cust_00112233445566778899aabb",
+            category: "operation_problem",
+            openedAt: "2026-09-19T00:00:00.000Z",
+            state: "escalated",
+            priority: "urgent",
+            assignee: { subject: "syn_oper_0011223344556677" },
+            ageMs: 2_000_000
+          }
+        ],
+        summary: { count: 1, byState: { open: 0, waiting: 0, escalated: 1 } },
+        posting: "none"
+      }
+    });
+
+    // The explicit default and the absent query hit the same upstream read.
+    const explicit = await operatorQueueEnvelope(baseUrl, cookie, "kyc");
+    assert.equal(explicit.response.status, 200);
+    const explicitQueue = (explicit.body.payload as { queue: { kind: string; items: unknown[] } }).queue;
+    assert.equal(explicitQueue.kind, "kyc");
+    assert.equal(explicitQueue.items.length, 2);
+    assert.deepEqual(
+      seen.map((call) => call.kind),
+      ["aml", "tickets", "kyc"]
+    );
+  });
+
+  it("rejects a kind outside the enum before any upstream call", async () => {
+    const { client, seen } = stubClient(contractView());
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const cookie = `${session}; solidchange_bo_device=${testDeviceId}`;
+    for (const kind of ["fraud", "KYC", "", "kyc,aml"]) {
+      const { response, body } = await operatorQueueEnvelope(baseUrl, cookie, kind);
+      assert.equal(response.status, 400, kind);
+      assert.deepEqual(body, { error: "operator_queue_kind_invalid" });
+    }
+    assert.equal(seen.length, 0);
+  });
+
+  it("degrades each kind to its matching local roster when the upstream is unconfigured", async () => {
+    const baseUrl = await listen(createBackofficeServer(config()));
+    const cookie = await devSession(baseUrl);
+
+    const aml = await operatorQueueEnvelope(baseUrl, cookie, "aml");
+    assert.equal(aml.response.status, 200);
+    const amlPayload = aml.body.payload as { queue: { kind: string; items: Record<string, unknown>[]; summary: { count: number; byState: Record<string, number> } } };
+    assert.equal(amlPayload.queue.kind, "aml");
+    assert.ok(amlPayload.queue.items.length >= 1);
+    for (const item of amlPayload.queue.items) {
+      assert.equal(item.queueId, null);
+      assert.equal(item.subjectId, null);
+      assert.equal(item.alertType, null);
+      assert.deepEqual(item.evidenceRefs, []);
+      assert.equal(item.slaDueAt, null);
+      assert.match(String(item.state), /^(pending|in_review|escalated)$/u);
+      assert.equal(item.assignee, null);
+      assert.equal(item.ageMs, null);
+    }
+    assert.equal(amlPayload.queue.summary.count, amlPayload.queue.items.length);
+
+    const tickets = await operatorQueueEnvelope(baseUrl, cookie, "tickets");
+    assert.equal(tickets.response.status, 200);
+    const ticketPayload = tickets.body.payload as { queue: { kind: string; items: Record<string, unknown>[]; summary: { count: number; byState: Record<string, number> } } };
+    assert.equal(ticketPayload.queue.kind, "tickets");
+    for (const item of ticketPayload.queue.items) {
+      assert.equal(item.queueId, null);
+      assert.equal(item.subjectId, null);
+      assert.equal(item.category, null);
+      assert.equal(typeof item.openedAt, "string");
+      assert.match(String(item.state), /^(open|waiting|escalated)$/u);
+      assert.equal(item.assignee, null);
+      assert.equal(item.ageMs, null);
+    }
+    assert.equal(ticketPayload.queue.summary.count, ticketPayload.queue.items.length);
+    const tallied: Record<string, number> = {};
+    for (const item of ticketPayload.queue.items) {
+      const key = String(item.state);
+      tallied[key] = (tallied[key] ?? 0) + 1;
+    }
+    assert.deepEqual(ticketPayload.queue.summary.byState, tallied);
   });
 
   it("rejects absent or malformed device identities before any upstream call", async () => {

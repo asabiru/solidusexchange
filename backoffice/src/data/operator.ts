@@ -12,8 +12,13 @@
 
 export type OperatorKycStatus = "unverified" | "pending" | "verified";
 export type OperatorAccountStatus = "active" | "closed" | "dormant" | "restricted";
+export type OperatorQueueKind = "kyc" | "aml" | "tickets";
 export type OperatorQueueState = "pending" | "in_review" | "escalated";
+export type OperatorTicketQueueState = "open" | "waiting" | "escalated";
 export type OperatorQueuePriority = "normal" | "high" | "urgent";
+export type OperatorAmlAlertType = "structuring" | "velocity" | "geo_mismatch";
+// The ticket categories echo the customer support ticket universe.
+export type OperatorTicketCategory = "question" | "operation_problem" | "complaint" | "data_request";
 
 export interface OperatorSubjectRow {
   subjectId: string;
@@ -55,20 +60,62 @@ export interface OperatorQueueItem {
   ageMs: number;
 }
 
-export interface OperatorQueueSummary {
-  count: number;
-  byState: { pending: number; inReview: number; escalated: number };
+export interface OperatorAmlQueueItem {
+  queueId: string;
+  subjectId: string;
+  alertType: OperatorAmlAlertType;
+  evidenceRefs: readonly string[];
+  slaDueAt: string;
+  state: OperatorQueueState;
+  priority: OperatorQueuePriority;
+  assignee: { subject: string } | null;
+  ageMs: number;
 }
 
-export interface OperatorQueueView {
-  mode: "test";
-  queue: {
-    kind: "kyc";
-    items: readonly OperatorQueueItem[];
-    summary: OperatorQueueSummary;
-    posting: "none";
-  };
+export interface OperatorTicketQueueItem {
+  queueId: string;
+  subjectId: string;
+  category: OperatorTicketCategory;
+  openedAt: string;
+  state: OperatorTicketQueueState;
+  priority: OperatorQueuePriority;
+  assignee: { subject: string } | null;
+  ageMs: number;
 }
+
+export interface OperatorQueueSummary<ByState> {
+  count: number;
+  byState: ByState;
+}
+
+export type OperatorQueueView =
+  | {
+      mode: "test";
+      queue: {
+        kind: "kyc";
+        items: readonly OperatorQueueItem[];
+        summary: OperatorQueueSummary<{ pending: number; inReview: number; escalated: number }>;
+        posting: "none";
+      };
+    }
+  | {
+      mode: "test";
+      queue: {
+        kind: "aml";
+        items: readonly OperatorAmlQueueItem[];
+        summary: OperatorQueueSummary<{ pending: number; inReview: number; escalated: number }>;
+        posting: "none";
+      };
+    }
+  | {
+      mode: "test";
+      queue: {
+        kind: "tickets";
+        items: readonly OperatorTicketQueueItem[];
+        summary: OperatorQueueSummary<{ open: number; waiting: number; escalated: number }>;
+        posting: "none";
+      };
+    };
 
 const operatorSubjectsViewKeys = ["mode", "subjects"] as const;
 const subjectRowKeys = [
@@ -111,7 +158,29 @@ const queueItemKeys = [
 ] as const;
 const queueSummaryKeys = ["byState", "count"] as const;
 const queueByStateKeys = ["escalated", "inReview", "pending"] as const;
+const queueTicketByStateKeys = ["escalated", "open", "waiting"] as const;
 const queueAssigneeKeys = ["subject"] as const;
+const amlQueueItemKeys = [
+  "ageMs",
+  "alertType",
+  "assignee",
+  "evidenceRefs",
+  "priority",
+  "queueId",
+  "slaDueAt",
+  "state",
+  "subjectId"
+] as const;
+const ticketQueueItemKeys = [
+  "ageMs",
+  "assignee",
+  "category",
+  "openedAt",
+  "priority",
+  "queueId",
+  "state",
+  "subjectId"
+] as const;
 
 const customerSubjectPattern = /^syn_cust_[a-z0-9]{8,32}$/;
 const operatorSubjectPattern = /^syn_oper_[a-z0-9]{8,32}$/;
@@ -120,11 +189,18 @@ const isoTimestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]
 const contactHashPattern = /^cth_[0-9a-f]{32}$/;
 const deviceRefPattern = /^dev_[0-9a-f]{16}$/;
 const queueIdPattern = /^qky_[0-9a-f]{24}$/;
+const amlQueueIdPattern = /^qml_[0-9a-f]{24}$/;
+const ticketQueueIdPattern = /^qtick_[0-9a-f]{24}$/;
+const evidenceRefPattern = /^evd_[0-9a-f]{24}$/;
+const evidenceRefsMaxItems = 8;
 
 const kycStatuses: ReadonlySet<string> = new Set(["unverified", "pending", "verified"]);
 const accountStatuses: ReadonlySet<string> = new Set(["active", "closed", "dormant", "restricted"]);
 const queueStates: ReadonlySet<string> = new Set(["pending", "in_review", "escalated"]);
+const queueTicketStates: ReadonlySet<string> = new Set(["open", "waiting", "escalated"]);
 const queuePriorities: ReadonlySet<string> = new Set(["normal", "high", "urgent"]);
+const amlAlertTypes: ReadonlySet<string> = new Set(["structuring", "velocity", "geo_mismatch"]);
+const ticketCategories: ReadonlySet<string> = new Set(["question", "operation_problem", "complaint", "data_request"]);
 
 const subjectsMaxItems = 64;
 const queueMaxItems = 64;
@@ -284,100 +360,195 @@ export function parseOperatorSubjectView(value: unknown): OperatorSubjectView | 
   });
 }
 
+/** The shared queue-item axes every kind pins: ref grammar, enums, assignee and age. */
+function validQueueItemCore(
+  item: Record<string, unknown>,
+  keys: readonly string[],
+  idPattern: RegExp,
+  states: ReadonlySet<string>,
+  seen: Set<string>
+): boolean {
+  if (
+    !hasExactKeys(item, keys)
+    || typeof item.queueId !== "string"
+    || !idPattern.test(item.queueId)
+    || seen.has(item.queueId)
+    || typeof item.subjectId !== "string"
+    || !customerSubjectPattern.test(item.subjectId)
+    || typeof item.state !== "string"
+    || !states.has(item.state)
+    || typeof item.priority !== "string"
+    || !queuePriorities.has(item.priority)
+    || !isNonNegativeInt(item.ageMs)
+  ) {
+    return false;
+  }
+  if (item.assignee !== null) {
+    if (
+      !isRecord(item.assignee)
+      || !hasExactKeys(item.assignee, queueAssigneeKeys)
+      || typeof item.assignee.subject !== "string"
+      || !operatorSubjectPattern.test(item.assignee.subject)
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function parseQueueAssignee(item: Record<string, unknown>): { subject: string } | null {
+  return item.assignee === null ? null : Object.freeze({ subject: (item.assignee as { subject: string }).subject });
+}
+
 /**
- * The operator KYC work queue: `qky_*`/`syn_cust_*`/`syn_oper_*` refs, enum
- * membership, coherent ISO timestamps (submitted never after the SLA
- * deadline), a non-negative integer age and a summary that tallies the item
- * set exactly.
+ * The operator work queue, one projection per kind: `qky_*`/`qml_*`/
+ * `qtick_*`/`evd_*`/`syn_cust_*`/`syn_oper_*` refs, the declared kind's
+ * item shape and state vocabulary, coherent ISO timestamps, a non-negative
+ * integer age and a summary that tallies the item set exactly.
  */
 export function parseOperatorQueueView(value: unknown): OperatorQueueView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, queueViewKeys) || value.mode !== "test") {
     return undefined;
   }
   const queue = value.queue;
-  if (!isRecord(queue) || !hasExactKeys(queue, queueKeys) || queue.kind !== "kyc" || queue.posting !== "none") {
+  if (
+    !isRecord(queue)
+    || !hasExactKeys(queue, queueKeys)
+    || (queue.kind !== "kyc" && queue.kind !== "aml" && queue.kind !== "tickets")
+    || queue.posting !== "none"
+  ) {
     return undefined;
   }
+  const kind = queue.kind;
   if (!Array.isArray(queue.items) || queue.items.length > queueMaxItems) {
     return undefined;
   }
-  const items: OperatorQueueItem[] = [];
   const seen = new Set<string>();
-  const tallied = { pending: 0, inReview: 0, escalated: 0 };
+  const tallied: Record<string, number> = {};
+  const items: (OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem)[] = [];
   for (const item of queue.items) {
-    if (
-      !isRecord(item)
-      || !hasExactKeys(item, queueItemKeys)
-      || typeof item.queueId !== "string"
-      || !queueIdPattern.test(item.queueId)
-      || seen.has(item.queueId)
-      || typeof item.subjectId !== "string"
-      || !customerSubjectPattern.test(item.subjectId)
-      || typeof item.displayName !== "string"
-      || !displayNamePattern.test(item.displayName)
-      || !isIsoTimestamp(item.submittedAt)
-      || !isIsoTimestamp(item.slaDueAt)
-      || Date.parse(item.slaDueAt) <= Date.parse(item.submittedAt)
-      || typeof item.state !== "string"
-      || !queueStates.has(item.state)
-      || typeof item.priority !== "string"
-      || !queuePriorities.has(item.priority)
-      || !isNonNegativeInt(item.ageMs)
-    ) {
+    if (!isRecord(item)) {
       return undefined;
     }
-    if (item.assignee !== null) {
+    if (kind === "aml") {
       if (
-        !isRecord(item.assignee)
-        || !hasExactKeys(item.assignee, queueAssigneeKeys)
-        || typeof item.assignee.subject !== "string"
-        || !operatorSubjectPattern.test(item.assignee.subject)
+        !validQueueItemCore(item, amlQueueItemKeys, amlQueueIdPattern, queueStates, seen)
+        || typeof item.alertType !== "string"
+        || !amlAlertTypes.has(item.alertType)
+        || !Array.isArray(item.evidenceRefs)
+        || item.evidenceRefs.length < 1
+        || item.evidenceRefs.length > evidenceRefsMaxItems
+        || new Set(item.evidenceRefs).size !== item.evidenceRefs.length
+        || !item.evidenceRefs.every((ref) => typeof ref === "string" && evidenceRefPattern.test(ref))
+        || !isIsoTimestamp(item.slaDueAt)
       ) {
         return undefined;
       }
+      items.push(
+        Object.freeze({
+          queueId: item.queueId as string,
+          subjectId: item.subjectId as string,
+          alertType: item.alertType as OperatorAmlAlertType,
+          evidenceRefs: Object.freeze([...(item.evidenceRefs as string[])]),
+          slaDueAt: item.slaDueAt as string,
+          state: item.state as OperatorQueueState,
+          priority: item.priority as OperatorQueuePriority,
+          assignee: parseQueueAssignee(item),
+          ageMs: item.ageMs as number
+        })
+      );
+    } else if (kind === "tickets") {
+      if (
+        !validQueueItemCore(item, ticketQueueItemKeys, ticketQueueIdPattern, queueTicketStates, seen)
+        || typeof item.category !== "string"
+        || !ticketCategories.has(item.category)
+        || !isIsoTimestamp(item.openedAt)
+      ) {
+        return undefined;
+      }
+      items.push(
+        Object.freeze({
+          queueId: item.queueId as string,
+          subjectId: item.subjectId as string,
+          category: item.category as OperatorTicketCategory,
+          openedAt: item.openedAt as string,
+          state: item.state as OperatorTicketQueueState,
+          priority: item.priority as OperatorQueuePriority,
+          assignee: parseQueueAssignee(item),
+          ageMs: item.ageMs as number
+        })
+      );
+    } else {
+      if (
+        !validQueueItemCore(item, queueItemKeys, queueIdPattern, queueStates, seen)
+        || typeof item.displayName !== "string"
+        || !displayNamePattern.test(item.displayName)
+        || !isIsoTimestamp(item.submittedAt)
+        || !isIsoTimestamp(item.slaDueAt)
+        || Date.parse(item.slaDueAt as string) <= Date.parse(item.submittedAt as string)
+      ) {
+        return undefined;
+      }
+      items.push(
+        Object.freeze({
+          queueId: item.queueId as string,
+          subjectId: item.subjectId as string,
+          displayName: item.displayName as string,
+          submittedAt: item.submittedAt as string,
+          slaDueAt: item.slaDueAt as string,
+          state: item.state as OperatorQueueState,
+          priority: item.priority as OperatorQueuePriority,
+          assignee: parseQueueAssignee(item),
+          ageMs: item.ageMs as number
+        })
+      );
     }
-    seen.add(item.queueId);
-    tallied[item.state === "in_review" ? "inReview" : (item.state as "pending" | "escalated")] += 1;
-    items.push(
-      Object.freeze({
-        queueId: item.queueId,
-        subjectId: item.subjectId,
-        displayName: item.displayName,
-        submittedAt: item.submittedAt,
-        slaDueAt: item.slaDueAt,
-        state: item.state as OperatorQueueState,
-        priority: item.priority as OperatorQueuePriority,
-        assignee: item.assignee === null ? null : Object.freeze({ subject: item.assignee.subject as string }),
-        ageMs: item.ageMs
-      })
-    );
+    seen.add(item.queueId as string);
+    const tallyKey = item.state === "in_review" ? "inReview" : (item.state as string);
+    tallied[tallyKey] = (tallied[tallyKey] ?? 0) + 1;
   }
   const summary = queue.summary;
+  const byStateKeys = kind === "tickets" ? queueTicketByStateKeys : queueByStateKeys;
   if (
     !isRecord(summary)
     || !hasExactKeys(summary, queueSummaryKeys)
     || summary.count !== items.length
     || !isRecord(summary.byState)
-    || !hasExactKeys(summary.byState, queueByStateKeys)
-    || summary.byState.pending !== tallied.pending
-    || summary.byState.inReview !== tallied.inReview
-    || summary.byState.escalated !== tallied.escalated
+    || !hasExactKeys(summary.byState, byStateKeys)
+    || !Object.entries(summary.byState).every(([key, count]) => count === (tallied[key] ?? 0))
   ) {
     return undefined;
+  }
+  const byState = Object.freeze({ ...summary.byState });
+  const parsedSummary = Object.freeze({ count: summary.count as number, byState });
+  if (kind === "aml") {
+    return Object.freeze({
+      mode: "test",
+      queue: Object.freeze({
+        kind: "aml",
+        items: Object.freeze(items as OperatorAmlQueueItem[]),
+        summary: parsedSummary as { count: number; byState: { pending: number; inReview: number; escalated: number } },
+        posting: "none"
+      })
+    });
+  }
+  if (kind === "tickets") {
+    return Object.freeze({
+      mode: "test",
+      queue: Object.freeze({
+        kind: "tickets",
+        items: Object.freeze(items as OperatorTicketQueueItem[]),
+        summary: parsedSummary as { count: number; byState: { open: number; waiting: number; escalated: number } },
+        posting: "none"
+      })
+    });
   }
   return Object.freeze({
     mode: "test",
     queue: Object.freeze({
       kind: "kyc",
-      items: Object.freeze(items),
-      summary: Object.freeze({
-        count: summary.count,
-        byState: Object.freeze({
-          pending: tallied.pending,
-          inReview: tallied.inReview,
-          escalated: tallied.escalated
-        })
-      }),
+      items: Object.freeze(items as OperatorQueueItem[]),
+      summary: parsedSummary as { count: number; byState: { pending: number; inReview: number; escalated: number } },
       posting: "none"
     })
   });

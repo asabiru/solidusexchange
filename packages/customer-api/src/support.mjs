@@ -126,6 +126,18 @@ function buildTicket(subject, index) {
 }
 
 /**
+ * The synchronous ticket rows behind `listFor`: the operator tickets queue
+ * projects this same support universe operator-side and must recompute it
+ * verbatim, so both surfaces share the single builder rather than drift
+ * into parallel derivations.
+ * @param {string} subject
+ * @returns {readonly TicketView[]}
+ */
+export function syntheticSupportTickets(subject) {
+  return buildSupportTicketsView(subject).tickets;
+}
+
+/**
  * @param {string} subject
  * @returns {SupportTicketsView}
  */

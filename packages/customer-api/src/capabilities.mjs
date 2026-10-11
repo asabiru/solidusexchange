@@ -333,13 +333,16 @@ export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
   entry("operator.capabilities.read", "read", false, []),
   entry("operator.admin.read", "read", false, []),
   entry("operator.subjects.read", "read", false, []),
-  // The KYC work queue is a projection of the subject roster the directory
+  // The work queue is a projection of the subject roster the directory
   // read already exposes — no new subject data — so it sits at the same
   // unconditional read tier: the operator audience plus the bound device
   // identifier are the gate, KYC and decisions never apply. It carries its
   // own capability name (not operator.subjects.read) because it is a
   // distinct read surface: a future role-scoped grant may widen or hold a
-  // queue view separately from the raw directory.
+  // queue view separately from the raw directory. The single capability
+  // covers every queue kind (kyc|aml|tickets): a queue is the same
+  // read-only projection regardless of kind, so no kind gets its own
+  // capability name.
   entry("operator.queue.read", "read", false, [])
 ]);
 
