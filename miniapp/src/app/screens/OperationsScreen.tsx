@@ -8,6 +8,8 @@ import { Icon } from "../Icon";
 import {
   activitySourceKeyOf,
   arrayOf,
+  contractActivityKindKeyOf,
+  contractActivityToneOf,
   kycActivityOf,
   screeningBadgeOf,
   screeningNetworkKeyOf,
@@ -15,7 +17,7 @@ import {
 } from "../server-fields";
 import { EmptyState, ScreenTitle } from "../ui";
 
-type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening" | "support";
+type ActivityGroup = "all" | "login" | "kyc" | "quote" | "screening" | "support" | "contract";
 
 const groupFilters: readonly { value: ActivityGroup; label: MessageKey }[] = [
   { value: "all", label: "activity.filterAll" },
@@ -23,7 +25,8 @@ const groupFilters: readonly { value: ActivityGroup; label: MessageKey }[] = [
   { value: "kyc", label: "activity.filterKyc" },
   { value: "quote", label: "activity.filterQuote" },
   { value: "screening", label: "activity.filterScreening" },
-  { value: "support", label: "activity.filterSupport" }
+  { value: "support", label: "activity.filterSupport" },
+  { value: "contract", label: "activity.filterContract" }
 ];
 
 function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
@@ -31,6 +34,7 @@ function groupOf(kind: ActivityKind): Exclude<ActivityGroup, "all"> {
   if (kind === "quote_previewed") return "quote";
   if (kind === "address_screened") return "screening";
   if (kind === "support_requested") return "support";
+  if (kind === "contract") return "contract";
   return "kyc";
 }
 
@@ -101,6 +105,28 @@ function ActivityRow({ item }: { item: ActivityItem }) {
           <span className="num">{when(item.at)}</span>
           <span className="pill pill--muted">{t("activity.supportOnly")}</span>
         </span>
+      </li>
+    );
+  }
+  if (item.kind === "contract") {
+    // The served feed is a derived-only projection: title/detail/status
+    // arrive as upstream display text, the kind pill is i18n'd, and the
+    // monetary pair renders only when the upstream kind is a money kind.
+    const contractKind = contractActivityKindKeyOf(item.contract);
+    const tone = contractActivityToneOf(item.status);
+    return (
+      <li className="row">
+        <span className="coin coin--menu" aria-hidden="true"><Icon name="receipt" size="sm" /></span>
+        <span className="row__main">
+          <strong>{item.title}</strong>
+          <span className="num">{when(item.at)} · {item.detail}</span>
+          <span className={`pill pill--${tone}`}>{contractKind ? t(contractKind) : item.contract}</span>
+        </span>
+        {item.amount !== undefined && item.asset !== undefined ? (
+          <span className="row__amount">
+            <strong className="num">{format.money(item.asset, item.amount)}</strong>
+          </span>
+        ) : null}
       </li>
     );
   }

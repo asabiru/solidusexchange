@@ -876,6 +876,87 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  ActivityView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "activity"],
+    properties: {
+      mode: { const: "test" },
+      activity: {
+        type: "array",
+        items: { $ref: "#/components/schemas/ActivityItemView" }
+      }
+    }
+  },
+  ActivityItemView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["activity_id", "kind", "status", "title", "detail", "money", "created_at", "posting"],
+    properties: {
+      activity_id: { type: "string", pattern: "^act_[0-9a-f]{24}$" },
+      kind: {
+        type: "string",
+        enum: ["deposit", "withdrawal", "quote", "order", "payment", "card", "check", "kyc", "security"]
+      },
+      status: {
+        type: "string",
+        enum: [
+          "awaiting_payment",
+          "payment_received",
+          "partial_payment",
+          "duplicate_payment",
+          "payment_reversed",
+          "expired_no_payment",
+          "draft",
+          "screened",
+          "pending_maker_approval",
+          "pending_checker_approval",
+          "unsigned_intent_ready",
+          "broadcast",
+          "confirmed",
+          "rejected",
+          "cancelled",
+          "expired",
+          "indicative",
+          "open",
+          "created",
+          "processing",
+          "completed",
+          "failed",
+          "reversed",
+          "pending_activation",
+          "active",
+          "frozen",
+          "blocked",
+          "terminated",
+          "awaiting_confirmation",
+          "awaiting_recipient_kyc",
+          "claimed",
+          "submitted",
+          "in_review",
+          "approved",
+          "needs_more_data",
+          "timed_out",
+          "unavailable",
+          "login",
+          "revoked"
+        ]
+      },
+      title: boundedString,
+      detail: { type: "string", minLength: 1, maxLength: 256 },
+      money: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["amount", "asset"],
+        properties: {
+          amount: { $ref: "#/$defs/decimalAmount" },
+          asset: { $ref: "#/$defs/assetCode" }
+        }
+      },
+      created_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   ChecksView: {
     type: "object",
     additionalProperties: false,
@@ -1113,6 +1194,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["getOperatorAdmin", "/api/v1/operator/admin"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
+    ["getCustomerActivity", "/api/v1/customer/activity"],
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
     ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
     ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
@@ -1162,6 +1244,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", gatedReadStatuses],
     ["getOperatorAdmin", readStatuses],
     ["getCustomerChecks", gatedReadStatuses],
+    ["getCustomerActivity", gatedReadStatuses],
     ["previewCustomerCheck", gatedReadStatuses],
     ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
     ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
@@ -1188,6 +1271,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
+    ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
     ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
     ["claimCustomerCheck", "#/components/schemas/CheckView"],

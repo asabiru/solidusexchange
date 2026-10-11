@@ -4,6 +4,7 @@ import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
 import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth-sessions.mjs";
+import { createSyntheticActivityDirectory, validActivityView } from "../../customer-api/src/activity.mjs";
 import { createSyntheticCheckDirectory, validChecksView } from "../../customer-api/src/checks.mjs";
 import { createSyntheticKycApplicationDirectory } from "../../customer-api/src/kyc.mjs";
 import { createSyntheticProfileDirectory } from "../../customer-api/src/profile.mjs";
@@ -511,6 +512,28 @@ describe("customer journey through the Mini App BFF", () => {
     const upstreamIds = new Set(upstreamView.checks.map((check) => check.check_id));
     for (const check of view.checks) {
       assert.equal(upstreamIds.has(check.reference), false);
+    }
+  });
+
+  it("keeps the activity feed on the local log while customer.activity.read is denied upstream", async () => {
+    // customer.activity.read is KYC-gated and the upstream KYC directory
+    // marks every subject unverified, so the verified dev session's upstream
+    // read is refused: /bff/activity degrades in place to the local
+    // per-subject ActivityLog view. The upstream directory still answers a
+    // deterministic, contract-valid view for the same subject — nothing
+    // here leaks into the app surface.
+    const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
+    const upstreamView = await createSyntheticActivityDirectory().viewFor(customerApiSubject(devSubject));
+    assert.equal(validActivityView(upstreamView), true);
+    assert.ok(upstreamView.activity.length >= 1);
+    assert.deepEqual(upstreamView, await createSyntheticActivityDirectory().viewFor(customerApiSubject(devSubject)));
+    const view = await getMiniapp("/bff/activity", cookie);
+    assert.equal(view.mode, "test");
+    assert.equal(view.executable, false);
+    const upstreamIds = new Set(upstreamView.activity.map((item) => item.activity_id));
+    for (const item of view.items) {
+      assert.equal(upstreamIds.has(item.id), false);
+      assert.notEqual(item.kind, "contract");
     }
   });
 

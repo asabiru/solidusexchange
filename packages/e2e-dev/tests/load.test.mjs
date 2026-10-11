@@ -43,7 +43,7 @@ const rssGrowthBudgetBytes = 256 * 1024 * 1024;
 const customerApiRateLimit = 40;
 const maxSessionsPerSubject = 5;
 const documentedStatuses = new Set([200, 201, 202, 429, 503]);
-const documented503 = new Set(["audit_integrity_unavailable", "cards_unavailable", "checks_unavailable", "deposits_unavailable", "kyc_unavailable", "profile_unavailable", "exchange_orders_unavailable", "payments_unavailable", "quote_unavailable", "screening_unavailable", "sessions_unavailable", "support_unavailable", "account_unavailable", "quotes_unavailable", "withdrawals_unavailable"]);
+const documented503 = new Set(["activity_unavailable", "audit_integrity_unavailable", "cards_unavailable", "checks_unavailable", "deposits_unavailable", "kyc_unavailable", "profile_unavailable", "exchange_orders_unavailable", "payments_unavailable", "quote_unavailable", "screening_unavailable", "sessions_unavailable", "support_unavailable", "account_unavailable", "quotes_unavailable", "withdrawals_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 let startedAt;
@@ -472,7 +472,18 @@ describe("bounded load on the dev stack", () => {
     for (const result of results.filter((entry) => entry.kind === "checks" && entry.status === 503)) {
       assert.deepEqual(result.body, { error: "checks_unavailable" });
     }
-    assert.deepEqual(countBy(results, "activity"), { 200: total / 19 });
+    // /bff/activity shares the same upstream KYC gate
+    // (customer.activity.read): the verified dev session consults upstream,
+    // so the feed answers the contract view or the sibling
+    // activity_unavailable under the shared rate budget — gated sessions
+    // keep the local log without an upstream call.
+    const activityFeed = countBy(results, "activity");
+    assert.equal((activityFeed[200] ?? 0) + (activityFeed[503] ?? 0), total / 19);
+    assert.ok((activityFeed[200] ?? 0) > 0, "customer-api answered at least one activity read");
+    assert.ok((activityFeed[503] ?? 0) > 0, "customer-api rate limit applies to activity");
+    for (const result of results.filter((entry) => entry.kind === "activity" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "activity_unavailable" });
+    }
     const submits = countBy(results, "kyc-submit");
     assert.equal((submits[200] ?? 0) + (submits[202] ?? 0), total / 19);
     // The burst drives 25 distinct telegram subjects through two submissions
@@ -484,7 +495,7 @@ describe("bounded load on the dev stack", () => {
       if (result.kind === "quote") assert.equal(result.body.kycRequired, true);
       if (result.kind === "quote" || result.kind === "verified-quote") assert.equal(result.body.executable, false);
       if (result.kind === "notifications") assert.ok(result.body.notifications.length <= defaultMaxPerSubject);
-      if (result.kind === "activity") {
+      if (result.kind === "activity" && result.status === 200) {
         assert.ok(result.body.items.length <= maxActivityPerSubject);
         assert.equal(result.body.executable, false);
       }

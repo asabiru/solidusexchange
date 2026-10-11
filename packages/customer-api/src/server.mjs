@@ -7,6 +7,7 @@ import { createSyntheticAuthSessionDirectory } from "./auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "./capabilities.mjs";
 import { isLoopbackAddress, loadConfig } from "./config.mjs";
 import { createSyntheticCardDirectory } from "./cards.mjs";
+import { createSyntheticActivityDirectory } from "./activity.mjs";
 import { createSyntheticCheckDirectory } from "./checks.mjs";
 import { createSyntheticDepositDirectory } from "./deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "./exchange-orders.mjs";
@@ -40,13 +41,14 @@ import { createFixedWindowRateLimiter } from "./rate-limit.mjs";
  *   paymentDirectory?: import("./payments.mjs").PaymentDirectory,
  *   cardDirectory?: import("./cards.mjs").CardDirectory,
  *   checkDirectory?: import("./checks.mjs").CheckDirectory,
+ *   activityDirectory?: import("./activity.mjs").ActivityDirectory,
  *   operatorDirectory?: import("./operator.mjs").OperatorDirectory,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, operatorDirectory, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operatorDirectory, clock, logSink, timer } = {}) {
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -68,6 +70,7 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     paymentDirectory: paymentDirectory ?? createSyntheticPaymentDirectory(),
     cardDirectory: cardDirectory ?? createSyntheticCardDirectory(),
     checkDirectory: checkDirectory ?? createSyntheticCheckDirectory(),
+    activityDirectory: activityDirectory ?? createSyntheticActivityDirectory(),
     operatorDirectory: operatorDirectory ?? createSyntheticOperatorDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: config.rateLimitPerMinute, clock }),
     clock,

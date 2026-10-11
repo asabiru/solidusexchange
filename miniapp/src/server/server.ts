@@ -17,7 +17,7 @@ import type {
   SupportRequestsView
 } from "../shared/api.js";
 import { isAssetCode } from "../shared/assets.js";
-import { type ActivityLog, createActivityLog, maxActivityPerSubject } from "./activity.js";
+import { type ActivityLog, contractActivityView, createActivityLog, maxActivityPerSubject } from "./activity.js";
 import { type CheckBook, CheckError, contractChecksView, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
@@ -885,8 +885,28 @@ export function createMiniappServer(
         json(response, 400, { error: "invalid_request" });
         return;
       }
-      const view: ActivityView = { mode: "test", items: activity.list(session.subject, limit), executable: false };
-      json(response, 200, view);
+      // Same gating as /bff/deposits: the local KYC gate and the standalone
+      // (unconfigured) dev BFF keep the local per-subject ActivityLog view;
+      // only a verified session with customer-api access reads the served
+      // contract feed. An upstream refusal degrades to the same local view
+      // a gated session sees (in place); any other upstream failure answers
+      // the sibling *_unavailable error shape. The served feed is a
+      // derived-only projection — recording events stays local either way.
+      const local = (): ActivityView => ({ mode: "test", items: activity.list(session.subject, limit), executable: false });
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, local());
+        return;
+      }
+      const upstream = await customerApi.activity(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractActivityView(upstream.activity, limit));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, local());
+        return;
+      }
+      json(response, 503, { error: "activity_unavailable" });
       return;
     }
     if (path === "/bff/sessions") {

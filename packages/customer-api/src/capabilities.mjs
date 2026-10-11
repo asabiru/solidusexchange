@@ -214,6 +214,12 @@ export const CAPABILITY_POLICY = Object.freeze([
   // needs no open money-movement decisions: the unserved check commands
   // below keep the financial denial with their decision reasons.
   entry("customer.checks.read", "read", true, []),
+  // The served customer activity feed is KYC-gated like the other asset
+  // collections: it is a derived-only projection over the subject's own
+  // deposits, withdrawals, quotes, orders, payments, cards, checks, kyc and
+  // session-security events — never a posting source — so it reads with
+  // the same verified-KYC gate and no write capability exists.
+  entry("customer.activity.read", "read", true, []),
   // Previewing a check is the issuance-side rate/terms command for the
   // chat flow: it stays denied under the financial-commands gate like the
   // claim and cancel commands, with the in-chat checks decision D-019
