@@ -24,6 +24,27 @@ const subjectRowKeys = [
   "registered_at",
   "subject_id"
 ] as const;
+const subjectDetailViewKeys = ["mode", "subject"] as const;
+const subjectDetailKeys = [
+  "account_status",
+  "contact_hash",
+  "devices",
+  "display_name",
+  "flags",
+  "kyc_status",
+  "last_active_at",
+  "limits",
+  "posting",
+  "registered_at",
+  "sessions",
+  "subject_id"
+] as const;
+const subjectLimitKeys = ["max_devices", "max_sessions"] as const;
+const subjectAccountStatuses: ReadonlySet<string> = new Set(["active", "closed", "dormant", "restricted"]);
+const contactHashPattern = /^cth_[0-9a-f]{32}$/;
+const deviceRefPattern = /^dev_[0-9a-f]{16}$/;
+const subjectSessionsMax = 16;
+const subjectDevicesMax = 8;
 const subjectsMaxItems = 64;
 const kycStatuses: ReadonlySet<string> = new Set(["unverified", "pending", "verified"]);
 const operatorAdminViewKeys = [
@@ -89,10 +110,38 @@ export type CustomerApiOperatorSubjects =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** Bounded limits echo inside GET /api/v1/operator/subjects/{subjectId}. */
+export interface CustomerApiSubjectLimits {
+  max_sessions: number;
+  max_devices: number;
+}
+
+/** One subject row of the operator detail read — the list fields plus the id-bound detail extension. */
+export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
+  account_status: string;
+  contact_hash: string;
+  sessions: number;
+  devices: readonly string[];
+  limits: CustomerApiSubjectLimits;
+}
+
+/** Wire view of GET /api/v1/operator/subjects/{subjectId} — snake_case contract fields. */
+export interface CustomerApiOperatorSubjectView {
+  mode: "test";
+  subject: CustomerApiSubjectDetail;
+}
+
+export type CustomerApiOperatorSubject =
+  | { status: "ok"; view: CustomerApiOperatorSubjectView }
+  | { status: "not-found" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   operatorAdmin(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorAdmin>;
   operatorSubjects(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorSubjects>;
+  operatorSubject(bffSubject: string, deviceId: string, subjectId: string, nowMs: number): Promise<CustomerApiOperatorSubject>;
 }
 
 /** Maps a BFF pseudonymous operator subject onto the customer-api operator subject space. */
@@ -254,6 +303,88 @@ function parseOperatorSubjectsView(value: unknown): CustomerApiOperatorSubjectsV
   return Object.freeze({ mode: "test", subjects: Object.freeze(rows) });
 }
 
+/**
+ * Fail-closed parser for the operator subject detail contract view: the list
+ * row's axes (exact key sets, `syn_cust_*` ref, kyc_status enum, non-negative
+ * integer flags, coherent ISO timestamps, pinned `posting: "none"`) plus the
+ * detail extension — the account_status enum, the redacted `cth_*` contact
+ * digest, bounded integer session count, unique bounded `dev_*` device refs
+ * and a limits echo the counts always fit inside — the same axes the
+ * upstream `validOperatorSubjectDetailView` validator pins.
+ */
+function parseOperatorSubjectDetailView(value: unknown): CustomerApiOperatorSubjectView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, subjectDetailViewKeys)) {
+    return undefined;
+  }
+  const item = value.subject;
+  if (
+    value.mode !== "test"
+    || !isRecord(item)
+    || !hasExactKeys(item, subjectDetailKeys)
+    || typeof item.subject_id !== "string"
+    || !customerSubjectPattern.test(item.subject_id)
+    || typeof item.display_name !== "string"
+    || !displayNamePattern.test(item.display_name)
+    || typeof item.kyc_status !== "string"
+    || !kycStatuses.has(item.kyc_status)
+    || typeof item.flags !== "number"
+    || !Number.isInteger(item.flags)
+    || item.flags < 0
+    || !isIsoTimestamp(item.registered_at)
+    || !isIsoTimestamp(item.last_active_at)
+    || Date.parse(item.last_active_at) < Date.parse(item.registered_at)
+    || item.posting !== "none"
+    || typeof item.account_status !== "string"
+    || !subjectAccountStatuses.has(item.account_status)
+    || typeof item.contact_hash !== "string"
+    || !contactHashPattern.test(item.contact_hash)
+    || typeof item.sessions !== "number"
+    || !Number.isInteger(item.sessions)
+    || item.sessions < 0
+    || item.sessions > subjectSessionsMax
+    || !Array.isArray(item.devices)
+    || item.devices.length > subjectDevicesMax
+    || new Set(item.devices).size !== item.devices.length
+    || !item.devices.every((device) => typeof device === "string" && deviceRefPattern.test(device))
+    || !isRecord(item.limits)
+    || !hasExactKeys(item.limits, subjectLimitKeys)
+    || typeof item.limits.max_sessions !== "number"
+    || !Number.isInteger(item.limits.max_sessions)
+    || item.limits.max_sessions < 1
+    || item.limits.max_sessions > subjectSessionsMax
+    || typeof item.limits.max_devices !== "number"
+    || !Number.isInteger(item.limits.max_devices)
+    || item.limits.max_devices < 1
+    || item.limits.max_devices > subjectDevicesMax
+    // Coherence mirrors the synthetic build: the live counts can never
+    // exceed the limits echo.
+    || item.sessions > item.limits.max_sessions
+    || item.devices.length > item.limits.max_devices
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    mode: "test",
+    subject: Object.freeze({
+      subject_id: item.subject_id,
+      display_name: item.display_name,
+      kyc_status: item.kyc_status,
+      flags: item.flags,
+      registered_at: item.registered_at,
+      last_active_at: item.last_active_at,
+      posting: "none",
+      account_status: item.account_status,
+      contact_hash: item.contact_hash,
+      sessions: item.sessions,
+      devices: Object.freeze([...(item.devices as readonly string[])]),
+      limits: Object.freeze({
+        max_sessions: item.limits.max_sessions,
+        max_devices: item.limits.max_devices
+      })
+    })
+  });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -278,7 +409,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     return Object.freeze({
       configured: false,
       operatorAdmin: async (): Promise<CustomerApiOperatorAdmin> => ({ status: "not-configured" }),
-      operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" })
+      operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" }),
+      operatorSubject: async (): Promise<CustomerApiOperatorSubject> => ({ status: "not-configured" })
     });
   }
 
@@ -354,5 +486,42 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects });
+  async function operatorSubject(
+    bffSubject: string,
+    deviceId: string,
+    subjectId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperatorSubject> {
+    // Same device guard as operatorAdmin: never emit a non-contract
+    // X-Device-Id if the client is reused outside the gated route. The
+    // subject ref guard mirrors it: a non-contract id is answered locally as
+    // the uniform not-found, never propagated upstream.
+    if (!isDeviceId(deviceId)) {
+      return { status: "unavailable" };
+    }
+    if (!customerSubjectPattern.test(subjectId)) {
+      return { status: "not-found" };
+    }
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticOperatorToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(`/api/v1/operator/subjects/${encodeURIComponent(subjectId)}`, token, deviceId, nowMs);
+      const view = parseOperatorSubjectDetailView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch (error) {
+      // The upstream member read answers unknown ids with its uniform 404;
+      // that is a real not-found, not drift — surface it distinctly so the
+      // route can keep the same uniform response.
+      if (error instanceof CustomerApiHttpError && error.status === 404) {
+        return { status: "not-found" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject });
 }

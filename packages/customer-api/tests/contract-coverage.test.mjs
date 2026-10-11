@@ -9,6 +9,7 @@ import test from "node:test";
 
 import { ERROR_MESSAGES, OPERATIONS } from "../src/contract.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {
   assertConforms,
@@ -39,7 +40,13 @@ const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TR
 const KNOWN_SCREENING_ID = (
   await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
 ).screenings[0].screening_id;
-const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor(), orderId: await orderIdFor(), screeningId: KNOWN_SCREENING_ID });
+// The operator subjectId detail read only serves ids inside the shared
+// roster, so the pinned value is the roster's first minted id — a
+// well-formed id outside the universe is the legitimate 404, not a 200.
+const KNOWN_OPERATOR_SUBJECT_ID = (
+  await createSyntheticOperatorSubjectsDirectory().subjectsFor()
+).subjects[0].subject_id;
+const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor(), orderId: await orderIdFor(), screeningId: KNOWN_SCREENING_ID, subjectId: KNOWN_OPERATOR_SUBJECT_ID });
 const OPERATOR_HEADERS = [
   ...customerHeaders({ "X-Platform": "operator-web" }),
   ["X-Device-Id", "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11"]

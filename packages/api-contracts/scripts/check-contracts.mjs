@@ -295,6 +295,60 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  OperatorSubjectDetailView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "subject"],
+    properties: {
+      mode: { const: "test" },
+      subject: { $ref: "#/components/schemas/OperatorSubjectDetail" }
+    }
+  },
+  OperatorSubjectDetail: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "subject_id",
+      "display_name",
+      "kyc_status",
+      "flags",
+      "registered_at",
+      "last_active_at",
+      "posting",
+      "account_status",
+      "contact_hash",
+      "sessions",
+      "devices",
+      "limits"
+    ],
+    properties: {
+      subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
+      display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
+      kyc_status: { type: "string", enum: ["unverified", "pending", "verified"] },
+      flags: { type: "integer", minimum: 0 },
+      registered_at: { type: "string", format: "date-time" },
+      last_active_at: { type: "string", format: "date-time" },
+      posting: { const: "none" },
+      account_status: { type: "string", enum: ["active", "dormant", "restricted", "closed"] },
+      contact_hash: { type: "string", pattern: "^cth_[0-9a-f]{32}$" },
+      sessions: { type: "integer", minimum: 0, maximum: 16 },
+      devices: {
+        type: "array",
+        maxItems: 8,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^dev_[0-9a-f]{16}$" }
+      },
+      limits: {
+        type: "object",
+        additionalProperties: false,
+        required: ["max_sessions", "max_devices"],
+        properties: {
+          max_sessions: { type: "integer", minimum: 1, maximum: 16 },
+          max_devices: { type: "integer", minimum: 1, maximum: 8 }
+        }
+      }
+    }
+  },
   WalletsView: {
     type: "object",
     additionalProperties: false,
@@ -1468,17 +1522,20 @@ const pinnedParameterNames = new Set([
   "OrderId",
   "Platform",
   "RequestId",
-  "ScreeningId"
+  "ScreeningId",
+  "SubjectId"
 ]);
 
 // Templated paths bind exactly one canonical path parameter per placeholder
 // name: {checkId} -> CheckId, {operationId} -> OperationId,
-// {orderId} -> OrderId, {screeningId} -> ScreeningId.
+// {orderId} -> OrderId, {screeningId} -> ScreeningId,
+// {subjectId} -> SubjectId.
 const canonicalPathParameters = new Map([
   ["checkId", "#/components/parameters/CheckId"],
   ["operationId", "#/components/parameters/OperationId"],
   ["orderId", "#/components/parameters/OrderId"],
-  ["screeningId", "#/components/parameters/ScreeningId"]
+  ["screeningId", "#/components/parameters/ScreeningId"],
+  ["subjectId", "#/components/parameters/SubjectId"]
 ]);
 
 const canonicalHeaderParameters = new Map([
@@ -1646,6 +1703,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["getOperatorAdmin", "/api/v1/operator/admin"],
     ["getOperatorSubjects", "/api/v1/operator/subjects"],
+    ["getOperatorSubject", "/api/v1/operator/subjects/{subjectId}"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
     ["getCustomerOperations", "/api/v1/customer/operations"],
@@ -1705,6 +1763,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", readStatuses],
     ["getOperatorAdmin", readStatuses],
     ["getOperatorSubjects", readStatuses],
+    ["getOperatorSubject", ["200", "401", "404", "429", "500"]],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
     ["getCustomerOperations", gatedReadStatuses],
@@ -1741,6 +1800,7 @@ function checkOpenApi() {
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["getOperatorSubjects", "#/components/schemas/OperatorSubjectsView"],
+    ["getOperatorSubject", "#/components/schemas/OperatorSubjectDetailView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["getCustomerOperations", "#/components/schemas/OperationsView"],
@@ -2077,6 +2137,17 @@ function checkOpenApi() {
       pattern: "^ord_[0-9a-f]{24}$"
     }),
     "Canonical OrderId constraints must remain pinned"
+  );
+  const subjectIdParameter = parameters.SubjectId;
+  assert(subjectIdParameter?.required === true, "SubjectId must be required when used");
+  assert(subjectIdParameter?.in === "path", "SubjectId must remain a path parameter");
+  assert(subjectIdParameter?.name === "subjectId", "SubjectId must use subjectId");
+  assert(
+    canonicalJson(subjectIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^syn_cust_[a-z0-9]{8,32}$"
+    }),
+    "Canonical SubjectId constraints must remain pinned"
   );
   for (const name of ["decimalAmount", "assetCode"]) {
     assert(

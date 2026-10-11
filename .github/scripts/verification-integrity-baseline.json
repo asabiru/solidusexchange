@@ -8,7 +8,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/server-fields.test.js .test-dist/app/app-render.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/oidc-audit.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js .test-dist/server/authz.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/operator-admin-upstream.test.js .test-dist/server/operator-subjects-upstream.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/server-fields.test.js .test-dist/app/app-render.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/oidc-audit.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js .test-dist/server/authz.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/operator-admin-upstream.test.js .test-dist/server/operator-subjects-upstream.test.js .test-dist/server/operator-subject-upstream.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -525,8 +525,8 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 240,
-      "minCases": 8
+      "minLines": 644,
+      "minCases": 23
     },
     "backoffice/src/server/dev-server.test.ts": {
       "minLines": 49,
@@ -549,11 +549,15 @@
       "minCases": 19
     },
     "backoffice/src/server/operator-admin-upstream.test.ts": {
-      "minLines": 230,
+      "minLines": 232,
       "minCases": 7
     },
+    "backoffice/src/server/operator-subject-upstream.test.ts": {
+      "minLines": 296,
+      "minCases": 9
+    },
     "backoffice/src/server/operator-subjects-upstream.test.ts": {
-      "minLines": 233,
+      "minLines": 234,
       "minCases": 6
     },
     "backoffice/src/server/postgres-audit-store.test.ts": {
@@ -569,7 +573,7 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 548,
+      "minLines": 550,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
@@ -833,7 +837,7 @@
       "minCases": 2
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 2172,
+      "minLines": 2204,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
@@ -945,11 +949,11 @@
       "minCases": 15
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 828,
-      "minCases": 42
+      "minLines": 893,
+      "minCases": 43
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 287,
+      "minLines": 291,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -1009,8 +1013,8 @@
       "minCases": 5
     },
     "packages/customer-api/tests/operator.test.mjs": {
-      "minLines": 335,
-      "minCases": 14
+      "minLines": 547,
+      "minCases": 21
     },
     "packages/customer-api/tests/payments.test.mjs": {
       "minLines": 280,
@@ -1033,7 +1037,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 308,
+      "minLines": 316,
       "minCases": 14
     },
     "packages/customer-api/tests/routing.test.mjs": {
@@ -1041,7 +1045,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
-      "minLines": 141,
+      "minLines": 146,
       "minCases": 6
     },
     "packages/customer-api/tests/store-config.test.mjs": {
