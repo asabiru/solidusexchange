@@ -1239,6 +1239,10 @@
       "minLines": 309,
       "minCases": 7
     },
+    "packages/matching-core/tests/audit.test.mjs": {
+      "minLines": 282,
+      "minCases": 12
+    },
     "packages/customer-api/tests/store-contract.mjs": {
       "minLines": 81,
       "minCases": 6

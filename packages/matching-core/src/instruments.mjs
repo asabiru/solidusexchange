@@ -70,14 +70,18 @@ export function validInstrumentDefinition(definition) {
 export function instrumentIndex(definitions) {
   const index = new Map();
   for (const definition of definitions) {
-    if (!validInstrumentDefinition(definition)) {
+    // Snapshot each definition's fields exactly once before validating: a
+    // getter or Proxy that re-answers cannot pass validation and then store
+    // different values in the registry.
+    const candidate = { .../** @type {Record<string, unknown>} */ (definition) };
+    if (!validInstrumentDefinition(candidate)) {
       throw new TypeError("instrument definitions must be well-formed BASE/QUOTE pairs");
     }
-    const { instrument } = /** @type {InstrumentDefinition} */ (definition);
+    const { instrument } = /** @type {InstrumentDefinition} */ (candidate);
     if (index.has(instrument)) {
       throw new TypeError(`duplicate instrument definition: ${instrument}`);
     }
-    index.set(instrument, Object.freeze({ .../** @type {InstrumentDefinition} */ (definition) }));
+    index.set(instrument, Object.freeze(candidate));
   }
   return index;
 }
