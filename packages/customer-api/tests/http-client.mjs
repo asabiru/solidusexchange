@@ -211,6 +211,10 @@ export async function checkedRequest(port, options) {
 }
 
 const PATH_PARAMETER_PATTERN = /^[a-z][a-z0-9_-]{2,127}$/u;
+// Mirrors the server's {instrument} arm: the canonical id's '/'
+// separator travels percent-encoded, so the segment is admitted on its
+// decoded BASE/QUOTE shape.
+const INSTRUMENT_PATH_PATTERN = /^[A-Z0-9]{2,8}\/[A-Z0-9]{2,8}$/u;
 const TEMPLATED_PATHS = OPERATIONS.filter((operation) => operation.path.includes("{")).map(
   (operation) => ({ path: operation.path, segments: operation.path.split("/") })
 );
@@ -229,9 +233,23 @@ export function operationPathFor(requestPath) {
     for (let index = 0; index < segments.length; index += 1) {
       const segment = segments[index];
       if (segment.startsWith("{") && segment.endsWith("}")) {
-        if (!PATH_PARAMETER_PATTERN.test(requestSegments[index])) {
-          matched = false;
-          break;
+        const raw = requestSegments[index];
+        if (!PATH_PARAMETER_PATTERN.test(raw)) {
+          if (segment !== "{instrument}") {
+            matched = false;
+            break;
+          }
+          let decoded;
+          try {
+            decoded = decodeURIComponent(raw);
+          } catch {
+            matched = false;
+            break;
+          }
+          if (!INSTRUMENT_PATH_PATTERN.test(decoded)) {
+            matched = false;
+            break;
+          }
         }
         continue;
       }
@@ -252,6 +270,13 @@ export function operationPathFor(requestPath) {
 export async function operationIdFor(subject = VERIFIED_SUBJECT) {
   const view = await createSyntheticOperationDirectory().viewFor(subject);
   return view.operations[0].operation_id;
+}
+
+// The percent-encoded wire form of an instrument id for the depth member
+// read — the canonical '/' separator travels inside one path segment as
+// %2F, e.g. marketDepthPathFor("USDT/RUB") -> ".../markets/USDT%2FRUB".
+export function marketDepthPathFor(instrument) {
+  return `/api/v1/customer/markets/${encodeURIComponent(instrument)}`;
 }
 
 // The first minted order id for a subject — the scenario's first intent,

@@ -175,6 +175,19 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects unbound instrument path templates",
+  "instrument path parameter must be bound exactly on its templated paths: getCustomerMarketDepth",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/markets/{instrument}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/Instrument"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects bearer check types in canonical preview requests",
   "Canonical CheckPreviewRequest schema must remain pinned",
   (scratch) => {

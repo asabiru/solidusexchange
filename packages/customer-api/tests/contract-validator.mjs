@@ -331,7 +331,21 @@ function operationFor(contract, validator, method, path) {
     }
     const satisfied = names.every((name, index) => {
       const schema = declared.get(name);
-      return schema !== undefined && validator.validate(schema, match[index + 1], `path ${name}`).length === 0;
+      if (schema === undefined) {
+        return false;
+      }
+      // The server's {instrument} capture decodes the segment once — its
+      // canonical id carries a '/' separator — so the schema sees the
+      // decoded value. Other parameters validate their raw segment.
+      let value = match[index + 1];
+      if (name === "instrument") {
+        try {
+          value = decodeURIComponent(value);
+        } catch {
+          return false;
+        }
+      }
+      return validator.validate(schema, value, `path ${name}`).length === 0;
     });
     if (satisfied) {
       return operation;

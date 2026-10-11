@@ -51,6 +51,7 @@ const DEPOSIT_ADDRESSES = "/api/v1/customer/deposit-addresses";
 const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
 const TRADES = "/api/v1/customer/trades";
 const MARKETS = "/api/v1/customer/markets";
+const MARKET_DEPTH = "/api/v1/customer/markets/USDT%2FRUB";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const ADMIN = "/api/v1/operator/admin";
@@ -206,7 +207,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, MARKET_DEPTH, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -219,7 +220,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, MARKET_DEPTH, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS]) {
       now += 61_000;
       assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
@@ -348,8 +349,14 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
-  await withServer({ marketDirectory: { async listFor() { throw new Error("market store exploded: secret=abc"); } } }, async (port) => {
+  await withServer({ marketDirectory: { async listFor() { throw new Error("market store exploded: secret=abc"); }, async depthFor() { return null; } } }, async (port) => {
     const response = await observe(port, { path: MARKETS, headers: verifiedCustomerHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
+  await withServer({ marketDirectory: { async listFor() { return { mode: "test", markets: [] }; }, async depthFor() { throw new Error("depth store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: MARKET_DEPTH, headers: verifiedCustomerHeaders() });
     assert.equal(response.status, 500);
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
@@ -831,6 +838,32 @@ test("GET /api/v1/customer/markets serves verified customers and gates the rest"
       const denied = await observe(port, { path: MARKETS, headers });
       assert.equal(denied.status, 403);
       assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/markets/{instrument} serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: MARKET_DEPTH, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    const view = JSON.parse(granted.body);
+    assert.equal(view.instrument, "USDT/RUB");
+    // The member read shares the collection's capability and fails closed
+    // on every other admission: unverified subjects are gated like the
+    // list, and an instrument outside the declared universe answers the
+    // same 404 as a malformed id — no existence leak.
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: MARKET_DEPTH, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+    for (const unknown of [
+      "/api/v1/customer/markets/BTC%2FUSD",
+      "/api/v1/customer/markets/nope"
+    ]) {
+      const missing = await observe(port, { path: unknown, headers: verifiedCustomerHeaders() });
+      assert.equal(missing.status, 404);
+      assert.equal(JSON.parse(missing.body).code, "CAPABILITY_DENIED");
     }
   });
 });

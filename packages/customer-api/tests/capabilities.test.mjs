@@ -30,16 +30,17 @@ function decisionStatus(id) {
 test("only served read operations are ever granted", () => {
   // getCustomerWallets, getCustomerNotifications, getCustomerDeposits,
   // getCustomerWithdrawals, getCustomerQuotes, the two exchange-orders
-  // reads, getCustomerTrades, getCustomerPayments, getCustomerCards,
+  // reads, getCustomerTrades, the two markets reads, getCustomerPayments,
+  // getCustomerCards,
   // getCustomerChecks, getCustomerDepositAddresses,
   // getCustomerAddressScreenings,
   // getCustomerAddressScreening, getCustomerActivity and the two
   // getCustomerOperations reads are the only
   // KYC-gated served operations today.
   const gated = OPERATIONS.filter((operation) =>
-    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerExchangeOrder", "getCustomerTrades", "getCustomerMarkets", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerDepositAddresses", "getCustomerAddressScreenings", "getCustomerAddressScreening", "getCustomerActivity", "getCustomerOperations", "getCustomerOperation"].includes(operation.operationId)
+    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerExchangeOrder", "getCustomerTrades", "getCustomerMarkets", "getCustomerMarketDepth", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerDepositAddresses", "getCustomerAddressScreenings", "getCustomerAddressScreening", "getCustomerActivity", "getCustomerOperations", "getCustomerOperation"].includes(operation.operationId)
   ).length;
-  assert.equal(gated, 18);
+  assert.equal(gated, 19);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     // customer.kyc.read, customer.profile.read, customer.support.read,
@@ -63,11 +64,12 @@ test("only served read operations are ever granted", () => {
     assert.equal(
       granted.length,
       // getCustomerOperation shares getCustomerOperations' capability,
-      // getCustomerExchangeOrder shares getCustomerExchangeOrders' and
+      // getCustomerExchangeOrder shares getCustomerExchangeOrders',
+      // getCustomerMarketDepth shares getCustomerMarkets' and
       // getCustomerAddressScreening shares getCustomerAddressScreenings',
-      // so a verified subject sees three fewer grants than served operations
-      // (18 gated operations behind 15 gated capabilities).
-      customerOperations - (kycStatus === "verified" ? 3 : gated)
+      // so a verified subject sees four fewer grants than served operations
+      // (19 gated operations behind 15 gated capabilities).
+      customerOperations - (kycStatus === "verified" ? 4 : gated)
     );
   }
 });

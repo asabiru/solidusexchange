@@ -250,6 +250,9 @@ test("served reads fail closed on shape-valid content drift", async () => {
           : market
       );
       return { ...view, markets };
+    },
+    async depthFor(subject, instrument) {
+      return createSyntheticMarketDirectory().depthFor(subject, instrument);
     }
   };
   const routes = [

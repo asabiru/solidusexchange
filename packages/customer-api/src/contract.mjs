@@ -255,6 +255,27 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The market-depth member read shares the collection's KYC gate like
+  // the exchange-order and operations member reads (the getCustomerOperation
+  // precedent), so it adds the declared 404 for instruments outside the
+  // subject's book — a member read can never be wider than the list it
+  // belongs to, and a malformed or unknown instrument fails closed rather
+  // than leaking which instruments exist. The canonical instrument id
+  // carries a '/' separator (USDT/RUB), so the path segment carries it
+  // percent-encoded.
+  Object.freeze({
+    operationId: "getCustomerMarketDepth",
+    method: "GET",
+    path: "/api/v1/customer/markets/{instrument}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 404, 429, 500])
+  }),
   // The payments collection read is KYC-gated like the deposits, withdrawals,
   // wallets, notifications, quotes and exchange-orders reads, so it declares
   // a 403: payments are an asset/activity collection (the outbound fiat

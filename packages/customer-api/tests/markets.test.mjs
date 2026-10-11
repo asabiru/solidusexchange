@@ -392,9 +392,9 @@ test("rate limiting applies before the capability check", async () => {
 
 test("market and kyc directory failures return a client-safe 500 envelope", async () => {
   const failures = [
-    { marketDirectory: { async listFor() { throw new Error("market store exploded: secret=abc"); } } },
-    { marketDirectory: { async listFor() { return { markets: "nope" }; } } },
-    { marketDirectory: { async listFor() { return { mode: "test", markets: [], extra: "x" }; } } },
+    { marketDirectory: { async listFor() { throw new Error("market store exploded: secret=abc"); }, async depthFor() { return null; } } },
+    { marketDirectory: { async listFor() { return { markets: "nope" }; }, async depthFor() { return null; } } },
+    { marketDirectory: { async listFor() { return { mode: "test", markets: [], extra: "x" }; }, async depthFor() { return null; } } },
     { kycDirectory: { async statusFor() { throw new Error("kyc provider down"); } } }
   ];
   for (const options of failures) {

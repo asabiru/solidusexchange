@@ -809,6 +809,67 @@
         }
       }
     },
+    "/api/v1/customer/markets/{instrument}": {
+      "get": {
+        "operationId": "getCustomerMarketDepth",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the synthetic book depth ladder of the authenticated customer's order book for one instrument",
+        "description": "Serves the instrument's full resting ladder from the same per-subject replay the markets collection read projects: bids best (highest) price first, asks best (lowest) price first, each side capped at 16 levels when the book runs deeper (`depth_levels` reports the deeper side's resting level count before the cap). The canonical instrument id carries a '/' separator and travels inside one path segment percent-encoded (USDT%2FRUB for USDT/RUB). An instrument outside the declared universe answers the uniform 404 — the response never enumerates which instruments exist.",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/Instrument"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Book depth ladder of the instrument in test mode mirroring the subject's synthetic book, at most 16 levels per side",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketDepthView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/payments": {
       "get": {
         "operationId": "getCustomerPayments",
@@ -2089,6 +2150,20 @@
         "schema": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_-]{2,127}$"
+        }
+      },
+      "Instrument": {
+        "name": "instrument",
+        "in": "path",
+        "required": true,
+        "description": "Instrument identifier. The canonical id carries a '/' separator and travels inside one path segment percent-encoded (USDT%2FRUB for USDT/RUB).",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "USDT/RUB",
+            "TON/RUB",
+            "TON/USDT"
+          ]
         }
       },
       "ScreeningId": {
@@ -4047,6 +4122,129 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 18
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "MarketDepthView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "instrument",
+          "base_asset",
+          "quote_asset",
+          "bids",
+          "asks",
+          "last_trade",
+          "depth_levels",
+          "as_of",
+          "posting"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "instrument": {
+            "type": "string",
+            "enum": [
+              "USDT/RUB",
+              "TON/RUB",
+              "TON/USDT"
+            ]
+          },
+          "base_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "quote_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "bids": {
+            "type": "array",
+            "description": "Bid ladder levels, best (highest) price first, capped at 16.",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "price",
+                "quantity",
+                "order_count"
+              ],
+              "properties": {
+                "price": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "quantity": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "order_count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "asks": {
+            "type": "array",
+            "description": "Ask ladder levels, best (lowest) price first, capped at 16.",
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "price",
+                "quantity",
+                "order_count"
+              ],
+              "properties": {
+                "price": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "quantity": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "order_count": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "last_trade": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "price",
+              "quantity",
+              "executed_at"
+            ],
+            "properties": {
+              "price": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "quantity": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "executed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "depth_levels": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The deeper side's resting level count before the per-side cap; exceeds the served level count exactly when the ladder was truncated."
           },
           "as_of": {
             "type": "string",

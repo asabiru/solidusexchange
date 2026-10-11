@@ -17,7 +17,7 @@ import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
 import { validDepositsView } from "./deposits.mjs";
-import { validExchangeOrderDetailView, validExchangeOrdersView, validMarketsView, validTradesView } from "./exchange-orders.mjs";
+import { validExchangeOrderDetailView, validExchangeOrdersView, validMarketDepthView, validMarketsView, validTradesView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
 import { validPaymentsView } from "./payments.mjs";
 import {
@@ -121,6 +121,13 @@ export const SECURITY_HEADERS = Object.freeze({
   "x-frame-options": "DENY"
 });
 const PATH_PARAMETER_PATTERN = /^[a-z][a-z0-9_-]{2,127}$/u;
+// Canonical instrument ids carry a '/' separator (USDT/RUB), so a single
+// path segment can only carry them percent-encoded (USDT%2FRUB). The
+// {instrument} capture decodes the segment once — malformed escapes never
+// decode — and admits only the BASE/QUOTE shape; membership in the
+// declared universe stays the directory's fail-closed call, so a
+// well-formed non-member answers the same 404 as a malformed value.
+const INSTRUMENT_PATH_PATTERN = /^[A-Z0-9]{2,8}\/[A-Z0-9]{2,8}$/u;
 
 /**
  * Route matching mirrors the declared contract surface exactly: literal
@@ -162,12 +169,26 @@ function matchOperation(method, url) {
         }
         continue;
       }
-      const value = urlSegments[index];
+      const parameterName = placeholder[1];
+      const segment_value = urlSegments[index];
+      let value = segment_value;
       if (!PATH_PARAMETER_PATTERN.test(value)) {
-        matched = false;
-        break;
+        if (parameterName !== "instrument") {
+          matched = false;
+          break;
+        }
+        try {
+          value = decodeURIComponent(segment_value);
+        } catch {
+          matched = false;
+          break;
+        }
+        if (!INSTRUMENT_PATH_PATTERN.test(value)) {
+          matched = false;
+          break;
+        }
       }
-      parameters.set(placeholder[1], value);
+      parameters.set(parameterName, value);
     }
     if (matched) {
       return { operation, parameters };
@@ -377,7 +398,7 @@ export function createCustomerApiHandler({
   if (typeof tradeDirectory?.listFor !== "function") {
     throw new Error("A trade directory is required");
   }
-  if (typeof marketDirectory?.listFor !== "function") {
+  if (typeof marketDirectory?.listFor !== "function" || typeof marketDirectory?.depthFor !== "function") {
     throw new Error("A market directory is required");
   }
   if (typeof paymentDirectory?.listFor !== "function") {
@@ -843,6 +864,28 @@ export function createCustomerApiHandler({
         throw new Error("Market directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerMarketDepth") {
+      // Same capability as the collection: a member read can never be
+      // wider than the list it belongs to. An instrument outside the
+      // declared universe fails closed as the pinned 404 — uniform for
+      // every shape the template admits, so the response never reveals
+      // which instruments exist.
+      if (!evaluation.granted.includes("customer.markets.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const instrument = parameters.get("instrument") ?? "";
+      const item = await marketDirectory.depthFor(principal.subject, instrument);
+      if (item === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validMarketDepthView(item)) {
+        throw new Error("Market directory returned an invalid market depth view");
+      }
+      send(response, 200, { ...item }, requestId);
       return;
     }
     if (operation.operationId === "getCustomerPayments") {

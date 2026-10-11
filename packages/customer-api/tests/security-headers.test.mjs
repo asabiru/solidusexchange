@@ -83,6 +83,7 @@ test("every operation sends the security headers on success and on its error pat
       const path = operation.path
         .replaceAll("{operationId}", VERIFIED_OPERATION_ID)
         .replaceAll("{orderId}", VERIFIED_ORDER_ID)
+        .replaceAll("{instrument}", "USDT%2FRUB")
         .replaceAll("{screeningId}", KNOWN_SCREENING_ID)
         .replaceAll("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
       const ok = await request(port, { method, path, headers: operationHeaders(operation) });
