@@ -38,7 +38,7 @@ test("synthetic operation directory returns deterministic frozen views per subje
   const directory = createSyntheticOperationDirectory();
   const first = await directory.viewFor(VERIFIED_SUBJECT);
   const second = await directory.viewFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.operations));
   for (const item of first.operations) {
     assert.ok(Object.isFrozen(item) && Object.isFrozen(item.legs) && Object.isFrozen(item.timeline));
@@ -88,7 +88,7 @@ test("operationFor fails closed for ids the subject does not own", async () => {
   const view = await directory.viewFor(VERIFIED_SUBJECT);
   for (const item of view.operations) {
     const found = await directory.operationFor(VERIFIED_SUBJECT, item.operation_id);
-    assert.equal(found, item);
+    assert.deepEqual(found, item);
   }
   // A well-formed but never-minted id, another subject's id and a malformed
   // id all fail closed to null (the router maps null to the pinned 404).

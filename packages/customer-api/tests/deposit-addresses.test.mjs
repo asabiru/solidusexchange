@@ -42,7 +42,7 @@ test("synthetic deposit address directory returns deterministic frozen views per
   const directory = createSyntheticDepositAddressDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.deposit_addresses));
   for (const entry of first.deposit_addresses) {
     assert.ok(Object.isFrozen(entry));
@@ -120,7 +120,24 @@ test("validDepositAddressesView fails closed on directory drift", () => {
   for (const view of bad) {
     assert.equal(validDepositAddressesView(view), false, JSON.stringify(view));
   }
-  assert.equal(validDepositAddressesView({ mode: "test", deposit_addresses: [entry] }), true);
+  const full = [
+    entry,
+    { ...entry, deposit_address_id: "dpa_aaaaaaaabbbbbbbbcccccccc", asset: "USDT" },
+    {
+      ...entry,
+      deposit_address_id: "dpa_dddddddd55555555eeeeeeee",
+      asset: "USDT",
+      network: "TRON_TESTNET",
+      address: "T" + "B".repeat(33)
+    }
+  ];
+  assert.equal(validDepositAddressesView({ mode: "test", deposit_addresses: full }), true);
+  // One entry per (asset, network) target — a duplicate or a missing pair fails closed.
+  assert.equal(validDepositAddressesView({ mode: "test", deposit_addresses: [entry] }), false);
+  assert.equal(
+    validDepositAddressesView({ mode: "test", deposit_addresses: [...full, { ...entry, deposit_address_id: "dpa_ffffffff0000000011111111" }] }),
+    false
+  );
 });
 
 test("GET /api/v1/customer/deposit-addresses returns the exact synthetic view for a verified customer", async () => {

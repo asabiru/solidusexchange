@@ -200,21 +200,31 @@ export function validSupportTicketsView(view) {
     ) {
       return false;
     }
-    return true;
+    const createdMs = Date.parse(ticket.created_at);
+    return (
+      // The lifecycle is a strict prefix of the status order: a ticket that
+      // reached `status` visited every earlier state exactly once, at a
+      // fixed step — never out of order, never skipped.
+      ticket.timeline.every(
+        (/** @type {TicketTimelineEntry} */ entry, /** @type {number} */ index) =>
+          entry.status === TICKET_STATUSES[index] &&
+          Date.parse(entry.at) === createdMs + index * TIMELINE_STEP_MS
+      ) &&
+      // The acknowledgement flag mirrors the complaint category, and the
+      // ticket expires exactly one TTL after creation.
+      ticket.complaint_acknowledged === (ticket.category === "complaint") &&
+      Date.parse(ticket.expires_at) === createdMs + TTL_MS
+    );
   });
 }
 
 /** @returns {SupportDirectory} */
 export function createSyntheticSupportDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildSupportTicketsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildSupportTicketsView(subject);
     }
   });
 }

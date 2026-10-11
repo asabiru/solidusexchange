@@ -149,6 +149,20 @@ function buildDepositsView(subject) {
   return Object.freeze({ mode: "test", deposits });
 }
 
+/**
+ * Minor units of a canonical decimal string, or null when malformed. All
+ * comparisons stay in integer/BigInt space.
+ * @param {string} value
+ * @returns {bigint | null}
+ */
+function parseMinor(value) {
+  const match = /^(0|[1-9][0-9]*)\.([0-9]{2})$/u.exec(value);
+  if (match === null) {
+    return null;
+  }
+  return BigInt(match[1]) * 100n + BigInt(match[2]);
+}
+
 /** @param {unknown} value */
 function isIsoTimestamp(value) {
   return (
@@ -170,38 +184,67 @@ export function validDepositsView(view) {
   if (candidate.mode !== "test" || !Array.isArray(candidate.deposits)) {
     return false;
   }
-  return candidate.deposits.every(
-    (deposit) =>
-      deposit !== null &&
-      typeof deposit === "object" &&
-      !Array.isArray(deposit) &&
-      JSON.stringify(Object.keys(deposit).sort()) === JSON.stringify([...DEPOSIT_KEYS].sort()) &&
-      Object.values(deposit).every((value) => typeof value === "string") &&
-      DEPOSIT_ID_PATTERN.test(deposit.deposit_id) &&
-      ASSET_PATTERN.test(deposit.asset) &&
-      deposit.method === "sbp" &&
-      DEPOSIT_STATUSES.includes(deposit.status) &&
-      DECIMAL_PATTERN.test(deposit.expected_amount) &&
-      DECIMAL_PATTERN.test(deposit.received_total) &&
-      DECIMAL_PATTERN.test(deposit.reversed_total) &&
-      PAYMENT_REFERENCE_PATTERN.test(deposit.payment_reference) &&
-      isIsoTimestamp(deposit.created_at) &&
-      isIsoTimestamp(deposit.updated_at) &&
-      deposit.posting === "none"
-  );
+  return candidate.deposits.every((deposit) => {
+    if (
+      deposit === null ||
+      typeof deposit !== "object" ||
+      Array.isArray(deposit) ||
+      JSON.stringify(Object.keys(deposit).sort()) !== JSON.stringify([...DEPOSIT_KEYS].sort()) ||
+      !Object.values(deposit).every((value) => typeof value === "string") ||
+      !DEPOSIT_ID_PATTERN.test(deposit.deposit_id) ||
+      !ASSET_PATTERN.test(deposit.asset) ||
+      deposit.method !== "sbp" ||
+      !DEPOSIT_STATUSES.includes(deposit.status) ||
+      !DECIMAL_PATTERN.test(deposit.expected_amount) ||
+      !DECIMAL_PATTERN.test(deposit.received_total) ||
+      !DECIMAL_PATTERN.test(deposit.reversed_total) ||
+      !PAYMENT_REFERENCE_PATTERN.test(deposit.payment_reference) ||
+      !isIsoTimestamp(deposit.created_at) ||
+      !isIsoTimestamp(deposit.updated_at) ||
+      deposit.posting !== "none"
+    ) {
+      return false;
+    }
+    const expected = parseMinor(deposit.expected_amount);
+    const received = parseMinor(deposit.received_total);
+    const reversed = parseMinor(deposit.reversed_total);
+    if (expected === null || received === null || reversed === null || expected <= 0n) {
+      return false;
+    }
+    const createdMs = Date.parse(deposit.created_at);
+    const updatedMs = Date.parse(deposit.updated_at);
+    if (updatedMs < createdMs) {
+      return false;
+    }
+    // The lifecycle pins the totals per status: awaiting and expired
+    // intents carry nothing, received and reversed intents carry exactly
+    // the expected amount, duplicates carry twice, partials strictly less.
+    switch (deposit.status) {
+      case "awaiting_payment":
+        return received === 0n && reversed === 0n && updatedMs === createdMs;
+      case "payment_received":
+        return received === expected && reversed === 0n;
+      case "partial_payment":
+        return received > 0n && received < expected && reversed === 0n;
+      case "duplicate_payment":
+        return received === expected * 2n && reversed === 0n;
+      case "payment_reversed":
+        return received === expected && reversed > 0n && reversed <= received;
+      case "expired_no_payment":
+        return received === 0n && reversed === 0n && updatedMs > createdMs;
+      default:
+        return false;
+    }
+  });
 }
 
 /** @returns {DepositDirectory} */
 export function createSyntheticDepositDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildDepositsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildDepositsView(subject);
     }
   });
 }

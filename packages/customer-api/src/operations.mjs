@@ -401,10 +401,29 @@ export function validOperationView(item) {
       return false;
     }
   }
-  return Array.isArray(candidate.timeline) &&
-    candidate.timeline.length >= 1 &&
-    candidate.timeline.length <= 4 &&
-    candidate.timeline.every(validTimelineStep);
+  if (
+    !Array.isArray(candidate.timeline) ||
+    candidate.timeline.length < 1 ||
+    candidate.timeline.length > 4 ||
+    !candidate.timeline.every(validTimelineStep)
+  ) {
+    return false;
+  }
+  // The walk only ever moves forward inside the operation's own window:
+  // recorded steps are non-decreasing in time and never past creation.
+  const createdMs = Date.parse(candidate.created_at);
+  let previousStep = Number.NEGATIVE_INFINITY;
+  for (const step of candidate.timeline) {
+    if (step.at === null) {
+      continue;
+    }
+    const at = Date.parse(step.at);
+    if (at < previousStep || at > createdMs) {
+      return false;
+    }
+    previousStep = at;
+  }
+  return true;
 }
 
 /** @param {unknown} view */
@@ -426,9 +445,10 @@ export function validOperationsView(view) {
     return false;
   }
   const seen = new Set();
+  const seenKinds = new Set();
   let previous = Number.POSITIVE_INFINITY;
   for (const item of candidate.operations) {
-    if (!validOperationView(item) || seen.has(item.operation_id)) {
+    if (!validOperationView(item) || seen.has(item.operation_id) || seenKinds.has(item.kind)) {
       return false;
     }
     const at = Date.parse(item.created_at);
@@ -436,6 +456,7 @@ export function validOperationsView(view) {
       return false;
     }
     seen.add(item.operation_id);
+    seenKinds.add(item.kind);
     previous = at;
   }
   return true;
@@ -443,17 +464,12 @@ export function validOperationsView(view) {
 
 /** @returns {OperationDirectory} */
 export function createSyntheticOperationDirectory() {
-  /** @type {Map<string, OperationsView>} */
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   const directory = Object.freeze({
     /** @param {string} subject */
     async viewFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildOperationsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildOperationsView(subject);
     },
     /**
      * Fails closed to null for ids the subject does not own and for

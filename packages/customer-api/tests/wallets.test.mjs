@@ -41,7 +41,7 @@ test("synthetic wallet directory returns deterministic frozen views per subject"
   const directory = createSyntheticWalletDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.wallets));
   for (const wallet of first.wallets) {
     assert.ok(Object.isFrozen(wallet));

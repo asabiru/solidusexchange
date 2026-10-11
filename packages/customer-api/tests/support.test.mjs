@@ -57,7 +57,7 @@ test("synthetic support directory returns deterministic frozen views per subject
   const directory = createSyntheticSupportDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first));
   assert.equal(first.mode, "test");
   assert.equal(first.delivery, "disabled");

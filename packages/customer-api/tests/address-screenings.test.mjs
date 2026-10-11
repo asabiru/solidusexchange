@@ -56,7 +56,7 @@ test("synthetic address screening directory returns deterministic frozen views p
   const directory = createSyntheticAddressScreeningDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.screenings));
   for (const entry of first.screenings) {
     assert.ok(Object.isFrozen(entry));
@@ -102,7 +102,7 @@ test("detail lookup returns the same frozen record and misses foreign ids", asyn
   const view = await directory.listFor(VERIFIED_SUBJECT);
   for (const entry of view.screenings) {
     const detail = await directory.viewFor(VERIFIED_SUBJECT, entry.screening_id);
-    assert.equal(detail, entry);
+    assert.deepEqual(detail, entry);
   }
   for (const subject of [SUBJECT, "syn_cust_ffffffff"]) {
     const foreign = await directory.viewFor(subject, view.screenings[0].screening_id);
@@ -191,7 +191,18 @@ test("validAddressScreeningsView and validAddressScreeningView fail closed on di
       assert.equal(validAddressScreeningView(view.screenings[0]), false, JSON.stringify(view));
     }
   }
-  assert.equal(validAddressScreeningsView({ mode: "test", screenings: [entry] }), true);
+  const full = [
+    entry,
+    { ...entry, screening_id: "scr_aaaaaaaabbbbbbbbccccccccdddddddd", asset: "USDT", network: "TON_TESTNET" },
+    { ...entry, screening_id: "scr_eeeeeeeeffffffff0000000011111111", asset: "USDT", network: "TRON_TESTNET" }
+  ];
+  assert.equal(validAddressScreeningsView({ mode: "test", screenings: full }), true);
+  // One record per (asset, network) target — a duplicate or a missing pair fails closed.
+  assert.equal(validAddressScreeningsView({ mode: "test", screenings: [entry] }), false);
+  assert.equal(
+    validAddressScreeningsView({ mode: "test", screenings: [...full, { ...entry, screening_id: "scr_11111111222222223333333344444444" }] }),
+    false
+  );
   assert.equal(validAddressScreeningView(entry), true);
   assert.equal(
     validAddressScreeningView({ ...entry, status: "pending", verdict: "none", risk_level: null }),

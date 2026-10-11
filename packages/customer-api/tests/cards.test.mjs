@@ -45,7 +45,7 @@ test("synthetic card directory returns deterministic frozen views per subject", 
   const directory = createSyntheticCardDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.cards));
   for (const card of first.cards) {
     assert.ok(Object.isFrozen(card));

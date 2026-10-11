@@ -215,12 +215,28 @@ export function validAddressScreeningsView(view) {
     return false;
   }
   const candidate = /** @type {AddressScreeningsView} */ (view);
-  return (
-    JSON.stringify(Object.keys(view).sort()) === JSON.stringify([...VIEW_KEYS].sort()) &&
-    candidate.mode === "test" &&
-    Array.isArray(candidate.screenings) &&
-    candidate.screenings.every(validAddressScreening)
-  );
+  if (
+    JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...VIEW_KEYS].sort()) ||
+    candidate.mode !== "test" ||
+    !Array.isArray(candidate.screenings) ||
+    // The set is exactly the allowlisted screening targets: one record per
+    // (asset, network) pair — a duplicate or a missing pair fails closed.
+    candidate.screenings.length !== ADDRESS_SCREENING_TARGETS.length
+  ) {
+    return false;
+  }
+  const seen = new Set();
+  for (const record of candidate.screenings) {
+    const key =
+      record !== null && typeof record === "object" && !Array.isArray(record)
+        ? `${record.asset}/${record.network}`
+        : undefined;
+    if (!validAddressScreening(record) || key === undefined || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+  }
+  return true;
 }
 
 /** @param {unknown} view */
@@ -230,18 +246,13 @@ export function validAddressScreeningView(view) {
 
 /** @returns {AddressScreeningDirectory} */
 export function createSyntheticAddressScreeningDirectory() {
-  /** @type {Map<string, AddressScreeningsView>} */
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   /**
    * @param {string} subject
    */
   async function viewForSubject(subject) {
-    let view = cache.get(subject);
-    if (view === undefined) {
-      view = buildAddressScreeningsView(subject);
-      cache.set(subject, view);
-    }
-    return view;
+    return buildAddressScreeningsView(subject);
   }
   return Object.freeze({
     async listFor(subject) {

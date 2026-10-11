@@ -296,15 +296,11 @@ export function validChecksView(view) {
 
 /** @returns {CheckDirectory} */
 export function createSyntheticCheckDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async viewFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildChecksView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildChecksView(subject);
     }
   });
 }

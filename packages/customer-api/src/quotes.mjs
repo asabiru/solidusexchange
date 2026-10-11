@@ -355,15 +355,11 @@ export function validQuotesView(view) {
 
 /** @returns {QuoteDirectory} */
 export function createSyntheticQuoteDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildQuotesView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildQuotesView(subject);
     }
   });
 }

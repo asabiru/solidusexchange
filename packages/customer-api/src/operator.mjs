@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { OPERATOR_CAPABILITY_POLICY } from "./capabilities.mjs";
 
 // Deterministic synthetic operator admin source. A future operator-directory
 // adapter replaces it behind `viewFor(subject, grantedCapabilities) ->
@@ -35,7 +36,9 @@ const OPERATOR_ID_PATTERN = /^opr_[0-9a-f]{24}$/u;
 const SUBJECT_PATTERN = /^syn_oper_[a-z0-9]{8,32}$/u;
 const ISO_TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/u;
 const GRANTED_CAPABILITIES_MAX_ITEMS = 32;
-const GRANTED_CAPABILITY_MAX_LENGTH = 128;
+const OPERATOR_CAPABILITY_VOCABULARY = new Set(
+  OPERATOR_CAPABILITY_POLICY.map((policy) => policy.capability)
+);
 const BASE_MS = Date.parse("2026-09-01T00:00:00.000Z");
 const CREATED_WINDOW_MS = 90 * 86_400_000;
 const UPDATED_WINDOW_MS = 30 * 86_400_000;
@@ -107,9 +110,9 @@ function validGrantedCapabilities(granted) {
     Array.isArray(granted) &&
     granted.length <= GRANTED_CAPABILITIES_MAX_ITEMS &&
     new Set(granted).size === granted.length &&
-    granted.every(
-      (item) => typeof item === "string" && item.length >= 1 && item.length <= GRANTED_CAPABILITY_MAX_LENGTH
-    )
+    // The echo only ever reports real operator capability ids — a view
+    // claiming a capability outside the declared policy vocabulary fails.
+    granted.every((item) => typeof item === "string" && OPERATOR_CAPABILITY_VOCABULARY.has(item))
   );
 }
 
@@ -141,16 +144,11 @@ export function validOperatorAdminView(view) {
 
 /** @returns {OperatorDirectory} */
 export function createSyntheticOperatorDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject and the
+  // granted capabilities, and a retained cache would grow without bound.
   return Object.freeze({
     async viewFor(subject, grantedCapabilities) {
-      const key = `${subject}${grantedCapabilities.map((item) => `\n${item}`).join("")}`;
-      let view = cache.get(key);
-      if (view === undefined) {
-        view = buildOperatorAdminView(subject, grantedCapabilities);
-        cache.set(key, view);
-      }
-      return view;
+      return buildOperatorAdminView(subject, grantedCapabilities);
     }
   });
 }

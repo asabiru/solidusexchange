@@ -202,7 +202,7 @@ test("the synthetic view stays deterministic, frozen and within the contract sha
   const directory = createSyntheticOperatorDirectory();
   const first = await directory.viewFor(OPERATOR_SUBJECT, GRANTED);
   const second = await directory.viewFor(OPERATOR_SUBJECT, GRANTED);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first));
   assert.ok(Object.isFrozen(first.granted_capabilities));
   assert.equal(first.mode, "test");

@@ -41,7 +41,7 @@ test("synthetic auth session directory returns deterministic frozen views per su
   const directory = createSyntheticAuthSessionDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.sessions));
   for (const session of first.sessions) {
     assert.ok(Object.isFrozen(session));

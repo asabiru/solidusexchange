@@ -46,7 +46,7 @@ test("synthetic payment directory returns deterministic frozen views per subject
   const directory = createSyntheticPaymentDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.payments));
   for (const payment of first.payments) {
     assert.ok(Object.isFrozen(payment));
