@@ -52,7 +52,8 @@ const USERS = "/api/v1/customer/users";
 const ADMIN = "/api/v1/operator/admin";
 const OPERATOR_SESSION = "/api/v1/operator/session";
 const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
-const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN];
+const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -406,6 +407,12 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
+  await withServer({ operatorSubjectsDirectory: { async subjectsFor() { throw new Error("subject store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
   // An operator principal outside the token grammar (here a subject that
   // never matches syn_oper_*) fails the session view's fail-closed
   // validation: the served route answers the client-safe 500 envelope.
@@ -524,7 +531,8 @@ test("GET /api/v1/operator/admin serves the operator's own admin overview to the
     assert.deepEqual(view.granted_capabilities, [
       "operator.session.read",
       "operator.capabilities.read",
-      "operator.admin.read"
+      "operator.admin.read",
+      "operator.subjects.read"
     ]);
     const customer = await observe(port, {
       path: ADMIN,
@@ -567,7 +575,7 @@ test("GET /api/v1/operator/capabilities grants exactly the operator read tier", 
     const response = await observe(port, { path: OPERATOR_CAPABILITIES, headers: operatorHeaders() });
     assert.equal(response.status, 200);
     assert.deepEqual(JSON.parse(response.body), {
-      capabilities: ["operator.session.read", "operator.capabilities.read", "operator.admin.read"],
+      capabilities: ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read"],
       commands_enabled: false
     });
     const customer = await observe(port, {
@@ -576,6 +584,30 @@ test("GET /api/v1/operator/capabilities grants exactly the operator read tier", 
     });
     assert.equal(customer.status, 401);
     assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("GET /api/v1/operator/subjects serves the shared customer directory to the operator audience only", async () => {
+  await withServer({}, async (port) => {
+    const response = await observe(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+    assert.equal(response.status, 200);
+    const view = JSON.parse(response.body);
+    assert.equal(view.mode, "test");
+    assert.ok(view.subjects.length >= 1);
+    for (const row of view.subjects) {
+      assert.match(row.subject_id, /^syn_cust_[a-z0-9]{8,32}$/u);
+      assert.match(row.kyc_status, /^(unverified|pending|verified)$/u);
+      assert.ok(Number.isInteger(row.flags) && row.flags >= 0);
+      assert.ok(Date.parse(row.last_active_at) >= Date.parse(row.registered_at));
+      assert.equal(row.posting, "none");
+    }
+    const customer = await observe(port, {
+      path: OPERATOR_SUBJECTS,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+    assert.equal(header(customer, "www-authenticate"), "Bearer");
   });
 });
 

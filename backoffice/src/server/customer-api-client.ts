@@ -11,7 +11,21 @@ export const maxCustomerApiResponseBytes = 16_384;
 
 const operatorIdPattern = /^opr_[0-9a-f]{24}$/;
 const operatorSubjectPattern = /^syn_oper_[a-z0-9]{8,32}$/;
+const customerSubjectPattern = /^syn_cust_[a-z0-9]{8,32}$/;
+const displayNamePattern = /^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$/;
 const isoTimestampPattern = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/;
+const operatorSubjectsViewKeys = ["mode", "subjects"] as const;
+const subjectRowKeys = [
+  "display_name",
+  "flags",
+  "kyc_status",
+  "last_active_at",
+  "posting",
+  "registered_at",
+  "subject_id"
+] as const;
+const subjectsMaxItems = 64;
+const kycStatuses: ReadonlySet<string> = new Set(["unverified", "pending", "verified"]);
 const operatorAdminViewKeys = [
   "created_at",
   "granted_capabilities",
@@ -53,9 +67,32 @@ export type CustomerApiOperatorAdmin =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** One row of GET /api/v1/operator/subjects — snake_case contract fields. */
+export interface CustomerApiSubjectRow {
+  subject_id: string;
+  display_name: string;
+  kyc_status: string;
+  flags: number;
+  registered_at: string;
+  last_active_at: string;
+  posting: string;
+}
+
+/** Wire view of GET /api/v1/operator/subjects — snake_case contract fields. */
+export interface CustomerApiOperatorSubjectsView {
+  mode: "test";
+  subjects: readonly CustomerApiSubjectRow[];
+}
+
+export type CustomerApiOperatorSubjects =
+  | { status: "ok"; view: CustomerApiOperatorSubjectsView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   operatorAdmin(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorAdmin>;
+  operatorSubjects(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorSubjects>;
 }
 
 /** Maps a BFF pseudonymous operator subject onto the customer-api operator subject space. */
@@ -159,6 +196,64 @@ function parseOperatorAdminView(value: unknown, expectedSubject: string): Custom
   });
 }
 
+/**
+ * Fail-closed parser for the operator subjects contract view: exact key set,
+ * `syn_cust_*` subject refs, transliterated display names, the customer
+ * lifecycle kyc_status enum, non-negative integer flag counts, coherent ISO
+ * timestamps and the pinned `posting: "none"` sentinel — the same axes the
+ * upstream `validOperatorSubjectsView` validator pins.
+ */
+function parseOperatorSubjectsView(value: unknown): CustomerApiOperatorSubjectsView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, operatorSubjectsViewKeys)) {
+    return undefined;
+  }
+  if (
+    value.mode !== "test"
+    || !Array.isArray(value.subjects)
+    || value.subjects.length < 1
+    || value.subjects.length > subjectsMaxItems
+  ) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const rows: CustomerApiSubjectRow[] = [];
+  for (const item of value.subjects) {
+    if (
+      !isRecord(item)
+      || !hasExactKeys(item, subjectRowKeys)
+      || typeof item.subject_id !== "string"
+      || !customerSubjectPattern.test(item.subject_id)
+      || seen.has(item.subject_id)
+      || typeof item.display_name !== "string"
+      || !displayNamePattern.test(item.display_name)
+      || typeof item.kyc_status !== "string"
+      || !kycStatuses.has(item.kyc_status)
+      || typeof item.flags !== "number"
+      || !Number.isInteger(item.flags)
+      || item.flags < 0
+      || !isIsoTimestamp(item.registered_at)
+      || !isIsoTimestamp(item.last_active_at)
+      || Date.parse(item.last_active_at) < Date.parse(item.registered_at)
+      || item.posting !== "none"
+    ) {
+      return undefined;
+    }
+    seen.add(item.subject_id);
+    rows.push(
+      Object.freeze({
+        subject_id: item.subject_id,
+        display_name: item.display_name,
+        kyc_status: item.kyc_status,
+        flags: item.flags,
+        registered_at: item.registered_at,
+        last_active_at: item.last_active_at,
+        posting: "none"
+      })
+    );
+  }
+  return Object.freeze({ mode: "test", subjects: Object.freeze(rows) });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -168,12 +263,13 @@ class CustomerApiHttpError extends Error {
 
 /**
  * Server-side, read-only client for the dev customer API's operator audience.
- * It only issues the operator admin GET, always sends X-Device-Id (the
- * operator audience pins a bound workstation device on every request) and
- * fails closed to "unavailable" on any unexpected response, including a
- * non-JSON content type or a body above maxCustomerApiResponseBytes. The read
- * is granted to every operator token upstream, so there is no "denied" arm:
- * a refusal is contract drift, not a real denial.
+ * It only issues the operator directory GETs (admin, subjects), always sends
+ * X-Device-Id (the operator audience pins a bound workstation device on every
+ * request) and fails closed to "unavailable" on any unexpected response,
+ * including a non-JSON content type or a body above
+ * maxCustomerApiResponseBytes. The reads are granted to every operator token
+ * upstream, so there is no "denied" arm: a refusal is contract drift, not a
+ * real denial.
  */
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
@@ -181,7 +277,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
   if (!baseUrl || !devTokenKey) {
     return Object.freeze({
       configured: false,
-      operatorAdmin: async (): Promise<CustomerApiOperatorAdmin> => ({ status: "not-configured" })
+      operatorAdmin: async (): Promise<CustomerApiOperatorAdmin> => ({ status: "not-configured" }),
+      operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" })
     });
   }
 
@@ -232,5 +329,30 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, operatorAdmin });
+  async function operatorSubjects(
+    bffSubject: string,
+    deviceId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperatorSubjects> {
+    // Same device guard as operatorAdmin: never emit a non-contract
+    // X-Device-Id if the client is reused outside the gated route.
+    if (!isDeviceId(deviceId)) {
+      return { status: "unavailable" };
+    }
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticOperatorToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/operator/subjects", token, deviceId, nowMs);
+      const view = parseOperatorSubjectsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects });
 }

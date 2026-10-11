@@ -321,7 +321,8 @@ export function evaluateCapabilities({ kycStatus }) {
 export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
   entry("operator.session.read", "read", false, []),
   entry("operator.capabilities.read", "read", false, []),
-  entry("operator.admin.read", "read", false, [])
+  entry("operator.admin.read", "read", false, []),
+  entry("operator.subjects.read", "read", false, [])
 ]);
 
 /** @returns {Readonly<{ granted: readonly string[], denied: readonly unknown[], commandsEnabled: boolean }>} */
