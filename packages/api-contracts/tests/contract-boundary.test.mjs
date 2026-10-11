@@ -362,6 +362,17 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects the served operator queue read without a device identifier",
+  "Missing X-Device-Id: getOperatorQueue",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/queue"].get;
+    operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects the operator subject detail read with a missing path parameter binding",
   "subjectId path parameter must be bound exactly",
   (scratch) => {

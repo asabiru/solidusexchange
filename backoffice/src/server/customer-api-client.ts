@@ -47,6 +47,26 @@ const subjectSessionsMax = 16;
 const subjectDevicesMax = 8;
 const subjectsMaxItems = 64;
 const kycStatuses: ReadonlySet<string> = new Set(["unverified", "pending", "verified"]);
+const queueViewKeys = ["mode", "queue"] as const;
+const queueKeys = ["items", "kind", "posting", "summary"] as const;
+const queueItemKeys = [
+  "age_ms",
+  "assignee",
+  "display_name",
+  "priority",
+  "queue_id",
+  "sla_due_at",
+  "state",
+  "subject_id",
+  "submitted_at"
+] as const;
+const queueSummaryKeys = ["by_state", "count"] as const;
+const queueByStateKeys = ["escalated", "in_review", "pending"] as const;
+const queueAssigneeKeys = ["subject"] as const;
+const queueIdPattern = /^qky_[0-9a-f]{24}$/;
+const queueMaxItems = 64;
+const queueStates: ReadonlySet<string> = new Set(["pending", "in_review", "escalated"]);
+const queuePriorities: ReadonlySet<string> = new Set(["normal", "high", "urgent"]);
 const operatorAdminViewKeys = [
   "created_at",
   "granted_capabilities",
@@ -137,11 +157,44 @@ export type CustomerApiOperatorSubject =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** One item of GET /api/v1/operator/queue — snake_case contract fields. */
+export interface CustomerApiQueueItem {
+  queue_id: string;
+  subject_id: string;
+  display_name: string;
+  submitted_at: string;
+  sla_due_at: string;
+  state: string;
+  priority: string;
+  assignee: { subject: string } | null;
+  age_ms: number;
+}
+
+/** Wire view of GET /api/v1/operator/queue — snake_case contract fields. */
+export interface CustomerApiOperatorQueueView {
+  mode: "test";
+  queue: {
+    kind: "kyc";
+    items: readonly CustomerApiQueueItem[];
+    summary: {
+      count: number;
+      by_state: { pending: number; in_review: number; escalated: number };
+    };
+    posting: "none";
+  };
+}
+
+export type CustomerApiOperatorQueue =
+  | { status: "ok"; view: CustomerApiOperatorQueueView }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   operatorAdmin(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorAdmin>;
   operatorSubjects(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorSubjects>;
   operatorSubject(bffSubject: string, deviceId: string, subjectId: string, nowMs: number): Promise<CustomerApiOperatorSubject>;
+  operatorQueue(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorQueue>;
 }
 
 /** Maps a BFF pseudonymous operator subject onto the customer-api operator subject space. */
@@ -385,6 +438,110 @@ function parseOperatorSubjectDetailView(value: unknown): CustomerApiOperatorSubj
   });
 }
 
+/**
+ * Fail-closed parser for the operator queue contract view: the same axes
+ * the upstream `validOperatorQueueView` validator pins — exact key sets,
+ * `qky_*`/`syn_cust_*`/`syn_oper_*` refs, enum membership, coherent ISO
+ * timestamps (submitted never after the SLA deadline), a non-negative
+ * integer age, and a summary that tallies the item set exactly.
+ */
+function parseOperatorQueueView(value: unknown): CustomerApiOperatorQueueView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, queueViewKeys) || value.mode !== "test") {
+    return undefined;
+  }
+  const queue = value.queue;
+  if (!isRecord(queue) || !hasExactKeys(queue, queueKeys) || queue.kind !== "kyc" || queue.posting !== "none") {
+    return undefined;
+  }
+  if (!Array.isArray(queue.items) || queue.items.length > queueMaxItems) {
+    return undefined;
+  }
+  const items: CustomerApiQueueItem[] = [];
+  const seen = new Set<string>();
+  const tallied = { pending: 0, in_review: 0, escalated: 0 };
+  for (const item of queue.items) {
+    if (
+      !isRecord(item)
+      || !hasExactKeys(item, queueItemKeys)
+      || typeof item.queue_id !== "string"
+      || !queueIdPattern.test(item.queue_id)
+      || seen.has(item.queue_id)
+      || typeof item.subject_id !== "string"
+      || !customerSubjectPattern.test(item.subject_id)
+      || typeof item.display_name !== "string"
+      || !displayNamePattern.test(item.display_name)
+      || !isIsoTimestamp(item.submitted_at)
+      || !isIsoTimestamp(item.sla_due_at)
+      || Date.parse(item.sla_due_at) <= Date.parse(item.submitted_at)
+      || typeof item.state !== "string"
+      || !queueStates.has(item.state)
+      || typeof item.priority !== "string"
+      || !queuePriorities.has(item.priority)
+      || typeof item.age_ms !== "number"
+      || !Number.isInteger(item.age_ms)
+      || item.age_ms < 0
+    ) {
+      return undefined;
+    }
+    if (item.assignee !== null) {
+      if (
+        !isRecord(item.assignee)
+        || !hasExactKeys(item.assignee, queueAssigneeKeys)
+        || typeof item.assignee.subject !== "string"
+        || !operatorSubjectPattern.test(item.assignee.subject)
+      ) {
+        return undefined;
+      }
+    }
+    seen.add(item.queue_id);
+    tallied[item.state as keyof typeof tallied] += 1;
+    items.push(
+      Object.freeze({
+        queue_id: item.queue_id,
+        subject_id: item.subject_id,
+        display_name: item.display_name,
+        submitted_at: item.submitted_at,
+        sla_due_at: item.sla_due_at,
+        state: item.state,
+        priority: item.priority,
+        assignee: item.assignee === null ? null : Object.freeze({ subject: item.assignee.subject as string }),
+        age_ms: item.age_ms
+      })
+    );
+  }
+  const summary = queue.summary;
+  if (
+    !isRecord(summary)
+    || !hasExactKeys(summary, queueSummaryKeys)
+    || typeof summary.count !== "number"
+    || !Number.isInteger(summary.count)
+    || summary.count !== items.length
+    || !isRecord(summary.by_state)
+    || !hasExactKeys(summary.by_state, queueByStateKeys)
+    || summary.by_state.pending !== tallied.pending
+    || summary.by_state.in_review !== tallied.in_review
+    || summary.by_state.escalated !== tallied.escalated
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    mode: "test",
+    queue: Object.freeze({
+      kind: "kyc",
+      items: Object.freeze(items),
+      summary: Object.freeze({
+        count: summary.count,
+        by_state: Object.freeze({
+          pending: summary.by_state.pending,
+          in_review: summary.by_state.in_review,
+          escalated: summary.by_state.escalated
+        })
+      }),
+      posting: "none"
+    })
+  });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -410,7 +567,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       configured: false,
       operatorAdmin: async (): Promise<CustomerApiOperatorAdmin> => ({ status: "not-configured" }),
       operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" }),
-      operatorSubject: async (): Promise<CustomerApiOperatorSubject> => ({ status: "not-configured" })
+      operatorSubject: async (): Promise<CustomerApiOperatorSubject> => ({ status: "not-configured" }),
+      operatorQueue: async (): Promise<CustomerApiOperatorQueue> => ({ status: "not-configured" })
     });
   }
 
@@ -523,5 +681,30 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject });
+  async function operatorQueue(
+    bffSubject: string,
+    deviceId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperatorQueue> {
+    // Same device guard as operatorAdmin: never emit a non-contract
+    // X-Device-Id if the client is reused outside the gated route.
+    if (!isDeviceId(deviceId)) {
+      return { status: "unavailable" };
+    }
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticOperatorToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/operator/queue", token, deviceId, nowMs);
+      const view = parseOperatorQueueView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch {
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject, operatorQueue });
 }
