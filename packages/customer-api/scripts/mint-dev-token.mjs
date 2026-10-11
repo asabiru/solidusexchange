@@ -32,8 +32,14 @@ try {
   }
   const audience = /** @type {keyof typeof AUDIENCES} */ (values.audience);
   const selected = AUDIENCES[audience];
+  // Number() alone would also accept non-decimal integer forms ("0x10", "1e3")
+  // and surrounding whitespace; the flag stays canonical like every other
+  // parsed field so argv can only name a plain base-10 second count.
+  if (!/^[1-9][0-9]*$/u.test(values.ttl)) {
+    throw new Error(`--ttl must be an integer from 1 to ${SYNTHETIC_TOKEN_MAX_TTL_SECONDS}`);
+  }
   const ttl = Number(values.ttl);
-  if (!Number.isSafeInteger(ttl) || ttl < 1 || ttl > SYNTHETIC_TOKEN_MAX_TTL_SECONDS) {
+  if (ttl > SYNTHETIC_TOKEN_MAX_TTL_SECONDS) {
     throw new Error(`--ttl must be an integer from 1 to ${SYNTHETIC_TOKEN_MAX_TTL_SECONDS}`);
   }
   const token = selected.mint({
