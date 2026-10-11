@@ -86,6 +86,7 @@ function stubClient(result: CustomerApiOperatorSubject): { client: CustomerApiCl
     configured: true,
     operatorAdmin: async () => ({ status: "not-configured" }),
     operatorSubjects: async () => ({ status: "not-configured" }),
+    operatorQueue: async () => ({ status: "not-configured" }),
     operatorSubject: async (
       subject: string,
       deviceId: string,

@@ -11,6 +11,7 @@ import {
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
+  validOperatorQueueView,
   validOperatorSessionView,
   validOperatorSubjectDetailView,
   validOperatorSubjectsView
@@ -35,8 +36,9 @@ const ADMIN = "/api/v1/operator/admin";
 const OPERATOR_SESSION = "/api/v1/operator/session";
 const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
 const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
+const OPERATOR_QUEUE = "/api/v1/operator/queue";
 const SESSION = "/api/v1/customer/session";
-const GRANTED = ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read"];
+const GRANTED = ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read", "operator.queue.read"];
 
 async function withServer(options, run) {
   const { server, port } = await startTestServer(options);
@@ -447,7 +449,7 @@ test("a malformed operator subjects view fails closed", async () => {
   for (const view of malformed) {
     assert.equal(validOperatorSubjectsView(view), false, JSON.stringify(view));
     await withServer(
-      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; } } },
+      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; }, async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); } } },
       async (port) => {
         const response = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
         assert.equal(response.status, 500, JSON.stringify(view));
@@ -581,11 +583,182 @@ test("a malformed operator subject detail fails closed", async () => {
       {
         operatorSubjectsDirectory: {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
-          async subjectFor() { return view; }
+          async subjectFor() { return view; },
+          async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); }
         }
       },
       async (port) => {
         const response = await request(port, { path, headers: operatorHeaders() });
+        assert.equal(response.status, 500, JSON.stringify(view));
+        assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      }
+    );
+  }
+});
+
+function queueView(overrides = {}, queueOverrides = {}) {
+  return {
+    mode: "test",
+    queue: {
+      kind: "kyc",
+      items: [],
+      summary: { count: 0, by_state: { pending: 0, in_review: 0, escalated: 0 } },
+      posting: "none",
+      ...queueOverrides
+    },
+    ...overrides
+  };
+}
+
+test("GET /api/v1/operator/queue returns the deterministic shared queue view", async () => {
+  await withServer({}, async (port) => {
+    const served = await request(port, { path: OPERATOR_QUEUE, headers: operatorHeaders() });
+    assert.equal(served.status, 200);
+    const expected = await createSyntheticOperatorSubjectsDirectory().queueFor();
+    assert.deepEqual(JSON.parse(served.body), {
+      mode: "test",
+      queue: {
+        kind: "kyc",
+        items: expected.queue.items.map((item) => ({ ...item, assignee: item.assignee === null ? null : { ...item.assignee } })),
+        summary: { count: expected.queue.summary.count, by_state: { ...expected.queue.summary.by_state } },
+        posting: "none"
+      }
+    });
+    assert.equal(header(served, "x-request-id"), REQUEST_ID);
+    // Every operator sees the same queue: the projection is shared, not
+    // derived per caller.
+    const other = await request(port, {
+      path: OPERATOR_QUEUE,
+      headers: operatorHeaders({ Authorization: `Bearer ${operatorToken({ subject: "syn_oper_00000002" })}` })
+    });
+    assert.deepEqual(JSON.parse(other.body), JSON.parse(served.body));
+    // A customer-family token on the queue path never authenticates.
+    const customer = await request(port, {
+      path: OPERATOR_QUEUE,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("the synthetic queue view stays deterministic, frozen, roster-consistent and within the contract shape", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const first = await directory.queueFor();
+  const second = await directory.queueFor();
+  assert.deepEqual(first, second);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.queue));
+  assert.ok(Object.isFrozen(first.queue.items));
+  assert.ok(first.queue.items.every((item) => Object.isFrozen(item)));
+  assert.ok(Object.isFrozen(first.queue.summary));
+  assert.equal(first.mode, "test");
+  assert.equal(first.queue.kind, "kyc");
+  assert.equal(first.queue.posting, "none");
+  assert.equal(validOperatorQueueView(first), true);
+  // The view answers the pinned contract schema exactly.
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/OperatorQueueView"),
+      {
+        mode: "test",
+        queue: {
+          ...first.queue,
+          items: first.queue.items.map((item) => ({ ...item, assignee: item.assignee === null ? null : { ...item.assignee } })),
+          summary: { count: first.queue.summary.count, by_state: { ...first.queue.summary.by_state } }
+        }
+      }
+    ),
+    []
+  );
+  // Queue subjects are a subset of the shared roster — and only the
+  // non-verified ones; every queue item agrees with its roster row on the
+  // fields they share.
+  const roster = (await directory.subjectsFor()).subjects;
+  const byId = new Map(roster.map((row) => [row.subject_id, row]));
+  const seenStates = new Set();
+  for (const item of first.queue.items) {
+    const row = byId.get(item.subject_id);
+    assert.ok(row, `${item.subject_id} is outside the roster`);
+    assert.notEqual(row.kyc_status, "verified", `${item.subject_id} left the queue while verified`);
+    assert.equal(item.display_name, row.display_name);
+    assert.ok(Date.parse(item.submitted_at) >= Date.parse(row.registered_at), `${item.subject_id} submitted before registration`);
+    assert.ok(Date.parse(item.sla_due_at) > Date.parse(item.submitted_at));
+    assert.equal(item.age_ms > 0, true);
+    assert.match(item.queue_id, /^qky_[0-9a-f]{24}$/u);
+    assert.match(item.state, /^(pending|in_review|escalated)$/u);
+    assert.match(item.priority, /^(normal|high|urgent)$/u);
+    seenStates.add(item.state);
+    if (item.assignee === null) {
+      assert.equal(item.state, "pending", `${item.subject_id} unclaimed outside pending`);
+    } else {
+      assert.match(item.assignee.subject, /^syn_oper_[a-z0-9]{8,32}$/u);
+    }
+  }
+  // Verified subjects never occupy the queue: membership is exactly the
+  // non-verified roster.
+  const members = new Set(first.queue.items.map((item) => item.subject_id));
+  for (const row of roster) {
+    assert.equal(members.has(row.subject_id), row.kyc_status !== "verified", row.subject_id);
+  }
+  assert.equal(seenStates.size, 3, "every queue state is exercised by the pinned universe");
+  // The summary tallies the items exactly.
+  assert.equal(first.queue.summary.count, first.queue.items.length);
+  const tallied = { pending: 0, in_review: 0, escalated: 0 };
+  for (const item of first.queue.items) {
+    tallied[item.state] += 1;
+  }
+  assert.deepEqual({ ...first.queue.summary.by_state }, tallied);
+});
+
+test("a malformed operator queue view fails closed", async () => {
+  const real = await createSyntheticOperatorSubjectsDirectory().queueFor();
+  const drifted = (itemOverrides = {}) => queueView({}, { items: [{ ...real.queue.items[0], ...itemOverrides }] });
+  const missingQueue = { mode: "test" };
+  const missingSummary = queueView({}, { summary: undefined });
+  delete missingSummary.queue.summary;
+  const malformed = [
+    queueView({ mode: "live" }),
+    queueView({ mode: "test", extra: true }),
+    queueView({}, { kind: "aml" }),
+    queueView({}, { posting: "pending" }),
+    queueView({}, { items: null }),
+    queueView({}, { summary: { count: real.queue.items.length, by_state: { pending: 1, in_review: 1, escalated: 1 } } }),
+    drifted({ queue_id: "qky_" + "f".repeat(24) }),
+    drifted({ queue_id: "opr_0123456789abcdef01234567" }),
+    drifted({ subject_id: `syn_cust_${"f".repeat(24)}` }),
+    drifted({ display_name: "alina mironova" }),
+    drifted({ submitted_at: "yesterday" }),
+    drifted({ sla_due_at: real.queue.items[0].submitted_at }),
+    drifted({ state: "approved" }),
+    drifted({ state: "pending" }),
+    drifted({ priority: "critical" }),
+    drifted({ priority: real.queue.items[0].priority === "urgent" ? "normal" : "urgent" }),
+    drifted({ assignee: "syn_oper_00000001" }),
+    drifted({ assignee: { subject: SUBJECT } }),
+    drifted({ assignee: { subject: "syn_oper_00000001", contact: "x" } }),
+    drifted({ assignee: real.queue.items[0].assignee === null ? { subject: "syn_oper_00000001" } : null }),
+    drifted({ age_ms: -1 }),
+    drifted({ age_ms: real.queue.items[0].age_ms + 1 }),
+    drifted({ age_ms: 1.5 }),
+    { ...queueView(), session_secret: "abc" },
+    missingQueue,
+    missingSummary,
+    null,
+    "view"
+  ];
+  for (const view of malformed) {
+    assert.equal(validOperatorQueueView(view), false, JSON.stringify(view));
+    await withServer(
+      {
+        operatorSubjectsDirectory: {
+          async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
+          async subjectFor() { return null; },
+          async queueFor() { return view; }
+        }
+      },
+      async (port) => {
+        const response = await request(port, { path: OPERATOR_QUEUE, headers: operatorHeaders() });
         assert.equal(response.status, 500, JSON.stringify(view));
         assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
       }

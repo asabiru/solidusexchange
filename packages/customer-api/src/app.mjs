@@ -32,6 +32,7 @@ import {
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
+  validOperatorQueueView,
   validOperatorSessionView,
   validOperatorSubjectsView,
   validOperatorSubjectDetailView
@@ -405,7 +406,8 @@ export function createCustomerApiHandler({
   }
   if (
     typeof operatorSubjectsDirectory?.subjectsFor !== "function" ||
-    typeof operatorSubjectsDirectory?.subjectFor !== "function"
+    typeof operatorSubjectsDirectory?.subjectFor !== "function" ||
+    typeof operatorSubjectsDirectory?.queueFor !== "function"
   ) {
     throw new Error("An operator subjects directory is required");
   }
@@ -611,6 +613,24 @@ export function createCustomerApiHandler({
       }
       if (!validOperatorSubjectDetailView(view)) {
         throw new Error("Operator subjects directory returned an invalid subject detail");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorQueue") {
+      // operator.queue.read is granted to the operator audience by policy:
+      // the operator token and device identifier are the gate, KYC never
+      // applies to staff surfaces. The check stays so a served route can
+      // never drift from the capabilities the service exposes.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.queue.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await operatorSubjectsDirectory.queueFor();
+      if (!validOperatorQueueView(view)) {
+        throw new Error("Operator subjects directory returned an invalid queue view");
       }
       send(response, 200, { ...view }, requestId);
       return;

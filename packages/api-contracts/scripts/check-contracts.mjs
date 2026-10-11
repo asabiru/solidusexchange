@@ -349,6 +349,83 @@ const pinnedResponseSchemas = {
       }
     }
   },
+  OperatorQueueView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "queue"],
+    properties: {
+      mode: { const: "test" },
+      queue: { $ref: "#/components/schemas/OperatorQueue" }
+    }
+  },
+  OperatorQueue: {
+    type: "object",
+    additionalProperties: false,
+    required: ["kind", "items", "summary", "posting"],
+    properties: {
+      kind: { const: "kyc" },
+      items: {
+        type: "array",
+        maxItems: 64,
+        uniqueItems: true,
+        items: { $ref: "#/components/schemas/OperatorQueueItem" }
+      },
+      summary: {
+        type: "object",
+        additionalProperties: false,
+        required: ["count", "by_state"],
+        properties: {
+          // The item tally is "count", not "total": the money-field
+          // convention pins every *total* name to decimalAmount.
+          count: { type: "integer", minimum: 0 },
+          by_state: {
+            type: "object",
+            additionalProperties: false,
+            required: ["pending", "in_review", "escalated"],
+            properties: {
+              pending: { type: "integer", minimum: 0 },
+              in_review: { type: "integer", minimum: 0 },
+              escalated: { type: "integer", minimum: 0 }
+            }
+          }
+        }
+      },
+      posting: { const: "none" }
+    }
+  },
+  OperatorQueueItem: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "queue_id",
+      "subject_id",
+      "display_name",
+      "submitted_at",
+      "sla_due_at",
+      "state",
+      "priority",
+      "assignee",
+      "age_ms"
+    ],
+    properties: {
+      queue_id: { type: "string", pattern: "^qky_[0-9a-f]{24}$" },
+      subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
+      display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
+      submitted_at: { type: "string", format: "date-time" },
+      sla_due_at: { type: "string", format: "date-time" },
+      state: { type: "string", enum: ["pending", "in_review", "escalated"] },
+      priority: { type: "string", enum: ["normal", "high", "urgent"] },
+      assignee: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["subject"],
+        properties: {
+          subject: { type: "string", pattern: "^syn_oper_[a-z0-9]{8,32}$" }
+        }
+      },
+      age_ms: { type: "integer", minimum: 0 }
+    }
+  },
   WalletsView: {
     type: "object",
     additionalProperties: false,
@@ -1704,6 +1781,7 @@ function checkOpenApi() {
     ["getOperatorAdmin", "/api/v1/operator/admin"],
     ["getOperatorSubjects", "/api/v1/operator/subjects"],
     ["getOperatorSubject", "/api/v1/operator/subjects/{subjectId}"],
+    ["getOperatorQueue", "/api/v1/operator/queue"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
     ["getCustomerOperations", "/api/v1/customer/operations"],
@@ -1764,6 +1842,7 @@ function checkOpenApi() {
     ["getOperatorAdmin", readStatuses],
     ["getOperatorSubjects", readStatuses],
     ["getOperatorSubject", ["200", "401", "404", "429", "500"]],
+    ["getOperatorQueue", readStatuses],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
     ["getCustomerOperations", gatedReadStatuses],
@@ -1801,6 +1880,7 @@ function checkOpenApi() {
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["getOperatorSubjects", "#/components/schemas/OperatorSubjectsView"],
     ["getOperatorSubject", "#/components/schemas/OperatorSubjectDetailView"],
+    ["getOperatorQueue", "#/components/schemas/OperatorQueueView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["getCustomerOperations", "#/components/schemas/OperationsView"],

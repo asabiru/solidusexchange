@@ -56,7 +56,8 @@ const KNOWN_OPERATOR_SUBJECT_ID = (
   await createSyntheticOperatorSubjectsDirectory().subjectsFor()
 ).subjects[0].subject_id;
 const OPERATOR_SUBJECT = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
-const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT];
+const OPERATOR_QUEUE = "/api/v1/operator/queue";
+const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT, OPERATOR_QUEUE];
 const TRADES = "/api/v1/customer/trades";
 const MARKETS = "/api/v1/customer/markets";
 const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, ADDRESS_SCREENING, AUTH, USERS];
@@ -170,7 +171,10 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [OPERATOR_SUBJECTS, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401],
     [OPERATOR_SUBJECT, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATOR_SUBJECT, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
-    [OPERATOR_SUBJECT, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401]
+    [OPERATOR_SUBJECT, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401],
+    [OPERATOR_QUEUE, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [OPERATOR_QUEUE, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
+    [OPERATOR_QUEUE, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);

@@ -63,7 +63,8 @@ const KNOWN_OPERATOR_SUBJECT_ID = (
   await createSyntheticOperatorSubjectsDirectory().subjectsFor()
 ).subjects[0].subject_id;
 const OPERATOR_SUBJECT_DETAIL = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
-const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`];
+const OPERATOR_QUEUE = "/api/v1/operator/queue";
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`, OPERATOR_QUEUE];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -431,10 +432,11 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
   await withServer({
     operatorSubjectsDirectory: {
       async subjectsFor() { throw new Error("subject store exploded: secret=abc"); },
-      async subjectFor() { throw new Error("subject store exploded: secret=abc"); }
+      async subjectFor() { throw new Error("subject store exploded: secret=abc"); },
+      async queueFor() { throw new Error("queue store exploded: secret=abc"); }
     }
   }, async (port) => {
-    for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL]) {
+    for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL, OPERATOR_QUEUE]) {
       const response = await observe(port, { path, headers: operatorHeaders() });
       assert.equal(response.status, 500);
       assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
@@ -560,7 +562,8 @@ test("GET /api/v1/operator/admin serves the operator's own admin overview to the
       "operator.session.read",
       "operator.capabilities.read",
       "operator.admin.read",
-      "operator.subjects.read"
+      "operator.subjects.read",
+      "operator.queue.read"
     ]);
     const customer = await observe(port, {
       path: ADMIN,
@@ -603,7 +606,7 @@ test("GET /api/v1/operator/capabilities grants exactly the operator read tier", 
     const response = await observe(port, { path: OPERATOR_CAPABILITIES, headers: operatorHeaders() });
     assert.equal(response.status, 200);
     assert.deepEqual(JSON.parse(response.body), {
-      capabilities: ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read"],
+      capabilities: ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read", "operator.queue.read"],
       commands_enabled: false
     });
     const customer = await observe(port, {
@@ -689,6 +692,48 @@ test("GET /api/v1/operator/subjects/{subjectId} serves the roster detail to the 
     }
     const customer = await observe(port, {
       path: `${OPERATOR_SUBJECTS}/${rows[0].subject_id}`,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+    assert.equal(header(customer, "www-authenticate"), "Bearer");
+  });
+});
+
+test("GET /api/v1/operator/queue serves the shared KYC work queue to the operator audience only", async () => {
+  await withServer({}, async (port) => {
+    const list = await observe(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+    const roster = new Map(JSON.parse(list.body).subjects.map((row) => [row.subject_id, row]));
+    const response = await observe(port, { path: OPERATOR_QUEUE, headers: operatorHeaders() });
+    assert.equal(response.status, 200);
+    const view = JSON.parse(response.body);
+    assert.equal(view.mode, "test");
+    assert.equal(view.queue.kind, "kyc");
+    assert.equal(view.queue.posting, "none");
+    assert.ok(view.queue.items.length >= 1);
+    const tallied = { pending: 0, in_review: 0, escalated: 0 };
+    for (const item of view.queue.items) {
+      const row = roster.get(item.subject_id);
+      assert.ok(row, `${item.subject_id} is outside the roster`);
+      assert.notEqual(row.kyc_status, "verified");
+      assert.equal(item.display_name, row.display_name);
+      assert.match(item.queue_id, /^qky_[0-9a-f]{24}$/u);
+      assert.match(item.state, /^(pending|in_review|escalated)$/u);
+      assert.match(item.priority, /^(normal|high|urgent)$/u);
+      assert.ok(Date.parse(item.submitted_at) >= Date.parse(row.registered_at));
+      assert.ok(Date.parse(item.sla_due_at) > Date.parse(item.submitted_at));
+      assert.ok(Number.isInteger(item.age_ms) && item.age_ms > 0);
+      if (item.assignee === null) {
+        assert.equal(item.state, "pending");
+      } else {
+        assert.match(item.assignee.subject, /^syn_oper_[a-z0-9]{8,32}$/u);
+      }
+      tallied[item.state] += 1;
+    }
+    assert.equal(view.queue.summary.count, view.queue.items.length);
+    assert.deepEqual(view.queue.summary.by_state, tallied);
+    const customer = await observe(port, {
+      path: OPERATOR_QUEUE,
       headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
     });
     assert.equal(customer.status, 401);
