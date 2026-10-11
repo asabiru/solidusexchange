@@ -16,7 +16,8 @@ const testDeviceId = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
 const operatorCapabilities = [
   "operator.session.read",
   "operator.capabilities.read",
-  "operator.admin.read"
+  "operator.admin.read",
+  "operator.subjects.read"
 ];
 
 async function withCustomerApi<T>(key: string, run: (baseUrl: string) => Promise<T>): Promise<T> {
@@ -50,6 +51,21 @@ async function withFakeApi<T>(
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+}
+
+function subjectsView(): { mode: string; subjects: Record<string, unknown>[] } {
+  return {
+    mode: "test",
+    subjects: [{
+      subject_id: "syn_cust_00112233445566778899aabb",
+      display_name: "Alina Mironova",
+      kyc_status: "verified",
+      flags: 2,
+      registered_at: "2026-09-05T00:00:00.000Z",
+      last_active_at: "2026-09-25T00:00:00.000Z",
+      posting: "none"
+    }]
+  };
 }
 
 function contractView(subject: string): Record<string, unknown> {
@@ -217,6 +233,171 @@ describe("customer API operator client", () => {
       await unreachable.operatorAdmin("dev:auditor", testDeviceId, Date.now()),
       { status: "unavailable" }
     );
+  });
+
+  it("reports not-configured for the subjects read without a base URL or token key", async () => {
+    for (const options of [{}, { baseUrl: "http://127.0.0.1:9" }, { devTokenKey: "0".repeat(64) }]) {
+      const client = createCustomerApiClient(options);
+      assert.equal(client.configured, false);
+      assert.deepEqual(
+        await client.operatorSubjects("dev:auditor", testDeviceId, Date.now()),
+        { status: "not-configured" }
+      );
+    }
+  });
+
+  it("reads the operator subjects view from the dev customer API", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      const result = await client.operatorSubjects("dev:compliance-lead", testDeviceId, Date.now());
+      assert.equal(result.status, "ok");
+      if (result.status !== "ok") return;
+      assert.equal(result.view.mode, "test");
+      assert.ok(result.view.subjects.length >= 1);
+      const seen = new Set<string>();
+      for (const row of result.view.subjects) {
+        assert.match(row.subject_id, /^syn_cust_[a-z0-9]{8,32}$/);
+        assert.equal(seen.has(row.subject_id), false);
+        seen.add(row.subject_id);
+        assert.match(row.display_name, /^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$/);
+        assert.match(row.kyc_status, /^(unverified|pending|verified)$/);
+        assert.ok(Number.isInteger(row.flags) && row.flags >= 0);
+        assert.ok(Date.parse(row.last_active_at) >= Date.parse(row.registered_at));
+        assert.equal(row.posting, "none");
+      }
+      const wrongKey = createCustomerApiClient({ baseUrl, devTokenKey: randomBytes(32).toString("hex") });
+      assert.deepEqual(
+        await wrongKey.operatorSubjects("dev:compliance-lead", testDeviceId, Date.now()),
+        { status: "unavailable" }
+      );
+    });
+  });
+
+  it("sends the same operator request headers on the subjects read", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("dev:auditor");
+    await withFakeApi(
+      () => subjectsView(),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.operatorSubjects("dev:auditor", testDeviceId, Date.now());
+        assert.equal(result.status, "ok");
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], testDeviceId);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(
+          String(headers.authorization),
+          new RegExp(`^Bearer sodev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`)
+        );
+      }
+    );
+  });
+
+  it("never emits a malformed X-Device-Id on the subjects read", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withFakeApi(
+      () => subjectsView(),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const deviceId of ["not-a-uuid", "", "F47AC10B-58CC-4372-A567-0E02B2C3D479"]) {
+          assert.deepEqual(
+            await client.operatorSubjects("dev:auditor", deviceId, Date.now()),
+            { status: "unavailable" },
+            deviceId
+          );
+        }
+        assert.equal(seen.length, 0);
+      }
+    );
+  });
+
+  it("fails closed on subjects contract drift", async () => {
+    const key = randomBytes(32).toString("hex");
+    const good = subjectsView();
+    const row = (overrides: Record<string, unknown> = {}) => ({ ...subjectsView().subjects[0], ...overrides });
+    const drifts: Record<string, unknown>[] = [
+      { ...good, extra: true },
+      { subjects: good.subjects },
+      { ...good, mode: "live" },
+      { ...good, subjects: [] },
+      { ...good, subjects: [...good.subjects, ...Array.from({ length: 64 }, (_v, i) => row({ subject_id: `syn_cust_extra${String(i).padStart(18, "0")}` }))] },
+      { ...good, subjects: [row(), row()] },
+      { ...good, subjects: [row({ subject_id: "syn_oper_00000001" })] },
+      { ...good, subjects: [row({ display_name: "alina mironova" })] },
+      { ...good, subjects: [row({ kyc_status: "approved" })] },
+      { ...good, subjects: [row({ flags: -1 })] },
+      { ...good, subjects: [row({ flags: 1.5 })] },
+      { ...good, subjects: [row({ registered_at: "2026-09-01" })] },
+      { ...good, subjects: [row({ registered_at: "2026-09-10T00:00:00.000Z", last_active_at: "2026-09-05T00:00:00.000Z" })] },
+      { ...good, subjects: [row({ posting: "pending" })] },
+      { ...good, subjects: [{ ...row(), wallet_address: "0xabc" }] },
+      { ...good, subjects: [null] }
+    ];
+    for (const body of drifts) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.operatorSubjects("dev:auditor", testDeviceId, Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+  });
+
+  it("reports every non-200 upstream outcome on the subjects read as unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    for (const status of [400, 401, 403, 500]) {
+      const server = createServer((_request, response) => {
+        response.statusCode = status;
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(
+          await client.operatorSubjects("dev:auditor", testDeviceId, Date.now()),
+          { status: "unavailable" },
+          String(status)
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on subjects responses that are non-JSON or oversized", async () => {
+    const key = randomBytes(32).toString("hex");
+    const oversized = JSON.stringify({ mode: "test", subjects: [subjectsView().subjects[0]], padding: "x".repeat(maxCustomerApiResponseBytes) });
+    assert.ok(Buffer.byteLength(oversized) > maxCustomerApiResponseBytes);
+    for (const [label, contentType, payload] of [
+      ["text/html", "text/html", JSON.stringify(subjectsView())],
+      ["oversized", "application/json", oversized]
+    ] as [string, string, string][]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", contentType);
+        response.end(payload);
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(
+          await client.operatorSubjects("dev:auditor", testDeviceId, Date.now()),
+          { status: "unavailable" },
+          label
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
   });
 
   it("fails closed on non-JSON content types and oversized bodies", async () => {

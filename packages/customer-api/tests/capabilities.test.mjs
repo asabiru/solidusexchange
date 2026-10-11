@@ -304,7 +304,7 @@ test("reason codes are stable identifiers", () => {
 test("operator capabilities are read-tier grants over the operator audience only", () => {
   assert.deepEqual(
     OPERATOR_CAPABILITY_POLICY.map((item) => item.capability),
-    ["operator.session.read", "operator.capabilities.read", "operator.admin.read"]
+    ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read"]
   );
   assert.ok(
     OPERATOR_CAPABILITY_POLICY.every(
@@ -326,7 +326,8 @@ test("operator capabilities are read-tier grants over the operator audience only
   assert.deepEqual([...evaluation.granted], [
     "operator.session.read",
     "operator.capabilities.read",
-    "operator.admin.read"
+    "operator.admin.read",
+    "operator.subjects.read"
   ]);
   assert.deepEqual(evaluation.denied, []);
   assert.equal(evaluation.commandsEnabled, false);

@@ -143,6 +143,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/signing-keys",
   "/bff/api/session",
   "/bff/api/operator/admin",
+  "/bff/api/operator/subjects",
   "/bff/api/dashboard",
   "/bff/api/customers",
   "/bff/api/checks",
@@ -627,6 +628,56 @@ export function createBackofficeServer(
           grantedCapabilities: [...profile.capabilities],
           createdAt: null,
           updatedAt: null
+        });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/operator/subjects") {
+        const session = authorized(request, response);
+        if (!session) return;
+        if (customerApi.configured) {
+          // Same device gate as the operator admin read: the upstream
+          // audience requires X-Device-Id, so the BFF rejects locally before
+          // any call when the session presents no device identity.
+          const deviceId = requestDeviceId(request);
+          if (!deviceId) {
+            json(response, 403, { error: "device_required" });
+            return;
+          }
+          const upstream = await customerApi.operatorSubjects(session.subject, deviceId, Date.now());
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "operator_subjects_unavailable" });
+            return;
+          }
+          signed(response, "operator-subjects", {
+            mode: upstream.view.mode,
+            subjects: upstream.view.subjects.map((row) => ({
+              subjectId: row.subject_id,
+              displayName: row.display_name,
+              kycStatus: row.kyc_status,
+              flags: row.flags,
+              registeredAt: row.registered_at,
+              lastActiveAt: row.last_active_at,
+              posting: row.posting
+            }))
+          });
+          return;
+        }
+        // Unconfigured: the local synthetic directory is the customer-360
+        // roster, with the upstream-only fields (synthetic subject ref,
+        // lifecycle status, activity timestamps) left null rather than
+        // invented.
+        signed(response, "operator-subjects", {
+          mode: "test",
+          subjects: demoRepository.customers().map((customer) => ({
+            subjectId: null,
+            displayName: customer.name,
+            kycStatus: null,
+            flags: customer.openAmlCases,
+            registeredAt: null,
+            lastActiveAt: null,
+            posting: "none"
+          }))
         });
         return;
       }

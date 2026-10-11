@@ -258,6 +258,43 @@ const pinnedResponseSchemas = {
       updated_at: { type: "string", format: "date-time" }
     }
   },
+  OperatorSubjectsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "subjects"],
+    properties: {
+      mode: { const: "test" },
+      subjects: {
+        type: "array",
+        minItems: 1,
+        maxItems: 64,
+        uniqueItems: true,
+        items: { $ref: "#/components/schemas/OperatorSubjectView" }
+      }
+    }
+  },
+  OperatorSubjectView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "subject_id",
+      "display_name",
+      "kyc_status",
+      "flags",
+      "registered_at",
+      "last_active_at",
+      "posting"
+    ],
+    properties: {
+      subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
+      display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
+      kyc_status: { type: "string", enum: ["unverified", "pending", "verified"] },
+      flags: { type: "integer", minimum: 0 },
+      registered_at: { type: "string", format: "date-time" },
+      last_active_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   WalletsView: {
     type: "object",
     additionalProperties: false,
@@ -1476,6 +1513,7 @@ function checkOpenApi() {
     ["getOperatorSession", "/api/v1/operator/session"],
     ["getOperatorCapabilities", "/api/v1/operator/capabilities"],
     ["getOperatorAdmin", "/api/v1/operator/admin"],
+    ["getOperatorSubjects", "/api/v1/operator/subjects"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
     ["getCustomerOperations", "/api/v1/customer/operations"],
@@ -1532,6 +1570,7 @@ function checkOpenApi() {
     ["getOperatorSession", readStatuses],
     ["getOperatorCapabilities", readStatuses],
     ["getOperatorAdmin", readStatuses],
+    ["getOperatorSubjects", readStatuses],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
     ["getCustomerOperations", gatedReadStatuses],
@@ -1565,6 +1604,7 @@ function checkOpenApi() {
     ["getOperatorSession", "#/components/schemas/OperatorSessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
+    ["getOperatorSubjects", "#/components/schemas/OperatorSubjectsView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["getCustomerOperations", "#/components/schemas/OperationsView"],

@@ -22,6 +22,7 @@ const KEYWORDS = new Set([
   "pattern",
   "format",
   "items",
+  "minItems",
   "maxItems",
   "uniqueItems",
   "minimum",
@@ -100,7 +101,7 @@ function declaredTypes(schema, path) {
 }
 
 function assertKeywordShapes(schema, path) {
-  for (const keyword of ["minLength", "maxLength", "maxItems"]) {
+  for (const keyword of ["minLength", "maxLength", "minItems", "maxItems"]) {
     if (
       Object.hasOwn(schema, keyword) &&
       (!Number.isInteger(schema[keyword]) || schema[keyword] < 0)
@@ -224,6 +225,9 @@ export function createValidator(contract) {
       }
     }
     if (Array.isArray(value)) {
+      if (schema.minItems !== undefined && value.length < schema.minItems) {
+        errors.push(`${path}: shorter than ${schema.minItems} items`);
+      }
       if (schema.maxItems !== undefined && value.length > schema.maxItems) {
         errors.push(`${path}: longer than ${schema.maxItems} items`);
       }

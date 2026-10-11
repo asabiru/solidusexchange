@@ -110,9 +110,10 @@ describe("backoffice authorization matrix", () => {
       );
     }
 
-    // Only /bff/api/session and /bff/api/operator/admin run the gate without a
-    // capability — both read the operator's own record, which every role holds.
-    assert.equal(calls.filter((call) => !call.capability).length, 2);
+    // Only /bff/api/session, /bff/api/operator/admin and
+    // /bff/api/operator/subjects run the gate without a capability — they read
+    // the operator's own record and directory, which every role holds.
+    assert.equal(calls.filter((call) => !call.capability).length, 3);
   });
 
   it("matches roles and capabilities exactly, never by prefix, case or wildcard", () => {

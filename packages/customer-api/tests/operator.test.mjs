@@ -5,12 +5,14 @@ import { createDenyAllVerifier } from "../src/auth.mjs";
 import { evaluateOperatorCapabilities } from "../src/capabilities.mjs";
 import {
   createSyntheticOperatorDirectory,
+  createSyntheticOperatorSubjectsDirectory,
   OPERATOR_ROLES,
   operatorCapabilitiesViewFor,
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
-  validOperatorSessionView
+  validOperatorSessionView,
+  validOperatorSubjectsView
 } from "../src/operator.mjs";
 import {
   customerHeaders,
@@ -31,8 +33,9 @@ import {
 const ADMIN = "/api/v1/operator/admin";
 const OPERATOR_SESSION = "/api/v1/operator/session";
 const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
+const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
 const SESSION = "/api/v1/customer/session";
-const GRANTED = ["operator.session.read", "operator.capabilities.read", "operator.admin.read"];
+const GRANTED = ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read"];
 
 async function withServer(options, run) {
   const { server, port } = await startTestServer(options);
@@ -167,8 +170,10 @@ test("the operator read never consults customer KYC state", async () => {
       }
     },
     async (port) => {
-      const response = await request(port, { path: ADMIN, headers: operatorHeaders() });
-      assert.equal(response.status, 200);
+      for (const path of [ADMIN, OPERATOR_SUBJECTS]) {
+        const response = await request(port, { path, headers: operatorHeaders() });
+        assert.equal(response.status, 200, path);
+      }
     }
   );
 });
@@ -351,6 +356,103 @@ test("a malformed operator capabilities view fails closed", () => {
   ];
   for (const view of malformed) {
     assert.equal(validOperatorCapabilitiesView(view), false, JSON.stringify(view));
+  }
+});
+
+function subjectRow(overrides = {}) {
+  return {
+    subject_id: "syn_cust_00112233445566778899aabb",
+    display_name: "Alina Mironova",
+    kyc_status: "verified",
+    flags: 2,
+    registered_at: "2026-09-05T00:00:00.000Z",
+    last_active_at: "2026-09-25T00:00:00.000Z",
+    posting: "none",
+    ...overrides
+  };
+}
+
+function subjectsView(overrides = {}) {
+  return {
+    mode: "test",
+    subjects: [subjectRow()],
+    ...overrides
+  };
+}
+
+test("GET /api/v1/operator/subjects returns the deterministic shared directory view", async () => {
+  await withServer({}, async (port) => {
+    const served = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+    assert.equal(served.status, 200);
+    const expected = await createSyntheticOperatorSubjectsDirectory().subjectsFor();
+    assert.deepEqual(JSON.parse(served.body), { mode: "test", subjects: expected.subjects.map((row) => ({ ...row })) });
+    assert.equal(header(served, "x-request-id"), REQUEST_ID);
+    // Every operator sees the same directory: the universe is shared, not
+    // derived per caller.
+    const other = await request(port, {
+      path: OPERATOR_SUBJECTS,
+      headers: operatorHeaders({ Authorization: `Bearer ${operatorToken({ subject: "syn_oper_00000002" })}` })
+    });
+    assert.deepEqual(JSON.parse(other.body), JSON.parse(served.body));
+  });
+});
+
+test("the synthetic subjects view stays deterministic, frozen and within the contract shape", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const first = await directory.subjectsFor();
+  const second = await directory.subjectsFor();
+  assert.deepEqual(first, second);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.subjects));
+  assert.ok(first.subjects.every((row) => Object.isFrozen(row)));
+  assert.equal(first.mode, "test");
+  assert.equal(validOperatorSubjectsView(first), true);
+  // The view answers the pinned contract schema exactly.
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/OperatorSubjectsView"),
+      { ...first, subjects: first.subjects.map((row) => ({ ...row })) }
+    ),
+    []
+  );
+});
+
+test("a malformed operator subjects view fails closed", async () => {
+  const missingSubjects = subjectsView();
+  delete missingSubjects.subjects;
+  const row = (overrides = {}) => subjectRow(overrides);
+  const malformed = [
+    subjectsView({ mode: "live" }),
+    subjectsView({ subjects: [] }),
+    subjectsView({ subjects: Array.from({ length: 65 }, (_value, index) => row({ subject_id: `syn_cust_${String(index).padStart(24, "0")}` })) }),
+    subjectsView({ subjects: [row(), row()] }),
+    subjectsView({ subjects: [row({ subject_id: "sub_0001" })] }),
+    subjectsView({ subjects: [row({ subject_id: "syn_oper_00000001" })] }),
+    subjectsView({ subjects: [row({ display_name: "alina mironova" })] }),
+    subjectsView({ subjects: [row({ display_name: "A1ina Mironova" })] }),
+    subjectsView({ subjects: [row({ kyc_status: "approved" })] }),
+    subjectsView({ subjects: [row({ flags: -1 })] }),
+    subjectsView({ subjects: [row({ flags: 1.5 })] }),
+    subjectsView({ subjects: [row({ flags: "2" })] }),
+    subjectsView({ subjects: [row({ registered_at: "yesterday" })] }),
+    subjectsView({ subjects: [row({ registered_at: "2026-09-10T00:00:00.000Z", last_active_at: "2026-09-05T00:00:00.000Z" })] }),
+    subjectsView({ subjects: [row({ posting: "pending" })] }),
+    subjectsView({ subjects: [{ ...row(), wallet_address: "0xabc" }] }),
+    subjectsView({ subjects: [row(), null] }),
+    missingSubjects,
+    null,
+    "view"
+  ];
+  for (const view of malformed) {
+    assert.equal(validOperatorSubjectsView(view), false, JSON.stringify(view));
+    await withServer(
+      { operatorSubjectsDirectory: { async subjectsFor() { return view; } } },
+      async (port) => {
+        const response = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+        assert.equal(response.status, 500, JSON.stringify(view));
+        assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      }
+    );
   }
 });
 

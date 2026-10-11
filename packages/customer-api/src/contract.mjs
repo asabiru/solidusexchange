@@ -464,6 +464,24 @@ export const OPERATIONS = Object.freeze([
       "x-device-id"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The operator subjects read is the staff customer directory: every
+  // operator administers the same deterministic synthetic customer set, so
+  // the view is granted unconditionally like the other operator reads and
+  // declares no 403.
+  Object.freeze({
+    operationId: "getOperatorSubjects",
+    method: "GET",
+    path: "/api/v1/operator/subjects",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
   })
 ]);
 
