@@ -16,7 +16,7 @@ import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticOperationDirectory } from "../src/operations.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createSyntheticDepositAddressDirectory } from "../src/deposit-addresses.mjs";
-import { createSyntheticOperatorDirectory } from "../src/operator.mjs";
+import { createSyntheticOperatorDirectory, createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
 import { createSyntheticQuoteDirectory } from "../src/quotes.mjs";
@@ -104,6 +104,7 @@ export async function startTestServer(options = {}) {
     depositAddressDirectory: createSyntheticDepositAddressDirectory(),
     addressScreeningDirectory: createSyntheticAddressScreeningDirectory(),
     operatorDirectory: createSyntheticOperatorDirectory(),
+    operatorSubjectsDirectory: createSyntheticOperatorSubjectsDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,
     ...options

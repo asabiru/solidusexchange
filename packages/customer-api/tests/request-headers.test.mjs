@@ -46,7 +46,8 @@ const ADDRESS_SCREENING = `/api/v1/customer/address-screenings/${KNOWN_SCREENING
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const OPERATOR_ADMIN = "/api/v1/operator/admin";
-const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN];
+const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
+const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS];
 const TRADES = "/api/v1/customer/trades";
 const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, ADDRESS_SCREENING, AUTH, USERS];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
@@ -153,7 +154,10 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [USERS, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
-    [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401]
+    [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401],
+    [OPERATOR_SUBJECTS, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [OPERATOR_SUBJECTS, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, "X-Platform": "bad" }), 400],
+    [OPERATOR_SUBJECTS, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID, Authorization: null }), 401]
   ];
   for (const [path, headers, status] of scenarios) {
     const response = await expectStatus(path, headers, status);

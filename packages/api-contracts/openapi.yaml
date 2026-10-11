@@ -1726,6 +1726,60 @@
           }
         }
       }
+    },
+    "/api/v1/operator/subjects": {
+      "get": {
+        "operationId": "getOperatorSubjects",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "List the synthetic customer subjects an operator administers",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator subject directory",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSubjectsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2040,6 +2094,74 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OperatorSubjectsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "subjects"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "subjects": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OperatorSubjectView"
+            }
+          }
+        }
+      },
+      "OperatorSubjectView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject_id",
+          "display_name",
+          "kyc_status",
+          "flags",
+          "registered_at",
+          "last_active_at",
+          "posting"
+        ],
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "pattern": "^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$"
+          },
+          "kyc_status": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "pending",
+              "verified"
+            ]
+          },
+          "flags": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_active_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
           }
         }
       },

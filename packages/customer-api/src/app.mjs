@@ -32,7 +32,8 @@ import {
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
-  validOperatorSessionView
+  validOperatorSessionView,
+  validOperatorSubjectsView
 } from "./operator.mjs";
 import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
@@ -75,6 +76,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./deposit-addresses.mjs").DepositAddressDirectory} depositAddressDirectory
  * @property {import("./address-screenings.mjs").AddressScreeningDirectory} addressScreeningDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
+ * @property {import("./operator.mjs").OperatorSubjectsDirectory} operatorSubjectsDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
  * @property {RequestObserver} [observer]
@@ -321,6 +323,7 @@ export function createCustomerApiHandler({
   depositAddressDirectory,
   addressScreeningDirectory,
   operatorDirectory,
+  operatorSubjectsDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
   observer
@@ -393,6 +396,9 @@ export function createCustomerApiHandler({
   }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
+  }
+  if (typeof operatorSubjectsDirectory?.subjectsFor !== "function") {
+    throw new Error("An operator subjects directory is required");
   }
 
   /**
@@ -554,6 +560,24 @@ export function createCustomerApiHandler({
       const view = await operatorDirectory.viewFor(principal.subject, operatorEvaluation.granted);
       if (!validOperatorAdminView(view)) {
         throw new Error("Operator directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorSubjects") {
+      // operator.subjects.read is granted to the operator audience by policy:
+      // the operator token and device identifier are the gate, KYC never
+      // applies to staff surfaces. The check stays so a served route can
+      // never drift from the capabilities the service exposes.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.subjects.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await operatorSubjectsDirectory.subjectsFor();
+      if (!validOperatorSubjectsView(view)) {
+        throw new Error("Operator subjects directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;
