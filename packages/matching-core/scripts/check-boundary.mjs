@@ -34,9 +34,21 @@ const MONEY_MOVING_WORD =
  * Persistence groundwork stays on the data plane: the engine's `journal()`
  * accessor exposes the append-only record of emitted events — event data,
  * never ledger postings — so the exact name is allowlisted while every
- * `journal*`/`Journal` identifier beyond it stays banned.
+ * `journal*`/`Journal` identifier beyond it stays banned. The dev-only
+ * journal persistence seam (`src/journal-store.mjs`,
+ * `src/postgres-journal-store.mjs`, `replayMatchingJournalStore`) mirrors
+ * those same emitted events into a store backend — still data, never
+ * ledger postings — so its exact exported names are allowlisted the same
+ * way.
  */
-const DATA_PLANE_NAMES = new Set(["journal"]);
+const DATA_PLANE_NAMES = new Set([
+  "journal",
+  "createMemoryJournalStore",
+  "createPostgresJournalStore",
+  "validJournalStore",
+  "resolveJournalStoreEnv",
+  "replayMatchingJournalStore",
+]);
 
 /** @param {string} directory @returns {string[]} */
 function sourceFiles(directory) {
@@ -51,8 +63,12 @@ function sourceFiles(directory) {
 
 const errors = [];
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-if (packageJson.dependencies && Object.keys(packageJson.dependencies).length > 0) {
-  errors.push("package.json: runtime dependencies are not allowed");
+// The only allowed runtime dependency is the `pg` driver the optional
+// PostgreSQL journal backend lazy-loads inside initialize(); every other
+// dependency keeps the package non-importable-without-installation.
+const dependencyNames = Object.keys(packageJson.dependencies ?? {}).sort();
+if (dependencyNames.length !== 0 && !(dependencyNames.length === 1 && dependencyNames[0] === "pg")) {
+  errors.push("package.json: only the optional pg driver runtime dependency is allowed");
 }
 if (packageJson.private !== true) {
   errors.push("package.json: package must stay private");

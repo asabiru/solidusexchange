@@ -65,7 +65,8 @@
       "lint": "biome lint src tests scripts",
       "test": "node --test tests/*.test.mjs",
       "typecheck": "tsc -p tsconfig.json --pretty false",
-      "verify": "npm run check && npm run lint && npm run typecheck && npm test && npm run build"
+      "verify": "npm run check && npm run lint && npm run typecheck && npm test && npm run build",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
     }
   },
   "runSteps": {
@@ -416,6 +417,13 @@
       },
       {
         "run": "npm test"
+      },
+      {
+        "run": "npm run verify:migrations"
+      },
+      {
+        "run": "bash tests/postgres-journal.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       },
       {
         "run": "npm run build"
@@ -1305,6 +1313,25 @@
     "packages/customer-api/tests/operations.test.mjs": {
       "minLines": 142,
       "minCases": 5
+    },
+    "packages/matching-core/tests/journal-store-contract.mjs": {
+      "minLines": 72,
+      "minCases": 6
+    },
+    "packages/matching-core/tests/journal-store.test.mjs": {
+      "minLines": 171,
+      "minCases": 15
+    },
+    "packages/matching-core/tests/postgres-journal-contract.mjs": {
+      "minLines": 190,
+      "minCases": 10
+    },
+    "packages/matching-core/tests/postgres-journal.sh": {
+      "minLines": 32
+    },
+    "packages/matching-core/tests/store-config.test.mjs": {
+      "minLines": 72,
+      "minCases": 10
     }
   }
 }

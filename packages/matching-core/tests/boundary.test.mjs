@@ -10,10 +10,24 @@ const MONEY_MOVING_NAME =
   /^(?:approve|broadcast|charge|confirm|credit|custod|debit|deposit[A-Z]|execute|journal|ledger|mint|pay(?!ment)|payout|post|refund|release|serve|settle|sign[A-Z](?!ature)|transfer|withdraw)/;
 const MONEY_MOVING_WORD =
   /(?:Broadcast|Custod|Deposit|Journal|Ledger|Posting|Payout|Settlement|Settle|Signature|Signer|Transfer|Withdraw)/;
+// The dev-only journal persistence seam mirrors the engine's emitted
+// event data into a store backend — data plane, never ledger postings —
+// so its exact exported names are allowlisted like `journal` is for
+// scripts/check-boundary.mjs.
+const DATA_PLANE_NAMES = new Set([
+  "createMemoryJournalStore",
+  "createPostgresJournalStore",
+  "validJournalStore",
+  "resolveJournalStoreEnv",
+  "replayMatchingJournalStore",
+]);
 
 describe("library boundary", () => {
   test("the exported surface carries no money-moving or serving names", () => {
     for (const name of Object.keys(api)) {
+      if (DATA_PLANE_NAMES.has(name)) {
+        continue;
+      }
       assert.equal(MONEY_MOVING_NAME.test(name), false, name);
       assert.equal(MONEY_MOVING_WORD.test(name), false, name);
     }
