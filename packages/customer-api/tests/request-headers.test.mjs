@@ -9,6 +9,7 @@ import {
   header,
   operationIdFor,
   operatorHeaders,
+  orderIdFor,
   operatorToken,
   REQUEST_ID,
   startTestServer,
@@ -37,6 +38,7 @@ const CHECKS = "/api/v1/customer/checks";
 const ACTIVITY = "/api/v1/customer/activity";
 const OPERATIONS_LIST = "/api/v1/customer/operations";
 const OPERATION_DETAIL = `/api/v1/customer/operations/${await operationIdFor()}`;
+const EXCHANGE_ORDER_DETAIL = `/api/v1/customer/exchange-orders/${await orderIdFor()}`;
 const DEPOSIT_ADDRESSES = "/api/v1/customer/deposit-addresses";
 const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
 const KNOWN_SCREENING_ID = (
@@ -50,7 +52,7 @@ const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
 const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS];
 const TRADES = "/api/v1/customer/trades";
 const MARKETS = "/api/v1/customer/markets";
-const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, ADDRESS_SCREENING, AUTH, USERS];
+const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, ADDRESS_SCREENING, AUTH, USERS];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
 let port;
