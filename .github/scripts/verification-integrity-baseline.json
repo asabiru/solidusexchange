@@ -722,7 +722,7 @@
       "minLines": 38
     },
     "packages/api-contracts/tests/contract-boundary.test.mjs": {
-      "minLines": 2132,
+      "minLines": 2150,
       "minCases": 5
     },
     "packages/custody-core/tests/custody-event.test.mjs": {
@@ -797,8 +797,8 @@
       "minCases": 8
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 681,
-      "minCases": 36
+      "minLines": 737,
+      "minCases": 38
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
       "minLines": 280,
@@ -847,11 +847,11 @@
       "minCases": 10
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 293,
+      "minLines": 299,
       "minCases": 14
     },
     "packages/customer-api/tests/routing.test.mjs": {
-      "minLines": 178,
+      "minLines": 182,
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
@@ -1220,8 +1220,8 @@
       "minCases": 7
     },
     "packages/customer-api/tests/operator.test.mjs": {
-      "minLines": 204,
-      "minCases": 9
+      "minLines": 335,
+      "minCases": 14
     },
     "packages/api-contracts/tests/check-machinery.test.mjs": {
       "minLines": 372,

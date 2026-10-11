@@ -224,6 +224,18 @@ const pinnedResponseSchemas = {
       commands_enabled: { const: false }
     }
   },
+  OperatorSessionView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["subject", "actor_type", "scopes", "expires_at", "device_bound"],
+    properties: {
+      subject: { type: "string", pattern: "^syn_oper_[a-z0-9]{8,32}$" },
+      actor_type: { const: "operator" },
+      scopes: { type: "array", uniqueItems: true, items: boundedString },
+      expires_at: { type: "string", format: "date-time" },
+      device_bound: { const: true }
+    }
+  },
   OperatorAdminView: {
     type: "object",
     additionalProperties: false,
@@ -1464,8 +1476,8 @@ function checkOpenApi() {
     ["getCustomerCards", gatedReadStatuses],
     ["getCustomerAuth", readStatuses],
     ["getCustomerUsers", readStatuses],
-    ["getOperatorSession", gatedReadStatuses],
-    ["getOperatorCapabilities", gatedReadStatuses],
+    ["getOperatorSession", readStatuses],
+    ["getOperatorCapabilities", readStatuses],
     ["getOperatorAdmin", readStatuses],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
@@ -1496,7 +1508,7 @@ function checkOpenApi() {
     ["getCustomerCards", "#/components/schemas/CardsView"],
     ["getCustomerAuth", "#/components/schemas/AuthSessionsView"],
     ["getCustomerUsers", "#/components/schemas/UserView"],
-    ["getOperatorSession", "#/components/schemas/SessionView"],
+    ["getOperatorSession", "#/components/schemas/OperatorSessionView"],
     ["getOperatorCapabilities", "#/components/schemas/CapabilitiesView"],
     ["getOperatorAdmin", "#/components/schemas/OperatorAdminView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],

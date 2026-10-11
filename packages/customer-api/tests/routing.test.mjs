@@ -8,6 +8,7 @@ import {
   contract,
   customerHeaders,
   header,
+  operatorHeaders,
   rawExchange,
   REQUEST_ID,
   startTestServer,
@@ -190,7 +191,13 @@ test("seeded probe: generated request targets match only exact served paths", as
       continue;
     }
     tried.add(path);
-    const response = await checkedRequest(port, { path, headers: customerHeaders() });
+    // Operator reads need the operator audience plus X-Device-Id, so probes
+    // aimed at that namespace carry operator headers; the expectation stays
+    // 200 for served paths and 404 for everything else.
+    const response = await checkedRequest(port, {
+      path,
+      headers: path.startsWith("/api/v1/operator/") ? operatorHeaders() : customerHeaders()
+    });
     assert.equal(response.status, SERVED.includes(path) ? 200 : 404, path);
   }
 });

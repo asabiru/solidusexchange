@@ -560,6 +560,26 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects permissive canonical operator session views",
+  "Canonical OperatorSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.OperatorSessionView.additionalProperties = true;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects unbound operator session views",
+  "Canonical OperatorSessionView schema must remain pinned",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.components.schemas.OperatorSessionView.properties.device_bound.const = false;
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects permissive canonical wallet views",
   "Canonical WalletView schema must remain pinned",
   (scratch) => {

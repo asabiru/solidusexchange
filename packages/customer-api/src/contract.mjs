@@ -395,6 +395,42 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 404, 429, 500])
   }),
+  // The operator session read is the operator meta pair's identity half:
+  // like the customer session read it answers the token principal's own
+  // metadata, so it declares no 403. Operator operations require the
+  // X-Device-Id header and an operator-audience token instead of a customer
+  // one; KYC evaluation never applies to them.
+  Object.freeze({
+    operationId: "getOperatorSession",
+    method: "GET",
+    path: "/api/v1/operator/session",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The operator capabilities read is the meta pair's capability half: the
+  // operator policy grants the whole read tier unconditionally, so it
+  // declares no 403 either.
+  Object.freeze({
+    operationId: "getOperatorCapabilities",
+    method: "GET",
+    path: "/api/v1/operator/capabilities",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 429, 500])
+  }),
   // First operator-namespaced read. Operator operations require the
   // X-Device-Id header and an operator-audience token instead of a customer
   // one; KYC evaluation never applies to them.
