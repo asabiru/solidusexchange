@@ -12,6 +12,7 @@ import {
   SELF_TRADE_POLICY,
 } from "./events.mjs";
 import { INSTRUMENTS, instrumentIndex } from "./instruments.mjs";
+import { validJournalStore } from "./journal-store.mjs";
 import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
 
 /**
@@ -35,6 +36,7 @@ import { canonicalEngineSnapshot, snapshotPlainData } from "./snapshot.mjs";
  * @typedef {import("./events.mjs").OrderInput} OrderInput
  * @typedef {import("./deterministic.mjs").SimulatedClock} SimulatedClock
  * @typedef {import("./instruments.mjs").InstrumentDefinition} InstrumentDefinition
+ * @typedef {import("./journal-store.mjs").MatchingJournalStore} MatchingJournalStore
  * @typedef {import("./snapshot.mjs").EngineSnapshot} EngineSnapshot
  *
  * @typedef {object} TrackedOrder
@@ -73,18 +75,18 @@ const REQUIRED_ORDER_KEYS = Object.freeze(["instrument", "order_id", "quantity",
 
 /**
  * @param {unknown} options
- * @returns {{ instruments: InstrumentDefinition[] | undefined, clock: SimulatedClock | undefined }}
+ * @returns {{ instruments: InstrumentDefinition[] | undefined, clock: SimulatedClock | undefined, journalStore: MatchingJournalStore | undefined }}
  */
 function engineOptions(options) {
   if (options === undefined) {
-    return { instruments: undefined, clock: undefined };
+    return { instruments: undefined, clock: undefined, journalStore: undefined };
   }
   if (options === null || typeof options !== "object" || Array.isArray(options)) {
     throw new TypeError("engine options must be a plain object");
   }
-  const candidate = /** @type {{ instruments?: unknown, clock?: unknown }} */ (options);
+  const candidate = /** @type {{ instruments?: unknown, clock?: unknown, journalStore?: unknown }} */ (options);
   for (const key of Object.keys(options)) {
-    if (key !== "instruments" && key !== "clock") {
+    if (key !== "instruments" && key !== "clock" && key !== "journalStore") {
       throw new TypeError(`unknown engine option: ${key}`);
     }
   }
@@ -98,17 +100,20 @@ function engineOptions(options) {
   ) {
     throw new TypeError("clock must be an object with a now() function");
   }
+  const journalStore =
+    candidate.journalStore === undefined ? undefined : validJournalStore(candidate.journalStore);
   return {
     instruments: /** @type {InstrumentDefinition[] | undefined} */ (candidate.instruments),
     clock: /** @type {SimulatedClock | undefined} */ (clock),
+    journalStore,
   };
 }
 
 /**
- * @param {{ instruments?: InstrumentDefinition[], clock?: SimulatedClock }} [options]
+ * @param {{ instruments?: InstrumentDefinition[], clock?: SimulatedClock, journalStore?: MatchingJournalStore }} [options]
  */
 export function createMatchingEngine(options = {}) {
-  const { instruments, clock } = engineOptions(options);
+  const { instruments, clock, journalStore } = engineOptions(options);
   /** @type {EngineState} */
   const state = {
     books: new Map(),
@@ -122,6 +127,7 @@ export function createMatchingEngine(options = {}) {
     instrumentIndex(instruments ?? INSTRUMENTS),
     clock ?? createSimulatedClock(),
     state,
+    journalStore,
   );
 }
 
@@ -134,9 +140,40 @@ export function createMatchingEngine(options = {}) {
  * @param {ReadonlyMap<string, InstrumentDefinition>} index
  * @param {SimulatedClock} timeSource
  * @param {EngineState} state
+ * @param {MatchingJournalStore} [journalStore]
+ *   Optional dev-only durability sink: every event batch an operation
+ *   emits is appended to it before the operation returns. The engine's
+ *   own in-memory journal stays the live record (`journal()` semantics
+ *   are unchanged — the store only mirrors it), so replay/restore call
+ *   this without a store.
  */
-export function createMatchingEngineFromState(index, timeSource, state) {
+export function createMatchingEngineFromState(index, timeSource, state, journalStore) {
   const { books, tracked, journal } = state;
+
+  /**
+   * Closes one operation: mirrors the emitted batch into the attached
+   * journal store, then seals the returned array. A synchronous append
+   * result is ignored (the memory backend appends inline); a thenable
+   * result is settled on its own — a durable backend serializes and
+   * latches write failures, surfacing them on its next awaited operation
+   * (`load`, a later `append`, `close`), which a synchronous emit cannot
+   * await without changing the engine's atomic-call contract.
+   *
+   * @param {MatchingEvent[]} events
+   * @returns {readonly MatchingEvent[]}
+   */
+  function finish(events) {
+    if (journalStore !== undefined) {
+      const outcome = journalStore.append(events);
+      if (outcome instanceof Promise) {
+        void outcome.then(
+          () => undefined,
+          () => undefined,
+        );
+      }
+    }
+    return Object.freeze(events);
+  }
 
   /**
    * @param {string} instrument
@@ -429,7 +466,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         snapshot = snapshotPlainData(input);
       } catch {
         emitRejected(events, {}, "invalid_order");
-        return Object.freeze(events);
+        return finish(events);
       }
       const validated = validateOrder(snapshot);
       if (!validated.ok) {
@@ -438,7 +475,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
             ? /** @type {{ order_id?: unknown, instrument?: unknown, side?: unknown }} */ (snapshot)
             : {};
         emitRejected(events, echo, validated.reason);
-        return Object.freeze(events);
+        return finish(events);
       }
       const taker = validated.parsed;
       const book = bookFor(taker.instrument);
@@ -456,7 +493,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
       });
 
       matchTaker(events, book, taker, definition);
-      return Object.freeze(events);
+      return finish(events);
     },
 
     /**
@@ -475,21 +512,21 @@ export function createMatchingEngineFromState(index, timeSource, state) {
       const echo = { order_id: orderId, instrument, side: null };
       if (typeof instrument !== "string") {
         emitRejected(events, echo, "invalid_instrument");
-        return Object.freeze(events);
+        return finish(events);
       }
       if (!index.has(instrument)) {
         emitRejected(events, echo, "unknown_instrument");
-        return Object.freeze(events);
+        return finish(events);
       }
       if (!isOrderId(orderId)) {
         emitRejected(events, echo, "invalid_order_id");
-        return Object.freeze(events);
+        return finish(events);
       }
       const book = bookFor(instrument);
       const resting = book.restingOrder(orderId);
       if (resting === undefined) {
         emitRejected(events, echo, "order_not_resting");
-        return Object.freeze(events);
+        return finish(events);
       }
       const removedUnits = resting.remaining_units;
       book.remove(resting);
@@ -508,7 +545,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         price: resting.price,
         quantity: formatScaledDecimal(removedUnits, definition.base_scale),
       });
-      return Object.freeze(events);
+      return finish(events);
     },
 
     /**
@@ -551,7 +588,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         snapshot = snapshotPlainData(input);
       } catch {
         emitRejected(events, {}, "invalid_order");
-        return Object.freeze(events);
+        return finish(events);
       }
       if (
         snapshot === null ||
@@ -562,14 +599,14 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         (!Object.hasOwn(snapshot, "price") && !Object.hasOwn(snapshot, "quantity"))
       ) {
         emitRejected(events, {}, "invalid_order");
-        return Object.freeze(events);
+        return finish(events);
       }
       const candidate = /** @type {import("./events.mjs").AmendInput} */ (snapshot);
       /** @type {{ order_id: unknown, instrument: unknown, side: unknown }} */
       const echo = { order_id: candidate.order_id, instrument: null, side: null };
       if (!isOrderId(candidate.order_id)) {
         emitRejected(events, echo, "invalid_order_id");
-        return Object.freeze(events);
+        return finish(events);
       }
       const entry = tracked.get(candidate.order_id);
       if (entry !== undefined) {
@@ -580,13 +617,13 @@ export function createMatchingEngineFromState(index, timeSource, state) {
       // also the market-amendment rejection.
       if (entry === undefined || entry.state !== "resting") {
         emitRejected(events, echo, "order_not_resting");
-        return Object.freeze(events);
+        return finish(events);
       }
       const book = bookFor(entry.instrument);
       const resting = book.restingOrder(entry.order_id);
       if (resting === undefined) {
         emitRejected(events, echo, "order_not_resting");
-        return Object.freeze(events);
+        return finish(events);
       }
       const definition = /** @type {InstrumentDefinition} */ (
         index.get(entry.instrument)
@@ -595,36 +632,36 @@ export function createMatchingEngineFromState(index, timeSource, state) {
       if (Object.hasOwn(snapshot, "price")) {
         if (!isScaledDecimal(candidate.price, definition.price_scale)) {
           emitRejected(events, echo, "invalid_price");
-          return Object.freeze(events);
+          return finish(events);
         }
         priceUnits = parseScaledDecimal(candidate.price, definition.price_scale);
         if (priceUnits === 0n) {
           emitRejected(events, echo, "non_positive_price");
-          return Object.freeze(events);
+          return finish(events);
         }
       }
       let totalUnits = entry.quantity_units;
       if (Object.hasOwn(snapshot, "quantity")) {
         if (!isScaledDecimal(candidate.quantity, definition.base_scale)) {
           emitRejected(events, echo, "invalid_quantity");
-          return Object.freeze(events);
+          return finish(events);
         }
         totalUnits = parseScaledDecimal(candidate.quantity, definition.base_scale);
         if (totalUnits === 0n) {
           emitRejected(events, echo, "non_positive_quantity");
-          return Object.freeze(events);
+          return finish(events);
         }
       }
       const priceChanged = priceUnits !== entry.price_units;
       const quantityChanged = totalUnits !== entry.quantity_units;
       if (!priceChanged && !quantityChanged) {
         emitRejected(events, echo, "no_change");
-        return Object.freeze(events);
+        return finish(events);
       }
       const executedUnits = entry.quantity_units - entry.remaining_units;
       if (totalUnits <= executedUnits) {
         emitRejected(events, echo, "quantity_below_filled");
-        return Object.freeze(events);
+        return finish(events);
       }
       const previousPrice = entry.price;
       const previousQuantity = entry.quantity;
@@ -661,7 +698,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         // rest its remainder at the tail of the (uncrossed) new level.
         matchTaker(events, book, entry, definition);
       }
-      return Object.freeze(events);
+      return finish(events);
     },
 
     /**
