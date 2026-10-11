@@ -202,6 +202,24 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The exchange-order member read shares the collection's KYC gate like
+  // the operations member read (the getCustomerOperation precedent), so it
+  // adds the declared 404 for ids the subject does not own — a member read
+  // can never be wider than the list it belongs to, and a foreign or
+  // never-minted id fails closed rather than leaking existence.
+  Object.freeze({
+    operationId: "getCustomerExchangeOrder",
+    method: "GET",
+    path: "/api/v1/customer/exchange-orders/{orderId}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 404, 429, 500])
+  }),
   // The trades collection read is KYC-gated like the deposits, withdrawals,
   // wallets, notifications, quotes and exchange-orders reads, so it declares
   // a 403: trades are an asset/activity collection (the engine's recorded

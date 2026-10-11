@@ -80,6 +80,11 @@ export const ORDER_TYPES = Object.freeze(["market", "limit"]);
 // never appear — a fully executed order is excluded rather than shown,
 // since the contract's statuses never describe executed volume.
 export const ORDER_STATUSES = Object.freeze(["open", "cancelled", "expired", "rejected"]);
+// The member read serves the same lifecycle vocabulary plus "filled": the
+// templated detail read shows terminal state (the getCustomerOperation
+// precedent), so a fully executed order answers its executed record —
+// only the collection view excludes it.
+export const ORDER_DETAIL_STATUSES = Object.freeze(["open", "filled", "cancelled", "expired", "rejected"]);
 // A trade's liquidity leg is read straight off the fill pair it came from:
 // the subject leg is "maker" when its order rested on the book and "taker"
 // when it swept.
@@ -110,6 +115,27 @@ const ORDER_KEYS = Object.freeze([
 ]);
 const ORDER_ID_PATTERN = /^ord_[0-9a-f]{24}$/u;
 const TRADE_ID_PATTERN = /^trd_[0-9a-f]{24}$/u;
+const DETAIL_KEYS = Object.freeze([
+  "order_id",
+  "pair",
+  "base_asset",
+  "quote_asset",
+  "side",
+  "order_type",
+  "base_amount",
+  "price",
+  "quote_amount",
+  "fee_bps",
+  "fee_amount",
+  "total_quote_amount",
+  "status",
+  "created_at",
+  "updated_at",
+  "fills",
+  "execution",
+  "posting"
+]);
+const FILL_KEYS = Object.freeze(["fill_id", "liquidity", "price", "quantity", "executed_at"]);
 const MARKETS_VIEW_KEYS = Object.freeze(["mode", "markets"]);
 const MARKET_KEYS = Object.freeze([
   "instrument",
@@ -216,8 +242,56 @@ for (const pairDef of ORDER_PAIRS) {
  */
 
 /**
+ * One executed leg of an order detail — the same fill pair the trades
+ * projection folds into a TradeView, minus the redundant per-order
+ * context. `fill_id` reuses the trades read's subject-scoped trd_* digest
+ * recipe so a leg joins one-to-one to its TradeView row; `price`/`quantity`
+ * are the maker price and executed size off the journal pair, and
+ * `liquidity` is "maker" when this order rested and "taker" when it swept.
+ *
+ * @typedef {object} ExchangeOrderFillView
+ * @property {string} fill_id
+ * @property {string} liquidity
+ * @property {string} price
+ * @property {string} quantity
+ * @property {string} executed_at
+ */
+
+/**
+ * The templated member read's row: every list field plus `fills`, the
+ * order's own executed legs in journal order. `status` extends the list
+ * vocabulary with "filled" — the detail read serves terminal state (the
+ * getCustomerOperation precedent), so a fully executed order answers its
+ * executed record with `base_amount` the placed quantity and `updated_at`
+ * its last fill's stamp. For every other status the shared fields carry
+ * exactly the list row's semantics (an "open" detail still reports the
+ * resting remainder while `fills` shows what already executed).
+ *
+ * @typedef {object} ExchangeOrderDetailView
+ * @property {string} order_id
+ * @property {string} pair
+ * @property {string} base_asset
+ * @property {string} quote_asset
+ * @property {string} side
+ * @property {string} order_type
+ * @property {string} base_amount
+ * @property {string} price
+ * @property {string} quote_amount
+ * @property {number} fee_bps
+ * @property {string} fee_amount
+ * @property {string} total_quote_amount
+ * @property {string} status
+ * @property {string} created_at
+ * @property {string} updated_at
+ * @property {readonly ExchangeOrderFillView[]} fills
+ * @property {string} execution
+ * @property {string} posting
+ */
+
+/**
  * @typedef {object} ExchangeOrderDirectory
  * @property {(subject: string) => Promise<ExchangeOrdersView>} listFor
+ * @property {(subject: string, orderId: string) => Promise<ExchangeOrderDetailView | null>} orderFor
  */
 
 /**
@@ -354,8 +428,14 @@ for (const pairDef of ORDER_PAIRS) {
  * @property {string | null} terminalAt `cancelled`/`rejected` stamp.
  * @property {string | null} terminalQuantity Remaining quantity the
  *   terminal event removed or refused, when the event carries one.
- * @property {{ quantityUnits: bigint, priceUnits: bigint }[]} fills This
- *   order's own fill legs — the VWAP source for a market order's price.
+ * @property {{
+ *   fillId: string | null,
+ *   liquidity: "maker" | "taker" | null,
+ *   at: string,
+ *   quantityUnits: bigint,
+ *   priceUnits: bigint
+ * }[]} fills This order's own fill legs — the VWAP source for a market
+ *   order's price and the member read's `fills` projection source.
  */
 
 /**
@@ -811,17 +891,15 @@ export function replayExchangeOrderScenario(scenario) {
 }
 
 /**
- * Folds one replayed engine into contract rows in submission order — the
- * directory reverses for newest-first display. Engine state is read two
- * ways: `orderStatus` for the tracked lifecycle state, and the journal
- * for the `accepted`/terminal timestamps, removed remainders and the fill
- * legs a market order's VWAP comes from.
+ * Folds one replayed journal into per-order trails — the scratch state
+ * every row projection shares. Fill legs keep the pair's ids, liquidity
+ * leg, stamp and units so a market order's VWAP and the member read's
+ * `fills` both come from the same recorded executions.
  *
  * @param {ReturnType<typeof createMatchingEngine>} engine
- * @param {readonly ScenarioOrderIntent[]} intents
- * @returns {readonly ExchangeOrderView[]}
+ * @returns {Map<string, OrderTrail>}
  */
-export function projectExchangeOrders(engine, intents) {
+function orderTrails(engine) {
   /** @type {Map<string, OrderTrail>} */
   const trails = new Map();
   for (const event of engine.journal()) {
@@ -838,13 +916,40 @@ export function projectExchangeOrders(engine, intents) {
       trail.acceptedAt = event.at;
     } else if (event.type === "partially_filled" || event.type === "filled") {
       if (typeof fields.price === "string" && typeof fields.quantity === "string") {
-        trail.fills.push({ quantityUnits: parseUnits(fields.quantity), priceUnits: parseUnits(fields.price) });
+        trail.fills.push({
+          fillId: typeof fields.fill_id === "string" ? fields.fill_id : null,
+          liquidity:
+            event.order_id === fields.maker_order_id
+              ? "maker"
+              : event.order_id === fields.taker_order_id
+                ? "taker"
+                : null,
+          at: event.at,
+          quantityUnits: parseUnits(fields.quantity),
+          priceUnits: parseUnits(fields.price)
+        });
       }
     } else if (event.type === "cancelled" || event.type === "rejected") {
       trail.terminalAt = event.at;
       trail.terminalQuantity = typeof fields.quantity === "string" ? fields.quantity : null;
     }
   }
+  return trails;
+}
+
+/**
+ * Folds one replayed engine into contract rows in submission order — the
+ * directory reverses for newest-first display. Engine state is read two
+ * ways: `orderStatus` for the tracked lifecycle state, and the journal
+ * for the `accepted`/terminal timestamps, removed remainders and the fill
+ * legs a market order's VWAP comes from.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @param {readonly ScenarioOrderIntent[]} intents
+ * @returns {readonly ExchangeOrderView[]}
+ */
+export function projectExchangeOrders(engine, intents) {
+  const trails = orderTrails(engine);
 
   /** @type {ExchangeOrderView[]} */
   const rows = [];
@@ -931,6 +1036,129 @@ export function projectExchangeOrders(engine, intents) {
     );
   }
   return Object.freeze(rows);
+}
+
+/**
+ * Folds one replayed engine into the subject's single-order detail: the
+ * same contract row the list read emits — same status mapping, same
+ * derived amounts — plus the order's own executed legs and the "filled"
+ * terminal state the collection view excludes. A member read serves
+ * terminal state (the getCustomerOperation precedent), so a fully
+ * executed order reports `base_amount` as the placed quantity, its last
+ * fill's stamp as `updated_at` and every leg in `fills`; an "open" order
+ * still reports the resting remainder while `fills` shows what already
+ * executed. `null` answers ids no intent minted — a foreign or
+ * never-minted id fails closed rather than leaking existence.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @param {readonly ScenarioOrderIntent[]} intents
+ * @param {string} orderId
+ * @returns {ExchangeOrderDetailView | null}
+ */
+export function projectExchangeOrderDetail(engine, intents, orderId) {
+  const intent = intents.find((entry) => entry.order_id === orderId);
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === intent?.pair);
+  const trail = orderTrails(engine).get(orderId);
+  const createdAt = trail === undefined ? null : trail.acceptedAt ?? trail.terminalAt;
+  if (intent === undefined || pairDef === undefined || trail === undefined || createdAt === null) {
+    // Intents always name ORDER_PAIRS instruments and every submission
+    // emits at least one event; a subject intent with no journal record is
+    // a scenario bug the read must not silently re-render as an order.
+    return null;
+  }
+  const status = engine.orderStatus(orderId);
+  /** @type {"open" | "filled" | "cancelled" | "expired" | "rejected"} */
+  let state;
+  let baseText;
+  let updatedAt;
+  if (status === null) {
+    // Validation rejects never reach the tracked map: the lone reject
+    // event is the whole lifecycle and nothing ever executed.
+    state = "rejected";
+    baseText = intent.quantity;
+    updatedAt = trail.terminalAt ?? createdAt;
+  } else if (status.state === "resting") {
+    // Open orders show the still-resting remainder — a partially filled
+    // order reports its reduced never-executed quantity, with the legs
+    // that already executed in `fills`.
+    state = "open";
+    baseText = status.remaining_quantity;
+    updatedAt = createdAt;
+  } else if (status.state === "cancelled") {
+    state = intent.expires ? "expired" : "cancelled";
+    baseText = trail.terminalQuantity ?? status.quantity;
+    updatedAt = trail.terminalAt ?? createdAt;
+  } else if (status.state === "rejected") {
+    state = "rejected";
+    baseText = trail.terminalQuantity ?? status.remaining_quantity;
+    updatedAt = trail.terminalAt ?? createdAt;
+  } else {
+    // "filled": the detail read serves terminal state, so the executed
+    // order reports the placed quantity (the amount that actually filled)
+    // and its last fill's stamp as the terminal update.
+    state = "filled";
+    baseText = intent.quantity;
+    updatedAt = trail.fills.at(-1)?.at ?? trail.terminalAt ?? createdAt;
+  }
+  /** @type {ExchangeOrderFillView[]} */
+  const fills = [];
+  for (const leg of trail.fills) {
+    if (leg.fillId === null || leg.liquidity === null) {
+      // Fill events always carry both leg ids on this engine; a leg
+      // without them is scenario drift the member read must not serve.
+      continue;
+    }
+    fills.push(
+      Object.freeze({
+        // The trd_* digest recipe the trades read applies to the same
+        // journal pair, so a fill leg joins one-to-one to its TradeView.
+        fill_id: `trd_${digest(orderId, `trade:${leg.fillId}`).toString("hex").slice(0, 24)}`,
+        liquidity: leg.liquidity,
+        price: decimal(leg.priceUnits, PRICE_SCALE),
+        quantity: decimal(leg.quantityUnits, pairDef.baseScale),
+        executed_at: msIso(leg.at)
+      })
+    );
+  }
+  // A market order carries no limit price: its displayed price is the
+  // volume-weighted average of its own fills (the same legs `fills`
+  // projects), or the scenario's reference estimate when nothing executed.
+  const priceUnits =
+    intent.order_type === "market" && trail.fills.length > 0
+      ? divideRounded(
+          trail.fills.reduce((sum, fill) => sum + fill.quantityUnits * fill.priceUnits, 0n),
+          trail.fills.reduce((sum, fill) => sum + fill.quantityUnits, 0n),
+          "half_even"
+        )
+      : parseUnits(intent.price);
+  const baseUnits = parseUnits(baseText);
+  const { quoteUnits, fee, total } = computeAmounts(
+    pairDef,
+    intent.side,
+    baseUnits,
+    priceUnits,
+    intent.fee_bps
+  );
+  return Object.freeze({
+    order_id: intent.order_id,
+    pair: intent.pair,
+    base_asset: pairDef.base,
+    quote_asset: pairDef.quote,
+    side: intent.side,
+    order_type: intent.order_type,
+    base_amount: decimal(baseUnits, pairDef.baseScale),
+    price: decimal(priceUnits, PRICE_SCALE),
+    quote_amount: decimal(quoteUnits, pairDef.quoteScale),
+    fee_bps: intent.fee_bps,
+    fee_amount: decimal(fee, pairDef.quoteScale),
+    total_quote_amount: decimal(total, pairDef.quoteScale),
+    status: state,
+    created_at: msIso(createdAt),
+    updated_at: msIso(updatedAt),
+    fills: Object.freeze(fills),
+    execution: "not_supported",
+    posting: "none"
+  });
 }
 
 /**
@@ -1420,6 +1648,148 @@ export function validExchangeOrdersView(view) {
   return candidate.orders.every(validOrder);
 }
 
+/**
+ * Fail-closed member-read check: every list-row constraint holds (the
+ * shared fields carry the same semantics — the "open" remainder, the
+ * amounts recomputation, the created/updated coherence), the status
+ * vocabulary extends to "filled", and `fills` recomputes against the
+ * recorded execution — ids unique trd_* digests, quantities/price at the
+ * pair and price scales, stamps inside the order's lifetime, the legs
+ * summing to the executed quantity exactly when the status is "filled",
+ * and a market order's displayed price exactly its fills' VWAP.
+ *
+ * @param {unknown} detail
+ */
+export function validExchangeOrderDetailView(detail) {
+  if (detail === null || typeof detail !== "object" || Array.isArray(detail)) {
+    return false;
+  }
+  const candidate = /** @type {ExchangeOrderDetailView} */ (detail);
+  if (JSON.stringify(Object.keys(detail).sort()) !== JSON.stringify([...DETAIL_KEYS].sort())) {
+    return false;
+  }
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === candidate.pair);
+  if (
+    pairDef === undefined ||
+    candidate.base_asset !== pairDef.base ||
+    candidate.quote_asset !== pairDef.quote
+  ) {
+    return false;
+  }
+  if (
+    !ORDER_SIDES.includes(candidate.side) ||
+    !ORDER_TYPES.includes(candidate.order_type) ||
+    !ORDER_DETAIL_STATUSES.includes(candidate.status) ||
+    candidate.execution !== "not_supported" ||
+    candidate.posting !== "none"
+  ) {
+    return false;
+  }
+  if (
+    !Number.isSafeInteger(candidate.fee_bps) ||
+    candidate.fee_bps < 0 ||
+    candidate.fee_bps > MAX_BPS
+  ) {
+    return false;
+  }
+  if (
+    !ORDER_ID_PATTERN.test(candidate.order_id) ||
+    !isScaledDecimal(candidate.base_amount, pairDef.baseScale) ||
+    !isScaledDecimal(candidate.price, PRICE_SCALE) ||
+    !isScaledDecimal(candidate.quote_amount, pairDef.quoteScale) ||
+    !isScaledDecimal(candidate.fee_amount, pairDef.quoteScale) ||
+    !isScaledDecimal(candidate.total_quote_amount, pairDef.quoteScale)
+  ) {
+    return false;
+  }
+  if (!isIsoTimestamp(candidate.created_at) || !isIsoTimestamp(candidate.updated_at)) {
+    return false;
+  }
+  const created = Date.parse(candidate.created_at);
+  const updated = Date.parse(candidate.updated_at);
+  // Lifecycle coherence mirrors the synthetic build: a resting open order
+  // still stamps its acceptance while a terminal order updates at or
+  // after creation — a "filled" order's last leg IS its terminal update.
+  if (updated < created || (candidate.status === "open" && updated !== created)) {
+    return false;
+  }
+  if (!Array.isArray(candidate.fills)) {
+    return false;
+  }
+  const legIds = new Set();
+  let executedUnits = 0n;
+  for (const leg of candidate.fills) {
+    if (leg === null || typeof leg !== "object" || Array.isArray(leg)) {
+      return false;
+    }
+    const fill = /** @type {ExchangeOrderFillView} */ (leg);
+    if (JSON.stringify(Object.keys(leg).sort()) !== JSON.stringify([...FILL_KEYS].sort())) {
+      return false;
+    }
+    if (
+      !TRADE_ID_PATTERN.test(fill.fill_id) ||
+      !TRADE_LIQUIDITIES.includes(fill.liquidity) ||
+      !isScaledDecimal(fill.price, PRICE_SCALE) ||
+      !isScaledDecimal(fill.quantity, pairDef.baseScale) ||
+      !isIsoTimestamp(fill.executed_at) ||
+      legIds.has(fill.fill_id)
+    ) {
+      return false;
+    }
+    const executed = Date.parse(fill.executed_at);
+    // A leg can never precede acceptance; once the order is terminal no
+    // leg lands after the terminal stamp. A resting order's legs are the
+    // exception to the latter: fills keep landing on an open remainder
+    // while updated_at stays pinned to acceptance.
+    if (
+      executed < created ||
+      (candidate.status !== "open" && executed > updated) ||
+      parseUnits(fill.price) <= 0n ||
+      parseUnits(fill.quantity) <= 0n
+    ) {
+      return false;
+    }
+    legIds.add(fill.fill_id);
+    executedUnits += parseUnits(fill.quantity);
+  }
+  const baseUnits = parseUnits(candidate.base_amount);
+  // A filled detail reports the placed quantity as base_amount, so its
+  // legs must recompute that execution exactly; any other status keeps
+  // base_amount on the never-executed remainder and places no sum
+  // constraint on its (possibly empty) legs.
+  if (candidate.status === "filled" && (candidate.fills.length === 0 || executedUnits !== baseUnits)) {
+    return false;
+  }
+  // A market order's displayed price is its legs' exact volume-weighted
+  // average — the same recomputation the projection performs.
+  if (candidate.order_type === "market" && candidate.fills.length > 0) {
+    const vwap = divideRounded(
+      candidate.fills.reduce((sum, fill) => sum + parseUnits(fill.quantity) * parseUnits(fill.price), 0n),
+      executedUnits,
+      "half_even"
+    );
+    if (decimal(vwap, PRICE_SCALE) !== candidate.price) {
+      return false;
+    }
+  }
+  // Fail closed unless every derived amount recomputes exactly like the
+  // simulator's quote arithmetic at the order's fixed price.
+  const recomputed = computeAmounts(
+    pairDef,
+    candidate.side,
+    baseUnits,
+    parseUnits(candidate.price),
+    candidate.fee_bps
+  );
+  return (
+    decimal(recomputed.quoteUnits, pairDef.quoteScale) === candidate.quote_amount &&
+    decimal(recomputed.fee, pairDef.quoteScale) === candidate.fee_amount &&
+    decimal(recomputed.total, pairDef.quoteScale) === candidate.total_quote_amount &&
+    recomputed.quoteUnits > 0n &&
+    recomputed.total > 0n
+  );
+}
+
 /** @returns {ExchangeOrderDirectory} */
 export function createSyntheticExchangeOrderDirectory() {
   // No per-subject memo or retained engine: each read rebuilds the whole
@@ -1431,6 +1801,15 @@ export function createSyntheticExchangeOrderDirectory() {
       const engine = replayExchangeOrderScenario(scenario);
       const orders = Object.freeze(projectExchangeOrders(engine, scenario.intents).slice().reverse());
       return Object.freeze({ mode: "test", orders });
+    },
+    async orderFor(subject, orderId) {
+      // Same request-scoped invariant as listFor: the member read rebuilds
+      // the subject's scenario on a fresh engine and projects the single
+      // order — a foreign id simply has no intent to project, so the null
+      // answer never leaks existence across subjects.
+      const scenario = exchangeOrderScenario(subject);
+      const engine = replayExchangeOrderScenario(scenario);
+      return projectExchangeOrderDetail(engine, scenario.intents, orderId);
     }
   });
 }

@@ -519,6 +519,35 @@ declare module "@solidchange/customer-api/dev-server" {
             posting: "none";
           }>;
         }>;
+        orderFor(
+          subject: string,
+          orderId: string
+        ): Promise<{
+          order_id: string;
+          pair: "USDT/RUB" | "TON/RUB" | "TON/USDT";
+          base_asset: string;
+          quote_asset: string;
+          side: "buy" | "sell";
+          order_type: "market" | "limit";
+          base_amount: string;
+          price: string;
+          quote_amount: string;
+          fee_bps: number;
+          fee_amount: string;
+          total_quote_amount: string;
+          status: "open" | "filled" | "cancelled" | "expired" | "rejected";
+          created_at: string;
+          updated_at: string;
+          fills: ReadonlyArray<{
+            fill_id: string;
+            liquidity: "maker" | "taker";
+            price: string;
+            quantity: string;
+            executed_at: string;
+          }>;
+          execution: "not_supported";
+          posting: "none";
+        } | null>;
       };
       paymentDirectory?: {
         listFor(subject: string): Promise<{

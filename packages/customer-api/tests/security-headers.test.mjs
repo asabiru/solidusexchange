@@ -7,11 +7,14 @@ import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
-import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
+import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, orderIdFor, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
 
 // A concrete operation id minted for the verified test subject: the
 // templated member read needs a real id to reach its 200 path.
 const VERIFIED_OPERATION_ID = await operationIdFor();
+// Same for the exchange-order member read: the pinned id is the verified
+// subject's first scenario intent so the success path returns a real 200.
+const VERIFIED_ORDER_ID = await orderIdFor();
 // Templated served paths are requested with the verified subject's own
 // deterministic screening id so the success path returns a real 200.
 const KNOWN_SCREENING_ID = (
@@ -79,6 +82,7 @@ test("every operation sends the security headers on success and on its error pat
       const { method } = operation;
       const path = operation.path
         .replaceAll("{operationId}", VERIFIED_OPERATION_ID)
+        .replaceAll("{orderId}", VERIFIED_ORDER_ID)
         .replaceAll("{screeningId}", KNOWN_SCREENING_ID)
         .replaceAll("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
       const ok = await request(port, { method, path, headers: operationHeaders(operation) });

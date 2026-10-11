@@ -878,6 +878,64 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  ExchangeOrderDetailView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "order_id",
+      "pair",
+      "base_asset",
+      "quote_asset",
+      "side",
+      "order_type",
+      "base_amount",
+      "price",
+      "quote_amount",
+      "fee_bps",
+      "fee_amount",
+      "total_quote_amount",
+      "status",
+      "created_at",
+      "updated_at",
+      "fills",
+      "execution",
+      "posting"
+    ],
+    properties: {
+      order_id: { type: "string", pattern: "^ord_[0-9a-f]{24}$" },
+      pair: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      side: { type: "string", enum: ["buy", "sell"] },
+      order_type: { type: "string", enum: ["market", "limit"] },
+      base_amount: { $ref: "#/$defs/decimalAmount" },
+      price: { $ref: "#/$defs/decimalAmount" },
+      quote_amount: { $ref: "#/$defs/decimalAmount" },
+      fee_bps: { type: "integer", minimum: 0, maximum: 1000 },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      total_quote_amount: { $ref: "#/$defs/decimalAmount" },
+      status: { type: "string", enum: ["open", "filled", "cancelled", "expired", "rejected"] },
+      created_at: { type: "string", format: "date-time" },
+      updated_at: { type: "string", format: "date-time" },
+      fills: {
+        type: "array",
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["fill_id", "liquidity", "price", "quantity", "executed_at"],
+          properties: {
+            fill_id: { type: "string", pattern: "^trd_[0-9a-f]{24}$" },
+            liquidity: { type: "string", enum: ["maker", "taker"] },
+            price: { $ref: "#/$defs/decimalAmount" },
+            quantity: { $ref: "#/$defs/decimalAmount" },
+            executed_at: { type: "string", format: "date-time" }
+          }
+        }
+      },
+      execution: { const: "not_supported" },
+      posting: { const: "none" }
+    }
+  },
   TradesView: {
     type: "object",
     additionalProperties: false,
@@ -1461,6 +1519,7 @@ const pinnedParameterNames = new Set([
   "DeviceId",
   "IdempotencyKey",
   "OperationId",
+  "OrderId",
   "Platform",
   "RequestId",
   "ScreeningId",
@@ -1469,10 +1528,12 @@ const pinnedParameterNames = new Set([
 
 // Templated paths bind exactly one canonical path parameter per placeholder
 // name: {checkId} -> CheckId, {operationId} -> OperationId,
-// {screeningId} -> ScreeningId, {subjectId} -> SubjectId.
+// {orderId} -> OrderId, {screeningId} -> ScreeningId,
+// {subjectId} -> SubjectId.
 const canonicalPathParameters = new Map([
   ["checkId", "#/components/parameters/CheckId"],
   ["operationId", "#/components/parameters/OperationId"],
+  ["orderId", "#/components/parameters/OrderId"],
   ["screeningId", "#/components/parameters/ScreeningId"],
   ["subjectId", "#/components/parameters/SubjectId"]
 ]);
@@ -1633,6 +1694,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", "/api/v1/customer/withdrawals"],
     ["getCustomerQuotes", "/api/v1/customer/quotes"],
     ["getCustomerExchangeOrders", "/api/v1/customer/exchange-orders"],
+    ["getCustomerExchangeOrder", "/api/v1/customer/exchange-orders/{orderId}"],
     ["getCustomerPayments", "/api/v1/customer/payments"],
     ["getCustomerCards", "/api/v1/customer/cards"],
     ["getCustomerAuth", "/api/v1/customer/auth"],
@@ -1692,6 +1754,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", gatedReadStatuses],
     ["getCustomerQuotes", gatedReadStatuses],
     ["getCustomerExchangeOrders", gatedReadStatuses],
+    ["getCustomerExchangeOrder", ["200", "401", "403", "404", "429", "500"]],
     ["getCustomerPayments", gatedReadStatuses],
     ["getCustomerCards", gatedReadStatuses],
     ["getCustomerAuth", readStatuses],
@@ -1728,6 +1791,7 @@ function checkOpenApi() {
     ["getCustomerWithdrawals", "#/components/schemas/WithdrawalsView"],
     ["getCustomerQuotes", "#/components/schemas/QuotesView"],
     ["getCustomerExchangeOrders", "#/components/schemas/ExchangeOrdersView"],
+    ["getCustomerExchangeOrder", "#/components/schemas/ExchangeOrderDetailView"],
     ["getCustomerPayments", "#/components/schemas/PaymentsView"],
     ["getCustomerCards", "#/components/schemas/CardsView"],
     ["getCustomerAuth", "#/components/schemas/AuthSessionsView"],
@@ -2062,6 +2126,17 @@ function checkOpenApi() {
       pattern: "^[a-z][a-z0-9_-]{2,127}$"
     }),
     "Canonical OperationId constraints must remain pinned"
+  );
+  const orderIdParameter = parameters.OrderId;
+  assert(orderIdParameter?.required === true, "OrderId must be required when used");
+  assert(orderIdParameter?.in === "path", "OrderId must remain a path parameter");
+  assert(orderIdParameter?.name === "orderId", "OrderId must use orderId");
+  assert(
+    canonicalJson(orderIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^ord_[0-9a-f]{24}$"
+    }),
+    "Canonical OrderId constraints must remain pinned"
   );
   const subjectIdParameter = parameters.SubjectId;
   assert(subjectIdParameter?.required === true, "SubjectId must be required when used");
