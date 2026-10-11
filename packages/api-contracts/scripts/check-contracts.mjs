@@ -363,7 +363,7 @@ const pinnedResponseSchemas = {
     additionalProperties: false,
     required: ["kind", "items", "summary", "posting"],
     properties: {
-      kind: { const: "kyc" },
+      kind: { type: "string", enum: ["kyc", "aml", "tickets"] },
       items: {
         type: "array",
         maxItems: 64,
@@ -378,14 +378,22 @@ const pinnedResponseSchemas = {
           // The item tally is "count", not "total": the money-field
           // convention pins every *total* name to decimalAmount.
           count: { type: "integer", minimum: 0 },
+          // The by_state vocabulary is the union of every kind's states:
+          // kyc and aml items report pending|in_review|escalated, tickets
+          // items report open|waiting|escalated. Only "escalated" exists
+          // in every kind's vocabulary, so the per-kind key sets stay
+          // enforced by the served validator — the contract schema is the
+          // wire ceiling across kinds.
           by_state: {
             type: "object",
             additionalProperties: false,
-            required: ["pending", "in_review", "escalated"],
+            required: ["escalated"],
             properties: {
               pending: { type: "integer", minimum: 0 },
               in_review: { type: "integer", minimum: 0 },
-              escalated: { type: "integer", minimum: 0 }
+              escalated: { type: "integer", minimum: 0 },
+              open: { type: "integer", minimum: 0 },
+              waiting: { type: "integer", minimum: 0 }
             }
           }
         }
@@ -393,27 +401,39 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  // The queue item is the merged kind ceiling: every kind shares the
+  // queue_id/subject_id/state/priority/assignee/age_ms core, and the
+  // per-kind fields (kyc: display_name, submitted_at, sla_due_at; aml:
+  // alert_type, evidence_refs, sla_due_at; tickets: category, opened_at)
+  // stay optional here because the schema cannot express the per-kind
+  // required sets — the served validator enforces them verbatim.
   OperatorQueueItem: {
     type: "object",
     additionalProperties: false,
     required: [
       "queue_id",
       "subject_id",
-      "display_name",
-      "submitted_at",
-      "sla_due_at",
       "state",
       "priority",
       "assignee",
       "age_ms"
     ],
     properties: {
-      queue_id: { type: "string", pattern: "^qky_[0-9a-f]{24}$" },
+      queue_id: { type: "string", pattern: "^(qky|qml|qtick)_[0-9a-f]{24}$" },
       subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
       display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
       submitted_at: { type: "string", format: "date-time" },
       sla_due_at: { type: "string", format: "date-time" },
-      state: { type: "string", enum: ["pending", "in_review", "escalated"] },
+      opened_at: { type: "string", format: "date-time" },
+      alert_type: { type: "string", enum: ["structuring", "velocity", "geo_mismatch"] },
+      evidence_refs: {
+        type: "array",
+        maxItems: 8,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^evd_[0-9a-f]{24}$" }
+      },
+      category: { type: "string", enum: ["question", "operation_problem", "complaint", "data_request"] },
+      state: { type: "string", enum: ["pending", "in_review", "escalated", "open", "waiting"] },
       priority: { type: "string", enum: ["normal", "high", "urgent"] },
       assignee: {
         type: ["object", "null"],
@@ -1077,6 +1097,75 @@ const pinnedResponseSchemas = {
       }
     }
   },
+  MarketDepthView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "mode",
+      "instrument",
+      "base_asset",
+      "quote_asset",
+      "bids",
+      "asks",
+      "last_trade",
+      "depth_levels",
+      "as_of",
+      "posting"
+    ],
+    properties: {
+      mode: { const: "test" },
+      instrument: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      bids: {
+        type: "array",
+        description: "Bid ladder levels, best (highest) price first, capped at 16.",
+        maxItems: 16,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["price", "quantity", "order_count"],
+          properties: {
+            price: { $ref: "#/$defs/decimalAmount" },
+            quantity: { $ref: "#/$defs/decimalAmount" },
+            order_count: { type: "integer", minimum: 1 }
+          }
+        }
+      },
+      asks: {
+        type: "array",
+        description: "Ask ladder levels, best (lowest) price first, capped at 16.",
+        maxItems: 16,
+        items: {
+          type: "object",
+          additionalProperties: false,
+          required: ["price", "quantity", "order_count"],
+          properties: {
+            price: { $ref: "#/$defs/decimalAmount" },
+            quantity: { $ref: "#/$defs/decimalAmount" },
+            order_count: { type: "integer", minimum: 1 }
+          }
+        }
+      },
+      last_trade: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["price", "quantity", "executed_at"],
+        properties: {
+          price: { $ref: "#/$defs/decimalAmount" },
+          quantity: { $ref: "#/$defs/decimalAmount" },
+          executed_at: { type: "string", format: "date-time" }
+        }
+      },
+      depth_levels: {
+        type: "integer",
+        minimum: 0,
+        description: "The deeper side's resting level count before the per-side cap; exceeds the served level count exactly when the ladder was truncated."
+      },
+      as_of: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   MarketView: {
     type: "object",
     additionalProperties: false,
@@ -1595,6 +1684,7 @@ const pinnedParameterNames = new Set([
   "ClientVersion",
   "DeviceId",
   "IdempotencyKey",
+  "Instrument",
   "OperationId",
   "OrderId",
   "Platform",
@@ -1604,11 +1694,12 @@ const pinnedParameterNames = new Set([
 ]);
 
 // Templated paths bind exactly one canonical path parameter per placeholder
-// name: {checkId} -> CheckId, {operationId} -> OperationId,
-// {orderId} -> OrderId, {screeningId} -> ScreeningId,
-// {subjectId} -> SubjectId.
+// name: {checkId} -> CheckId, {instrument} -> Instrument,
+// {operationId} -> OperationId, {orderId} -> OrderId,
+// {screeningId} -> ScreeningId, {subjectId} -> SubjectId.
 const canonicalPathParameters = new Map([
   ["checkId", "#/components/parameters/CheckId"],
+  ["instrument", "#/components/parameters/Instrument"],
   ["operationId", "#/components/parameters/OperationId"],
   ["orderId", "#/components/parameters/OrderId"],
   ["screeningId", "#/components/parameters/ScreeningId"],
@@ -1794,7 +1885,8 @@ function checkOpenApi() {
     ["getCustomerAddressScreenings", "/api/v1/customer/address-screenings"],
     ["getCustomerAddressScreening", "/api/v1/customer/address-screenings/{screeningId}"],
     ["getCustomerTrades", "/api/v1/customer/trades"],
-    ["getCustomerMarkets", "/api/v1/customer/markets"]
+    ["getCustomerMarkets", "/api/v1/customer/markets"],
+    ["getCustomerMarketDepth", "/api/v1/customer/markets/{instrument}"]
   ]);
   const commandOperations = new Set([
     "previewCustomerCheck",
@@ -1855,7 +1947,8 @@ function checkOpenApi() {
     ["getCustomerAddressScreenings", gatedReadStatuses],
     ["getCustomerAddressScreening", ["200", "401", "403", "404", "429", "500"]],
     ["getCustomerTrades", gatedReadStatuses],
-    ["getCustomerMarkets", gatedReadStatuses]
+    ["getCustomerMarkets", gatedReadStatuses],
+    ["getCustomerMarketDepth", ["200", "401", "403", "404", "429", "500"]]
   ]);
   const successSchemas = new Map([
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
@@ -1893,7 +1986,8 @@ function checkOpenApi() {
     ["getCustomerAddressScreenings", "#/components/schemas/AddressScreeningsView"],
     ["getCustomerAddressScreening", "#/components/schemas/AddressScreeningView"],
     ["getCustomerTrades", "#/components/schemas/TradesView"],
-    ["getCustomerMarkets", "#/components/schemas/MarketsView"]
+    ["getCustomerMarkets", "#/components/schemas/MarketsView"],
+    ["getCustomerMarketDepth", "#/components/schemas/MarketDepthView"]
   ]);
   const allowedPathItemFields = new Set([...methodNames, "parameters"]);
   const allowedOperationFields = new Set([
@@ -2217,6 +2311,17 @@ function checkOpenApi() {
       pattern: "^ord_[0-9a-f]{24}$"
     }),
     "Canonical OrderId constraints must remain pinned"
+  );
+  const instrumentParameter = parameters.Instrument;
+  assert(instrumentParameter?.required === true, "Instrument must be required when used");
+  assert(instrumentParameter?.in === "path", "Instrument must remain a path parameter");
+  assert(instrumentParameter?.name === "instrument", "Instrument must use instrument");
+  assert(
+    canonicalJson(instrumentParameter?.schema) === canonicalJson({
+      type: "string",
+      enum: ["USDT/RUB", "TON/RUB", "TON/USDT"]
+    }),
+    "Canonical Instrument constraints must remain pinned"
   );
   const subjectIdParameter = parameters.SubjectId;
   assert(subjectIdParameter?.required === true, "SubjectId must be required when used");

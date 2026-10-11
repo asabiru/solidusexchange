@@ -36,6 +36,7 @@ import {
   createSyntheticMarketDirectory,
   createSyntheticTradeDirectory,
   validExchangeOrdersView,
+  validMarketDepthView,
   validMarketsView, validTradesView
 } from "../src/exchange-orders.mjs";
 import { createSyntheticPaymentDirectory, validPaymentsView } from "../src/payments.mjs";
@@ -147,6 +148,14 @@ const DIRECTORIES = [
     make: () => createSyntheticMarketDirectory(),
     call: (directory, subject) => directory.listFor(subject),
     valid: validMarketsView
+  },
+  {
+    // The depth member read is a fourth projection of the same replay —
+    // the audit pins it holding no per-subject state like every listFor.
+    name: "market-depth",
+    make: () => createSyntheticMarketDirectory(),
+    call: (directory, subject) => directory.depthFor(subject, "USDT/RUB"),
+    valid: validMarketDepthView
   },
   {
     name: "payments",

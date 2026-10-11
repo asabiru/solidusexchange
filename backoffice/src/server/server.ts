@@ -763,6 +763,15 @@ export function createBackofficeServer(
       if (request.method === "GET" && path === "/bff/api/operator/queue") {
         const session = authorized(request, response);
         if (!session) return;
+        // `kind` is the operator queue's only query parameter: absent means
+        // kyc (the default upstream), anything outside the enum is invalid
+        // input and fails closed locally rather than propagating upstream.
+        const kindParam = url.searchParams.get("kind");
+        const kind = kindParam === null ? "kyc" : kindParam;
+        if (kind !== "kyc" && kind !== "aml" && kind !== "tickets") {
+          json(response, 400, { error: "operator_queue_kind_invalid" });
+          return;
+        }
         if (customerApi.configured) {
           // Same device gate as the other operator reads: the upstream
           // audience requires X-Device-Id, so the BFF rejects locally before
@@ -772,70 +781,130 @@ export function createBackofficeServer(
             json(response, 403, { error: "device_required" });
             return;
           }
-          const upstream = await customerApi.operatorQueue(session.subject, deviceId, Date.now());
+          const upstream = await customerApi.operatorQueue(session.subject, deviceId, kind, Date.now());
           if (upstream.status !== "ok") {
             json(response, 503, { error: "operator_queue_unavailable" });
             return;
           }
+          // Per-kind item mapping: every kind carries the shared queue
+          // axes (queueId/subjectId/state/priority/assignee/ageMs); the
+          // kind-specific fields map alongside on the same camelCase
+          // surface, and by_state keys pass through per kind.
+          const items = upstream.view.queue.items.map((item) => {
+            const core = {
+              queueId: item.queue_id,
+              subjectId: item.subject_id,
+              state: item.state,
+              priority: item.priority,
+              assignee: item.assignee === null ? null : { subject: item.assignee.subject },
+              ageMs: item.age_ms
+            };
+            if (upstream.view.queue.kind === "aml") {
+              const aml = item as (typeof upstream.view.queue.items)[number] & {
+                alert_type: string;
+                evidence_refs: readonly string[];
+                sla_due_at: string;
+              };
+              return { ...core, alertType: aml.alert_type, evidenceRefs: [...aml.evidence_refs], slaDueAt: aml.sla_due_at };
+            }
+            if (upstream.view.queue.kind === "tickets") {
+              const ticket = item as (typeof upstream.view.queue.items)[number] & {
+                category: string;
+                opened_at: string;
+              };
+              return { ...core, category: ticket.category, openedAt: ticket.opened_at };
+            }
+            const kyc = item as (typeof upstream.view.queue.items)[number] & {
+              display_name: string;
+              submitted_at: string;
+              sla_due_at: string;
+            };
+            return { ...core, displayName: kyc.display_name, submittedAt: kyc.submitted_at, slaDueAt: kyc.sla_due_at };
+          });
           signed(response, "operator-queue", {
             mode: upstream.view.mode,
             queue: {
               kind: upstream.view.queue.kind,
-              items: upstream.view.queue.items.map((item) => ({
-                queueId: item.queue_id,
-                subjectId: item.subject_id,
-                displayName: item.display_name,
-                submittedAt: item.submitted_at,
-                slaDueAt: item.sla_due_at,
-                state: item.state,
-                priority: item.priority,
-                assignee: item.assignee === null ? null : { subject: item.assignee.subject },
-                ageMs: item.age_ms
-              })),
+              items,
               summary: {
                 count: upstream.view.queue.summary.count,
-                byState: {
-                  pending: upstream.view.queue.summary.by_state.pending,
-                  inReview: upstream.view.queue.summary.by_state.in_review,
-                  escalated: upstream.view.queue.summary.by_state.escalated
-                }
+                byState:
+                  upstream.view.queue.kind === "tickets"
+                    ? {
+                        open: upstream.view.queue.summary.by_state.open,
+                        waiting: upstream.view.queue.summary.by_state.waiting,
+                        escalated: upstream.view.queue.summary.by_state.escalated
+                      }
+                    : {
+                        pending: upstream.view.queue.summary.by_state.pending,
+                        inReview: upstream.view.queue.summary.by_state.in_review,
+                        escalated: upstream.view.queue.summary.by_state.escalated
+                      }
               },
               posting: upstream.view.queue.posting
             }
           });
           return;
         }
-        // Unconfigured: the local KYC roster is the work queue — only
-        // awaiting-review cases occupy it (verified cases have left), with
-        // the upstream-only fields (synthetic refs, SLA deadline, item age,
-        // staff assignee) left null rather than invented.
-        const localItems = demoRepository
-          .kycCases()
-          .filter((row) => row.status !== "verified")
-          .map((row) => ({
-            queueId: null,
-            subjectId: null,
-            displayName: row.subject,
-            submittedAt: row.openedAt,
-            slaDueAt: null,
-            state: row.status === "review" ? "in_review" : "pending",
-            priority: row.riskRating === "High" ? "high" : "normal",
-            assignee: null,
-            ageMs: null
-          }));
+        // Unconfigured: the matching local roster is the work queue for
+        // each kind — only items still occupying the queue appear, with
+        // the upstream-only fields (synthetic refs, derived enums, item
+        // age, staff assignee) left null rather than invented.
+        const localItems =
+          kind === "aml"
+            ? demoRepository.amlCases().map((row) => ({
+                queueId: null,
+                subjectId: null,
+                alertType: null,
+                evidenceRefs: [],
+                slaDueAt: null,
+                state: row.state === "escalated" ? "escalated" : row.state === "review" ? "in_review" : "pending",
+                priority: row.severity === "High" ? "high" : "normal",
+                assignee: null,
+                ageMs: null
+              }))
+            : kind === "tickets"
+              ? demoRepository
+                  .supportTickets()
+                  .filter((row) => row.status !== "resolved")
+                  .map((row) => ({
+                    queueId: null,
+                    subjectId: null,
+                    category: null,
+                    openedAt: row.createdAt,
+                    state: row.status === "escalated" ? "escalated" : row.status === "pending-customer" ? "waiting" : "open",
+                    priority: row.priority === "urgent" ? "urgent" : row.priority === "high" ? "high" : "normal",
+                    assignee: null,
+                    ageMs: null
+                  }))
+              : demoRepository
+                  .kycCases()
+                  .filter((row) => row.status !== "verified")
+                  .map((row) => ({
+                    queueId: null,
+                    subjectId: null,
+                    displayName: row.subject,
+                    submittedAt: row.openedAt,
+                    slaDueAt: null,
+                    state: row.status === "review" ? "in_review" : "pending",
+                    priority: row.riskRating === "High" ? "high" : "normal",
+                    assignee: null,
+                    ageMs: null
+                  }));
+        // Match the upstream summary shape: every state key of the kind is
+        // present even at zero.
+        const byState: Record<string, number> =
+          kind === "tickets" ? { open: 0, waiting: 0, escalated: 0 } : { pending: 0, inReview: 0, escalated: 0 };
+        for (const item of localItems) {
+          const key = item.state === "in_review" ? "inReview" : item.state;
+          byState[key] += 1;
+        }
         signed(response, "operator-queue", {
           mode: "test",
           queue: {
-            kind: "kyc",
+            kind,
             items: localItems,
-            summary: {
-              count: localItems.length,
-              byState: {
-                pending: localItems.filter((item) => item.state === "pending").length,
-                inReview: localItems.filter((item) => item.state === "in_review").length,
-                escalated: localItems.filter((item) => item.state === "escalated").length
-              }
-            },
+            summary: { count: localItems.length, byState },
             posting: "none"
           }
         });

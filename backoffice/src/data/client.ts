@@ -25,6 +25,7 @@ import type {
   ReportListPayload
 } from "./reports.js";
 import type { KycProviderEvidence, KytProviderEvidence, ProviderEvidenceFeed } from "./provider-evidence.js";
+import type { OperatorQueueKind } from "./operator.js";
 
 export interface SignedEnvelope<T> {
   signatureVersion: 1;
@@ -467,8 +468,9 @@ export function getOperatorSubject(subjectId: string): Promise<OperatorSubjectPa
   return getSigned(`/bff/api/operator/subjects/${encodeURIComponent(subjectId)}`, "operator-subject");
 }
 
-export function getOperatorQueue(): Promise<OperatorQueuePayload> {
-  return getSigned("/bff/api/operator/queue", "operator-queue");
+export function getOperatorQueue(kind?: OperatorQueueKind): Promise<OperatorQueuePayload> {
+  const query = kind === undefined ? "" : `?kind=${kind}`;
+  return getSigned(`/bff/api/operator/queue${query}`, "operator-queue");
 }
 
 export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {

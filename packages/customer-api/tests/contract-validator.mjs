@@ -293,11 +293,16 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-// Resolve the operation a concrete request path belongs to. Exact paths win;
-// templated contract paths then match per segment and every captured path
+// Resolve the operation a concrete request path belongs to. The request
+// target splits at the first "?": the declared route is the path portion
+// and the query belongs to it — contract paths never carry a query — so
+// the strip mirrors the server's matcher. Exact paths win; templated
+// contract paths then match per segment and every captured path
 // parameter must satisfy its declared schema, otherwise the path is treated
 // as undeclared (a stray "/api/v1/customer/checks/ABC" never becomes a check).
 function operationFor(contract, validator, method, path) {
+  const questionMark = path.indexOf("?");
+  path = questionMark === -1 ? path : path.slice(0, questionMark);
   const paths = contract.openapi.paths ?? {};
   if (Object.hasOwn(paths, path)) {
     return paths[path][method.toLowerCase()];
@@ -331,7 +336,21 @@ function operationFor(contract, validator, method, path) {
     }
     const satisfied = names.every((name, index) => {
       const schema = declared.get(name);
-      return schema !== undefined && validator.validate(schema, match[index + 1], `path ${name}`).length === 0;
+      if (schema === undefined) {
+        return false;
+      }
+      // The server's {instrument} capture decodes the segment once — its
+      // canonical id carries a '/' separator — so the schema sees the
+      // decoded value. Other parameters validate their raw segment.
+      let value = match[index + 1];
+      if (name === "instrument") {
+        try {
+          value = decodeURIComponent(value);
+        } catch {
+          return false;
+        }
+      }
+      return validator.validate(schema, value, `path ${name}`).length === 0;
     });
     if (satisfied) {
       return operation;
