@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { KYC_STATUSES, OPERATOR_CAPABILITY_POLICY } from "./capabilities.mjs";
+import { syntheticSupportTickets, TICKET_CATEGORIES } from "./support.mjs";
 
 // Deterministic synthetic operator admin source. A future operator-directory
 // adapter replaces it behind `viewFor(subject, grantedCapabilities) ->
@@ -403,15 +404,40 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  */
 
 /**
+ * @typedef {object} OperatorAmlQueueItem
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} alert_type
+ * @property {readonly string[]} evidence_refs
+ * @property {string} sla_due_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ */
+
+/**
+ * @typedef {object} OperatorTicketQueueItem
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} category
+ * @property {string} opened_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ */
+
+/**
  * @typedef {object} OperatorQueueSummary
  * @property {number} count
- * @property {{ pending: number, in_review: number, escalated: number }} by_state
+ * @property {{ [state: string]: number }} by_state
  */
 
 /**
  * @typedef {object} OperatorQueueSection
  * @property {string} kind
- * @property {readonly OperatorQueueItem[]} items
+ * @property {readonly (OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem)[]} items
  * @property {OperatorQueueSummary} summary
  * @property {string} posting
  */
@@ -426,7 +452,7 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  * @typedef {object} OperatorSubjectsDirectory
  * @property {() => Promise<OperatorSubjectsView>} subjectsFor
  * @property {(subjectId: string) => Promise<OperatorSubjectDetailView | null>} subjectFor
- * @property {() => Promise<OperatorQueueView>} queueFor
+ * @property {(kind?: string) => Promise<OperatorQueueView>} queueFor
  */
 
 /**
@@ -702,25 +728,45 @@ export function createSyntheticOperatorSubjectsDirectory() {
     // The queue is a read-only projection of the same roster this directory
     // already owns, so it shares the directory seam instead of minting a
     // third one.
-    async queueFor() {
-      return buildOperatorQueueView();
+    /** @param {string} [kind] */
+    async queueFor(kind) {
+      return buildOperatorQueueView(kind);
     }
   });
 }
 
-// The operator KYC work queue is a read-only projection of the shared
-// customer universe: every subject whose kyc_status is anything but
+// The operator work queue is a read-only projection of the shared customer
+// universe served in three kinds behind the single `operator.queue.read`
+// capability — a queue is the same read tier regardless of the kind it
+// projects, so no kind mints a capability or a gate of its own.
+//
+// `kyc` (the default): every subject whose kyc_status is anything but
 // "verified" occupies the queue — a "pending" application and a still
 // "unverified" file both await operator attention here, and a verified
-// subject leaves it. An item carries only deterministic queue metadata:
-// the opaque qky_* id, the submission timestamp (clamped to never precede
-// the subject's own registration), the SLA deadline at a deterministic 2-5
-// day offset, the review state ("escalated" whenever the roster flags the
-// subject for escalation, "in_review" for a submitted application, else
-// "pending"), the priority that follows it, the assignee that stays null
-// while the item is unclaimed and the age against the pinned snapshot
-// instant. Nothing here mints or implies an approval state change — a
-// queue read is a projection, never a decision surface.
+// subject leaves it.
+//
+// `aml`: every subject the roster still flags for review (an open flag
+// count of at least one) is an open alert — `qml_*` ids, an opaque
+// `alert_type` from the fixed enum, `evd_*` evidence handles only (never
+// raw transaction details), and the same pending/in_review/escalated
+// lifecycle the flag count drives everywhere else.
+//
+// `tickets`: every subject with non-trivial support activity — more than
+// one ticket in the shared support universe — occupies the queue through
+// its newest ticket: `qtick_*` ids, the ticket's own category from the
+// support vocabulary, `opened_at` echoing its creation, and the
+// open/waiting/escalated lifecycle — "open" while the newest ticket sits
+// untouched at "received", "waiting" once the desk engaged it, "escalated"
+// on roster flags.
+//
+// Every item carries only deterministic queue metadata: the opaque queue
+// id, the timestamp draws clamped to never precede the subject's own
+// registration, the SLA deadline at a deterministic offset, the state, the
+// priority that follows it, the assignee that stays null while the item is
+// unclaimed and the age against the pinned snapshot instant. Nothing here
+// mints or implies an approval state change — a queue read is a
+// projection, never a decision surface.
+export const OPERATOR_QUEUE_KINDS = Object.freeze(["kyc", "aml", "tickets"]);
 const QUEUE_KIND = "kyc";
 const QUEUE_VIEW_KEYS = Object.freeze(["mode", "queue"]);
 const QUEUE_KEYS = Object.freeze(["items", "kind", "posting", "summary"]);
@@ -735,12 +781,48 @@ const QUEUE_ITEM_KEYS = Object.freeze([
   "subject_id",
   "submitted_at"
 ]);
+const AML_QUEUE_ITEM_KEYS = Object.freeze([
+  "age_ms",
+  "alert_type",
+  "assignee",
+  "evidence_refs",
+  "priority",
+  "queue_id",
+  "sla_due_at",
+  "state",
+  "subject_id"
+]);
+const TICKET_QUEUE_ITEM_KEYS = Object.freeze([
+  "age_ms",
+  "assignee",
+  "category",
+  "opened_at",
+  "priority",
+  "queue_id",
+  "state",
+  "subject_id"
+]);
 const QUEUE_SUMMARY_KEYS = Object.freeze(["by_state", "count"]);
 export const OPERATOR_QUEUE_STATES = Object.freeze(["pending", "in_review", "escalated"]);
-const QUEUE_STATE_KEYS = Object.freeze([...OPERATOR_QUEUE_STATES].sort());
+export const OPERATOR_TICKET_QUEUE_STATES = Object.freeze(["open", "waiting", "escalated"]);
+const QUEUE_KIND_STATES = Object.freeze({
+  kyc: OPERATOR_QUEUE_STATES,
+  aml: OPERATOR_QUEUE_STATES,
+  tickets: OPERATOR_TICKET_QUEUE_STATES
+});
+const QUEUE_STATE_KEYS = Object.freeze(
+  Object.fromEntries(
+    Object.entries(QUEUE_KIND_STATES).map(([kind, states]) => [kind, Object.freeze([...states].sort())])
+  )
+);
 export const OPERATOR_QUEUE_PRIORITIES = Object.freeze(["normal", "high", "urgent"]);
 const QUEUE_ASSIGNEE_KEYS = Object.freeze(["subject"]);
 const QUEUE_ID_PATTERN = /^qky_[0-9a-f]{24}$/u;
+const AML_QUEUE_ID_PATTERN = /^qml_[0-9a-f]{24}$/u;
+const TICKET_QUEUE_ID_PATTERN = /^qtick_[0-9a-f]{24}$/u;
+const EVIDENCE_REF_PATTERN = /^evd_[0-9a-f]{24}$/u;
+const EVIDENCE_REFS_MAX_ITEMS = 8;
+const AML_ALERT_TYPES = Object.freeze(["structuring", "velocity", "geo_mismatch"]);
 const QUEUE_MAX_ITEMS = 64;
 // The pinned snapshot instant the queue ages against. The read is a pure
 // function, so its "now" is part of the derivation — it lands after every
@@ -750,6 +832,11 @@ const QUEUE_SNAPSHOT_MS = BASE_MS + 150 * 86_400_000;
 const QUEUE_AGE_WINDOW_MS = 21 * 86_400_000;
 const QUEUE_SLA_BASE_MS = 2 * 86_400_000;
 const QUEUE_SLA_JITTER_MS = 3 * 86_400_000;
+const AML_AGE_WINDOW_MS = 28 * 86_400_000;
+const AML_SLA_BASE_MS = 86_400_000;
+const AML_SLA_JITTER_MS = 2 * 86_400_000;
+const AML_FLAGS_MIN = 1;
+const TICKET_QUEUE_MIN_TICKETS = 2;
 const QUEUE_ESCALATION_FLAGS_MIN = 4;
 const QUEUE_HIGH_FLAGS_MIN = 2;
 
@@ -817,8 +904,108 @@ function buildQueueItem(row) {
   });
 }
 
+/**
+ * The AML lifecycle rides the roster's flag count alone: at least one open
+ * flag means the alert exists, escalation follows the same escalation
+ * threshold the KYC item uses, anything below it is an in-review item a
+ * staff member picked up, and a single-flag subject is still an awaiting
+ * alert nobody claimed.
+ * @param {OperatorSubjectRow} row
+ * @returns {string}
+ */
+function amlQueueItemState(row) {
+  if (row.flags >= QUEUE_ESCALATION_FLAGS_MIN) {
+    return "escalated";
+  }
+  return row.flags >= QUEUE_HIGH_FLAGS_MIN ? "in_review" : "pending";
+}
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @returns {OperatorAmlQueueItem}
+ */
+function buildAmlQueueItem(row) {
+  const subjectId = row.subject_id;
+  const registeredMs = Date.parse(row.registered_at);
+  // An alert can never be raised before the account exists: the
+  // deterministic age draw is clamped to the subject's own registration.
+  const raisedMs = Math.max(
+    registeredMs,
+    QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "aml-age", BigInt(AML_AGE_WINDOW_MS)))
+  );
+  const slaDueMs =
+    raisedMs + AML_SLA_BASE_MS + Number(subjectsUnits(subjectId, "aml-sla", BigInt(AML_SLA_JITTER_MS)));
+  const state = amlQueueItemState(row);
+  // Evidence stays opaque evd_* handles minted from the same digest recipe —
+  // the queue never leaks raw transaction or screening details.
+  const evidenceCount = 1 + Number(subjectsUnits(subjectId, "aml-evidence-count", BigInt(EVIDENCE_REFS_MAX_ITEMS - 1)));
+  const evidenceRefs = [];
+  for (let index = 0; index < evidenceCount; index += 1) {
+    evidenceRefs.push(
+      `evd_${subjectsDigest(subjectId, `aml-evidence-${index}`).toString("hex").slice(0, 24)}`
+    );
+  }
+  return Object.freeze({
+    queue_id: `qml_${subjectsDigest(subjectId, "aml-queue").toString("hex").slice(0, 24)}`,
+    subject_id: subjectId,
+    alert_type:
+      AML_ALERT_TYPES[Number(subjectsUnits(subjectId, "aml-alert-type", BigInt(AML_ALERT_TYPES.length)))],
+    evidence_refs: Object.freeze(evidenceRefs),
+    sla_due_at: new Date(slaDueMs).toISOString(),
+    state,
+    priority: queueItemPriority(row, state),
+    // An awaiting alert is unclaimed; once an operator picks it up the
+    // assignee is a deterministic syn_oper_* staff ref inside the nested
+    // slot (nullable only inside a nested object, per the money precedent).
+    assignee: state === "pending"
+      ? null
+      : Object.freeze({
+          subject: `syn_oper_${subjectsDigest(subjectId, "aml-assignee").toString("hex").slice(0, 16)}`
+        }),
+    age_ms: QUEUE_SNAPSHOT_MS - raisedMs
+  });
+}
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @param {import("./support.mjs").TicketView} ticket
+ * @returns {OperatorTicketQueueItem}
+ */
+function buildTicketQueueItem(row, ticket) {
+  const subjectId = row.subject_id;
+  // The roster's flag count escalates the item outright; a ticket still
+  // untouched at "received" is open work, anything further along is the
+  // desk's in-flight item — an operator already engaged it.
+  const state =
+    row.flags >= QUEUE_ESCALATION_FLAGS_MIN ? "escalated" : ticket.status === "received" ? "open" : "waiting";
+  // A complaint or a flagged subject pulls the item up a tier; escalation
+  // already sets the ceiling.
+  const priority =
+    state === "escalated"
+      ? "urgent"
+      : ticket.category === "complaint" || row.flags >= QUEUE_HIGH_FLAGS_MIN
+        ? "high"
+        : "normal";
+  return Object.freeze({
+    queue_id: `qtick_${subjectsDigest(subjectId, "ticket-queue").toString("hex").slice(0, 24)}`,
+    subject_id: subjectId,
+    category: ticket.category,
+    opened_at: ticket.created_at,
+    state,
+    priority,
+    // An open ticket is unclaimed; once the desk engages it the assignee is
+    // a deterministic syn_oper_* staff ref inside the nested slot.
+    assignee: state === "open"
+      ? null
+      : Object.freeze({
+          subject: `syn_oper_${subjectsDigest(subjectId, "ticket-assignee").toString("hex").slice(0, 16)}`
+        }),
+    age_ms: QUEUE_SNAPSHOT_MS - Date.parse(ticket.created_at)
+  });
+}
+
 /** @returns {readonly OperatorQueueItem[]} */
-function expectedQueueItems() {
+function expectedKycQueueItems() {
   const items = [];
   for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
     const row = buildSubjectRow(index);
@@ -836,30 +1023,120 @@ function expectedQueueItems() {
   return items;
 }
 
+/** @returns {readonly OperatorAmlQueueItem[]} */
+function expectedAmlQueueItems() {
+  const items = [];
+  for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
+    const row = buildSubjectRow(index);
+    if (row.flags < AML_FLAGS_MIN) {
+      continue;
+    }
+    items.push(buildAmlQueueItem(row));
+  }
+  items.sort((left, right) =>
+    left.sla_due_at === right.sla_due_at
+      ? left.queue_id.localeCompare(right.queue_id)
+      : left.sla_due_at.localeCompare(right.sla_due_at)
+  );
+  return items;
+}
+
+/** @returns {readonly OperatorTicketQueueItem[]} */
+function expectedTicketQueueItems() {
+  const items = [];
+  for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
+    const row = buildSubjectRow(index);
+    // Non-trivial support activity is repeat contact: a single ticket is
+    // routine, two or more land the subject's newest ticket in the queue.
+    const tickets = syntheticSupportTickets(row.subject_id);
+    if (tickets.length < TICKET_QUEUE_MIN_TICKETS) {
+      continue;
+    }
+    items.push(buildTicketQueueItem(row, tickets[0]));
+  }
+  // Oldest untouched work first; the id breaks ties so the order is total.
+  items.sort((left, right) =>
+    left.opened_at === right.opened_at
+      ? left.queue_id.localeCompare(right.queue_id)
+      : left.opened_at.localeCompare(right.opened_at)
+  );
+  return items;
+}
+
 /**
- * @param {readonly OperatorQueueItem[]} items
+ * @param {string} kind
+ * @returns {readonly (OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem)[]}
+ */
+function expectedQueueItems(kind) {
+  if (kind === "aml") {
+    return expectedAmlQueueItems();
+  }
+  if (kind === "tickets") {
+    return expectedTicketQueueItems();
+  }
+  return expectedKycQueueItems();
+}
+
+/**
+ * @param {string} kind
+ * @param {readonly (OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem)[]} items
  * @returns {OperatorQueueSummary}
  */
-function queueSummary(items) {
-  const byState = { pending: 0, in_review: 0, escalated: 0 };
+function queueSummary(kind, items) {
+  /** @type {{ [state: string]: number }} */
+  const byState = {};
+  for (const state of QUEUE_KIND_STATES[/** @type {"kyc" | "aml" | "tickets"} */ (kind)]) {
+    byState[state] = 0;
+  }
   for (const item of items) {
-    byState[/** @type {"pending" | "in_review" | "escalated"} */ (item.state)] += 1;
+    byState[item.state] += 1;
   }
   return Object.freeze({ count: items.length, by_state: Object.freeze(byState) });
 }
 
-/** @returns {OperatorQueueView} */
-function buildOperatorQueueView() {
-  const items = expectedQueueItems();
+/**
+ * @param {string} [kind]
+ * @returns {OperatorQueueView}
+ */
+function buildOperatorQueueView(kind = QUEUE_KIND) {
+  if (!OPERATOR_QUEUE_KINDS.includes(kind)) {
+    // A kind outside the enum never mints a view — the request layer
+    // rejects it before the directory is reached, and any other caller
+    // fails closed here.
+    throw new Error("Unknown operator queue kind");
+  }
+  const items = expectedQueueItems(kind);
   return Object.freeze({
     mode: "test",
     queue: Object.freeze({
-      kind: QUEUE_KIND,
+      kind,
       items: Object.freeze(items),
-      summary: queueSummary(items),
+      summary: queueSummary(kind, items),
       posting: "none"
     })
   });
+}
+
+/**
+ * The assignee slot is the same nested shape for every kind: null while the
+ * item is unclaimed, else a single `subject` key holding a syn_oper_*
+ * staff ref.
+ * @param {unknown} assignee
+ */
+function validQueueAssignee(assignee) {
+  if (assignee === null) {
+    return true;
+  }
+  if (typeof assignee !== "object" || Array.isArray(assignee)) {
+    return false;
+  }
+  const candidate = /** @type {{ subject: unknown }} */ (assignee);
+  return (
+    JSON.stringify(Object.keys(assignee).sort()) ===
+      JSON.stringify([...QUEUE_ASSIGNEE_KEYS].sort()) &&
+    typeof candidate.subject === "string" &&
+    SUBJECT_PATTERN.test(candidate.subject)
+  );
 }
 
 /** @param {unknown} item */
@@ -888,19 +1165,60 @@ function validQueueItemShape(item) {
   if (Date.parse(candidate.sla_due_at) <= Date.parse(candidate.submitted_at)) {
     return false;
   }
-  if (candidate.assignee === null) {
-    return true;
-  }
-  if (typeof candidate.assignee !== "object" || Array.isArray(candidate.assignee)) {
+  return validQueueAssignee(candidate.assignee);
+}
+
+/** @param {unknown} item */
+function validAmlQueueItemShape(item) {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
     return false;
   }
-  const assignee = /** @type {{ subject: unknown }} */ (candidate.assignee);
-  return (
-    JSON.stringify(Object.keys(candidate.assignee).sort()) ===
-      JSON.stringify([...QUEUE_ASSIGNEE_KEYS].sort()) &&
-    typeof assignee.subject === "string" &&
-    SUBJECT_PATTERN.test(assignee.subject)
-  );
+  const candidate = /** @type {OperatorAmlQueueItem} */ (item);
+  if (JSON.stringify(Object.keys(item).sort()) !== JSON.stringify([...AML_QUEUE_ITEM_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !AML_QUEUE_ID_PATTERN.test(candidate.queue_id) ||
+    !CUSTOMER_SUBJECT_PATTERN.test(candidate.subject_id) ||
+    !AML_ALERT_TYPES.includes(candidate.alert_type) ||
+    !Array.isArray(candidate.evidence_refs) ||
+    candidate.evidence_refs.length < 1 ||
+    candidate.evidence_refs.length > EVIDENCE_REFS_MAX_ITEMS ||
+    new Set(candidate.evidence_refs).size !== candidate.evidence_refs.length ||
+    !candidate.evidence_refs.every((ref) => EVIDENCE_REF_PATTERN.test(ref)) ||
+    !OPERATOR_QUEUE_STATES.includes(candidate.state) ||
+    !OPERATOR_QUEUE_PRIORITIES.includes(candidate.priority) ||
+    !Number.isInteger(candidate.age_ms) ||
+    candidate.age_ms < 0 ||
+    !isIsoTimestamp(candidate.sla_due_at)
+  ) {
+    return false;
+  }
+  return validQueueAssignee(candidate.assignee);
+}
+
+/** @param {unknown} item */
+function validTicketQueueItemShape(item) {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorTicketQueueItem} */ (item);
+  if (JSON.stringify(Object.keys(item).sort()) !== JSON.stringify([...TICKET_QUEUE_ITEM_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !TICKET_QUEUE_ID_PATTERN.test(candidate.queue_id) ||
+    !CUSTOMER_SUBJECT_PATTERN.test(candidate.subject_id) ||
+    !(/** @type {readonly string[]} */ (TICKET_CATEGORIES)).includes(candidate.category) ||
+    !OPERATOR_TICKET_QUEUE_STATES.includes(candidate.state) ||
+    !OPERATOR_QUEUE_PRIORITIES.includes(candidate.priority) ||
+    !Number.isInteger(candidate.age_ms) ||
+    candidate.age_ms < 0 ||
+    !isIsoTimestamp(candidate.opened_at)
+  ) {
+    return false;
+  }
+  return validQueueAssignee(candidate.assignee);
 }
 
 /** @param {unknown} view */
@@ -923,13 +1241,22 @@ export function validOperatorQueueView(view) {
   if (JSON.stringify(Object.keys(queue).sort()) !== JSON.stringify([...QUEUE_KEYS].sort())) {
     return false;
   }
-  if (section.kind !== QUEUE_KIND || section.posting !== "none") {
+  // The declared kind selects the item shape, the state vocabulary and the
+  // derivation; a kind outside the enum is not a queue view at all.
+  const kind = section.kind;
+  if (!OPERATOR_QUEUE_KINDS.includes(kind) || section.posting !== "none") {
     return false;
   }
+  const validItemShape =
+    kind === "aml"
+      ? validAmlQueueItemShape
+      : kind === "tickets"
+        ? validTicketQueueItemShape
+        : validQueueItemShape;
   if (!Array.isArray(section.items) || section.items.length > QUEUE_MAX_ITEMS) {
     return false;
   }
-  if (!section.items.every(validQueueItemShape)) {
+  if (!section.items.every(validItemShape)) {
     return false;
   }
   const summary = /** @type {unknown} */ (section.summary);
@@ -943,7 +1270,8 @@ export function validOperatorQueueView(view) {
   if (byState === null || typeof byState !== "object" || Array.isArray(byState)) {
     return false;
   }
-  if (JSON.stringify(Object.keys(byState).sort()) !== JSON.stringify([...QUEUE_STATE_KEYS].sort())) {
+  const stateKeys = QUEUE_STATE_KEYS[/** @type {"kyc" | "aml" | "tickets"} */ (kind)];
+  if (JSON.stringify(Object.keys(byState).sort()) !== JSON.stringify([...stateKeys].sort())) {
     return false;
   }
   if (
@@ -958,9 +1286,11 @@ export function validOperatorQueueView(view) {
   // The queue is a pure function of the shared roster: the item set must
   // equal the deterministic membership derivation verbatim — membership,
   // order and every derived field — and the summary must equal the counts
-  // recomputed over it. Anything else is a fabricated read and fails
-  // closed.
-  const expected = expectedQueueItems();
+  // recomputed over it. The expected set is built from the roster rows
+  // alone, so verbatim equality is also the subject cross-check: any item
+  // referencing a subject outside `subjectsFor()` fails the comparison.
+  // Anything else is a fabricated read and fails closed.
+  const expected = expectedQueueItems(kind);
   if (section.items.length !== expected.length) {
     return false;
   }
@@ -969,11 +1299,11 @@ export function validOperatorQueueView(view) {
       return false;
     }
   }
-  const recomputed = queueSummary(expected);
+  const recomputed = queueSummary(kind, expected);
   return (
     section.summary.count === recomputed.count &&
-    section.summary.by_state.pending === recomputed.by_state.pending &&
-    section.summary.by_state.in_review === recomputed.by_state.in_review &&
-    section.summary.by_state.escalated === recomputed.by_state.escalated
+    stateKeys.every(
+      (state) => section.summary.by_state[state] === recomputed.by_state[state]
+    )
   );
 }

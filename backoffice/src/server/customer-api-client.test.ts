@@ -678,3 +678,103 @@ describe("customer API operator client", () => {
     }
   });
 });
+
+describe("operatorQueue", () => {
+  it("reads every queue kind from the dev customer API with the kind query", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      for (const kind of ["kyc", "aml", "tickets"] as const) {
+        const result = await client.operatorQueue("dev:auditor", testDeviceId, kind, Date.now());
+        assert.equal(result.status, "ok", kind);
+        if (result.status !== "ok") continue;
+        assert.equal(result.view.mode, "test");
+        assert.equal(result.view.queue.kind, kind);
+        assert.equal(result.view.queue.posting, "none");
+        assert.equal(result.view.queue.summary.count, result.view.queue.items.length);
+        for (const item of result.view.queue.items) {
+          assert.match(item.subject_id, /^syn_cust_[a-z0-9]{8,32}$/);
+          assert.match(item.priority, /^(normal|high|urgent)$/);
+          assert.ok(Number.isInteger(item.age_ms) && item.age_ms >= 0);
+        }
+      }
+    });
+  });
+
+  it("sends the kind query and the operator headers upstream", async () => {
+    const key = randomBytes(32).toString("hex");
+    const seenUrls: (string | undefined)[] = [];
+    await withFakeApi(
+      (path) => {
+        seenUrls.push(path);
+        return {
+          mode: "test",
+          queue: {
+            kind: "aml",
+            items: [{
+              queue_id: "qml_00112233445566778899aabb",
+              subject_id: "syn_cust_00112233445566778899aabb",
+              alert_type: "velocity",
+              evidence_refs: ["evd_00112233445566778899aabb"],
+              sla_due_at: "2026-09-23T00:00:00.000Z",
+              state: "pending",
+              priority: "normal",
+              assignee: null,
+              age_ms: 1_000_000
+            }],
+            summary: { count: 1, by_state: { pending: 1, in_review: 0, escalated: 0 } },
+            posting: "none"
+          }
+        };
+      },
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.operatorQueue("dev:auditor", testDeviceId, "aml", Date.now());
+        assert.equal(result.status, "ok");
+        assert.equal(seenUrls[0], "/api/v1/operator/queue?kind=aml");
+        assert.equal(seen[0]["x-device-id"], testDeviceId);
+        assert.match(
+          String(seen[0].authorization),
+          new RegExp(`^Bearer sodev1\\.${customerApiSubject("dev:auditor")}\\.[0-9]{10}\\.[0-9a-f]{64}$`)
+        );
+      }
+    );
+  });
+
+  it("answers malformed device ids and never reaches upstream for any kind", async () => {
+    const key = randomBytes(32).toString("hex");
+    let calls = 0;
+    await withFakeApi(
+      () => {
+        calls += 1;
+        return { status: "ok" };
+      },
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const kind of ["kyc", "aml", "tickets"] as const) {
+          assert.deepEqual(await client.operatorQueue("dev:auditor", "not-a-device", kind, Date.now()), { status: "unavailable" }, kind);
+        }
+        assert.equal(calls, 0);
+      }
+    );
+  });
+
+  it("fails closed on a kind-mismatched view (aml requested, kyc answered)", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withFakeApi(
+      () => ({
+        mode: "test",
+        queue: {
+          kind: "kyc",
+          items: [],
+          summary: { count: 0, by_state: { pending: 0, in_review: 0, escalated: 0 } },
+          posting: "none"
+        }
+      }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(await client.operatorQueue("dev:auditor", testDeviceId, "aml", Date.now()), { status: "unavailable" });
+      }
+    );
+  });
+});

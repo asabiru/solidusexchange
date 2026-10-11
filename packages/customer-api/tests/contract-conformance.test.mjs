@@ -86,7 +86,9 @@ async function withServer(options, run) {
 
 function headerParameterNames(operation) {
   return operation.parameters
-    .map((parameter) => validator.resolve(parameter.$ref))
+    // Parameters may be declared inline (the operator queue's `kind` query
+    // parameter) as well as by reference into components.parameters.
+    .map((parameter) => parameter.$ref === undefined ? parameter : validator.resolve(parameter.$ref))
     .filter((parameter) => parameter.in === "header" && parameter.required)
     .map((parameter) => parameter.name.toLowerCase());
 }

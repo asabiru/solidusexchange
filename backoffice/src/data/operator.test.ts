@@ -202,7 +202,116 @@ describe("operator queue adapter", () => {
         key
       );
     }
-    assert.equal(parseOperatorQueueView({ mode: "test", queue: { ...queuePayload.queue, kind: "aml" } }), undefined);
+    assert.equal(parseOperatorQueueView({ mode: "test", queue: { ...queuePayload.queue, kind: "fraud" } }), undefined);
     assert.equal(parseOperatorQueueView({ mode: "test", queue: { ...queuePayload.queue, posting: "pending" } }), undefined);
+  });
+
+  it("maps the aml projection with its own item shape", () => {
+    const amlItem = {
+      queueId: "qml_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      alertType: "structuring",
+      evidenceRefs: ["evd_0123456789abcdef01234567", "evd_89abcdef0123456701234567"],
+      slaDueAt: "2026-10-12T10:00:00.000Z",
+      state: "in_review",
+      priority: "high",
+      assignee: { subject: "syn_oper_alice001" },
+      ageMs: 120000
+    };
+    const parsed = parseOperatorQueueView({
+      mode: "test",
+      queue: {
+        kind: "aml",
+        items: [amlItem],
+        summary: { count: 1, byState: { pending: 0, inReview: 1, escalated: 0 } },
+        posting: "none"
+      }
+    });
+    assert.ok(parsed !== undefined);
+    assert.equal(parsed.queue.kind, "aml");
+    if (parsed.queue.kind !== "aml") return;
+    const item = parsed.queue.items[0];
+    assert.equal(item.alertType, "structuring");
+    assert.deepEqual([...item.evidenceRefs], [...amlItem.evidenceRefs]);
+    assert.equal(item.slaDueAt, amlItem.slaDueAt);
+    assert.equal(item.assignee?.subject, "syn_oper_alice001");
+  });
+
+  it("maps the tickets projection with its own item shape and state vocabulary", () => {
+    const ticketItem = {
+      queueId: "qtick_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      category: "operation_problem",
+      openedAt: "2026-10-09T10:00:00.000Z",
+      state: "waiting",
+      priority: "normal",
+      assignee: { subject: "syn_oper_alice001" },
+      ageMs: 120000
+    };
+    const parsed = parseOperatorQueueView({
+      mode: "test",
+      queue: {
+        kind: "tickets",
+        items: [ticketItem],
+        summary: { count: 1, byState: { open: 0, waiting: 1, escalated: 0 } },
+        posting: "none"
+      }
+    });
+    assert.ok(parsed !== undefined);
+    if (parsed.queue.kind !== "tickets") return;
+    const item = parsed.queue.items[0];
+    assert.equal(item.category, "operation_problem");
+    assert.equal(item.openedAt, ticketItem.openedAt);
+    assert.equal(item.state, "waiting");
+  });
+
+  it("rejects per-kind item and state drift", () => {
+    const amlItem = {
+      queueId: "qml_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      alertType: "structuring",
+      evidenceRefs: ["evd_0123456789abcdef01234567"],
+      slaDueAt: "2026-10-12T10:00:00.000Z",
+      state: "pending",
+      priority: "high",
+      assignee: null,
+      ageMs: 120000
+    };
+    const amlQueue = (item: unknown, byState: unknown = { pending: 1, inReview: 0, escalated: 0 }) => ({
+      mode: "test",
+      queue: { kind: "aml", items: [item], summary: { count: 1, byState }, posting: "none" }
+    });
+    const ticketItem = {
+      queueId: "qtick_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      category: "complaint",
+      openedAt: "2026-10-09T10:00:00.000Z",
+      state: "open",
+      priority: "normal",
+      assignee: null,
+      ageMs: 120000
+    };
+    const ticketQueue = (item: unknown, byState: unknown = { open: 1, waiting: 0, escalated: 0 }) => ({
+      mode: "test",
+      queue: { kind: "tickets", items: [item], summary: { count: 1, byState }, posting: "none" }
+    });
+    const cases: [unknown, string][] = [
+      [amlQueue({ ...amlItem, alertType: "sanctions" }), "aml alert type"],
+      [amlQueue({ ...amlItem, evidenceRefs: ["evd_short"] }), "aml evidence ref grammar"],
+      [amlQueue({ ...amlItem, evidenceRefs: [] }), "aml empty evidence"],
+      [amlQueue({ ...amlItem, evidenceRefs: ["evd_0123456789abcdef01234567", "evd_0123456789abcdef01234567"] }), "aml duplicate evidence"],
+      [amlQueue({ ...amlItem, queueId: "qky_0123456789abcdef01234567" }), "aml wrong ref family"],
+      [amlQueue({ ...amlItem, state: "open" }), "aml state outside kyc vocabulary"],
+      [amlQueue(amlItem, { open: 1, waiting: 0, escalated: 0 }), "aml summary in ticket vocabulary"],
+      [amlQueue({ ...amlItem, displayName: "Aibek Ermatov" }), "aml extra key"],
+      [ticketQueue({ ...ticketItem, category: "appeal" }), "ticket category"],
+      [ticketQueue({ ...ticketItem, state: "pending" }), "ticket state outside vocabulary"],
+      [ticketQueue({ ...ticketItem, queueId: "tck_0123456789abcdef01234567" }), "ticket wrong ref family"],
+      [ticketQueue(ticketItem, { pending: 1, inReview: 0, escalated: 0 }), "ticket summary in kyc vocabulary"],
+      [ticketQueue({ ...ticketItem, slaDueAt: "2026-10-12T10:00:00.000Z" }), "ticket extra key"]
+    ];
+    for (const [payload, label] of cases) {
+      assert.equal(parseOperatorQueueView(payload), undefined, label);
+    }
   });
 });

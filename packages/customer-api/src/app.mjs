@@ -28,6 +28,7 @@ import {
 } from "./observability.mjs";
 import { validNotificationsView } from "./notifications.mjs";
 import {
+  OPERATOR_QUEUE_KINDS,
   operatorCapabilitiesViewFor,
   operatorSessionViewFor,
   validOperatorAdminView,
@@ -134,25 +135,32 @@ const INSTRUMENT_PATH_PATTERN = /^[A-Z0-9]{2,8}\/[A-Z0-9]{2,8}$/u;
  * paths compare by string equality; templated paths ({operationId}) match
  * segment-wise and capture values only when every captured segment
  * satisfies the canonical path-parameter pattern. Anything else falls
- * through to the pinned 404.
+ * through to the pinned 404. The request target splits at the first "?":
+ * the path portion is the declared route, and a query is accepted only on
+ * the operator queue — the single operation that declares a query
+ * parameter — so every other route keeps its byte-identical behavior.
  *
  * @param {string | undefined} method
  * @param {string | undefined} url
- * @returns {{ operation: Operation, parameters: ReadonlyMap<string, string> } | null}
+ * @returns {{ operation: Operation, parameters: ReadonlyMap<string, string>, query: string } | null}
  */
 function matchOperation(method, url) {
+  const target = typeof url === "string" ? url : "";
+  const questionMark = target.indexOf("?");
+  const pathname = questionMark === -1 ? target : target.slice(0, questionMark);
+  const query = questionMark === -1 ? "" : target.slice(questionMark + 1);
   for (const operation of OPERATIONS) {
     if (operation.method !== method) {
       continue;
     }
-    if (operation.path === url) {
-      return { operation, parameters: new Map() };
+    if (operation.path === pathname) {
+      return queryOperation(operation, new Map(), questionMark !== -1, query);
     }
-    if (!operation.path.includes("{") || url === undefined) {
+    if (!operation.path.includes("{")) {
       continue;
     }
     const templateSegments = operation.path.split("/");
-    const urlSegments = url.split("/");
+    const urlSegments = pathname.split("/");
     if (templateSegments.length !== urlSegments.length) {
       continue;
     }
@@ -191,10 +199,52 @@ function matchOperation(method, url) {
       parameters.set(parameterName, value);
     }
     if (matched) {
-      return { operation, parameters };
+      return queryOperation(operation, parameters, questionMark !== -1, query);
     }
   }
   return null;
+}
+
+/**
+ * A query string is part of the declared surface only for the operation
+ * that declares a query parameter (the operator queue's `kind`); anywhere
+ * else it is undeclared input and the route fails to match, exactly as
+ * before.
+ * @param {Operation} operation
+ * @param {ReadonlyMap<string, string>} parameters
+ * @param {boolean} hasQuery
+ * @param {string} query
+ * @returns {{ operation: Operation, parameters: ReadonlyMap<string, string>, query: string } | null}
+ */
+function queryOperation(operation, parameters, hasQuery, query) {
+  if (hasQuery && operation.operationId !== "getOperatorQueue") {
+    return null;
+  }
+  return { operation, parameters, query };
+}
+
+/**
+ * The queue's only query parameter. Strict allowlist semantics: `kind` may
+ * appear at most once and only with an enum value; any other key, a
+ * duplicate or an out-of-enum value is malformed input and fails closed.
+ * @param {string} query
+ * @returns {string | null}
+ */
+function operatorQueueKind(query) {
+  if (query === "") {
+    return OPERATOR_QUEUE_KINDS[0];
+  }
+  const parameters = new URLSearchParams(query);
+  let kind = OPERATOR_QUEUE_KINDS[0];
+  let seen = false;
+  for (const [name, value] of parameters) {
+    if (name !== "kind" || seen || !OPERATOR_QUEUE_KINDS.includes(value)) {
+      return null;
+    }
+    seen = true;
+    kind = value;
+  }
+  return kind;
 }
 
 const BASE_HEADERS = Object.freeze({
@@ -440,8 +490,9 @@ export function createCustomerApiHandler({
    * @param {string} requestId
    * @param {Operation} operation
    * @param {ReadonlyMap<string, string>} parameters
+   * @param {string} query
    */
-  async function handleOperation(request, response, headers, requestId, operation, parameters) {
+  async function handleOperation(request, response, headers, requestId, operation, parameters, query) {
     /**
      * @param {number} status
      * @param {ErrorCode} code
@@ -640,16 +691,26 @@ export function createCustomerApiHandler({
     }
 
     if (operation.operationId === "getOperatorQueue") {
-      // operator.queue.read is granted to the operator audience by policy:
-      // the operator token and device identifier are the gate, KYC never
-      // applies to staff surfaces. The check stays so a served route can
-      // never drift from the capabilities the service exposes.
+      // `kind` selects the projected queue (kyc|aml|tickets, default kyc);
+      // a malformed kind is invalid input, so it answers with the same
+      // VALIDATION_FAILED the malformed-header rules use — an undeclared
+      // 400 is the pinned contract gap for this class.
+      const kind = operatorQueueKind(query);
+      if (kind === null) {
+        fail(400, "VALIDATION_FAILED", "kind must be exactly one of: kyc, aml, tickets.");
+        return;
+      }
+      // operator.queue.read is granted to the operator audience by policy
+      // and covers every kind — a queue is the same read-only projection
+      // tier regardless of kind, so no kind gets a capability of its own.
+      // The check stays so a served route can never drift from the
+      // capabilities the service exposes.
       const operatorEvaluation = evaluateOperatorCapabilities();
       if (!operatorEvaluation.granted.includes("operator.queue.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
       }
-      const view = await operatorSubjectsDirectory.queueFor();
+      const view = await operatorSubjectsDirectory.queueFor(kind);
       if (!validOperatorQueueView(view)) {
         throw new Error("Operator subjects directory returned an invalid queue view");
       }
@@ -1143,7 +1204,7 @@ export function createCustomerApiHandler({
         send(response, 404, errorBody("CAPABILITY_DENIED", requestId), requestId);
         return;
       }
-      await handleOperation(request, response, headers, requestId, match.operation, match.parameters);
+      await handleOperation(request, response, headers, requestId, match.operation, match.parameters, match.query);
     } catch {
       if (!response.headersSent) {
         send(response, 500, errorBody("INTERNAL_ERROR", requestId), requestId, {

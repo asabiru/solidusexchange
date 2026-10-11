@@ -6,7 +6,9 @@ import { evaluateOperatorCapabilities } from "../src/capabilities.mjs";
 import {
   createSyntheticOperatorDirectory,
   createSyntheticOperatorSubjectsDirectory,
+  OPERATOR_QUEUE_KINDS,
   OPERATOR_ROLES,
+  OPERATOR_TICKET_QUEUE_STATES,
   operatorCapabilitiesViewFor,
   operatorSessionViewFor,
   validOperatorAdminView,
@@ -16,6 +18,7 @@ import {
   validOperatorSubjectDetailView,
   validOperatorSubjectsView
 } from "../src/operator.mjs";
+import { syntheticSupportTickets, TICKET_CATEGORIES } from "../src/support.mjs";
 import {
   customerHeaders,
   DEVICE_ID,
@@ -642,85 +645,242 @@ test("GET /api/v1/operator/queue returns the deterministic shared queue view", a
   });
 });
 
-test("the synthetic queue view stays deterministic, frozen, roster-consistent and within the contract shape", async () => {
+test("GET /api/v1/operator/queue?kind=... projects every queue kind byte-faithfully", async () => {
   const directory = createSyntheticOperatorSubjectsDirectory();
-  const first = await directory.queueFor();
-  const second = await directory.queueFor();
-  assert.deepEqual(first, second);
-  assert.ok(Object.isFrozen(first));
-  assert.ok(Object.isFrozen(first.queue));
-  assert.ok(Object.isFrozen(first.queue.items));
-  assert.ok(first.queue.items.every((item) => Object.isFrozen(item)));
-  assert.ok(Object.isFrozen(first.queue.summary));
-  assert.equal(first.mode, "test");
-  assert.equal(first.queue.kind, "kyc");
-  assert.equal(first.queue.posting, "none");
-  assert.equal(validOperatorQueueView(first), true);
-  // The view answers the pinned contract schema exactly.
-  assert.deepEqual(
-    validator.validate(
-      validator.resolve("#/components/schemas/OperatorQueueView"),
-      {
+  await withServer({}, async (port) => {
+    // The default read and ?kind=kyc are byte-identical — the query is an
+    // optional selector, not a new route.
+    const implicit = await request(port, { path: OPERATOR_QUEUE, headers: operatorHeaders() });
+    assert.equal(implicit.status, 200);
+    const explicit = await request(port, { path: `${OPERATOR_QUEUE}?kind=kyc`, headers: operatorHeaders() });
+    assert.equal(explicit.status, 200);
+    assert.equal(explicit.body, implicit.body);
+    const bareQuery = await request(port, { path: `${OPERATOR_QUEUE}?`, headers: operatorHeaders() });
+    assert.equal(bareQuery.status, 200);
+    assert.equal(bareQuery.body, implicit.body);
+    for (const kind of ["aml", "tickets"]) {
+      const response = await request(port, {
+        path: `${OPERATOR_QUEUE}?kind=${kind}`,
+        headers: operatorHeaders()
+      });
+      assert.equal(response.status, 200, kind);
+      const expected = await directory.queueFor(kind);
+      assert.deepEqual(JSON.parse(response.body), {
         mode: "test",
         queue: {
-          ...first.queue,
-          items: first.queue.items.map((item) => ({ ...item, assignee: item.assignee === null ? null : { ...item.assignee } })),
-          summary: { count: first.queue.summary.count, by_state: { ...first.queue.summary.by_state } }
+          kind,
+          items: expected.queue.items.map((item) => ({
+            ...item,
+            assignee: item.assignee === null ? null : { ...item.assignee }
+          })),
+          summary: {
+            count: expected.queue.summary.count,
+            by_state: { ...expected.queue.summary.by_state }
+          },
+          posting: "none"
         }
-      }
-    ),
-    []
-  );
-  // Queue subjects are a subset of the shared roster — and only the
-  // non-verified ones; every queue item agrees with its roster row on the
-  // fields they share.
+      });
+      assert.equal(JSON.parse(response.body).queue.kind, kind);
+      assert.equal(header(response, "x-request-id"), REQUEST_ID);
+    }
+    // A malformed kind is invalid input and fails closed with the same
+    // VALIDATION_FAILED the malformed-header rules use — never a silent
+    // default-to-kyc. So is a repeated kind and any other query key.
+    for (const path of [
+      `${OPERATOR_QUEUE}?kind=fraud`,
+      `${OPERATOR_QUEUE}?kind=KYC`,
+      `${OPERATOR_QUEUE}?kind=`,
+      `${OPERATOR_QUEUE}?kind`,
+      `${OPERATOR_QUEUE}?kind=kyc&kind=aml`,
+      `${OPERATOR_QUEUE}?kind=aml&cursor=1`,
+      `${OPERATOR_QUEUE}?cursor=1`,
+      `${OPERATOR_QUEUE}?kin=aml`
+    ]) {
+      const response = await request(port, { path, headers: operatorHeaders() });
+      assert.equal(response.status, 400, path);
+      assert.equal(JSON.parse(response.body).code, "VALIDATION_FAILED", path);
+    }
+    // A query string stays undeclared everywhere else — the rest of the
+    // surface keeps its byte-identical 404.
+    for (const path of [
+      `${OPERATOR_SUBJECTS}?kind=aml`,
+      `${OPERATOR_SUBJECTS}/syn_cust_0123456789abcdef01234567?kind=aml`,
+      `${SESSION}?kind=aml`
+    ]) {
+      const response = await request(port, { path, headers: operatorHeaders() });
+      assert.equal(response.status, 404, path);
+      assert.equal(JSON.parse(response.body).code, "CAPABILITY_DENIED", path);
+    }
+    // The device-identifier gate binds the whole path including the query:
+    // no X-Device-Id means 400 regardless of kind.
+    for (const kind of ["kyc", "aml", "tickets"]) {
+      const response = await request(port, {
+        path: `${OPERATOR_QUEUE}?kind=${kind}`,
+        headers: customerHeaders()
+      });
+      assert.equal(response.status, 400, kind);
+      assert.equal(JSON.parse(response.body).code, "VALIDATION_FAILED", kind);
+    }
+  });
+});
+
+test("every queue kind stays deterministic, frozen, roster-consistent and within the contract shape", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
   const roster = (await directory.subjectsFor()).subjects;
   const byId = new Map(roster.map((row) => [row.subject_id, row]));
-  const seenStates = new Set();
-  for (const item of first.queue.items) {
-    const row = byId.get(item.subject_id);
-    assert.ok(row, `${item.subject_id} is outside the roster`);
-    assert.notEqual(row.kyc_status, "verified", `${item.subject_id} left the queue while verified`);
-    assert.equal(item.display_name, row.display_name);
-    assert.ok(Date.parse(item.submitted_at) >= Date.parse(row.registered_at), `${item.subject_id} submitted before registration`);
-    assert.ok(Date.parse(item.sla_due_at) > Date.parse(item.submitted_at));
-    assert.equal(item.age_ms > 0, true);
-    assert.match(item.queue_id, /^qky_[0-9a-f]{24}$/u);
-    assert.match(item.state, /^(pending|in_review|escalated)$/u);
-    assert.match(item.priority, /^(normal|high|urgent)$/u);
-    seenStates.add(item.state);
-    if (item.assignee === null) {
-      assert.equal(item.state, "pending", `${item.subject_id} unclaimed outside pending`);
-    } else {
-      assert.match(item.assignee.subject, /^syn_oper_[a-z0-9]{8,32}$/u);
+  const kinds = {
+    kyc: {
+      states: ["pending", "in_review", "escalated"],
+      idPattern: /^qky_[0-9a-f]{24}$/u,
+      member: (row) => row.kyc_status !== "verified",
+      memberOf: (item, row) => item.state === "pending" ? item.assignee === null : true
+    },
+    aml: {
+      states: ["pending", "in_review", "escalated"],
+      idPattern: /^qml_[0-9a-f]{24}$/u,
+      member: (row) => row.flags >= 1,
+      memberOf: (item) => item.state === "pending" ? item.assignee === null : true
+    },
+    tickets: {
+      states: ["open", "waiting", "escalated"],
+      idPattern: /^qtick_[0-9a-f]{24}$/u,
+      member: (row) => syntheticSupportTickets(row.subject_id).length >= 2,
+      memberOf: (item) => item.state === "open" ? item.assignee === null : true
     }
+  };
+  for (const kind of OPERATOR_QUEUE_KINDS) {
+    const spec = kinds[kind];
+    const first = await directory.queueFor(kind);
+    const second = await directory.queueFor(kind);
+    assert.deepEqual(first, second, kind);
+    assert.ok(Object.isFrozen(first) && Object.isFrozen(first.queue));
+    assert.ok(Object.isFrozen(first.queue.items) && Object.isFrozen(first.queue.summary));
+    assert.ok(first.queue.items.every((item) => Object.isFrozen(item)));
+    assert.equal(first.mode, "test");
+    assert.equal(first.queue.kind, kind);
+    assert.equal(first.queue.posting, "none");
+    assert.equal(validOperatorQueueView(first), true, kind);
+    // The view answers the pinned contract schema exactly — the merged
+    // kind ceiling covers every kind.
+    assert.deepEqual(
+      validator.validate(
+        validator.resolve("#/components/schemas/OperatorQueueView"),
+        {
+          mode: "test",
+          queue: {
+            ...first.queue,
+            items: first.queue.items.map((item) => ({
+              ...item,
+              ...(item.evidence_refs === undefined ? {} : { evidence_refs: [...item.evidence_refs] }),
+              assignee: item.assignee === null ? null : { ...item.assignee }
+            })),
+            summary: {
+              count: first.queue.summary.count,
+              by_state: { ...first.queue.summary.by_state }
+            }
+          }
+        }
+      ),
+      [],
+      kind
+    );
+    const seenStates = new Set();
+    for (const item of first.queue.items) {
+      const row = byId.get(item.subject_id);
+      assert.ok(row, `${item.subject_id} is outside the roster`);
+      assert.equal(spec.member(row), true, `${item.subject_id} should not queue for ${kind}`);
+      assert.match(item.queue_id, spec.idPattern);
+      assert.ok(spec.states.includes(item.state), `${item.state} is outside the ${kind} vocabulary`);
+      assert.match(item.priority, /^(normal|high|urgent)$/u);
+      assert.ok(Number.isInteger(item.age_ms) && item.age_ms > 0);
+      assert.equal(spec.memberOf(item, row), true, `${item.subject_id} assignee rule broke for ${kind}`);
+      if (item.assignee !== null) {
+        assert.match(item.assignee.subject, /^syn_oper_[a-z0-9]{8,32}$/u);
+      }
+      seenStates.add(item.state);
+      if (kind === "kyc") {
+        assert.notEqual(row.kyc_status, "verified");
+        assert.equal(item.display_name, row.display_name);
+        assert.ok(Date.parse(item.submitted_at) >= Date.parse(row.registered_at));
+        assert.ok(Date.parse(item.sla_due_at) > Date.parse(item.submitted_at));
+      } else if (kind === "aml") {
+        assert.ok(row.flags >= 1);
+        assert.match(item.alert_type, /^(structuring|velocity|geo_mismatch)$/u);
+        assert.ok(Array.isArray(item.evidence_refs) && item.evidence_refs.length >= 1);
+        assert.equal(new Set(item.evidence_refs).size, item.evidence_refs.length);
+        for (const ref of item.evidence_refs) {
+          assert.match(ref, /^evd_[0-9a-f]{24}$/u);
+        }
+        assert.ok(Date.parse(item.sla_due_at) > Date.parse(row.registered_at));
+      } else {
+        const tickets = syntheticSupportTickets(item.subject_id);
+        assert.ok(tickets.length >= 2);
+        // The queue item projects the subject's newest support ticket.
+        assert.equal(item.category, tickets[0].category);
+        assert.equal(item.opened_at, tickets[0].created_at);
+        assert.ok(TICKET_CATEGORIES.includes(item.category));
+        assert.ok(OPERATOR_TICKET_QUEUE_STATES.includes(item.state));
+      }
+    }
+    assert.equal(seenStates.size, 3, `every ${kind} queue state is exercised by the pinned universe`);
+    // Membership is exactly the kind's deterministic rule over the roster.
+    const members = new Set(first.queue.items.map((item) => item.subject_id));
+    for (const row of roster) {
+      assert.equal(members.has(row.subject_id), spec.member(row), `${row.subject_id} membership (${kind})`);
+    }
+    // The summary tallies the items exactly over the kind's own states.
+    assert.equal(first.queue.summary.count, first.queue.items.length);
+    const tallied = Object.fromEntries(spec.states.map((state) => [state, 0]));
+    for (const item of first.queue.items) {
+      tallied[item.state] += 1;
+    }
+    assert.deepEqual({ ...first.queue.summary.by_state }, tallied, kind);
   }
-  // Verified subjects never occupy the queue: membership is exactly the
-  // non-verified roster.
-  const members = new Set(first.queue.items.map((item) => item.subject_id));
-  for (const row of roster) {
-    assert.equal(members.has(row.subject_id), row.kyc_status !== "verified", row.subject_id);
-  }
-  assert.equal(seenStates.size, 3, "every queue state is exercised by the pinned universe");
-  // The summary tallies the items exactly.
-  assert.equal(first.queue.summary.count, first.queue.items.length);
-  const tallied = { pending: 0, in_review: 0, escalated: 0 };
-  for (const item of first.queue.items) {
-    tallied[item.state] += 1;
-  }
-  assert.deepEqual({ ...first.queue.summary.by_state }, tallied);
 });
 
 test("a malformed operator queue view fails closed", async () => {
   const real = await createSyntheticOperatorSubjectsDirectory().queueFor();
+  const realAml = await createSyntheticOperatorSubjectsDirectory().queueFor("aml");
+  const realTickets = await createSyntheticOperatorSubjectsDirectory().queueFor("tickets");
   const drifted = (itemOverrides = {}) => queueView({}, { items: [{ ...real.queue.items[0], ...itemOverrides }] });
+  // A full kind view with exactly one item field wrong: the verbatim
+  // recompute is what fails it.
+  const kindDrifted = (view, itemOverrides = {}, queueOverrides = {}) => ({
+    ...view,
+    queue: {
+      ...view.queue,
+      items: view.queue.items.map((item, index) =>
+        index === 0 ? { ...item, ...itemOverrides } : item
+      ),
+      ...queueOverrides
+    }
+  });
   const missingQueue = { mode: "test" };
   const missingSummary = queueView({}, { summary: undefined });
   delete missingSummary.queue.summary;
   const malformed = [
     queueView({ mode: "live" }),
     queueView({ mode: "test", extra: true }),
+    queueView({}, { kind: "fraud" }),
+    // A kind that validates but mismatches the derivation fails on the
+    // recompute — here an "aml" view carrying no items at all.
     queueView({}, { kind: "aml" }),
+    // An "aml" view carrying kyc-shaped items fails the item shape.
+    queueView({}, { kind: "aml", items: [...real.queue.items] }),
+    // A "tickets" by_state set belongs to a different vocabulary.
+    queueView({}, { kind: "tickets", items: [...realTickets.queue.items], summary: { count: realTickets.queue.items.length, by_state: { open: 1, waiting: 1, escalated: 1 } } }),
+    kindDrifted(realAml, { alert_type: "sanctions" }),
+    kindDrifted(realAml, { evidence_refs: ["evd_deadbeef"] }),
+    kindDrifted(realAml, { evidence_refs: ["tx_001122334455667788990011"] }),
+    kindDrifted(realAml, { state: "open" }),
+    kindDrifted(realAml, { queue_id: "qky_0123456789abcdef01234567" }),
+    kindDrifted(realAml, {}, { kind: "kyc" }),
+    kindDrifted(realTickets, { category: "appeal" }),
+    kindDrifted(realTickets, { state: "pending" }),
+    kindDrifted(realTickets, { opened_at: "yesterday" }),
+    kindDrifted(realTickets, { queue_id: "tck_0123456789abcdef01234567" }),
+    kindDrifted(realTickets, { subject_id: `syn_cust_${"f".repeat(24)}` }),
+    kindDrifted(realTickets, {}, { summary: { count: realTickets.queue.items.length, by_state: { pending: 1, in_review: 1, escalated: 1 } } }),
     queueView({}, { posting: "pending" }),
     queueView({}, { items: null }),
     queueView({}, { summary: { count: real.queue.items.length, by_state: { pending: 1, in_review: 1, escalated: 1 } } }),

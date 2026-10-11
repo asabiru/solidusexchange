@@ -559,10 +559,14 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 404, 429, 500])
   }),
-  // The operator queue read is the staff KYC work-queue projection of the
-  // same shared customer universe the subjects directory already exposes:
-  // an unconditional operator read-tier grant like its siblings, so it
-  // declares no 403.
+  // The operator queue read is the staff work-queue projection of the
+  // same shared customer universe the subjects directory already exposes,
+  // selected by the optional `kind` query parameter (kyc|aml|tickets,
+  // default kyc): an unconditional operator read-tier grant like its
+  // siblings covers every kind — a queue is the same read-only projection
+  // tier regardless of kind — so it declares no 403. A malformed kind is
+  // invalid input and answers 400 VALIDATION_FAILED, an undeclared gap
+  // like the malformed-header rules.
   Object.freeze({
     operationId: "getOperatorQueue",
     method: "GET",

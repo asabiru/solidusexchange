@@ -2022,7 +2022,7 @@
         "tags": [
           "Operator"
         ],
-        "summary": "Read the operator KYC work queue projected from the shared subject roster",
+        "summary": "Read the operator work queue of the selected kind projected from the shared subject roster",
         "security": [
           {
             "OperatorBearer": []
@@ -2040,11 +2040,26 @@
           },
           {
             "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "description": "Queue kind to project: `kyc` (default), `aml` or `tickets`. An out-of-enum or repeated `kind`, or any other query key, is malformed input and answers 400 VALIDATION_FAILED.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "kyc",
+                "aml",
+                "tickets"
+              ],
+              "default": "kyc"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "Operator KYC work queue",
+            "description": "Operator work queue",
             "headers": {
               "X-Request-Id": {
                 "$ref": "#/components/headers/RequestId"
@@ -2629,7 +2644,12 @@
         ],
         "properties": {
           "kind": {
-            "const": "kyc"
+            "type": "string",
+            "enum": [
+              "kyc",
+              "aml",
+              "tickets"
+            ]
           },
           "items": {
             "type": "array",
@@ -2655,8 +2675,6 @@
                 "type": "object",
                 "additionalProperties": false,
                 "required": [
-                  "pending",
-                  "in_review",
                   "escalated"
                 ],
                 "properties": {
@@ -2669,6 +2687,14 @@
                     "minimum": 0
                   },
                   "escalated": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "open": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "waiting": {
                     "type": "integer",
                     "minimum": 0
                   }
@@ -2687,9 +2713,6 @@
         "required": [
           "queue_id",
           "subject_id",
-          "display_name",
-          "submitted_at",
-          "sla_due_at",
           "state",
           "priority",
           "assignee",
@@ -2698,7 +2721,7 @@
         "properties": {
           "queue_id": {
             "type": "string",
-            "pattern": "^qky_[0-9a-f]{24}$"
+            "pattern": "^(qky|qml|qtick)_[0-9a-f]{24}$"
           },
           "subject_id": {
             "type": "string",
@@ -2716,12 +2739,44 @@
             "type": "string",
             "format": "date-time"
           },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "alert_type": {
+            "type": "string",
+            "enum": [
+              "structuring",
+              "velocity",
+              "geo_mismatch"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^evd_[0-9a-f]{24}$"
+            }
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "question",
+              "operation_problem",
+              "complaint",
+              "data_request"
+            ]
+          },
           "state": {
             "type": "string",
             "enum": [
               "pending",
               "in_review",
-              "escalated"
+              "escalated",
+              "open",
+              "waiting"
             ]
           },
           "priority": {
