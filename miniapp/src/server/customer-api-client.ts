@@ -268,6 +268,40 @@ export type CustomerApiChecks =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** Mirrors the contract kind enum of the served customer activity feed. */
+export type CustomerApiActivityKind =
+  | "deposit"
+  | "withdrawal"
+  | "quote"
+  | "order"
+  | "payment"
+  | "card"
+  | "check"
+  | "kyc"
+  | "security";
+
+export interface CustomerApiActivityItem {
+  activity_id: string;
+  kind: CustomerApiActivityKind;
+  status: string;
+  title: string;
+  detail: string;
+  money: { amount: string; asset: AssetCode } | null;
+  created_at: string;
+  posting: "none";
+}
+
+/**
+ * The activity read is KYC-gated upstream (customer.activity.read sits in
+ * the same asset/activity tier as the other KYC-gated reads), so a denied
+ * evaluation surfaces as "denied" like deposits, wallets, checks & co.
+ */
+export type CustomerApiActivity =
+  | { status: "ok"; activity: readonly CustomerApiActivityItem[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -439,6 +473,7 @@ export interface CustomerApiClient {
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
+  activity(bffSubject: string, nowMs: number): Promise<CustomerApiActivity>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
   profile(bffSubject: string, nowMs: number): Promise<CustomerApiProfile>;
@@ -1229,6 +1264,126 @@ function parseChecksView(value: unknown, subject: string): readonly CustomerApiC
   return Object.freeze(checks);
 }
 
+const activityItemKeys = [
+  "activity_id",
+  "kind",
+  "status",
+  "title",
+  "detail",
+  "money",
+  "created_at",
+  "posting"
+] as const;
+
+const activityKinds = new Set<string>([
+  "deposit",
+  "withdrawal",
+  "quote",
+  "order",
+  "payment",
+  "card",
+  "check",
+  "kyc",
+  "security"
+]);
+
+const moneyActivityKinds = new Set<string>([
+  "deposit",
+  "withdrawal",
+  "quote",
+  "order",
+  "payment",
+  "card",
+  "check"
+]);
+
+const activityIdContractPattern = /^act_[0-9a-f]{24}$/u;
+const activityStatusPattern = /^[a-z][a-z0-9_]{0,63}$/u;
+// The feed only ever references existing domain identifiers in its detail
+// text — never a claim secret, address or posting id.
+const activityDetailPattern = /^[a-z0-9 .·:_/-]{1,256}$/iu;
+
+/**
+ * Validates an upstream ActivityView. The exact key set is the boundary:
+ * any extra field fails closed here rather than flowing into the app.
+ * Items are derived-only: money kinds must carry a coherent {amount, asset}
+ * pair in a known asset and a positive scaled amount, non-money kinds must
+ * carry money: null, and posting stays "none" on every entry.
+ */
+function parseActivityView(value: unknown): readonly CustomerApiActivityItem[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "activity"])
+    || value.mode !== "test"
+    || !Array.isArray(value.activity)
+  ) {
+    return undefined;
+  }
+  const activity: CustomerApiActivityItem[] = [];
+  for (const entry of value.activity) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, activityItemKeys)
+      || typeof entry.activity_id !== "string"
+      || !activityIdContractPattern.test(entry.activity_id)
+      || typeof entry.kind !== "string"
+      || !activityKinds.has(entry.kind)
+      || typeof entry.status !== "string"
+      || !activityStatusPattern.test(entry.status)
+      || typeof entry.title !== "string"
+      || entry.title.length < 1
+      || entry.title.length > 128
+      || typeof entry.detail !== "string"
+      || !activityDetailPattern.test(entry.detail)
+      || !isIsoTimestamp(entry.created_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    if (!moneyActivityKinds.has(entry.kind)) {
+      if (entry.money !== null) {
+        return undefined;
+      }
+      activity.push(Object.freeze({
+        activity_id: entry.activity_id,
+        kind: entry.kind as CustomerApiActivityKind,
+        status: entry.status,
+        title: entry.title,
+        detail: entry.detail,
+        money: null,
+        created_at: entry.created_at,
+        posting: "none"
+      }));
+      continue;
+    }
+    const money = entry.money;
+    if (
+      !isRecord(money)
+      || !hasExactKeys(money, ["amount", "asset"])
+      || typeof money.asset !== "string"
+      || !isAssetCode(money.asset)
+      || typeof money.amount !== "string"
+    ) {
+      return undefined;
+    }
+    const scale = assets[money.asset as AssetCode].scale;
+    if (!isScaledDecimal(money.amount, scale) || toUnits(money.amount, scale) <= 0n) {
+      return undefined;
+    }
+    activity.push(Object.freeze({
+      activity_id: entry.activity_id,
+      kind: entry.kind as CustomerApiActivityKind,
+      status: entry.status,
+      title: entry.title,
+      detail: entry.detail,
+      money: Object.freeze({ amount: money.amount, asset: money.asset as AssetCode }),
+      created_at: entry.created_at,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(activity);
+}
+
 function parseNotificationsView(
   value: unknown
 ): { unread: number; notifications: readonly CustomerApiNotification[] } | undefined {
@@ -1671,6 +1826,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
+      activity: async (): Promise<CustomerApiActivity> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
       profile: async (): Promise<CustomerApiProfile> => ({ status: "not-configured" }),
@@ -1889,6 +2045,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function activity(bffSubject: string, nowMs: number): Promise<CustomerApiActivity> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/activity", token, nowMs);
+      const view = parseActivityView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", activity: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -2003,5 +2178,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, activity, notifications, kyc, profile, support, authSessions, users });
 }

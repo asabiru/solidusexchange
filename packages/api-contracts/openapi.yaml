@@ -1175,6 +1175,60 @@
         }
       }
     },
+    "/api/v1/customer/activity": {
+      "get": {
+        "operationId": "getCustomerActivity",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the authenticated customer's synthetic activity feed",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer activity feed in test mode carrying no posting state",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/operator/session": {
       "get": {
         "operationId": "getOperatorSession",
@@ -2817,6 +2871,139 @@
             "pattern": "^[A-Za-z0-9._:-]+$"
           },
           "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "ActivityView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "activity"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "activity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActivityItemView"
+            }
+          }
+        }
+      },
+      "ActivityItemView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "activity_id",
+          "kind",
+          "status",
+          "title",
+          "detail",
+          "money",
+          "created_at",
+          "posting"
+        ],
+        "properties": {
+          "activity_id": {
+            "type": "string",
+            "pattern": "^act_[0-9a-f]{24}$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "deposit",
+              "withdrawal",
+              "quote",
+              "order",
+              "payment",
+              "card",
+              "check",
+              "kyc",
+              "security"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "awaiting_payment",
+              "payment_received",
+              "partial_payment",
+              "duplicate_payment",
+              "payment_reversed",
+              "expired_no_payment",
+              "draft",
+              "screened",
+              "pending_maker_approval",
+              "pending_checker_approval",
+              "unsigned_intent_ready",
+              "broadcast",
+              "confirmed",
+              "rejected",
+              "cancelled",
+              "expired",
+              "indicative",
+              "open",
+              "created",
+              "processing",
+              "completed",
+              "failed",
+              "reversed",
+              "pending_activation",
+              "active",
+              "frozen",
+              "blocked",
+              "terminated",
+              "awaiting_confirmation",
+              "awaiting_recipient_kyc",
+              "claimed",
+              "submitted",
+              "in_review",
+              "approved",
+              "needs_more_data",
+              "timed_out",
+              "unavailable",
+              "login",
+              "revoked"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "detail": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "money": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "amount",
+              "asset"
+            ],
+            "properties": {
+              "amount": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "asset": {
+                "$ref": "#/$defs/assetCode"
+              }
+            }
+          },
+          "created_at": {
             "type": "string",
             "format": "date-time"
           },

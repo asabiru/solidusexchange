@@ -6,6 +6,7 @@ import { createSyntheticTokenVerifier, mintSyntheticCustomerToken, mintSynthetic
 import { createSyntheticAuthSessionDirectory } from "../src/auth-sessions.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createSyntheticCardDirectory } from "../src/cards.mjs";
+import { createSyntheticActivityDirectory } from "../src/activity.mjs";
 import { createSyntheticCheckDirectory } from "../src/checks.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
 import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mjs";
@@ -93,6 +94,7 @@ export async function startTestServer(options = {}) {
     paymentDirectory: createSyntheticPaymentDirectory(),
     cardDirectory: createSyntheticCardDirectory(),
     checkDirectory: createSyntheticCheckDirectory(),
+    activityDirectory: createSyntheticActivityDirectory(),
     operatorDirectory: createSyntheticOperatorDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,

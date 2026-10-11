@@ -9,6 +9,7 @@ import {
   OPERATIONS,
   PLATFORMS
 } from "./contract.mjs";
+import { validActivityView } from "./activity.mjs";
 import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
@@ -59,6 +60,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
  * @property {import("./checks.mjs").CheckDirectory} checkDirectory
+ * @property {import("./activity.mjs").ActivityDirectory} activityDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
@@ -244,6 +246,7 @@ export function createCustomerApiHandler({
   paymentDirectory,
   cardDirectory,
   checkDirectory,
+  activityDirectory,
   operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
@@ -299,6 +302,9 @@ export function createCustomerApiHandler({
   }
   if (typeof checkDirectory?.viewFor !== "function") {
     throw new Error("A check directory is required");
+  }
+  if (typeof activityDirectory?.viewFor !== "function") {
+    throw new Error("An activity directory is required");
   }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
@@ -635,6 +641,23 @@ export function createCustomerApiHandler({
       const view = await checkDirectory.viewFor(principal.subject);
       if (!validChecksView(view)) {
         throw new Error("Check directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerActivity") {
+      // customer.activity.read is KYC-gated like the other asset/activity
+      // collections: the feed is a derived-only projection over the
+      // subject's own records — it can never mint posting state
+      // (posting stays "none"), so unverified and pending subjects are
+      // denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.activity.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await activityDirectory.viewFor(principal.subject);
+      if (!validActivityView(view)) {
+        throw new Error("Activity directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

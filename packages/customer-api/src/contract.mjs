@@ -294,6 +294,24 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The customer activity feed is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications, quotes, exchange-orders, payments,
+  // cards and checks reads: it is a cross-domain asset/activity projection
+  // of the subject's own records, not an onboarding or identity surface
+  // (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerActivity",
+    method: "GET",
+    path: "/api/v1/customer/activity",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
   // First operator-namespaced read. Operator operations require the
   // X-Device-Id header and an operator-audience token instead of a customer
   // one; KYC evaluation never applies to them.

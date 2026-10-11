@@ -245,7 +245,24 @@ export type ActivityKind =
   | `kyc_${ActivityKycState}`
   | "quote_previewed"
   | "address_screened"
-  | "support_requested";
+  | "support_requested"
+  | "contract";
+
+/**
+ * The upstream (customer-api) activity feed vocabulary. The BFF view keeps
+ * the served kind verbatim under `contract` — it is a cross-domain derived
+ * projection, not one of the locally recorded event kinds.
+ */
+export type ContractActivityKind =
+  | "deposit"
+  | "withdrawal"
+  | "quote"
+  | "order"
+  | "payment"
+  | "card"
+  | "check"
+  | "kyc"
+  | "security";
 
 interface ActivityBase {
   id: string;
@@ -296,13 +313,32 @@ export interface SupportRequestedActivity extends ActivityBase {
   requestId: string;
 }
 
+/**
+ * An item projected from the served customer activity feed. `contract`
+ * carries the upstream kind enum (the feed is a derived-only projection
+ * over existing domain records — never posting state), `status` the
+ * upstream lifecycle status, and `amount`/`asset` the monetary pair when
+ * the upstream kind is a money kind (absent for kyc/security).
+ */
+export interface ContractActivity extends ActivityBase {
+  kind: "contract";
+  contract: ContractActivityKind;
+  status: string;
+  title: string;
+  detail: string;
+  amount?: string;
+  asset?: AssetCode;
+  executable: false;
+}
+
 export type ActivityItem =
   | SessionLoginActivity
   | SessionRevokedActivity
   | KycActivity
   | QuotePreviewedActivity
   | AddressScreenedActivity
-  | SupportRequestedActivity;
+  | SupportRequestedActivity
+  | ContractActivity;
 
 export interface ActivityView {
   mode: "test";

@@ -97,11 +97,86 @@ const activityKinds: Readonly<Record<ActivityKind, MessageKey>> = {
   kyc_unavailable: "activity.kycUnavailable",
   quote_previewed: "activity.filterQuote",
   address_screened: "activity.filterScreening",
+  contract: "activity.filterContract",
   support_requested: "common.support"
 };
 
 export function activityKindKeyOf(kind: string): MessageKey | undefined {
   return member(activityKinds, kind);
+}
+
+/**
+ * The served activity feed's upstream kind vocabulary, mapped to labels.
+ * The feed is a derived-only cross-domain projection, so its kinds never
+ * collide with the locally recorded ActivityKind members.
+ */
+const contractActivityKinds: Readonly<Record<string, MessageKey>> = {
+  deposit: "activity.contractDeposit",
+  withdrawal: "activity.contractWithdrawal",
+  quote: "activity.contractQuote",
+  order: "activity.contractOrder",
+  payment: "activity.contractPayment",
+  card: "activity.contractCard",
+  check: "activity.contractCheck",
+  kyc: "activity.contractKyc",
+  security: "activity.contractSecurity"
+};
+
+export function contractActivityKindKeyOf(contract: string): MessageKey | undefined {
+  return member(contractActivityKinds, contract);
+}
+
+/**
+ * Maps a served activity item's upstream lifecycle status onto a pill
+ * tone. In-progress and pending states warn, settled positive states are
+ * success, terminal negative states are risk, and neutral security
+ * bookkeeping stays muted. Unknown statuses fall back to muted via the
+ * caller's `??` — the feed's vocabulary may grow.
+ */
+const contractActivityTones: Readonly<Record<string, string>> = {
+  awaiting_payment: "warning",
+  payment_received: "success",
+  partial_payment: "warning",
+  duplicate_payment: "risk",
+  payment_reversed: "risk",
+  expired_no_payment: "risk",
+  draft: "muted",
+  screened: "warning",
+  pending_maker_approval: "warning",
+  pending_checker_approval: "warning",
+  unsigned_intent_ready: "warning",
+  broadcast: "warning",
+  confirmed: "success",
+  rejected: "risk",
+  cancelled: "risk",
+  expired: "risk",
+  indicative: "muted",
+  open: "warning",
+  created: "warning",
+  processing: "warning",
+  completed: "success",
+  failed: "risk",
+  reversed: "risk",
+  pending_activation: "warning",
+  active: "success",
+  frozen: "risk",
+  blocked: "risk",
+  terminated: "risk",
+  awaiting_confirmation: "warning",
+  awaiting_recipient_kyc: "warning",
+  claimed: "success",
+  submitted: "warning",
+  in_review: "warning",
+  approved: "success",
+  needs_more_data: "risk",
+  timed_out: "risk",
+  unavailable: "risk",
+  login: "muted",
+  revoked: "muted"
+};
+
+export function contractActivityToneOf(status: string): string {
+  return member(contractActivityTones, status) ?? "muted";
 }
 
 export interface KycActivityText {
