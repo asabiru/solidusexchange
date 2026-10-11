@@ -29,8 +29,13 @@ export const ADAPTER_OPERATIONS = Object.freeze({
  * Operation names that would imply money movement, execution or signing.
  * No adapter in this boundary may expose them.
  */
+/**
+ * Forbidden when the name starts with a money-moving verb in any casing
+ * (camelCase or UpperCamel). All-caps names are constants by convention and
+ * stay out of scope (`SIGNATURE_HEADERS` must not match on `sign`).
+ */
 export const FORBIDDEN_OPERATION =
-  /^(?:accept|approve|broadcast|capture|confirm|execute|fill|hedge|order|pay|payout|place|post|refund|release|settle|sign|submitOrder|trade|transfer|withdraw)(?![a-z])/;
+  /^(?!^[A-Z0-9_]+$)(?i:accept|approve|broadcast|capture|confirm|execute|fill|hedge|order|pay|payout|place|post|refund|release|settle|sign|submitOrder|trade|transfer|withdraw)(?![a-z])/;
 
 /**
  * @param {AdapterKind} kind

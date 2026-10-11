@@ -10,6 +10,7 @@ import {
   SIMULATOR_ENVIRONMENT,
 } from "./signing.mjs";
 import {
+  capacityError,
   DeliveryQueue,
   exactKeys,
   IdempotencyRegistry,
@@ -17,6 +18,7 @@ import {
   isIsoSeconds,
   isPositiveSequence,
   isStringMatching,
+  maxResourcesOf,
   oneOf,
   outageError,
   resolveScenario,
@@ -135,27 +137,33 @@ import {
  */
 
 export const CHECKS_SCENARIOS = Object.freeze({
-  delivered: { delivery: "normal" },
-  duplicate_callback: { delivery: "duplicate" },
-  late_callback: { delivery: "late" },
-  silent_callback: { delivery: "none" },
-  provider_outage: { delivery: "none" },
+  delivered: Object.freeze({ delivery: "normal" }),
+  duplicate_callback: Object.freeze({ delivery: "duplicate" }),
+  late_callback: Object.freeze({ delivery: "late" }),
+  silent_callback: Object.freeze({ delivery: "none" }),
+  provider_outage: Object.freeze({ delivery: "none" }),
 });
 
 /** @typedef {keyof typeof CHECKS_SCENARIOS} ChecksScenario */
 
 const SCENARIO_NAMES = /** @type {ChecksScenario[]} */ (Object.keys(CHECKS_SCENARIOS));
-const CHECK_ASSETS = /** @type {const} */ (["USDT", "TON"]);
-const CHECK_STATUSES = /** @type {const} */ ([
+const CHECK_ASSETS = Object.freeze(/** @type {const} */ (["USDT", "TON"]));
+const CHECK_STATUSES = Object.freeze(/** @type {const} */ ([
   "awaiting_confirmation",
   "created",
   "awaiting_recipient_kyc",
   "claimed",
   "cancelled",
   "expired",
-]);
+]));
 const CHECK_ID = /^[a-z][a-z0-9_-]{2,127}$/;
 const CLAIM_REFERENCE = /^[A-Za-z0-9._:-]{16,128}$/;
+/**
+ * Wrong claim references are counted; past this bound the check locks and
+ * every further claim attempt fails closed before the digest is even
+ * evaluated, so the bearer handle cannot be brute-forced online.
+ */
+const MAX_FAILED_CLAIM_ATTEMPTS = 25;
 
 export const CHECKS_TRANSITIONS = Object.freeze({
   registered: Object.freeze(["awaiting_confirmation"]),
@@ -168,7 +176,7 @@ export const CHECKS_TRANSITIONS = Object.freeze({
 });
 
 export const CHECKS_CALLBACK_SCHEMA = "solidchange.sim.checks.callback.v1";
-const CALLBACK_KEYS = [
+const CALLBACK_KEYS = Object.freeze([
   "amount",
   "asset",
   "check_id",
@@ -187,7 +195,7 @@ const CALLBACK_KEYS = [
   "sender_ref",
   "sequence",
   "status",
-];
+]);
 
 /**
  * @param {Record<string, JsonValue>} payload
@@ -273,6 +281,7 @@ export function createChecksCallbackInbox() {
  * @property {Record<string, ChecksScenario>} [scenarios] check_ref → scenario.
  * @property {ChecksScenario} [defaultScenario]
  * @property {number} [checkTtlSeconds]
+ * @property {number} [maxResources] Simultaneous checks kept in memory.
  */
 
 /**
@@ -295,15 +304,19 @@ export function createChecksSimulator(options) {
   if (!Number.isSafeInteger(checkTtlSeconds) || checkTtlSeconds < 3600 || checkTtlSeconds > 604_800) {
     throw new RangeError("checkTtlSeconds must be an integer between 3600 and 604800");
   }
-  const queue = new DeliveryQueue(createCallbackSigner({ key: options.key, domain: "checks", random }));
+  const maxResources = maxResourcesOf(options);
+  const queue = new DeliveryQueue(
+    createCallbackSigner({ key: options.key, domain: "checks", random }),
+    { maxPending: maxResources * 16 },
+  );
   /** @type {IdempotencyRegistry<CheckView>} */
-  const createRegistry = new IdempotencyRegistry();
+  const createRegistry = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {IdempotencyRegistry<CheckView>} */
-  const issueRegistry = new IdempotencyRegistry();
+  const issueRegistry = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {IdempotencyRegistry<CheckView>} */
-  const claimRegistry = new IdempotencyRegistry();
+  const claimRegistry = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {IdempotencyRegistry<CheckView>} */
-  const cancelRegistry = new IdempotencyRegistry();
+  const cancelRegistry = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {Map<string, CheckRecord>} */
   const checks = new Map();
 
@@ -487,6 +500,9 @@ export function createChecksSimulator(options) {
         throw outageError(90);
       }
       return createRegistry.run(key, input, () => {
+        if (checks.size >= maxResources) {
+          throw capacityError("check");
+        }
         const now = clock.now();
         /** @type {CheckRecord} */
         const check = {
@@ -551,6 +567,9 @@ export function createChecksSimulator(options) {
         }
         if (check.status !== "created") {
           throw new ProviderError("invalid_request", `check is ${check.status}`);
+        }
+        if (check.failed_claim_attempts >= MAX_FAILED_CLAIM_ATTEMPTS) {
+          throw new ProviderError("invalid_request", "claim attempts exhausted for this check");
         }
         const suppliedDigest = Buffer.from(sha256Hex(claimReference), "utf8");
         const storedDigest = Buffer.from(check.claimDigest, "utf8");

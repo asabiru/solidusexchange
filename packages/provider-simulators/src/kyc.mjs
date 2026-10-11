@@ -7,6 +7,7 @@ import {
   SIMULATOR_ENVIRONMENT,
 } from "./signing.mjs";
 import {
+  capacityError,
   DeliveryQueue,
   exactKeys,
   IdempotencyRegistry,
@@ -14,6 +15,7 @@ import {
   isIsoSeconds,
   isPositiveSequence,
   isStringMatching,
+  maxResourcesOf,
   oneOf,
   outageError,
   resolveScenario,
@@ -69,26 +71,30 @@ import {
  */
 
 export const KYC_SCENARIOS = Object.freeze({
-  approve: { outcome: "approved", delivery: "normal" },
-  reject: { outcome: "rejected", delivery: "normal" },
-  needs_more_data: { outcome: "needs_more_data", delivery: "normal" },
-  pending_timeout: { outcome: null, delivery: "normal" },
-  provider_outage: { outcome: null, delivery: "none" },
-  duplicate_callback: { outcome: "approved", delivery: "duplicate" },
-  out_of_order_callback: { outcome: "approved", delivery: "out_of_order" },
-  late_callback: { outcome: "approved", delivery: "late" },
+  approve: Object.freeze({ outcome: "approved", delivery: "normal" }),
+  reject: Object.freeze({ outcome: "rejected", delivery: "normal" }),
+  needs_more_data: Object.freeze({ outcome: "needs_more_data", delivery: "normal" }),
+  pending_timeout: Object.freeze({ outcome: null, delivery: "normal" }),
+  provider_outage: Object.freeze({ outcome: null, delivery: "none" }),
+  duplicate_callback: Object.freeze({ outcome: "approved", delivery: "duplicate" }),
+  out_of_order_callback: Object.freeze({ outcome: "approved", delivery: "out_of_order" }),
+  late_callback: Object.freeze({ outcome: "approved", delivery: "late" }),
 });
 
 /** @typedef {keyof typeof KYC_SCENARIOS} KycScenario */
 
 const SCENARIO_NAMES = /** @type {KycScenario[]} */ (Object.keys(KYC_SCENARIOS));
-const LEVELS = /** @type {const} */ (["basic", "enhanced"]);
-const STATUSES = /** @type {const} */ (["in_review", "approved", "rejected", "needs_more_data"]);
-const REASON_CODES = /** @type {const} */ (["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"]);
-const REQUESTED_ITEMS = /** @type {const} */ (["proof_of_address", "selfie_retake"]);
+const LEVELS = Object.freeze(/** @type {const} */ (["basic", "enhanced"]));
+const STATUSES = Object.freeze(/** @type {const} */ (["in_review", "approved", "rejected", "needs_more_data"]));
+const REASON_CODES = Object.freeze(/** @type {const} */ (["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"]));
+const REQUESTED_ITEMS = Object.freeze(/** @type {const} */ (["proof_of_address", "selfie_retake"]));
 
+/**
+ * The review step is mandatory: an application can only ever leave `submitted`
+ * into `in_review`, matching exactly what this simulator emits.
+ */
 export const KYC_TRANSITIONS = Object.freeze({
-  submitted: Object.freeze(["in_review", "approved", "rejected", "needs_more_data"]),
+  submitted: Object.freeze(["in_review"]),
   in_review: Object.freeze(["approved", "rejected", "needs_more_data"]),
   needs_more_data: Object.freeze([]),
   approved: Object.freeze([]),
@@ -96,7 +102,7 @@ export const KYC_TRANSITIONS = Object.freeze({
 });
 
 export const KYC_CALLBACK_SCHEMA = "solidchange.sim.kyc.callback.v1";
-const CALLBACK_KEYS = [
+const CALLBACK_KEYS = Object.freeze([
   "applicant_ref",
   "domain",
   "environment",
@@ -109,7 +115,7 @@ const CALLBACK_KEYS = [
   "schema",
   "sequence",
   "status",
-];
+]);
 
 /**
  * @param {Record<string, JsonValue>} payload
@@ -183,6 +189,7 @@ export function createKycCallbackInbox() {
  * @property {Record<string, KycScenario>} [scenarios] applicant_ref → scenario.
  * @property {KycScenario} [defaultScenario]
  * @property {number} [reviewTimeoutSeconds]
+ * @property {number} [maxResources] Simultaneous applications kept in memory.
  */
 
 /**
@@ -200,12 +207,16 @@ export function createKycSimulator(options) {
     throw new TypeError("unknown default KYC scenario");
   }
   const reviewTimeoutSeconds = options.reviewTimeoutSeconds ?? 3600;
-  if (!Number.isSafeInteger(reviewTimeoutSeconds) || reviewTimeoutSeconds < 600) {
-    throw new RangeError("reviewTimeoutSeconds must be an integer of at least 600");
+  if (!Number.isSafeInteger(reviewTimeoutSeconds) || reviewTimeoutSeconds < 600 || reviewTimeoutSeconds > 604_800) {
+    throw new RangeError("reviewTimeoutSeconds must be an integer between 600 and 604800");
   }
-  const queue = new DeliveryQueue(createCallbackSigner({ key: options.key, domain: "kyc", random }));
+  const maxResources = maxResourcesOf(options);
+  const queue = new DeliveryQueue(
+    createCallbackSigner({ key: options.key, domain: "kyc", random }),
+    { maxPending: maxResources * 16 },
+  );
   /** @type {IdempotencyRegistry<KycSubmission>} */
-  const idempotency = new IdempotencyRegistry();
+  const idempotency = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {Map<string, { status: KycStatus, sequence: number, occurredAt: number }[]>} */
   const timelines = new Map();
 
@@ -227,9 +238,13 @@ export function createKycSimulator(options) {
         throw outageError(60);
       }
       return idempotency.run(key, input, () => {
+        if (timelines.size >= maxResources) {
+          throw capacityError("KYC application");
+        }
         const now = clock.now();
         const providerReference = random.id("kycref", "kyc-reference");
         const deadline = now + reviewTimeoutSeconds;
+        const deadlineIso = toIsoSeconds(deadline);
         const plan = KYC_SCENARIOS[scenario];
         const reviewAt = now + random.int("kyc-review-delay", 30, 90);
         const events = [{ status: /** @type {KycStatus} */ ("in_review"), occurredAt: reviewAt }];
@@ -270,7 +285,7 @@ export function createKycSimulator(options) {
           level,
           status: /** @type {const} */ ("submitted"),
           submitted_at: toIsoSeconds(now),
-          review_deadline: toIsoSeconds(deadline),
+          review_deadline: deadlineIso,
         };
       });
     },
