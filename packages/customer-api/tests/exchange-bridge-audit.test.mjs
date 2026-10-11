@@ -266,6 +266,35 @@ test("served reads fail closed on shape-valid content drift", async () => {
   }
 });
 
+test("the member read fails closed on shape-valid detail drift", async () => {
+  // The detail arm applies its own validExchangeOrderDetailView gate the
+  // same way: a shape-valid detail whose legs recompute wrong still hits
+  // the 500 envelope.
+  const base = createSyntheticExchangeOrderDirectory();
+  const real = await base.listFor(VERIFIED_SUBJECT);
+  const target = real.orders.at(-1);
+  const tamperedDetail = {
+    async listFor(subject) {
+      return base.listFor(subject);
+    },
+    async orderFor(subject, orderId) {
+      const detail = await base.orderFor(subject, orderId);
+      if (detail === null) {
+        return null;
+      }
+      return { ...detail, quote_amount: detail.total_quote_amount };
+    }
+  };
+  await withServer({ exchangeOrderDirectory: tamperedDetail }, async (port) => {
+    const response = await checkedRequest(port, {
+      path: `/api/v1/customer/exchange-orders/${target.order_id}`,
+      headers: verifiedCustomerHeaders()
+    });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+  });
+});
+
 test("the ORDER_PAIRS / INSTRUMENTS drift check throws at module load", () => {
   // The bridge pins the engine registry against ORDER_PAIRS at import:
   // a drifted registry must fail the module instead of mis-pricing views.
