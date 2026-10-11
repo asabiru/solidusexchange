@@ -490,6 +490,101 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  DepositAddressesView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "deposit_addresses"],
+    properties: {
+      mode: { const: "test" },
+      deposit_addresses: {
+        type: "array",
+        items: { $ref: "#/components/schemas/DepositAddressView" }
+      }
+    }
+  },
+  DepositAddressView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "deposit_address_id",
+      "asset",
+      "network",
+      "address",
+      "status",
+      "created_at",
+      "posting"
+    ],
+    properties: {
+      deposit_address_id: { type: "string", pattern: "^dpa_[0-9a-f]{24}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      network: { type: "string", pattern: "^[A-Z0-9]+_TESTNET$" },
+      address: { type: "string", pattern: "^[A-Za-z0-9_-]{20,64}$" },
+      status: { type: "string", enum: ["active"] },
+      created_at: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
+  AddressScreeningsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "screenings"],
+    properties: {
+      mode: { const: "test" },
+      screenings: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AddressScreeningView" }
+      }
+    }
+  },
+  AddressScreeningView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "screening_id",
+      "asset",
+      "network",
+      "direction",
+      "status",
+      "verdict",
+      "risk_level",
+      "advisory",
+      "executable",
+      "submitted_at",
+      "deadline",
+      "posting"
+    ],
+    properties: {
+      screening_id: { type: "string", pattern: "^scr_[0-9a-f]{32}$" },
+      asset: { $ref: "#/$defs/assetCode" },
+      network: { type: "string", pattern: "^[A-Z0-9]+_TESTNET$" },
+      direction: { const: "outbound" },
+      status: {
+        type: "string",
+        enum: [
+          "pending",
+          "low",
+          "medium",
+          "high",
+          "severe",
+          "unavailable",
+          "timed_out"
+        ]
+      },
+      verdict: {
+        type: "string",
+        enum: ["clear", "review", "flagged", "none"]
+      },
+      risk_level: {
+        type: ["string", "null"],
+        enum: ["low", "medium", "high", "severe", null]
+      },
+      advisory: { const: true },
+      executable: { const: false },
+      submitted_at: { type: "string", format: "date-time" },
+      deadline: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   WithdrawalsView: {
     type: "object",
     additionalProperties: false,
@@ -1141,7 +1236,17 @@ const pinnedParameterNames = new Set([
   "IdempotencyKey",
   "OperationId",
   "Platform",
-  "RequestId"
+  "RequestId",
+  "ScreeningId"
+]);
+
+// Templated paths bind exactly one canonical path parameter per placeholder
+// name: {checkId} -> CheckId, {operationId} -> OperationId,
+// {screeningId} -> ScreeningId.
+const canonicalPathParameters = new Map([
+  ["checkId", "#/components/parameters/CheckId"],
+  ["operationId", "#/components/parameters/OperationId"],
+  ["screeningId", "#/components/parameters/ScreeningId"]
 ]);
 
 const canonicalHeaderParameters = new Map([
@@ -1150,13 +1255,6 @@ const canonicalHeaderParameters = new Map([
   ["x-platform", "#/components/parameters/Platform"],
   ["x-device-id", "#/components/parameters/DeviceId"],
   ["idempotency-key", "#/components/parameters/IdempotencyKey"]
-]);
-
-// Templated paths bind exactly one canonical path parameter per placeholder
-// name: {checkId} -> CheckId, {operationId} -> OperationId.
-const canonicalPathParameters = new Map([
-  ["checkId", "#/components/parameters/CheckId"],
-  ["operationId", "#/components/parameters/OperationId"]
 ]);
 
 function verifyUniqueParameters(pathParameters, operationParameters, sourcePath, label) {
@@ -1321,7 +1419,10 @@ function checkOpenApi() {
     ["previewCustomerCheck", "/api/v1/customer/checks/preview"],
     ["getCustomerCheckStatus", "/api/v1/customer/checks/{checkId}"],
     ["claimCustomerCheck", "/api/v1/customer/checks/{checkId}/claim"],
-    ["cancelCustomerCheck", "/api/v1/customer/checks/{checkId}/cancel"]
+    ["cancelCustomerCheck", "/api/v1/customer/checks/{checkId}/cancel"],
+    ["getCustomerDepositAddresses", "/api/v1/customer/deposit-addresses"],
+    ["getCustomerAddressScreenings", "/api/v1/customer/address-screenings"],
+    ["getCustomerAddressScreening", "/api/v1/customer/address-screenings/{screeningId}"]
   ]);
   const commandOperations = new Set([
     "previewCustomerCheck",
@@ -1373,7 +1474,10 @@ function checkOpenApi() {
     ["previewCustomerCheck", gatedReadStatuses],
     ["getCustomerCheckStatus", ["200", "401", "403", "404", "429", "500"]],
     ["claimCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
-    ["cancelCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]]
+    ["cancelCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
+    ["getCustomerDepositAddresses", gatedReadStatuses],
+    ["getCustomerAddressScreenings", gatedReadStatuses],
+    ["getCustomerAddressScreening", ["200", "401", "403", "404", "429", "500"]]
   ]);
   const successSchemas = new Map([
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
@@ -1402,7 +1506,10 @@ function checkOpenApi() {
     ["previewCustomerCheck", "#/components/schemas/CheckPreview"],
     ["getCustomerCheckStatus", "#/components/schemas/CheckView"],
     ["claimCustomerCheck", "#/components/schemas/CheckView"],
-    ["cancelCustomerCheck", "#/components/schemas/CheckView"]
+    ["cancelCustomerCheck", "#/components/schemas/CheckView"],
+    ["getCustomerDepositAddresses", "#/components/schemas/DepositAddressesView"],
+    ["getCustomerAddressScreenings", "#/components/schemas/AddressScreeningsView"],
+    ["getCustomerAddressScreening", "#/components/schemas/AddressScreeningView"]
   ]);
   const allowedPathItemFields = new Set([...methodNames, "parameters"]);
   const allowedOperationFields = new Set([
@@ -1489,6 +1596,13 @@ function checkOpenApi() {
         requestHeaders.has("#/components/parameters/RequestId"),
         `Missing X-Request-Id: ${operation.operationId}`
       );
+      for (const [parameterName, parameterRef] of canonicalPathParameters) {
+        const templated = pathName.includes(`{${parameterName}}`);
+        assert(
+          templated === requestHeaders.has(parameterRef),
+          `${parameterName} path parameter must be bound exactly on its templated paths: ${operation.operationId}`
+        );
+      }
       const isCheckPath = pathName.includes("{checkId}");
       assert(
         isCheckPath === requestHeaders.has("#/components/parameters/CheckId"),
@@ -1686,6 +1800,17 @@ function checkOpenApi() {
       pattern: "^[a-z][a-z0-9_-]{2,127}$"
     }),
     "Canonical CheckId constraints must remain pinned"
+  );
+  const screeningIdParameter = parameters.ScreeningId;
+  assert(screeningIdParameter?.required === true, "ScreeningId must be required when used");
+  assert(screeningIdParameter?.in === "path", "ScreeningId must remain a path parameter");
+  assert(screeningIdParameter?.name === "screeningId", "ScreeningId must use screeningId");
+  assert(
+    canonicalJson(screeningIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^scr_[0-9a-f]{32}$"
+    }),
+    "Canonical ScreeningId constraints must remain pinned"
   );
   const operationIdParameter = parameters.OperationId;
   assert(operationIdParameter?.required === true, "OperationId must be required when used");

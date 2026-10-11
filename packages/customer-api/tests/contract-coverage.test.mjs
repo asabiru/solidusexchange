@@ -8,6 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ERROR_MESSAGES, OPERATIONS } from "../src/contract.mjs";
+import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {
   assertConforms,
@@ -23,13 +24,20 @@ import {
   startTestServer,
   stopServer,
   validator,
+  VERIFIED_SUBJECT,
   verifiedCustomerHeaders
 } from "./http-client.mjs";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
 // The operationId pin is a real minted id for the verified test subject so
 // the served member read reaches its 200 path like every other served route.
-const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor() });
+// The screeningId detail read only serves records the subject owns, so the pinned value
+// is the verified subject's first deterministic screening id rather than an
+// arbitrary well-formed string (which would be the legitimate 404).
+const KNOWN_SCREENING_ID = (
+  await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
+).screenings[0].screening_id;
+const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor(), screeningId: KNOWN_SCREENING_ID });
 const OPERATOR_HEADERS = [
   ...customerHeaders({ "X-Platform": "operator-web" }),
   ["X-Device-Id", "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11"]

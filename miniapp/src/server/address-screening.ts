@@ -18,8 +18,9 @@ import {
   kytBindingDigest,
   verificationKeyOf
 } from "@solidchange/provider-simulators";
-import { type ScreeningTarget, screeningTargetOf } from "../shared/address-screening.js";
+import { type ScreeningAsset, type ScreeningNetwork, type ScreeningTarget, screeningTargetOf } from "../shared/address-screening.js";
 import type { AddressScreeningStatus, AddressScreeningView } from "../shared/api.js";
+import type { CustomerApiAddressScreening } from "./customer-api-client.js";
 
 export const maxAddressLength = 64;
 export const maxScreeningsPerSubject = 10;
@@ -67,6 +68,10 @@ export type ScreeningCallbackResult =
 export interface AddressScreeningService {
   submit(subject: string, input: ScreeningInput): Promise<{ created: boolean; view: AddressScreeningView }>;
   view(subject: string, id: string): AddressScreeningView | undefined;
+  /** The subject's locally-tracked screenings in submission order — the
+   * in-place degrade for the list route and the fallback for locally minted
+   * ids the upstream detail read 404s. */
+  list(subject: string): readonly AddressScreeningView[];
   /** Test seam: drain due signed deliveries without applying them. */
   drainDeliveries(): readonly ScheduledDelivery[];
   receiveCallback(delivery: { headers: unknown; body: unknown }, receivedAt?: number): ScreeningCallbackResult;
@@ -379,6 +384,12 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
       const screening = find(subject, id);
       return screening ? viewOf(screening) : undefined;
     },
+    list(subject: string): readonly AddressScreeningView[] {
+      sync();
+      return Object.freeze(
+        [...(subjects.get(subject)?.screenings.values() ?? [])].map(viewOf)
+      );
+    },
     drainDeliveries: () => simulator.drainCallbacks(),
     receiveCallback,
     inspect(subject: string, id: string): InboxSubject | undefined {
@@ -389,4 +400,24 @@ export function createAddressScreeningService(options: AddressScreeningServiceOp
     size: (subject: string) => subjects.get(subject)?.screenings.size ?? 0,
     trackedCount: () => [...subjects.values()].reduce((total, record) => total + record.screenings.size, 0)
   });
+}
+
+/**
+ * Adapts a served contract screening record into the local view shape:
+ * snake_case fields become camelCase and the advisory/badge vocabulary
+ * passes through verbatim — the local surface has no verdict/risk_level
+ * fields, so those contract fields are intentionally dropped here.
+ */
+export function contractAddressScreeningView(record: CustomerApiAddressScreening): AddressScreeningView {
+  return {
+    id: record.screening_id,
+    mode: "test",
+    asset: record.asset as ScreeningAsset,
+    network: record.network as ScreeningNetwork,
+    status: record.status,
+    advisory: true,
+    executable: false,
+    submittedAt: Date.parse(record.submitted_at),
+    deadline: Date.parse(record.deadline)
+  };
 }

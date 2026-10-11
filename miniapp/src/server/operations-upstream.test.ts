@@ -57,6 +57,9 @@ function operationsStub(
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),
+    depositAddresses: async () => ({ status: "not-configured" }),
+    addressScreenings: async () => ({ status: "not-configured" }),
+    addressScreening: async () => ({ status: "not-configured" }),
     activity: async () => ({ status: "not-configured" }),
     operations: async (subject) => {
       listCalls.push(subject);

@@ -5,11 +5,17 @@ import { PERMISSIONS_POLICY, SECURITY_HEADERS } from "../src/app.mjs";
 import { OPERATIONS } from "../src/contract.mjs";
 import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
-import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, rawExchange, REQUEST_ID, request, startTestServer, stopServer, verifiedCustomerHeaders } from "./http-client.mjs";
+import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
 
 // A concrete operation id minted for the verified test subject: the
 // templated member read needs a real id to reach its 200 path.
 const VERIFIED_OPERATION_ID = await operationIdFor();
+// Templated served paths are requested with the verified subject's own
+// deterministic screening id so the success path returns a real 200.
+const KNOWN_SCREENING_ID = (
+  await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
+).screenings[0].screening_id;
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
@@ -66,7 +72,9 @@ test("every operation sends the security headers on success and on its error pat
   await withServer({ observability: { log: "off", metrics: "loopback" } }, async (port) => {
     for (const operation of OPERATIONS) {
       const { method } = operation;
-      const path = operation.path.replaceAll("{operationId}", VERIFIED_OPERATION_ID);
+      const path = operation.path
+        .replaceAll("{operationId}", VERIFIED_OPERATION_ID)
+        .replaceAll("{screeningId}", KNOWN_SCREENING_ID);
       const ok = await request(port, { method, path, headers: operationHeaders(operation) });
       assert.equal(ok.status, 200, path);
       assertSecurityHeaders(ok, `${method} ${path} 200`);

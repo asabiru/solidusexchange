@@ -1,13 +1,16 @@
 import { type AssetCode, assets } from "../shared/assets.js";
 import type {
   AssetBalance,
+  DepositAddressView,
   KycStatus,
   OperationDetail,
   OperationSummary,
   ProfileView,
   WalletView
 } from "../shared/api.js";
+import type { ScreeningAsset, ScreeningNetwork } from "../shared/address-screening.js";
 import { fromUnits, toUnits } from "../shared/decimal.js";
+import type { CustomerApiDepositAddress } from "./customer-api-client.js";
 import { valueInRub } from "./quotes.js";
 
 function deepFreeze<T>(value: T): T {
@@ -31,7 +34,8 @@ function sumRub(values: readonly string[]): string {
 
 export function walletView(
   kyc: KycStatus,
-  entries: readonly { code: AssetCode; available: string; hold: string }[]
+  entries: readonly { code: AssetCode; available: string; hold: string }[],
+  depositAddresses: readonly DepositAddressView[] = []
 ): WalletView {
   const balances: AssetBalance[] = entries.map((entry) => {
     const scale = assets[entry.code].scale;
@@ -43,7 +47,28 @@ export function walletView(
     totalRub: sumRub(balances.map((balance) => balance.valueRub)),
     availableRub: sumRub(balances.map((balance) => valueInRub(balance.code, balance.available))),
     holdRub: sumRub(balances.map((balance) => valueInRub(balance.code, balance.hold))),
-    assets: balances
+    assets: balances,
+    // The wallet surface has no local deposit-address data of its own: the
+    // local (degraded/unconfigured) shape keeps the same section empty, and a
+    // denied upstream read degrades to this very in-place view.
+    depositAddresses: [...depositAddresses]
+  };
+}
+
+/**
+ * Adapts a served contract deposit-address record into the wallet surface's
+ * shape: snake_case fields become camelCase and the opaque address string
+ * passes through verbatim — no other interpretation is possible locally.
+ */
+export function contractDepositAddressView(record: CustomerApiDepositAddress): DepositAddressView {
+  return {
+    id: record.deposit_address_id,
+    asset: record.asset as ScreeningAsset,
+    network: record.network as ScreeningNetwork,
+    address: record.address,
+    status: "active",
+    createdAt: Date.parse(record.created_at),
+    posting: "none"
   };
 }
 

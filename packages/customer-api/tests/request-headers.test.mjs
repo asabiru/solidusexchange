@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { isUuidV7 } from "../src/request-id.mjs";
+import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import {
   checkedRequest,
   customerHeaders,
@@ -36,10 +37,16 @@ const CHECKS = "/api/v1/customer/checks";
 const ACTIVITY = "/api/v1/customer/activity";
 const OPERATIONS_LIST = "/api/v1/customer/operations";
 const OPERATION_DETAIL = `/api/v1/customer/operations/${await operationIdFor()}`;
+const DEPOSIT_ADDRESSES = "/api/v1/customer/deposit-addresses";
+const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
+const KNOWN_SCREENING_ID = (
+  await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
+).screenings[0].screening_id;
+const ADDRESS_SCREENING = `/api/v1/customer/address-screenings/${KNOWN_SCREENING_ID}`;
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const OPERATOR_ADMIN = "/api/v1/operator/admin";
-const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, AUTH, USERS];
+const CUSTOMER_PATHS = [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, ADDRESS_SCREENING, AUTH, USERS];
 const DEVICE_ID = "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11";
 const OTHER_REQUEST_ID = "018f3f8a-6a36-7bd8-86e0-b59cd575d55b";
 let port;
@@ -135,6 +142,9 @@ test("valid X-Request-Id is echoed on success and on every error class", async (
     [ACTIVITY, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATIONS_LIST, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATION_DETAIL, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [DEPOSIT_ADDRESSES, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [ADDRESS_SCREENINGS, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
+    [ADDRESS_SCREENING, verifiedCustomerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [AUTH, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [USERS, customerHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],
     [OPERATOR_ADMIN, operatorHeaders({ "X-Request-Id": OTHER_REQUEST_ID }), 200],

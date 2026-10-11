@@ -14,6 +14,8 @@ import { createSyntheticExchangeOrderDirectory } from "../src/exchange-orders.mj
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticOperationDirectory } from "../src/operations.mjs";
+import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { createSyntheticDepositAddressDirectory } from "../src/deposit-addresses.mjs";
 import { createSyntheticOperatorDirectory } from "../src/operator.mjs";
 import { createSyntheticPaymentDirectory } from "../src/payments.mjs";
 import { createSyntheticProfileDirectory } from "../src/profile.mjs";
@@ -98,6 +100,8 @@ export async function startTestServer(options = {}) {
     checkDirectory: createSyntheticCheckDirectory(),
     activityDirectory: createSyntheticActivityDirectory(),
     operationDirectory: createSyntheticOperationDirectory(),
+    depositAddressDirectory: createSyntheticDepositAddressDirectory(),
+    addressScreeningDirectory: createSyntheticAddressScreeningDirectory(),
     operatorDirectory: createSyntheticOperatorDirectory(),
     rateLimiter: createFixedWindowRateLimiter({ limit: 1000, clock }),
     clock,

@@ -588,6 +588,29 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(device.status, 400);
   });
 
+  it("degrades the served screening and deposit-address reads in place upstream", async () => {
+    // customer.address-screenings.read and customer.deposit-addresses.read
+    // carry the same upstream KYC gate as the other collection reads: the
+    // upstream synthetic KYC directory marks every subject unverified, so
+    // both reads are refused and degrade in place — the screening list to the
+    // subject's locally-tracked records (the POST submit stays local, so
+    // local-only records still render), the wallet's depositAddresses section
+    // to empty (the local surface has no address data of its own).
+    const submitted = await postMiniapp("/bff/address-screening", screeningBody, { cookie });
+    // Idempotent for a repeated submit of the same body (202 first time).
+    assert.ok(submitted.status === 202 || submitted.status === 200);
+    const created = await readJson(submitted);
+    const list = await getMiniapp("/bff/address-screening", cookie);
+    assert.equal(list.mode, "test");
+    assert.deepEqual(Object.keys(list).sort(), ["mode", "screenings"]);
+    assert.deepEqual(list.screenings.map((entry) => entry.id), [created.id]);
+    const view = await getMiniapp(`/bff/address-screening/${created.id}`, cookie);
+    assert.equal(view.id, created.id);
+    assert.equal(view.mode, "test");
+    const wallet = await getMiniapp("/bff/wallet", cookie);
+    assert.deepEqual(wallet.depositAddresses, []);
+  });
+
   it("previews buy and sell quotes that are never executable", async () => {
     // RUB -> USDT is routed to the simulator's buy side with quote_amount as the budget.
     const buy = await getMiniapp("/bff/quotes/preview?from=RUB&to=USDT&amount=5000", cookie);

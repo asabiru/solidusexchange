@@ -11,6 +11,8 @@ import {
 } from "./contract.mjs";
 import { validActivityView } from "./activity.mjs";
 import { validOperationsView, validOperationView } from "./operations.mjs";
+import { validDepositAddressesView } from "./deposit-addresses.mjs";
+import { validAddressScreeningsView, validAddressScreeningView } from "./address-screenings.mjs";
 import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
@@ -63,6 +65,8 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./checks.mjs").CheckDirectory} checkDirectory
  * @property {import("./activity.mjs").ActivityDirectory} activityDirectory
  * @property {import("./operations.mjs").OperationDirectory} operationDirectory
+ * @property {import("./deposit-addresses.mjs").DepositAddressDirectory} depositAddressDirectory
+ * @property {import("./address-screenings.mjs").AddressScreeningDirectory} addressScreeningDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
@@ -306,6 +310,8 @@ export function createCustomerApiHandler({
   checkDirectory,
   activityDirectory,
   operationDirectory,
+  depositAddressDirectory,
+  addressScreeningDirectory,
   operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
@@ -367,6 +373,12 @@ export function createCustomerApiHandler({
   }
   if (typeof operationDirectory?.viewFor !== "function" || typeof operationDirectory?.operationFor !== "function") {
     throw new Error("An operation directory is required");
+  }
+  if (typeof depositAddressDirectory?.listFor !== "function") {
+    throw new Error("A deposit address directory is required");
+  }
+  if (typeof addressScreeningDirectory?.listFor !== "function" || typeof addressScreeningDirectory?.viewFor !== "function") {
+    throw new Error("An address screening directory is required");
   }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
@@ -760,6 +772,61 @@ export function createCustomerApiHandler({
       }
       if (!validOperationView(item)) {
         throw new Error("Operation directory returned an invalid operation");
+      }
+      send(response, 200, { ...item }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerDepositAddresses") {
+      // customer.deposit-addresses.read is KYC-gated like the other
+      // asset/activity collections: the list only carries opaque synthetic
+      // testnet-looking address strings for the custody-dev-v1 pairs — never
+      // key material, never a posting instruction (posting stays "none") —
+      // so unverified and pending subjects are denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.deposit-addresses.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await depositAddressDirectory.listFor(principal.subject);
+      if (!validDepositAddressesView(view)) {
+        throw new Error("Deposit address directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerAddressScreenings") {
+      // customer.address-screenings.read is KYC-gated like the other
+      // asset/activity collections: screening records are advisory-only
+      // projections (advisory true, executable false, posting "none") so
+      // unverified and pending subjects are denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.address-screenings.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await addressScreeningDirectory.listFor(principal.subject);
+      if (!validAddressScreeningsView(view)) {
+        throw new Error("Address screening directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerAddressScreening") {
+      // Same capability as the collection: a member read can never be wider
+      // than the list it belongs to. An id the subject does not own (or a
+      // well-formed id that was never minted) fails closed as the pinned 404
+      // envelope — the synthetic directory is the only source of truth and
+      // denies by default.
+      if (!evaluation.granted.includes("customer.address-screenings.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const screeningId = parameters.get("screeningId") ?? "";
+      const item = await addressScreeningDirectory.viewFor(principal.subject, screeningId);
+      if (item === undefined || item === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validAddressScreeningView(item)) {
+        throw new Error("Address screening directory returned an invalid screening");
       }
       send(response, 200, { ...item }, requestId);
       return;
