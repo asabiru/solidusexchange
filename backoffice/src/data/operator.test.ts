@@ -102,7 +102,7 @@ describe("operator subjects adapter", () => {
 
 describe("operator subject detail adapter", () => {
   it("maps the extended detail fields", () => {
-    const parsed = parseOperatorSubjectView(subjectDetailPayload);
+    const parsed = parseOperatorSubjectView(subjectDetailPayload, subjectDetailPayload.subject.subjectId);
     assert.ok(parsed !== undefined);
     const subject = parsed.subject;
     assert.equal(subject.accountStatus, "active");
@@ -114,7 +114,7 @@ describe("operator subject detail adapter", () => {
   });
 
   it("rejects forged envelopes and invalid detail axes", () => {
-    assert.equal(parseOperatorSubjectView({ ...subjectDetailPayload, extra: true }), undefined);
+    assert.equal(parseOperatorSubjectView({ ...subjectDetailPayload, extra: true }, subjectDetailPayload.subject.subjectId), undefined);
     const cases: Record<string, unknown> = {
       accountStatus: "suspended",
       contactHash: "aibek@example.dev",
@@ -123,15 +123,15 @@ describe("operator subject detail adapter", () => {
       limits: { maxSessions: 8 }
     };
     for (const [key, value] of Object.entries(cases)) {
-      assert.equal(parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, [key]: value } }), undefined, key);
+      assert.equal(parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, [key]: value } }, subjectDetailPayload.subject.subjectId), undefined, key);
     }
     assert.equal(
-      parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, sessions: 9 } }),
+      parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, sessions: 9 } }, subjectDetailPayload.subject.subjectId),
       undefined,
       "sessions beyond the limits echo"
     );
     assert.equal(
-      parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, devices: ["dev_0123456789abcdef", "dev_0123456789abcdef"] } }),
+      parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, devices: ["dev_0123456789abcdef", "dev_0123456789abcdef"] } }, subjectDetailPayload.subject.subjectId),
       undefined,
       "duplicated device ref"
     );

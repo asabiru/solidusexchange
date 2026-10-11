@@ -709,7 +709,7 @@ export function createBackofficeServer(
             json(response, 503, { error: "operator_subject_unavailable" });
             return;
           }
-          signed(response, "operator-subject", {
+          signed(response, `operator-subject:${requestedId}`, {
             mode: upstream.view.mode,
             subject: {
               subjectId: upstream.view.subject.subject_id,
@@ -740,7 +740,7 @@ export function createBackofficeServer(
           json(response, 404, { error: "operator_subject_not_found" });
           return;
         }
-        signed(response, "operator-subject", {
+        signed(response, `operator-subject:${requestedId}`, {
           mode: "test",
           subject: {
             subjectId: null,
@@ -821,7 +821,7 @@ export function createBackofficeServer(
             };
             return { ...core, displayName: kyc.display_name, submittedAt: kyc.submitted_at, slaDueAt: kyc.sla_due_at };
           });
-          signed(response, "operator-queue", {
+          signed(response, `operator-queue:${kind}`, {
             mode: upstream.view.mode,
             queue: {
               kind: upstream.view.queue.kind,
@@ -899,7 +899,7 @@ export function createBackofficeServer(
           const key = item.state === "in_review" ? "inReview" : item.state;
           byState[key] += 1;
         }
-        signed(response, "operator-queue", {
+        signed(response, `operator-queue:${kind}`, {
           mode: "test",
           queue: {
             kind,

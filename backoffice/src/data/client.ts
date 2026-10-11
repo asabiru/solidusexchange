@@ -218,6 +218,15 @@ export class ApiError extends Error {
 
 const KEYSET_MAX_AGE_MS = 60 * 1_000;
 const RESPONSE_MAX_SKEW_MS = 5 * 60 * 1_000;
+// Every body the client parses is bounded on the wire before decode: a
+// giant or endless upstream payload must never materialize as JSON.
+const MAX_BFF_RESPONSE_BYTES = 262_144;
+// Mirror of the server signer: a payload nested deeper than the canonical
+// bound can keep a valid signature while exhausting the consumer.
+const MAX_PAYLOAD_DEPTH = 16;
+// The signer never advertises more keys than it retains; a keyset claiming
+// an arbitrarily large key list is drift, not a rotation history.
+const SIGNING_KEYSET_MAX_KEYS = 8;
 const ENVELOPE_FIELDS = [
   "issuedAt",
   "keyId",
@@ -250,7 +259,45 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function assertCanonicalJson(value: unknown): void {
+async function readBoundedJson(response: Response): Promise<unknown> {
+  const declared = response.headers.get("content-length");
+  if (declared !== null && !(/^\d{1,9}$/.test(declared) && Number(declared) <= MAX_BFF_RESPONSE_BYTES)) {
+    await response.body?.cancel().catch(() => undefined);
+    throw new Error("Backoffice response too large");
+  }
+  if (!response.body) {
+    const text = await response.text();
+    if (text.length > MAX_BFF_RESPONSE_BYTES) throw new Error("Backoffice response too large");
+    return JSON.parse(text) as unknown;
+  }
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BFF_RESPONSE_BYTES) throw new Error("Backoffice response too large");
+      chunks.push(value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+  const merged = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(merged)) as unknown;
+}
+
+function assertCanonicalJson(value: unknown, depth = 0): void {
+  if (depth > MAX_PAYLOAD_DEPTH) {
+    throw new Error("Backoffice response payload is not canonical JSON");
+  }
   if (typeof value === "number") {
     if (!Number.isFinite(value) || Object.is(value, -0)) {
       throw new Error("Backoffice response payload is not canonical JSON");
@@ -258,12 +305,47 @@ function assertCanonicalJson(value: unknown): void {
     return;
   }
   if (Array.isArray(value)) {
-    for (const item of value) assertCanonicalJson(item);
+    for (const item of value) assertCanonicalJson(item, depth + 1);
     return;
   }
   if (isRecord(value)) {
-    for (const item of Object.values(value)) assertCanonicalJson(item);
+    for (const item of Object.values(value)) assertCanonicalJson(item, depth + 1);
   }
+}
+
+// Error envelopes from the BFF carry optional fields the client surfaces
+// (error code, step-up state, attempts remaining, device digest). A detail
+// body is trusted only when every field it carries is correctly typed —
+// one hostile field poisons the whole detail rather than leaking through.
+function parseErrorDetail(value: unknown): {
+  error?: string;
+  state?: string;
+  attemptsRemaining?: number;
+  deviceDigest?: string;
+} {
+  if (!isRecord(value)) return {};
+  const detail: { error?: string; state?: string; attemptsRemaining?: number; deviceDigest?: string } = {};
+  if (value.error !== undefined) {
+    if (typeof value.error !== "string") return {};
+    detail.error = value.error;
+  }
+  if (value.state !== undefined) {
+    if (typeof value.state !== "string") return {};
+    detail.state = value.state;
+  }
+  if (value.attemptsRemaining !== undefined) {
+    if (
+      typeof value.attemptsRemaining !== "number"
+      || !Number.isInteger(value.attemptsRemaining)
+      || value.attemptsRemaining < 0
+    ) return {};
+    detail.attemptsRemaining = value.attemptsRemaining;
+  }
+  if (value.deviceDigest !== undefined) {
+    if (typeof value.deviceDigest !== "string") return {};
+    detail.deviceDigest = value.deviceDigest;
+  }
+  return detail;
 }
 
 function assertEnvelopeShape(envelope: unknown): asserts envelope is SignedEnvelope<unknown> {
@@ -302,6 +384,8 @@ function isValidKeyset(keyset: SigningKeyset): boolean {
     || keyset.backend !== "ephemeral-dev"
     || typeof keyset.activeKeyId !== "string"
     || !Array.isArray(keyset.keys)
+    || keyset.keys.length < 1
+    || keyset.keys.length > SIGNING_KEYSET_MAX_KEYS
   ) return false;
   const active = keyset.keys.filter((key) => isRecord(key) && key.status === "active");
   const keyIds = new Set(keyset.keys.map((key) => isRecord(key) ? key.keyId : undefined));
@@ -321,7 +405,7 @@ async function signingKeyset(forceRefresh = false): Promise<SigningKeyset> {
       headers: { accept: "application/json" }
     }).then(async (response) => {
       if (!response.ok) throw new ApiError(response.status, "Signing keys unavailable");
-      const keyset = await response.json() as SigningKeyset;
+      const keyset = await readBoundedJson(response) as SigningKeyset;
       if (!isValidKeyset(keyset)) throw new Error("Backoffice signing keyset is invalid");
       return keyset;
     });
@@ -391,7 +475,7 @@ async function getSigned<T>(path: string, resource: string): Promise<T> {
     headers: { accept: "application/json" }
   });
   if (!response.ok) throw new ApiError(response.status, `Backoffice API rejected ${path}`);
-  return verifyEnvelope(await response.json() as SignedEnvelope<T>, resource);
+  return verifyEnvelope(await readBoundedJson(response) as SignedEnvelope<T>, resource);
 }
 
 async function postSigned<T>(
@@ -415,7 +499,7 @@ async function postSigned<T>(
       attemptsRemaining?: number;
     } = {};
     try {
-      detail = await response.json() as typeof detail;
+      detail = parseErrorDetail(await readBoundedJson(response));
     } catch {
       detail = {};
     }
@@ -427,7 +511,7 @@ async function postSigned<T>(
       detail.attemptsRemaining
     );
   }
-  return verifyEnvelope(await response.json() as SignedEnvelope<T>, resource);
+  return verifyEnvelope(await readBoundedJson(response) as SignedEnvelope<T>, resource);
 }
 
 export async function getHealth(): Promise<HealthPayload> {
@@ -436,7 +520,7 @@ export async function getHealth(): Promise<HealthPayload> {
     headers: { accept: "application/json" }
   });
   if (!response.ok) throw new ApiError(response.status, "Backoffice BFF unavailable");
-  return await response.json() as HealthPayload;
+  return await readBoundedJson(response) as HealthPayload;
 }
 
 export async function getAuthStatus(): Promise<AuthStatusPayload> {
@@ -445,7 +529,7 @@ export async function getAuthStatus(): Promise<AuthStatusPayload> {
     headers: { accept: "application/json" }
   });
   if (!response.ok) throw new ApiError(response.status, "Session status unavailable");
-  return await response.json() as AuthStatusPayload;
+  return await readBoundedJson(response) as AuthStatusPayload;
 }
 
 export function getSession(): Promise<SessionPayload> {
@@ -465,12 +549,18 @@ export function getOperatorSubjects(): Promise<OperatorSubjectsPayload> {
 }
 
 export function getOperatorSubject(subjectId: string): Promise<OperatorSubjectPayload> {
-  return getSigned(`/bff/api/operator/subjects/${encodeURIComponent(subjectId)}`, "operator-subject");
+  // The attestation binds the member read exactly like check:${id} and
+  // withdrawal:${id}: a view signed for another subject can never satisfy
+  // this request.
+  return getSigned(`/bff/api/operator/subjects/${encodeURIComponent(subjectId)}`, `operator-subject:${subjectId}`);
 }
 
 export function getOperatorQueue(kind?: OperatorQueueKind): Promise<OperatorQueuePayload> {
-  const query = kind === undefined ? "" : `?kind=${kind}`;
-  return getSigned(`/bff/api/operator/queue${query}`, "operator-queue");
+  // Same binding as the member read: the server defaults an absent kind to
+  // kyc, so the expected resource resolves the same way.
+  const resolved = kind ?? "kyc";
+  const query = kind === undefined ? "" : `?kind=${encodeURIComponent(kind)}`;
+  return getSigned(`/bff/api/operator/queue${query}`, `operator-queue:${resolved}`);
 }
 
 export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {
@@ -546,7 +636,7 @@ export async function getAuditExport(): Promise<SignedEnvelope<AuditExportPayloa
     headers: { accept: "application/json" }
   });
   if (!response.ok) throw new ApiError(response.status, "Audit export was rejected");
-  const envelope = await response.json() as SignedEnvelope<AuditExportPayload>;
+  const envelope = await readBoundedJson(response) as SignedEnvelope<AuditExportPayload>;
   await verifyEnvelope(envelope, "audit-export");
   return envelope;
 }
@@ -603,7 +693,7 @@ export async function createDevSession(role: OperatorRole): Promise<void> {
   if (!response.ok) {
     let detail: { error?: string; deviceDigest?: string } = {};
     try {
-      detail = await response.json() as typeof detail;
+      detail = parseErrorDetail(await readBoundedJson(response));
     } catch {
       detail = {};
     }

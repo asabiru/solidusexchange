@@ -141,7 +141,7 @@ describe("operator subject detail BFF surface", () => {
     const cookie = await devSession(baseUrl);
     const { response, body } = await operatorSubjectEnvelope(baseUrl, cookie, "CUS-10482");
     assert.equal(response.status, 200);
-    assert.equal(body.resource, "operator-subject");
+    assert.equal(body.resource, "operator-subject:CUS-10482");
     const payload = body.payload as { mode: string; subject: Record<string, unknown> };
     assert.equal(payload.mode, "test");
     const subject = payload.subject;
@@ -188,7 +188,7 @@ describe("operator subject detail BFF surface", () => {
       `${session}; solidchange_bo_device=${testDeviceId}`
     );
     assert.equal(response.status, 200);
-    assert.equal(body.resource, "operator-subject");
+    assert.equal(body.resource, `operator-subject:${testSubjectId}`);
     assert.deepEqual(body.payload, {
       mode: "test",
       subject: {

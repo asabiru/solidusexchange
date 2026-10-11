@@ -449,7 +449,7 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
     getOperatorSubject(selected.subjectId)
       .then((payload) => {
         if (!alive) return;
-        const parsed = parseOperatorSubjectView(payload);
+        const parsed = parseOperatorSubjectView(payload, selected.subjectId);
         if (parsed === undefined) {
           setDetailState("failed");
           return;

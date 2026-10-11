@@ -214,7 +214,7 @@ describe("operator queue BFF surface", () => {
     const cookie = await devSession(baseUrl);
     const { response, body } = await operatorQueueEnvelope(baseUrl, cookie);
     assert.equal(response.status, 200);
-    assert.equal(body.resource, "operator-queue");
+    assert.equal(body.resource, "operator-queue:kyc");
     const payload = body.payload as {
       mode: string;
       queue: {
@@ -268,7 +268,7 @@ describe("operator queue BFF surface", () => {
       `${session}; solidchange_bo_device=${testDeviceId}`
     );
     assert.equal(response.status, 200);
-    assert.equal(body.resource, "operator-queue");
+    assert.equal(body.resource, "operator-queue:kyc");
     assert.deepEqual(body.payload, {
       mode: "test",
       queue: {

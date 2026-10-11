@@ -109,6 +109,16 @@ const operatorAdminViewKeys = [
 ] as const;
 const grantedCapabilitiesMaxItems = 32;
 const grantedCapabilityMaxLength = 128;
+// Mirror of upstream OPERATOR_CAPABILITY_POLICY capability ids: the echo
+// only ever reports real operator capabilities, so a view claiming a
+// capability outside the declared vocabulary fails closed.
+const operatorCapabilityVocabulary: ReadonlySet<string> = new Set([
+  "operator.session.read",
+  "operator.capabilities.read",
+  "operator.admin.read",
+  "operator.subjects.read",
+  "operator.queue.read"
+]);
 const operatorRoles: ReadonlySet<string> = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
@@ -335,7 +345,11 @@ function validGrantedCapabilities(value: unknown): value is readonly string[] {
     && value.length <= grantedCapabilitiesMaxItems
     && new Set(value).size === value.length
     && value.every(
-      (item) => typeof item === "string" && item.length >= 1 && item.length <= grantedCapabilityMaxLength
+      (item) =>
+        typeof item === "string"
+        && item.length >= 1
+        && item.length <= grantedCapabilityMaxLength
+        && operatorCapabilityVocabulary.has(item)
     )
   );
 }
@@ -443,9 +457,14 @@ function parseOperatorSubjectsView(value: unknown): CustomerApiOperatorSubjectsV
  * detail extension — the account_status enum, the redacted `cth_*` contact
  * digest, bounded integer session count, unique bounded `dev_*` device refs
  * and a limits echo the counts always fit inside — the same axes the
- * upstream `validOperatorSubjectDetailView` validator pins.
+ * upstream `validOperatorSubjectDetailView` validator pins. The detail
+ * answers exactly the requested member: a view carrying another subject's
+ * record is drift, never a fallback.
  */
-function parseOperatorSubjectDetailView(value: unknown): CustomerApiOperatorSubjectView | undefined {
+function parseOperatorSubjectDetailView(
+  value: unknown,
+  expectedSubject: string
+): CustomerApiOperatorSubjectView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, subjectDetailViewKeys)) {
     return undefined;
   }
@@ -455,6 +474,7 @@ function parseOperatorSubjectDetailView(value: unknown): CustomerApiOperatorSubj
     || !isRecord(item)
     || !hasExactKeys(item, subjectDetailKeys)
     || typeof item.subject_id !== "string"
+    || item.subject_id !== expectedSubject
     || !customerSubjectPattern.test(item.subject_id)
     || typeof item.display_name !== "string"
     || !displayNamePattern.test(item.display_name)
@@ -838,7 +858,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
         expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
       });
       const body = await get(`/api/v1/operator/subjects/${encodeURIComponent(subjectId)}`, token, deviceId, nowMs);
-      const view = parseOperatorSubjectDetailView(body);
+      const view = parseOperatorSubjectDetailView(body, subjectId);
       return view === undefined ? { status: "unavailable" } : { status: "ok", view };
     } catch (error) {
       // The upstream member read answers unknown ids with its uniform 404;
