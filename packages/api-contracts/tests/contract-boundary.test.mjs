@@ -162,6 +162,19 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects unbound order path templates",
+  "orderId path parameter must be bound exactly on its templated paths: getCustomerExchangeOrder",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/exchange-orders/{orderId}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/OrderId"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects bearer check types in canonical preview requests",
   "Canonical CheckPreviewRequest schema must remain pinned",
   (scratch) => {
@@ -333,6 +346,41 @@ assertRejected(
     const openapi = readJson(scratch, "openapi.yaml");
     const operation = openapi.paths["/api/v1/operator/subjects"].get;
     operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects the served operator subject detail read without a device identifier",
+  "Missing X-Device-Id: getOperatorSubject",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/subjects/{subjectId}"].get;
+    operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects the operator subject detail read with a missing path parameter binding",
+  "subjectId path parameter must be bound exactly",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/subjects/{subjectId}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/SubjectId"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects the operator subject detail read with a renamed placeholder",
+  "Operation path is not pinned: getOperatorSubject",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/operator/subjects/{id}"] = openapi.paths["/api/v1/operator/subjects/{subjectId}"];
+    delete openapi.paths["/api/v1/operator/subjects/{subjectId}"];
     writeJson(scratch, "openapi.yaml", openapi);
   }
 );

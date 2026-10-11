@@ -86,7 +86,8 @@ function stubClient(result: CustomerApiOperatorSubjects): { client: CustomerApiC
     operatorSubjects: async (subject: string, deviceId: string): Promise<CustomerApiOperatorSubjects> => {
       seen.push({ subject, deviceId });
       return result;
-    }
+    },
+    operatorSubject: async () => ({ status: "not-configured" })
   };
   return { client, seen };
 }

@@ -17,7 +17,7 @@ import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
 import { validDepositsView } from "./deposits.mjs";
-import { validExchangeOrdersView, validMarketsView, validTradesView } from "./exchange-orders.mjs";
+import { validExchangeOrderDetailView, validExchangeOrdersView, validMarketsView, validTradesView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
 import { validPaymentsView } from "./payments.mjs";
 import {
@@ -33,7 +33,8 @@ import {
   validOperatorAdminView,
   validOperatorCapabilitiesView,
   validOperatorSessionView,
-  validOperatorSubjectsView
+  validOperatorSubjectsView,
+  validOperatorSubjectDetailView
 } from "./operator.mjs";
 import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
@@ -369,7 +370,7 @@ export function createCustomerApiHandler({
   if (typeof quoteDirectory?.listFor !== "function") {
     throw new Error("A quote directory is required");
   }
-  if (typeof exchangeOrderDirectory?.listFor !== "function") {
+  if (typeof exchangeOrderDirectory?.listFor !== "function" || typeof exchangeOrderDirectory?.orderFor !== "function") {
     throw new Error("An exchange order directory is required");
   }
   if (typeof tradeDirectory?.listFor !== "function") {
@@ -402,7 +403,10 @@ export function createCustomerApiHandler({
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
   }
-  if (typeof operatorSubjectsDirectory?.subjectsFor !== "function") {
+  if (
+    typeof operatorSubjectsDirectory?.subjectsFor !== "function" ||
+    typeof operatorSubjectsDirectory?.subjectFor !== "function"
+  ) {
     throw new Error("An operator subjects directory is required");
   }
 
@@ -588,6 +592,30 @@ export function createCustomerApiHandler({
       return;
     }
 
+    if (operation.operationId === "getOperatorSubject") {
+      // The member read shares the collection's operator.subjects.read
+      // capability: a detail is never wider than the list it belongs to.
+      // A well-formed id outside the shared universe fails closed as the
+      // pinned 404 — uniform for every id shape the template admits, so the
+      // response never reveals which ids exist.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.subjects.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const subjectId = parameters.get("subjectId");
+      const view = await operatorSubjectsDirectory.subjectFor(subjectId ?? "");
+      if (view === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validOperatorSubjectDetailView(view)) {
+        throw new Error("Operator subjects directory returned an invalid subject detail");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
     const kycStatus = await kycDirectory.statusFor(principal.subject);
     const evaluation = evaluateCapabilities({ kycStatus });
     if (operation.operationId === "getCustomerKyc") {
@@ -735,6 +763,28 @@ export function createCustomerApiHandler({
         throw new Error("Exchange order directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerExchangeOrder") {
+      // Same capability as the collection: a member read can never be
+      // wider than the list it belongs to. An id the subject does not own
+      // (or a well-formed id that was never minted for it) fails closed as
+      // the pinned 404 envelope — the synthetic directory is the only
+      // source of truth and denies by default.
+      if (!evaluation.granted.includes("customer.exchange-orders.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const orderId = parameters.get("orderId") ?? "";
+      const item = await exchangeOrderDirectory.orderFor(principal.subject, orderId);
+      if (item === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validExchangeOrderDetailView(item)) {
+        throw new Error("Exchange order directory returned an invalid order detail");
+      }
+      send(response, 200, { ...item }, requestId);
       return;
     }
     if (operation.operationId === "getCustomerTrades") {

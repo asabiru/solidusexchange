@@ -144,6 +144,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/session",
   "/bff/api/operator/admin",
   "/bff/api/operator/subjects",
+  "/bff/api/operator/subjects/:id",
   "/bff/api/dashboard",
   "/bff/api/customers",
   "/bff/api/checks",
@@ -678,6 +679,82 @@ export function createBackofficeServer(
             lastActiveAt: null,
             posting: "none"
           }))
+        });
+        return;
+      }
+
+      const operatorSubjectMatch = path.match(/^\/bff\/api\/operator\/subjects\/([^/]+)$/);
+      if (request.method === "GET" && operatorSubjectMatch) {
+        const session = authorized(request, response);
+        if (!session) return;
+        const requestedId = decodeURIComponent(operatorSubjectMatch[1]);
+        if (customerApi.configured) {
+          // Same device gate as the other operator reads: the upstream
+          // audience requires X-Device-Id, so the BFF rejects locally before
+          // any call when the session presents no device identity.
+          const deviceId = requestDeviceId(request);
+          if (!deviceId) {
+            json(response, 403, { error: "device_required" });
+            return;
+          }
+          const upstream = await customerApi.operatorSubject(session.subject, deviceId, requestedId, Date.now());
+          // Unknown and non-contract ids share the upstream's uniform 404 —
+          // the BFF keeps that shape instead of revealing which ids exist.
+          if (upstream.status === "not-found") {
+            json(response, 404, { error: "operator_subject_not_found" });
+            return;
+          }
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "operator_subject_unavailable" });
+            return;
+          }
+          signed(response, "operator-subject", {
+            mode: upstream.view.mode,
+            subject: {
+              subjectId: upstream.view.subject.subject_id,
+              displayName: upstream.view.subject.display_name,
+              kycStatus: upstream.view.subject.kyc_status,
+              flags: upstream.view.subject.flags,
+              registeredAt: upstream.view.subject.registered_at,
+              lastActiveAt: upstream.view.subject.last_active_at,
+              posting: upstream.view.subject.posting,
+              accountStatus: upstream.view.subject.account_status,
+              contactHash: upstream.view.subject.contact_hash,
+              sessions: upstream.view.subject.sessions,
+              devices: [...upstream.view.subject.devices],
+              limits: {
+                maxSessions: upstream.view.subject.limits.max_sessions,
+                maxDevices: upstream.view.subject.limits.max_devices
+              }
+            }
+          });
+          return;
+        }
+        // Unconfigured: the local synthetic directory resolves the row by its
+        // customer id — the roster carries no upstream refs, so anything that
+        // is not a local CUS-* id is the uniform not-found, and the
+        // upstream-only detail fields stay null rather than invented.
+        const customer = demoRepository.customers().find((row) => row.id === requestedId);
+        if (!customer) {
+          json(response, 404, { error: "operator_subject_not_found" });
+          return;
+        }
+        signed(response, "operator-subject", {
+          mode: "test",
+          subject: {
+            subjectId: null,
+            displayName: customer.name,
+            kycStatus: null,
+            flags: customer.openAmlCases,
+            registeredAt: null,
+            lastActiveAt: null,
+            posting: "none",
+            accountStatus: null,
+            contactHash: null,
+            sessions: null,
+            devices: [],
+            limits: null
+          }
         });
         return;
       }

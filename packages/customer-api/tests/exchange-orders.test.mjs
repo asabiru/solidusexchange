@@ -284,9 +284,9 @@ test("rate limiting applies before the capability check", async () => {
 
 test("exchange order and kyc directory failures return a client-safe 500 envelope", async () => {
   const failures = [
-    { exchangeOrderDirectory: { async listFor() { throw new Error("order store exploded: secret=abc"); } } },
-    { exchangeOrderDirectory: { async listFor() { return { orders: "nope" }; } } },
-    { exchangeOrderDirectory: { async listFor() { return { mode: "test", orders: [], extra: "x" }; } } },
+    { exchangeOrderDirectory: { async listFor() { throw new Error("order store exploded: secret=abc"); }, async orderFor() { return null; } } },
+    { exchangeOrderDirectory: { async listFor() { return { orders: "nope" }; }, async orderFor() { return null; } } },
+    { exchangeOrderDirectory: { async listFor() { return { mode: "test", orders: [], extra: "x" }; }, async orderFor() { return null; } } },
     { kycDirectory: { async statusFor() { throw new Error("kyc provider down"); } } }
   ];
   for (const options of failures) {

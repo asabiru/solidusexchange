@@ -9,6 +9,7 @@ import test from "node:test";
 
 import { ERROR_MESSAGES, OPERATIONS } from "../src/contract.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {
   assertConforms,
@@ -19,6 +20,7 @@ import {
   NOW_MS,
   operationIdFor,
   operatorHeaders,
+  orderIdFor,
   rawExchange,
   REQUEST_ID,
   startTestServer,
@@ -29,15 +31,22 @@ import {
 } from "./http-client.mjs";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
-// The operationId pin is a real minted id for the verified test subject so
-// the served member read reaches its 200 path like every other served route.
+// The operationId and orderId pins are real minted ids for the verified
+// test subject so the served member reads reach their 200 path like every
+// other served route.
 // The screeningId detail read only serves records the subject owns, so the pinned value
 // is the verified subject's first deterministic screening id rather than an
 // arbitrary well-formed string (which would be the legitimate 404).
 const KNOWN_SCREENING_ID = (
   await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
 ).screenings[0].screening_id;
-const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor(), screeningId: KNOWN_SCREENING_ID });
+// The operator subjectId detail read only serves ids inside the shared
+// roster, so the pinned value is the roster's first minted id — a
+// well-formed id outside the universe is the legitimate 404, not a 200.
+const KNOWN_OPERATOR_SUBJECT_ID = (
+  await createSyntheticOperatorSubjectsDirectory().subjectsFor()
+).subjects[0].subject_id;
+const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor(), orderId: await orderIdFor(), screeningId: KNOWN_SCREENING_ID, subjectId: KNOWN_OPERATOR_SUBJECT_ID });
 const OPERATOR_HEADERS = [
   ...customerHeaders({ "X-Platform": "operator-web" }),
   ["X-Device-Id", "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11"]
@@ -224,8 +233,11 @@ test("unknown paths under /api/v1/customer/** 404 rather than fall through", asy
     "/api/v1/customer/withdrawals/wdr_0123456789abcdef01234567",
     "/api/v1/customer/quotes/",
     "/api/v1/customer/quotes/qte_0123456789abcdef01234567",
+    // The exchange-orders collection is served and its {orderId} member
+    // read now answers ord_* ids — the trailing slash and a trailing
+    // member segment stay contract-only, like every other collection.
     "/api/v1/customer/exchange-orders/",
-    "/api/v1/customer/exchange-orders/ord_0123456789abcdef01234567",
+    "/api/v1/customer/exchange-orders/ord_0123456789abcdef01234567/extra",
     "/api/v1/customer/trades/",
     "/api/v1/customer/trades/trd_0123456789abcdef01234567",
     "/api/v1/customer/markets/",

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createDenyAllVerifier } from "../src/auth.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
+import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { API_METADATA, CONTRACT_GAP_STATUSES, OPERATIONS, PLATFORMS } from "../src/contract.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { CONTRACT_GAP_STATUSES as VALIDATOR_GAP_STATUSES } from "./contract-validator.mjs";
@@ -17,6 +18,7 @@ import {
   operationIdFor,
   operationPathFor,
   operatorHeaders,
+  orderIdFor,
   REQUEST_ID,
   SUBJECT,
   startTestServer,
@@ -44,6 +46,7 @@ const CHECKS = "/api/v1/customer/checks";
 const ACTIVITY = "/api/v1/customer/activity";
 const OPERATIONS_LIST = "/api/v1/customer/operations";
 const OPERATION_DETAIL = `/api/v1/customer/operations/${await operationIdFor()}`;
+const EXCHANGE_ORDER_DETAIL = `/api/v1/customer/exchange-orders/${await orderIdFor()}`;
 const DEPOSIT_ADDRESSES = "/api/v1/customer/deposit-addresses";
 const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
 const TRADES = "/api/v1/customer/trades";
@@ -54,7 +57,13 @@ const ADMIN = "/api/v1/operator/admin";
 const OPERATOR_SESSION = "/api/v1/operator/session";
 const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
 const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
-const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS];
+// A real roster id: the member read only reaches its 200 path for ids inside
+// the shared subject universe.
+const KNOWN_OPERATOR_SUBJECT_ID = (
+  await createSyntheticOperatorSubjectsDirectory().subjectsFor()
+).subjects[0].subject_id;
+const OPERATOR_SUBJECT_DETAIL = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -196,7 +205,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -209,7 +218,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, TRADES, MARKETS, PAYMENTS, CARDS, CHECKS, ACTIVITY, OPERATIONS_LIST, OPERATION_DETAIL, EXCHANGE_ORDER_DETAIL, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS]) {
       now += 61_000;
       assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
@@ -229,10 +238,11 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
     assert.equal(limitedScreening.status, 429);
     assert.equal(JSON.parse(limitedScreening.body).code, "RATE_LIMITED");
     for (const path of OPERATOR_PATHS) {
+      const target = path.replace("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
       now += 61_000;
-      assert.equal((await observe(port, { path, headers: operatorHeaders() })).status, 200);
-      assert.equal((await observe(port, { path, headers: operatorHeaders({ Authorization: null }) })).status, 401);
-      const limited = await observe(port, { path, headers: operatorHeaders() });
+      assert.equal((await observe(port, { path: target, headers: operatorHeaders() })).status, 200);
+      assert.equal((await observe(port, { path: target, headers: operatorHeaders({ Authorization: null }) })).status, 401);
+      const limited = await observe(port, { path: target, headers: operatorHeaders() });
       assert.equal(limited.status, 429);
       assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
       assert.equal(header(limited, "retry-after"), "60");
@@ -321,11 +331,15 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
-  await withServer({ exchangeOrderDirectory: { async listFor() { throw new Error("order store exploded: secret=abc"); } } }, async (port) => {
+  await withServer({ exchangeOrderDirectory: { async listFor() { throw new Error("order store exploded: secret=abc"); }, async orderFor() { throw new Error("order store exploded: secret=abc"); } } }, async (port) => {
     const response = await observe(port, { path: EXCHANGE_ORDERS, headers: verifiedCustomerHeaders() });
     assert.equal(response.status, 500);
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
+    const detail = await observe(port, { path: EXCHANGE_ORDER_DETAIL, headers: verifiedCustomerHeaders() });
+    assert.equal(detail.status, 500);
+    assert.equal(JSON.parse(detail.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(detail.body, /secret|exploded/u);
   });
   await withServer({ tradeDirectory: { async listFor() { throw new Error("trade store exploded: secret=abc"); } } }, async (port) => {
     const response = await observe(port, { path: TRADES, headers: verifiedCustomerHeaders() });
@@ -414,11 +428,18 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
   });
-  await withServer({ operatorSubjectsDirectory: { async subjectsFor() { throw new Error("subject store exploded: secret=abc"); } } }, async (port) => {
-    const response = await observe(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
-    assert.equal(response.status, 500);
-    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
-    assert.doesNotMatch(response.body, /secret|exploded/u);
+  await withServer({
+    operatorSubjectsDirectory: {
+      async subjectsFor() { throw new Error("subject store exploded: secret=abc"); },
+      async subjectFor() { throw new Error("subject store exploded: secret=abc"); }
+    }
+  }, async (port) => {
+    for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL]) {
+      const response = await observe(port, { path, headers: operatorHeaders() });
+      assert.equal(response.status, 500);
+      assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      assert.doesNotMatch(response.body, /secret|exploded/u);
+    }
   });
   // An operator principal outside the token grammar (here a subject that
   // never matches syn_oper_*) fails the session view's fail-closed
@@ -618,6 +639,64 @@ test("GET /api/v1/operator/subjects serves the shared customer directory to the 
   });
 });
 
+test("GET /api/v1/operator/subjects/{subjectId} serves the roster detail to the operator audience only", async () => {
+  await withServer({}, async (port) => {
+    const list = await observe(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+    const rows = JSON.parse(list.body).subjects;
+    for (const row of rows) {
+      const detail = await observe(port, {
+        path: `${OPERATOR_SUBJECTS}/${row.subject_id}`,
+        headers: operatorHeaders()
+      });
+      assert.equal(detail.status, 200, row.subject_id);
+      const view = JSON.parse(detail.body);
+      assert.equal(view.mode, "test");
+      const subject = view.subject;
+      // The detail extends the list row verbatim for the same id.
+      for (const key of [
+        "subject_id",
+        "display_name",
+        "kyc_status",
+        "flags",
+        "registered_at",
+        "last_active_at",
+        "posting"
+      ]) {
+        assert.deepEqual(subject[key], row[key], `${row.subject_id} ${key}`);
+      }
+      assert.match(subject.account_status, /^(active|dormant|restricted|closed)$/u);
+      assert.match(subject.contact_hash, /^cth_[0-9a-f]{32}$/u);
+      assert.ok(Number.isInteger(subject.sessions) && subject.sessions >= 0);
+      assert.ok(subject.sessions <= subject.limits.max_sessions);
+      assert.ok(Array.isArray(subject.devices) && subject.devices.length <= subject.limits.max_devices);
+      for (const device of subject.devices) {
+        assert.match(device, /^dev_[0-9a-f]{16}$/u);
+      }
+      assert.deepEqual(Object.keys(subject.limits).sort(), ["max_devices", "max_sessions"]);
+      assert.ok(subject.limits.max_sessions >= 1 && subject.limits.max_sessions <= 16);
+      assert.ok(subject.limits.max_devices >= 1 && subject.limits.max_devices <= 8);
+    }
+    // A well-formed id outside the roster — including an operator-shaped id
+    // — fails closed as the pinned uniform 404 and never reveals which ids
+    // exist.
+    for (const id of [`syn_cust_${"f".repeat(24)}`, "syn_oper_00000001"]) {
+      const missing = await observe(port, {
+        path: `${OPERATOR_SUBJECTS}/${id}`,
+        headers: operatorHeaders()
+      });
+      assert.equal(missing.status, 404);
+      assert.equal(JSON.parse(missing.body).code, "CAPABILITY_DENIED");
+    }
+    const customer = await observe(port, {
+      path: `${OPERATOR_SUBJECTS}/${rows[0].subject_id}`,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+    assert.equal(header(customer, "www-authenticate"), "Bearer");
+  });
+});
+
 test("GET /api/v1/customer/deposits serves verified customers and gates the rest", async () => {
   await withServer({}, async (port) => {
     const granted = await observe(port, { path: DEPOSITS, headers: verifiedCustomerHeaders() });
@@ -662,6 +741,27 @@ test("GET /api/v1/customer/exchange-orders serves verified customers and gates t
       const denied = await observe(port, { path: EXCHANGE_ORDERS, headers });
       assert.equal(denied.status, 403);
       assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/exchange-orders/{orderId} serves the subject's own orders only", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: EXCHANGE_ORDER_DETAIL, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    assert.equal(JSON.parse(granted.body).order_id, EXCHANGE_ORDER_DETAIL.split("/").at(-1));
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: EXCHANGE_ORDER_DETAIL, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+    // A well-formed id that was never minted for the subject — including an
+    // id minted for a different subject — fails closed as the pinned 404.
+    const foreign = `/api/v1/customer/exchange-orders/${await orderIdFor(SUBJECT)}`;
+    for (const path of ["/api/v1/customer/exchange-orders/ord_ffffffffffffffffffffffff", foreign]) {
+      const response = await observe(port, { path, headers: verifiedCustomerHeaders() });
+      assert.equal(response.status, 404);
+      assert.equal(JSON.parse(response.body).code, "CAPABILITY_DENIED");
     }
   });
 });

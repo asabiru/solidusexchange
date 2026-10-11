@@ -87,7 +87,8 @@ function stubClient(result: CustomerApiOperatorAdmin): { client: CustomerApiClie
       seen.push({ subject, deviceId });
       return result;
     },
-    operatorSubjects: async () => ({ status: "not-configured" })
+    operatorSubjects: async () => ({ status: "not-configured" }),
+    operatorSubject: async () => ({ status: "not-configured" })
   };
   return { client, seen };
 }

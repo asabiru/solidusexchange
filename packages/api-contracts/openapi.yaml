@@ -641,6 +641,66 @@
         }
       }
     },
+    "/api/v1/customer/exchange-orders/{orderId}": {
+      "get": {
+        "operationId": "getCustomerExchangeOrder",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read one of the authenticated customer's synthetic exchange orders, including executed orders the list view excludes",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/OrderId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer exchange order detail in test mode mirroring the synthetic order book's record, terminal states included",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExchangeOrderDetailView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/trades": {
       "get": {
         "operationId": "getCustomerTrades",
@@ -1834,6 +1894,66 @@
           }
         }
       }
+    },
+    "/api/v1/operator/subjects/{subjectId}": {
+      "get": {
+        "operationId": "getOperatorSubject",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read one administered synthetic customer subject (the customer-360 detail)",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/SubjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator subject detail",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorSubjectDetailView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1935,6 +2055,26 @@
         "schema": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_-]{2,127}$"
+        }
+      },
+      "OrderId": {
+        "name": "orderId",
+        "in": "path",
+        "required": true,
+        "description": "Exchange order identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^ord_[0-9a-f]{24}$"
+        }
+      },
+      "SubjectId": {
+        "name": "subjectId",
+        "in": "path",
+        "required": true,
+        "description": "Administered customer subject identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^syn_cust_[a-z0-9]{8,32}$"
         }
       }
     },
@@ -2216,6 +2356,120 @@
           },
           "posting": {
             "const": "none"
+          }
+        }
+      },
+      "OperatorSubjectDetailView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "subject"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/OperatorSubjectDetail"
+          }
+        }
+      },
+      "OperatorSubjectDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject_id",
+          "display_name",
+          "kyc_status",
+          "flags",
+          "registered_at",
+          "last_active_at",
+          "posting",
+          "account_status",
+          "contact_hash",
+          "sessions",
+          "devices",
+          "limits"
+        ],
+        "properties": {
+          "subject_id": {
+            "type": "string",
+            "pattern": "^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$"
+          },
+          "kyc_status": {
+            "type": "string",
+            "enum": [
+              "unverified",
+              "pending",
+              "verified"
+            ]
+          },
+          "flags": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "registered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_active_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          },
+          "account_status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "dormant",
+              "restricted",
+              "closed"
+            ]
+          },
+          "contact_hash": {
+            "type": "string",
+            "pattern": "^cth_[0-9a-f]{32}$"
+          },
+          "sessions": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 16
+          },
+          "devices": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^dev_[0-9a-f]{16}$"
+            }
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "max_sessions",
+              "max_devices"
+            ],
+            "properties": {
+              "max_sessions": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 16
+              },
+              "max_devices": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 8
+              }
+            }
           }
         }
       },
@@ -3189,6 +3443,145 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "execution": {
+            "const": "not_supported"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "ExchangeOrderDetailView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "order_id",
+          "pair",
+          "base_asset",
+          "quote_asset",
+          "side",
+          "order_type",
+          "base_amount",
+          "price",
+          "quote_amount",
+          "fee_bps",
+          "fee_amount",
+          "total_quote_amount",
+          "status",
+          "created_at",
+          "updated_at",
+          "fills",
+          "execution",
+          "posting"
+        ],
+        "properties": {
+          "order_id": {
+            "type": "string",
+            "pattern": "^ord_[0-9a-f]{24}$"
+          },
+          "pair": {
+            "type": "string",
+            "enum": [
+              "USDT/RUB",
+              "TON/RUB",
+              "TON/USDT"
+            ]
+          },
+          "base_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "quote_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "side": {
+            "type": "string",
+            "enum": [
+              "buy",
+              "sell"
+            ]
+          },
+          "order_type": {
+            "type": "string",
+            "enum": [
+              "market",
+              "limit"
+            ]
+          },
+          "base_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "price": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "quote_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "fee_bps": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "fee_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "total_quote_amount": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "open",
+              "filled",
+              "cancelled",
+              "expired",
+              "rejected"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "fills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "fill_id",
+                "liquidity",
+                "price",
+                "quantity",
+                "executed_at"
+              ],
+              "properties": {
+                "fill_id": {
+                  "type": "string",
+                  "pattern": "^trd_[0-9a-f]{24}$"
+                },
+                "liquidity": {
+                  "type": "string",
+                  "enum": [
+                    "maker",
+                    "taker"
+                  ]
+                },
+                "price": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "quantity": {
+                  "$ref": "#/$defs/decimalAmount"
+                },
+                "executed_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
           },
           "execution": {
             "const": "not_supported"

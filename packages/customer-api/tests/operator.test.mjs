@@ -12,6 +12,7 @@ import {
   validOperatorAdminView,
   validOperatorCapabilitiesView,
   validOperatorSessionView,
+  validOperatorSubjectDetailView,
   validOperatorSubjectsView
 } from "../src/operator.mjs";
 import {
@@ -446,9 +447,145 @@ test("a malformed operator subjects view fails closed", async () => {
   for (const view of malformed) {
     assert.equal(validOperatorSubjectsView(view), false, JSON.stringify(view));
     await withServer(
-      { operatorSubjectsDirectory: { async subjectsFor() { return view; } } },
+      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; } } },
       async (port) => {
         const response = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
+        assert.equal(response.status, 500, JSON.stringify(view));
+        assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      }
+    );
+  }
+});
+
+const KNOWN_SUBJECT_ID_PATH = async () =>
+  `${OPERATOR_SUBJECTS}/${(await createSyntheticOperatorSubjectsDirectory().subjectsFor()).subjects[0].subject_id}`;
+
+test("GET /api/v1/operator/subjects/{subjectId} returns the deterministic shared detail", async () => {
+  await withServer({}, async (port) => {
+    const path = await KNOWN_SUBJECT_ID_PATH();
+    const served = await request(port, { path, headers: operatorHeaders() });
+    assert.equal(served.status, 200);
+    const expected = await createSyntheticOperatorSubjectsDirectory().subjectFor(path.split("/").at(-1));
+    assert.deepEqual(JSON.parse(served.body), { mode: "test", subject: { ...expected.subject, devices: [...expected.subject.devices], limits: { ...expected.subject.limits } } });
+    assert.equal(header(served, "x-request-id"), REQUEST_ID);
+    // Every operator sees the same detail: the universe is shared, not
+    // derived per caller.
+    const other = await request(port, {
+      path,
+      headers: operatorHeaders({ Authorization: `Bearer ${operatorToken({ subject: "syn_oper_00000002" })}` })
+    });
+    assert.deepEqual(JSON.parse(other.body), JSON.parse(served.body));
+    // A customer-family token on the member path never authenticates.
+    const customer = await request(port, {
+      path,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("the synthetic subject detail stays deterministic, frozen and within the contract shape", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const subjectId = (await directory.subjectsFor()).subjects[0].subject_id;
+  const first = await directory.subjectFor(subjectId);
+  const second = await directory.subjectFor(subjectId);
+  assert.deepEqual(first, second);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.subject));
+  assert.ok(Object.isFrozen(first.subject.devices));
+  assert.ok(Object.isFrozen(first.subject.limits));
+  assert.equal(first.mode, "test");
+  assert.equal(validOperatorSubjectDetailView(first), true);
+  // The view answers the pinned contract schema exactly.
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/OperatorSubjectDetailView"),
+      { mode: "test", subject: { ...first.subject, devices: [...first.subject.devices], limits: { ...first.subject.limits } } }
+    ),
+    []
+  );
+  // The detail extends the list row verbatim for the same id — the member
+  // read can never disagree with the collection.
+  const row = (await directory.subjectsFor()).subjects[0];
+  for (const key of ["subject_id", "display_name", "kyc_status", "flags", "registered_at", "last_active_at", "posting"]) {
+    assert.deepEqual(first.subject[key], row[key], key);
+  }
+  // An id outside the shared universe resolves to null — the route maps it
+  // onto the pinned uniform 404.
+  assert.equal(await directory.subjectFor(`syn_cust_${"f".repeat(24)}`), null);
+  assert.equal(await directory.subjectFor("syn_oper_00000001"), null);
+  assert.equal(await directory.subjectFor(""), null);
+});
+
+test("unknown or malformed subject ids fail closed with the uniform 404", async () => {
+  await withServer({}, async (port) => {
+    for (const id of [
+      `syn_cust_${"f".repeat(24)}`,
+      `syn_cust_${"0".repeat(24)}`,
+      "syn_oper_00000001",
+      "sub_0001",
+      "unknownsubject"
+    ]) {
+      const response = await request(port, { path: `${OPERATOR_SUBJECTS}/${id}`, headers: operatorHeaders() });
+      assert.equal(response.status, 404, id);
+      assert.equal(JSON.parse(response.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("a malformed operator subject detail fails closed", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const subjectId = (await directory.subjectsFor()).subjects[0].subject_id;
+  const real = await directory.subjectFor(subjectId);
+  const path = `${OPERATOR_SUBJECTS}/${subjectId}`;
+  const detailView = (overrides = {}, subjectOverrides = {}) => ({
+    mode: "test",
+    subject: { ...real.subject, ...subjectOverrides },
+    ...overrides
+  });
+  // Overrides must differ from the derived value or the case is not drift.
+  const differentName = real.subject.display_name === "Roman Sokolov" ? "Vera Aliyev" : "Roman Sokolov";
+  const differentStatus = real.subject.account_status === "closed" ? "restricted" : "closed";
+  const missingSubject = detailView();
+  delete missingSubject.subject;
+  const malformed = [
+    detailView({ mode: "live" }),
+    detailView({}, { subject_id: `syn_cust_${"f".repeat(24)}` }),
+    detailView({}, { subject_id: "sub_0001" }),
+    detailView({}, { display_name: differentName }),
+    detailView({}, { account_status: "suspended" }),
+    detailView({}, { account_status: differentStatus }),
+    detailView({}, { contact_hash: `cth_${"g".repeat(32)}` }),
+    detailView({}, { contact_hash: "redacted@example.test" }),
+    detailView({}, { sessions: -1 }),
+    detailView({}, { sessions: real.subject.limits.max_sessions + 1 }),
+    detailView({}, { devices: ["dev_0011223344556677", "dev_0011223344556677"] }),
+    detailView({}, { devices: ["workstation-1"] }),
+    detailView({}, { devices: [...real.subject.devices, "dev_8899aabbccddeeff", "dev_1122334455667788", "dev_2233445566778899", "dev_33445566778899aa", "dev_445566778899aabb", "dev_5566778899aabbcc", "dev_66778899aabbccdd", "dev_778899aabbccddee", "dev_889900aabbccddee"] }),
+    detailView({}, { limits: { max_sessions: real.subject.limits.max_sessions } }),
+    detailView({}, { limits: { ...real.subject.limits, max_devices: 0 } }),
+    detailView({}, { limits: { max_sessions: real.subject.limits.max_sessions, max_devices: real.subject.limits.max_devices, daily_quota: 5 } }),
+    detailView({}, { email: "a@b.test" }),
+    detailView({}, { last_active_at: "2000-01-01T00:00:00.000Z" }),
+    detailView({}, { posting: "pending" }),
+    missingSubject,
+    "view"
+  ];
+  // A null return is the directory's own not-found signal (the route maps it
+  // onto the 404), not drift — but the validator still rejects it as a view.
+  assert.equal(validOperatorSubjectDetailView(null), false);
+  for (const view of malformed) {
+    assert.equal(validOperatorSubjectDetailView(view), false, JSON.stringify(view));
+    await withServer(
+      {
+        operatorSubjectsDirectory: {
+          async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
+          async subjectFor() { return view; }
+        }
+      },
+      async (port) => {
+        const response = await request(port, { path, headers: operatorHeaders() });
         assert.equal(response.status, 500, JSON.stringify(view));
         assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
       }

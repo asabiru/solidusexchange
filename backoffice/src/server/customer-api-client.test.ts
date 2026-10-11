@@ -68,6 +68,28 @@ function subjectsView(): { mode: string; subjects: Record<string, unknown>[] } {
   };
 }
 
+function subjectDetailView(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    subject_id: "syn_cust_00112233445566778899aabb",
+    display_name: "Alina Mironova",
+    kyc_status: "verified",
+    flags: 2,
+    registered_at: "2026-09-05T00:00:00.000Z",
+    last_active_at: "2026-09-25T00:00:00.000Z",
+    posting: "none",
+    account_status: "active",
+    contact_hash: `cth_${"c".repeat(32)}`,
+    sessions: 3,
+    devices: [`dev_${"d".repeat(16)}`],
+    limits: { max_sessions: 8, max_devices: 4 },
+    ...overrides
+  };
+}
+
+function subjectView(overrides: Record<string, unknown> = {}): { mode: string; subject: Record<string, unknown> } {
+  return { mode: "test", subject: subjectDetailView(overrides) };
+}
+
 function contractView(subject: string): Record<string, unknown> {
   return {
     mode: "test",
@@ -427,6 +449,228 @@ describe("customer API operator client", () => {
         } else {
           assert.deepEqual(result, { status: "unavailable" }, label);
         }
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("reports not-configured for the subject detail read without a base URL or token key", async () => {
+    for (const options of [{}, { baseUrl: "http://127.0.0.1:9" }, { devTokenKey: "0".repeat(64) }]) {
+      const client = createCustomerApiClient(options);
+      assert.equal(client.configured, false);
+      assert.deepEqual(
+        await client.operatorSubject("dev:auditor", testDeviceId, "syn_cust_00112233445566778899aabb", Date.now()),
+        { status: "not-configured" }
+      );
+    }
+  });
+
+  it("reads the operator subject detail from the dev customer API", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // A real roster id comes from the sibling list read — the detail for the
+      // same id must extend that exact row.
+      const list = await client.operatorSubjects("dev:compliance-lead", testDeviceId, Date.now());
+      assert.equal(list.status, "ok");
+      if (list.status !== "ok") return;
+      const row = list.view.subjects[0];
+      const result = await client.operatorSubject("dev:compliance-lead", testDeviceId, row.subject_id, Date.now());
+      assert.equal(result.status, "ok");
+      if (result.status !== "ok") return;
+      assert.equal(result.view.mode, "test");
+      const subject = result.view.subject;
+      assert.equal(subject.subject_id, row.subject_id);
+      assert.equal(subject.display_name, row.display_name);
+      assert.equal(subject.kyc_status, row.kyc_status);
+      assert.equal(subject.flags, row.flags);
+      assert.equal(subject.registered_at, row.registered_at);
+      assert.equal(subject.last_active_at, row.last_active_at);
+      assert.equal(subject.posting, "none");
+      assert.match(subject.account_status, /^(active|dormant|restricted|closed)$/);
+      assert.match(subject.contact_hash, /^cth_[0-9a-f]{32}$/);
+      assert.ok(Number.isInteger(subject.sessions) && subject.sessions >= 0);
+      assert.ok(subject.sessions <= subject.limits.max_sessions);
+      assert.ok(subject.devices.length <= subject.limits.max_devices);
+      for (const device of subject.devices) {
+        assert.match(device, /^dev_[0-9a-f]{16}$/);
+      }
+      // Unknown ids share the uniform not-found — no existence leak.
+      assert.deepEqual(
+        await client.operatorSubject("dev:compliance-lead", testDeviceId, `syn_cust_${"f".repeat(24)}`, Date.now()),
+        { status: "not-found" }
+      );
+      const wrongKey = createCustomerApiClient({ baseUrl, devTokenKey: randomBytes(32).toString("hex") });
+      assert.deepEqual(
+        await wrongKey.operatorSubject("dev:compliance-lead", testDeviceId, row.subject_id, Date.now()),
+        { status: "unavailable" }
+      );
+    });
+  });
+
+  it("sends the same operator request headers on the subject detail read", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("dev:auditor");
+    await withFakeApi(
+      () => subjectView(),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.operatorSubject(
+          "dev:auditor", testDeviceId, "syn_cust_00112233445566778899aabb", Date.now()
+        );
+        assert.equal(result.status, "ok");
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], testDeviceId);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.match(String(headers["x-request-id"]), uuidV7);
+        assert.match(
+          String(headers.authorization),
+          new RegExp(`^Bearer sodev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`)
+        );
+      }
+    );
+  });
+
+  it("never emits a malformed X-Device-Id on the subject detail read", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withFakeApi(
+      () => subjectView(),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const deviceId of ["not-a-uuid", "", "F47AC10B-58CC-4372-A567-0E02B2C3D479"]) {
+          assert.deepEqual(
+            await client.operatorSubject("dev:auditor", deviceId, "syn_cust_00112233445566778899aabb", Date.now()),
+            { status: "unavailable" },
+            deviceId
+          );
+        }
+        assert.equal(seen.length, 0);
+      }
+    );
+  });
+
+  it("answers non-contract subject ids locally without an upstream call", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withFakeApi(
+      () => subjectView(),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const subjectId of ["not-an-id", "syn_oper_00000001", "syn_cust_00112233445566778899aabb/extra", ""]) {
+          assert.deepEqual(
+            await client.operatorSubject("dev:auditor", testDeviceId, subjectId, Date.now()),
+            { status: "not-found" },
+            subjectId
+          );
+        }
+        assert.equal(seen.length, 0);
+      }
+    );
+  });
+
+  it("fails closed on subject detail contract drift", async () => {
+    const key = randomBytes(32).toString("hex");
+    const good = subjectView();
+    const detail = (overrides: Record<string, unknown> = {}) => subjectView(overrides);
+    const limits = (overrides: Record<string, unknown> = {}) => ({ max_sessions: 8, max_devices: 4, ...overrides });
+    const drifts: Record<string, unknown>[] = [
+      { ...good, extra: true },
+      { subject: good.subject },
+      { ...good, mode: "live" },
+      { ...good, subject: null },
+      detail({ subject_id: "syn_oper_00000001" }),
+      detail({ display_name: "alina mironova" }),
+      detail({ kyc_status: "approved" }),
+      detail({ flags: -1 }),
+      detail({ flags: 1.5 }),
+      detail({ registered_at: "2026-09-01" }),
+      detail({ registered_at: "2026-09-10T00:00:00.000Z", last_active_at: "2026-09-05T00:00:00.000Z" }),
+      detail({ posting: "pending" }),
+      detail({ account_status: "suspended" }),
+      detail({ contact_hash: "a@b.test" }),
+      detail({ sessions: -1 }),
+      detail({ sessions: 1.5 }),
+      detail({ sessions: 17 }),
+      detail({ sessions: 9 }),
+      detail({ devices: "dev_0011223344556677" }),
+      detail({ devices: [`dev_${"d".repeat(16)}`, `dev_${"d".repeat(16)}`] }),
+      detail({ devices: [...Array.from({ length: 9 }, (_v, i) => `dev_${String(i).padStart(16, "0")}`)] }),
+      detail({ devices: ["not-a-device"] }),
+      detail({ devices: [`dev_${"a".repeat(16)}`, `dev_${"d".repeat(16)}`], limits: limits({ max_devices: 1 }) }),
+      detail({ limits: { max_sessions: 8 } }),
+      detail({ limits: limits({ extra: 1 }) }),
+      detail({ limits: limits({ max_sessions: 0 }) }),
+      detail({ limits: limits({ max_sessions: 17 }) }),
+      detail({ limits: limits({ max_devices: 0 }) }),
+      detail({ limits: limits({ max_devices: 9 }) }),
+      detail({ wallet_address: "0xabc" })
+    ];
+    for (const body of drifts) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.operatorSubject("dev:auditor", testDeviceId, "syn_cust_00112233445566778899aabb", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+  });
+
+  it("maps upstream 404 to not-found and other non-200s to unavailable on the detail read", async () => {
+    const key = randomBytes(32).toString("hex");
+    for (const [status, expected] of [
+      [400, "unavailable"],
+      [401, "unavailable"],
+      [403, "unavailable"],
+      [404, "not-found"],
+      [429, "unavailable"],
+      [500, "unavailable"]
+    ] as [number, string][]) {
+      const server = createServer((_request, response) => {
+        response.statusCode = status;
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(
+          await client.operatorSubject("dev:auditor", testDeviceId, "syn_cust_00112233445566778899aabb", Date.now()),
+          { status: expected },
+          String(status)
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on subject detail responses that are non-JSON or oversized", async () => {
+    const key = randomBytes(32).toString("hex");
+    const oversized = JSON.stringify({ ...subjectView(), padding: "x".repeat(maxCustomerApiResponseBytes) });
+    assert.ok(Buffer.byteLength(oversized) > maxCustomerApiResponseBytes);
+    for (const [label, contentType, payload] of [
+      ["text/html", "text/html", JSON.stringify(subjectView())],
+      ["oversized", "application/json", oversized]
+    ] as [string, string, string][]) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", contentType);
+        response.end(payload);
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(
+          await client.operatorSubject("dev:auditor", testDeviceId, "syn_cust_00112233445566778899aabb", Date.now()),
+          { status: "unavailable" },
+          label
+        );
       } finally {
         await new Promise<void>((resolve) => server.close(() => resolve()));
       }
