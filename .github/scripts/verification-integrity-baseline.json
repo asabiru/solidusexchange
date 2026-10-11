@@ -33,10 +33,11 @@
     "packages/customer-api/package.json": {
       "check": "node scripts/check-boundary.mjs",
       "dev": "node src/server.mjs",
-      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check src/app.mjs && node --check src/auth-sessions.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/cards.mjs && node --check src/checks.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/deposits.mjs && node --check src/exchange-orders.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/operator.mjs && node --check src/payments.mjs && node --check src/profile.mjs && node --check src/quotes.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/support.mjs && node --check src/users.mjs && node --check src/wallets.mjs && node --check src/withdrawals.mjs && node --check tests/auth-config.test.mjs && node --check tests/auth-sessions.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/cards.test.mjs && node --check tests/checks.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/deposits.test.mjs && node --check tests/exchange-orders.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/operator.test.mjs && node --check tests/payments.test.mjs && node --check tests/profile.test.mjs && node --check tests/quotes.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/support.test.mjs && node --check tests/users.test.mjs && node --check tests/wallets.test.mjs && node --check tests/withdrawals.test.mjs && npm run check",
+      "lint": "node --check scripts/check-boundary.mjs && node --check scripts/mint-dev-token.mjs && node --check scripts/verify-postgres-migration-source-catalog.mjs && node --check scripts/verify-postgres-migration-source-policy.mjs && node --check src/app.mjs && node --check src/auth-sessions.mjs && node --check src/auth.mjs && node --check src/capabilities.mjs && node --check src/cards.mjs && node --check src/checks.mjs && node --check src/config.mjs && node --check src/contract.mjs && node --check src/deposits.mjs && node --check src/exchange-orders.mjs && node --check src/kyc.mjs && node --check src/notifications.mjs && node --check src/observability.mjs && node --check src/operator.mjs && node --check src/payments.mjs && node --check src/postgres-store.mjs && node --check src/profile.mjs && node --check src/quotes.mjs && node --check src/rate-limit.mjs && node --check src/request-id.mjs && node --check src/server.mjs && node --check src/store.mjs && node --check src/support.mjs && node --check src/users.mjs && node --check src/wallets.mjs && node --check src/withdrawals.mjs && node --check tests/auth-config.test.mjs && node --check tests/auth-sessions.test.mjs && node --check tests/capabilities.test.mjs && node --check tests/cards.test.mjs && node --check tests/checks.test.mjs && node --check tests/contract-conformance.test.mjs && node --check tests/contract-coverage.test.mjs && node --check tests/contract-validator.mjs && node --check tests/contract-validator.test.mjs && node --check tests/deposits.test.mjs && node --check tests/exchange-orders.test.mjs && node --check tests/http-client.mjs && node --check tests/kyc.test.mjs && node --check tests/machinery-hardening.test.mjs && node --check tests/notifications.test.mjs && node --check tests/observability.test.mjs && node --check tests/operator.test.mjs && node --check tests/payments.test.mjs && node --check tests/postgres-store-contract.mjs && node --check tests/profile.test.mjs && node --check tests/quotes.test.mjs && node --check tests/request-headers.test.mjs && node --check tests/routing.test.mjs && node --check tests/security-headers.test.mjs && node --check tests/store-config.test.mjs && node --check tests/store-contract.mjs && node --check tests/store.test.mjs && node --check tests/support.test.mjs && node --check tests/users.test.mjs && node --check tests/wallets.test.mjs && node --check tests/withdrawals.test.mjs && npm run check",
       "mint-dev-token": "node scripts/mint-dev-token.mjs",
       "test": "npm run check && node --test tests/*.test.mjs",
-      "typecheck": "tsc -p tsconfig.json --pretty false"
+      "typecheck": "tsc -p tsconfig.json --pretty false",
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs"
     },
     "packages/e2e-dev/package.json": {
       "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
@@ -167,6 +168,13 @@
       },
       {
         "run": "npm test"
+      },
+      {
+        "run": "npm run verify:migrations"
+      },
+      {
+        "run": "bash tests/postgres-store.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       }
     ],
     ".github/workflows/deploy.yml": [],
@@ -1230,6 +1238,25 @@
     "miniapp/src/server/checks-upstream.test.ts": {
       "minLines": 309,
       "minCases": 7
+    },
+    "packages/customer-api/tests/store-contract.mjs": {
+      "minLines": 81,
+      "minCases": 6
+    },
+    "packages/customer-api/tests/store.test.mjs": {
+      "minLines": 66,
+      "minCases": 4
+    },
+    "packages/customer-api/tests/store-config.test.mjs": {
+      "minLines": 83,
+      "minCases": 7
+    },
+    "packages/customer-api/tests/postgres-store-contract.mjs": {
+      "minLines": 75,
+      "minCases": 4
+    },
+    "packages/customer-api/tests/postgres-store.sh": {
+      "minLines": 32
     }
   }
 }

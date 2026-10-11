@@ -27,11 +27,25 @@ const FORBIDDEN_CALLS = [
 const ALLOWED_OPERATOR_PATHS = ["/api/v1/operator/admin"];
 const OPERATOR_PATH_REFERENCE = /\/api\/v1\/operator[a-z0-9_/-]*/gu;
 
-// Static-check tooling only; runtime code stays dependency-free.
-const ALLOWED_DEV_DEPENDENCIES = JSON.stringify({ "@types/node": "24.3.0", typescript: "5.9.2" });
+// The only runtime dependency is the PostgreSQL driver behind the dev-only
+// store seam; static-check tooling stays the only other allowed package.
+const ALLOWED_DEPENDENCIES = JSON.stringify({ pg: "8.23.0" });
+const ALLOWED_DEV_DEPENDENCIES = JSON.stringify({
+  "@types/node": "24.3.0",
+  "@types/pg": "8.23.1",
+  typescript: "5.9.2"
+});
+// Only the PostgreSQL store backend may import the driver; every other
+// source keeps the dependency-free runtime boundary.
+const POSTGRES_STORE_SOURCES = new Set(["postgres-store.mjs"]);
+// Verification scripts additionally read files and assert invariants.
+const SCRIPT_ONLY_IMPORTS = new Set(["node:assert/strict", "node:fs"]);
 
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-for (const field of ["dependencies", "optionalDependencies", "peerDependencies"]) {
+if (JSON.stringify(manifest.dependencies) !== ALLOWED_DEPENDENCIES) {
+  errors.push(`package.json dependencies must be exactly ${ALLOWED_DEPENDENCIES}`);
+}
+for (const field of ["optionalDependencies", "peerDependencies"]) {
   if (manifest[field] !== undefined) {
     errors.push(`package.json must not declare ${field}`);
   }
@@ -48,7 +62,10 @@ for (const directory of ["src", "scripts"]) {
     }
     const text = readFileSync(join(root, directory, name), "utf8");
     for (const match of text.matchAll(/^import\s[^;]*?from\s+"([^"]+)";/gmu)) {
-      const allowed = ALLOWED_IMPORTS.has(match[1]) || (directory === "scripts" && match[1] === "node:fs");
+      const allowed =
+        ALLOWED_IMPORTS.has(match[1]) ||
+        (directory === "scripts" && SCRIPT_ONLY_IMPORTS.has(match[1])) ||
+        (directory === "src" && POSTGRES_STORE_SOURCES.has(name) && match[1] === "pg");
       if (!match[1].startsWith("./") && !match[1].startsWith("../") && !allowed) {
         errors.push(`${directory}/${name}: import ${match[1]} is outside the dev runtime boundary`);
       }
