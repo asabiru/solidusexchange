@@ -130,7 +130,7 @@ assertRejected(
 
 assertRejected(
   "rejects unbound check path templates",
-  "checkId path parameter must be bound exactly on templated check paths: getCustomerCheckStatus",
+  "checkId path parameter must be bound exactly on its templated paths: getCustomerCheckStatus",
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     const operation = openapi.paths["/api/v1/customer/checks/{checkId}"].get;
@@ -143,7 +143,7 @@ assertRejected(
 
 assertRejected(
   "rejects noncanonical check path parameters",
-  "Path parameter must use only the canonical CheckId parameter",
+  "Path parameter must use only its canonical component parameter: getCustomerCheckStatus",
   (scratch) => {
     const openapi = readJson(scratch, "openapi.yaml");
     const operation = openapi.paths["/api/v1/customer/checks/{checkId}"].get;
