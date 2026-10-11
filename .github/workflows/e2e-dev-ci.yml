@@ -56,3 +56,12 @@ jobs:
 
       - name: Build BFFs and run the cross-service smoke test
         run: npm test
+
+      - name: Install locked customer-api dependencies
+        run: npm ci --prefix ../../packages/customer-api
+
+      - name: Install locked matching-core dependencies
+        run: npm ci --prefix ../../packages/matching-core
+
+      - name: Run the postgres persistence arm of the dev stack
+        run: bash tests/postgres-stack.sh
