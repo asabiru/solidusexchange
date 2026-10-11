@@ -15,6 +15,7 @@ import type {
   QuotePair,
   QuoteRounding,
   QuoteSide,
+  TradeLiquidity,
   WithdrawalStatus
 } from "../shared/api.js";
 import type { ScreeningNetwork } from "../shared/address-screening.js";
@@ -40,6 +41,7 @@ import {
   isExchangeOrderStatus,
   isExchangeOrderType
 } from "./exchange-orders.js";
+import { isTradeLiquidity, tradeIdPattern } from "./trades.js";
 import { isNotificationTemplate, notificationIdPattern } from "./notifications.js";
 import {
   isPaymentStatus,
@@ -192,6 +194,31 @@ export interface CustomerApiExchangeOrder {
 
 export type CustomerApiExchangeOrders =
   | { status: "ok"; orders: readonly CustomerApiExchangeOrder[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+export interface CustomerApiTrade {
+  trade_id: string;
+  order_id: string;
+  pair: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  side: QuoteSide;
+  liquidity: TradeLiquidity;
+  price: string;
+  quantity: string;
+  quote_amount: string;
+  fee_bps: number;
+  fee_amount: string;
+  total_quote_amount: string;
+  executed_at: string;
+  execution: "not_supported";
+  posting: "none";
+}
+
+export type CustomerApiTrades =
+  | { status: "ok"; trades: readonly CustomerApiTrade[] }
   | { status: "denied" }
   | { status: "unavailable" }
   | { status: "not-configured" };
@@ -602,6 +629,7 @@ export interface CustomerApiClient {
   withdrawals(bffSubject: string, nowMs: number): Promise<CustomerApiWithdrawals>;
   quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
+  trades(bffSubject: string, nowMs: number): Promise<CustomerApiTrades>;
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
@@ -1089,6 +1117,105 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
     }));
   }
   return Object.freeze(orders);
+}
+
+const tradeKeys = [
+  "trade_id",
+  "order_id",
+  "pair",
+  "base_asset",
+  "quote_asset",
+  "side",
+  "liquidity",
+  "price",
+  "quantity",
+  "quote_amount",
+  "fee_bps",
+  "fee_amount",
+  "total_quote_amount",
+  "executed_at",
+  "execution",
+  "posting"
+] as const;
+
+function parseTradesView(value: unknown): readonly CustomerApiTrade[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "trades"])
+    || value.mode !== "test"
+    || !Array.isArray(value.trades)
+  ) {
+    return undefined;
+  }
+  const trades: CustomerApiTrade[] = [];
+  for (const entry of value.trades) {
+    const pairDef = isRecord(entry) ? contractQuotePair(entry.pair) : undefined;
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, tradeKeys)
+      || pairDef === undefined
+      || entry.base_asset !== pairDef.base
+      || entry.quote_asset !== pairDef.quote
+      || !isQuoteSide(entry.side)
+      || !isTradeLiquidity(entry.liquidity)
+      || typeof entry.trade_id !== "string"
+      || !tradeIdPattern.test(entry.trade_id)
+      || typeof entry.order_id !== "string"
+      || !exchangeOrderIdPattern.test(entry.order_id)
+      || typeof entry.fee_bps !== "number"
+      || !Number.isSafeInteger(entry.fee_bps)
+      || entry.fee_bps < 0
+      || entry.fee_bps > exchangeOrderMaxBps
+      || !isScaledDecimal(entry.quantity, pairDef.baseScale)
+      || !isScaledDecimal(entry.price, exchangeOrderPriceScale)
+      || !isScaledDecimal(entry.quote_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.fee_amount, pairDef.quoteScale)
+      || !isScaledDecimal(entry.total_quote_amount, pairDef.quoteScale)
+      || !isIsoTimestamp(entry.executed_at)
+      || entry.execution !== "not_supported"
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    // Fail closed unless every derived amount recomputes exactly like the
+    // upstream contract validator requires — the fill's quantity priced at
+    // its fixed price, the fee charged on the quote leg.
+    const recomputed = contractExchangeOrderAmounts(
+      pairDef,
+      entry.side,
+      toUnits(entry.quantity, pairDef.baseScale),
+      toUnits(entry.price, exchangeOrderPriceScale),
+      entry.fee_bps
+    );
+    if (
+      fromUnits(recomputed.quoteUnits, pairDef.quoteScale) !== entry.quote_amount
+      || fromUnits(recomputed.fee, pairDef.quoteScale) !== entry.fee_amount
+      || fromUnits(recomputed.total, pairDef.quoteScale) !== entry.total_quote_amount
+      || recomputed.quoteUnits <= 0n
+      || recomputed.total <= 0n
+    ) {
+      return undefined;
+    }
+    trades.push(Object.freeze({
+      trade_id: entry.trade_id,
+      order_id: entry.order_id,
+      pair: pairDef.pair,
+      base_asset: pairDef.base,
+      quote_asset: pairDef.quote,
+      side: entry.side,
+      liquidity: entry.liquidity,
+      price: entry.price,
+      quantity: entry.quantity,
+      quote_amount: entry.quote_amount,
+      fee_bps: entry.fee_bps,
+      fee_amount: entry.fee_amount,
+      total_quote_amount: entry.total_quote_amount,
+      executed_at: entry.executed_at,
+      execution: "not_supported",
+      posting: "none"
+    }));
+  }
+  return Object.freeze(trades);
 }
 
 const paymentKeys = [
@@ -2326,6 +2453,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       withdrawals: async (): Promise<CustomerApiWithdrawals> => ({ status: "not-configured" }),
       quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
+      trades: async (): Promise<CustomerApiTrades> => ({ status: "not-configured" }),
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
@@ -2488,6 +2616,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       const body = await get("/api/v1/customer/exchange-orders", token, nowMs);
       const view = parseExchangeOrdersView(body);
       return view === undefined ? { status: "unavailable" } : { status: "ok", orders: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function trades(bffSubject: string, nowMs: number): Promise<CustomerApiTrades> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/trades", token, nowMs);
+      const view = parseTradesView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", trades: view };
     } catch (error) {
       if (error instanceof CustomerApiHttpError && error.status === 403) {
         return { status: "denied" };
@@ -2798,5 +2945,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, trades, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
 }

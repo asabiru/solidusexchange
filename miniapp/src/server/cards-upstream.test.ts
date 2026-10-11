@@ -40,6 +40,7 @@ function cardsStub(
     withdrawals: async () => ({ status: "not-configured" }),
     quotes: async () => ({ status: "not-configured" }),
     exchangeOrders: async () => ({ status: "not-configured" }),
+    trades: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async (subject) => {
       calls.push(subject);

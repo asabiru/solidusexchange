@@ -33,7 +33,9 @@ import {
 import { createSyntheticQuoteDirectory, validQuotesView } from "../src/quotes.mjs";
 import {
   createSyntheticExchangeOrderDirectory,
-  validExchangeOrdersView
+  createSyntheticTradeDirectory,
+  validExchangeOrdersView,
+  validTradesView
 } from "../src/exchange-orders.mjs";
 import { createSyntheticPaymentDirectory, validPaymentsView } from "../src/payments.mjs";
 import { createSyntheticCardDirectory, validCardsView } from "../src/cards.mjs";
@@ -128,6 +130,18 @@ const DIRECTORIES = [
     valid: validExchangeOrdersView
   },
   {
+    name: "trades",
+    make: () => createSyntheticTradeDirectory(),
+    call: (directory, subject) => directory.listFor(subject),
+    valid: validTradesView,
+    // A trade's order_id is a foreign key back to the order its leg
+    // executed on — the id is minted by the exchange-orders namespace,
+    // not by the trades directory, so the namespace-disjointness pin
+    // excludes it (the cross-subject leak check still sees it: the ord_*
+    // digest is subject-scoped either way).
+    references: new Set(["order_id"])
+  },
+  {
     name: "payments",
     make: () => createSyntheticPaymentDirectory(),
     call: (directory, subject) => directory.listFor(subject),
@@ -171,7 +185,7 @@ const DIRECTORIES = [
   }
 ];
 
-const ID_FIELD = /"(?:[a-z_]*(?:id|reference|ref))":\s*"([a-z_]+_[0-9a-fA-Z]{4,40})"/gu;
+const ID_FIELD = /"(?<key>[a-z_]*(?:id|reference|ref))":\s*"(?<id>[a-z_]+_[0-9a-fA-Z]{4,40})"/gu;
 
 /** @param {unknown} value */
 function deepFrozen(value) {
@@ -215,26 +229,31 @@ test("no subject's minted ids appear inside another subject's views", async () =
   for (const { make, call } of DIRECTORIES) {
     const view = await call(make(), SUBJECT);
     for (const match of JSON.stringify(view).matchAll(ID_FIELD)) {
-      idsOfA.add(match[1]);
+      idsOfA.add(match.groups.id);
     }
   }
   assert.ok(idsOfA.size > 0);
   for (const { name, make, call } of DIRECTORIES) {
     const view = await call(make(), SUBJECT_B);
     for (const match of JSON.stringify(view).matchAll(ID_FIELD)) {
-      assert.equal(idsOfA.has(match[1]), false, `${name} leaked ${match[1]}`);
+      assert.equal(idsOfA.has(match.groups.id), false, `${name} leaked ${match.groups.id}`);
     }
   }
 });
 
 test("id namespaces stay disjoint across every served directory", async () => {
   const seen = new Map();
-  for (const { name, make, call } of DIRECTORIES) {
+  for (const { name, make, call, references } of DIRECTORIES) {
     const view = await call(make(), VERIFIED_SUBJECT);
     for (const match of JSON.stringify(view).matchAll(ID_FIELD)) {
-      const owner = seen.get(match[1]);
-      assert.equal(owner, undefined, `${name} collides with ${String(owner)} on ${match[1]}`);
-      seen.set(match[1], name);
+      // Foreign-key fields name an id another directory minted — they are
+      // references, not mints, so they cannot collide with their owner.
+      if (references?.has(match.groups.key)) {
+        continue;
+      }
+      const owner = seen.get(match.groups.id);
+      assert.equal(owner, undefined, `${name} collides with ${String(owner)} on ${match.groups.id}`);
+      seen.set(match.groups.id, name);
     }
   }
 });

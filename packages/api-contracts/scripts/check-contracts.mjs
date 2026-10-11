@@ -787,6 +787,58 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  TradesView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "trades"],
+    properties: {
+      mode: { const: "test" },
+      trades: {
+        type: "array",
+        items: { $ref: "#/components/schemas/TradeView" }
+      }
+    }
+  },
+  TradeView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "trade_id",
+      "order_id",
+      "pair",
+      "base_asset",
+      "quote_asset",
+      "side",
+      "liquidity",
+      "price",
+      "quantity",
+      "quote_amount",
+      "fee_bps",
+      "fee_amount",
+      "total_quote_amount",
+      "executed_at",
+      "execution",
+      "posting"
+    ],
+    properties: {
+      trade_id: { type: "string", pattern: "^trd_[0-9a-f]{24}$" },
+      order_id: { type: "string", pattern: "^ord_[0-9a-f]{24}$" },
+      pair: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      side: { type: "string", enum: ["buy", "sell"] },
+      liquidity: { type: "string", enum: ["maker", "taker"] },
+      price: { $ref: "#/$defs/decimalAmount" },
+      quantity: { $ref: "#/$defs/decimalAmount" },
+      quote_amount: { $ref: "#/$defs/decimalAmount" },
+      fee_bps: { type: "integer", minimum: 0, maximum: 1000 },
+      fee_amount: { $ref: "#/$defs/decimalAmount" },
+      total_quote_amount: { $ref: "#/$defs/decimalAmount" },
+      executed_at: { type: "string", format: "date-time" },
+      execution: { const: "not_supported" },
+      posting: { const: "none" }
+    }
+  },
   PaymentsView: {
     type: "object",
     additionalProperties: false,
@@ -1434,7 +1486,8 @@ function checkOpenApi() {
     ["cancelCustomerCheck", "/api/v1/customer/checks/{checkId}/cancel"],
     ["getCustomerDepositAddresses", "/api/v1/customer/deposit-addresses"],
     ["getCustomerAddressScreenings", "/api/v1/customer/address-screenings"],
-    ["getCustomerAddressScreening", "/api/v1/customer/address-screenings/{screeningId}"]
+    ["getCustomerAddressScreening", "/api/v1/customer/address-screenings/{screeningId}"],
+    ["getCustomerTrades", "/api/v1/customer/trades"]
   ]);
   const commandOperations = new Set([
     "previewCustomerCheck",
@@ -1489,7 +1542,8 @@ function checkOpenApi() {
     ["cancelCustomerCheck", ["200", "401", "403", "404", "409", "429", "500"]],
     ["getCustomerDepositAddresses", gatedReadStatuses],
     ["getCustomerAddressScreenings", gatedReadStatuses],
-    ["getCustomerAddressScreening", ["200", "401", "403", "404", "429", "500"]]
+    ["getCustomerAddressScreening", ["200", "401", "403", "404", "429", "500"]],
+    ["getCustomerTrades", gatedReadStatuses]
   ]);
   const successSchemas = new Map([
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
@@ -1521,7 +1575,8 @@ function checkOpenApi() {
     ["cancelCustomerCheck", "#/components/schemas/CheckView"],
     ["getCustomerDepositAddresses", "#/components/schemas/DepositAddressesView"],
     ["getCustomerAddressScreenings", "#/components/schemas/AddressScreeningsView"],
-    ["getCustomerAddressScreening", "#/components/schemas/AddressScreeningView"]
+    ["getCustomerAddressScreening", "#/components/schemas/AddressScreeningView"],
+    ["getCustomerTrades", "#/components/schemas/TradesView"]
   ]);
   const allowedPathItemFields = new Set([...methodNames, "parameters"]);
   const allowedOperationFields = new Set([

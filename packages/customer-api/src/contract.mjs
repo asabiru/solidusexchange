@@ -202,6 +202,23 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The trades collection read is KYC-gated like the deposits, withdrawals,
+  // wallets, notifications, quotes and exchange-orders reads, so it declares
+  // a 403: trades are an asset/activity collection (the engine's recorded
+  // fills), not an onboarding surface.
+  Object.freeze({
+    operationId: "getCustomerTrades",
+    method: "GET",
+    path: "/api/v1/customer/trades",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
   // The payments collection read is KYC-gated like the deposits, withdrawals,
   // wallets, notifications, quotes and exchange-orders reads, so it declares
   // a 403: payments are an asset/activity collection (the outbound fiat
