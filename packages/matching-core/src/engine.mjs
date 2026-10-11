@@ -152,14 +152,30 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     return book;
   }
 
-  function stamp() {
+  /**
+   * Reads and validates the injected clock once per operation. A submission
+   * or cancel is atomic — every event it produces shares one timestamp — so
+   * a backwards or malformed clock throws before any book or tracked-order
+   * state is touched and can never leave a half-applied operation behind.
+   */
+  function beginOperation() {
     const now = timeSource.now();
     assertEpochSeconds(now, "clock time");
     if (now < state.lastAt) {
       throw new RangeError("clock must not go backwards");
     }
     state.lastAt = now;
-    return { seq: state.nextSeq++, at: toIsoSeconds(now) };
+    operationAt = toIsoSeconds(now);
+  }
+
+  /** @type {string | null} */
+  let operationAt = null;
+
+  function stamp() {
+    if (operationAt === null) {
+      beginOperation();
+    }
+    return { seq: state.nextSeq++, at: /** @type {string} */ (operationAt) };
   }
 
   /**
@@ -315,6 +331,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     submitOrder(input) {
       /** @type {MatchingEvent[]} */
       const events = [];
+      beginOperation();
       /** @type {unknown} */
       let snapshot;
       try {
@@ -435,6 +452,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     cancelOrder(instrument, orderId) {
       /** @type {MatchingEvent[]} */
       const events = [];
+      beginOperation();
       const echo = { order_id: orderId, instrument, side: null };
       if (typeof instrument !== "string") {
         emitRejected(events, echo, "invalid_instrument");

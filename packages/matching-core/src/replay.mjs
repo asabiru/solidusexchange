@@ -280,6 +280,14 @@ export function replayMatchingEngine(options = {}) {
       if (bookFor(maker.instrument).bestHead(maker.side) !== maker) {
         invalid(`event seq ${event.seq}: maker is not at the head of the best level`);
       }
+      if (
+        taker.order_type === "limit" &&
+        (taker.side === "buy"
+          ? /** @type {bigint} */ (taker.price_units) < /** @type {bigint} */ (maker.price_units)
+          : /** @type {bigint} */ (taker.price_units) > /** @type {bigint} */ (maker.price_units))
+      ) {
+        invalid(`event seq ${event.seq}: fill price is outside the taker's limit`);
+      }
       pendingMaker = {
         fill_id: event.fill_id,
         maker_order_id: maker.order_id,

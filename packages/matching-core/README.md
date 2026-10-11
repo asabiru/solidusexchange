@@ -74,6 +74,12 @@ Each execution emits at most two events sharing one `fill_id`
 (`fll_` + 24 hex): the maker's event first, then the taker's — each is
 `filled` or `partially_filled` depending on that order's own remainder.
 
+All events produced by one `submitOrder` or `cancelOrder` share a single
+timestamp: the injected clock is read once per operation, before any state
+is touched, so a backwards or malformed clock fails the whole call atomically
+— no order is tracked, removed or partially filled, and no `seq` is consumed,
+when the call throws.
+
 Rejection reasons: `invalid_order`, `invalid_order_id`,
 `invalid_instrument`, `unknown_instrument`, `invalid_side`,
 `invalid_owner`, `invalid_type`, `invalid_price`, `non_positive_price`,
@@ -109,7 +115,10 @@ engine.orderStatus("ord_…");       // tracked state or null (price: null on ma
 ```
 
 `createMatchingEngine({ instruments })` accepts a custom instrument list;
-each entry must be a well-formed `BASE/QUOTE` definition.
+each entry must be a well-formed `BASE/QUOTE` definition. Every definition
+is copied once at creation and stored frozen — the registry never re-reads
+the caller's objects, so getters, Proxies or later edits cannot change what
+was validated.
 
 ## Persistence groundwork (data-only)
 
@@ -127,7 +136,9 @@ state, it never writes storage, does I/O, or posts anything.
   wrong types, unknown keys, duplicate ids, a resting order missing from
   the tracked set, the resting list out of book order, counters below
   what the recorded orders require, a market order carrying a price or
-  resting/cancelled) and rebuilds an engine whose
+  resting/cancelled, and order decimals that are not in exact-scale form —
+  a stored `price`, `quantity` or `remaining` must read exactly the way
+  the engine's own formatter would write it) and rebuilds an engine whose
   `bookSnapshot`/`orderStatus` are byte-identical to the source's.
   `seq`/`fill_id` continue where the snapshot left them; the restored
   `journal()` starts empty — a snapshot carries state, not history.
@@ -138,7 +149,8 @@ state, it never writes storage, does I/O, or posts anything.
   canonical timestamps, known types and fields only, fill pairs
   consecutive maker-then-taker sharing sequential `fill_id`s, every
   referenced order accepted by the stream, fill/cancel arithmetic
-  matching the tracked remainder, and the market-order rules — no `price`
+  matching the tracked remainder, a limit taker never filling at a price
+  outside its own limit, and the market-order rules — no `price`
   on a market `accepted`, never a `resting` for one, and
   `insufficient_liquidity` rejections only on market orders with the exact
   leftover quantity. Anything else throws `TypeError` with
