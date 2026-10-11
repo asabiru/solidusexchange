@@ -38,6 +38,12 @@ const ALLOWED_DEV_DEPENDENCIES = JSON.stringify({
 // Only the PostgreSQL store backend may import the driver; every other
 // source keeps the dependency-free runtime boundary.
 const POSTGRES_STORE_SOURCES = new Set(["postgres-store.mjs"]);
+// Cross-package source imports are allowed only where the boundary grants
+// them: the exchange-orders read replays the matching engine in the same runtime,
+// reached by repo-relative path because a `file:` dependency cannot
+// resolve under this package's realpathed symlink consumers (miniapp,
+// backoffice, e2e-dev never run `npm ci` inside packages/customer-api).
+const ALLOWED_CROSS_PACKAGE = new Set(["../../matching-core/src/index.mjs"]);
 // Verification scripts additionally read files and assert invariants.
 const SCRIPT_ONLY_IMPORTS = new Set(["node:assert/strict", "node:fs"]);
 
@@ -69,6 +75,13 @@ for (const directory of ["src", "scripts"]) {
       if (!match[1].startsWith("./") && !match[1].startsWith("../") && !allowed) {
         errors.push(`${directory}/${name}: import ${match[1]} is outside the dev runtime boundary`);
       }
+      if (
+        match[1].startsWith("../") &&
+        !join(root, directory, match[1]).startsWith(`${root}/`) &&
+        !ALLOWED_CROSS_PACKAGE.has(match[1])
+      ) {
+        errors.push(`${directory}/${name}: cross-package import ${match[1]} escapes the dev runtime boundary`);
+      }
     }
     // Dynamic imports (runtime or JSDoc type position) follow the same
     // boundary: node builtins are always allowed, and the PostgreSQL store
@@ -81,6 +94,13 @@ for (const directory of ["src", "scripts"]) {
         (directory === "src" && POSTGRES_STORE_SOURCES.has(name) && match[1] === "pg");
       if (!match[1].startsWith("./") && !match[1].startsWith("../") && !allowed) {
         errors.push(`${directory}/${name}: dynamic import ${match[1]} is outside the dev runtime boundary`);
+      }
+      if (
+        match[1].startsWith("../") &&
+        !join(root, directory, match[1]).startsWith(`${root}/`) &&
+        !ALLOWED_CROSS_PACKAGE.has(match[1])
+      ) {
+        errors.push(`${directory}/${name}: dynamic cross-package import ${match[1]} escapes the dev runtime boundary`);
       }
     }
     if (directory === "src") {

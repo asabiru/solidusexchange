@@ -1144,8 +1144,8 @@
       "minCases": 7
     },
     "packages/customer-api/tests/exchange-orders.test.mjs": {
-      "minLines": 296,
-      "minCases": 10
+      "minLines": 460,
+      "minCases": 18
     },
     "packages/customer-api/tests/payments.test.mjs": {
       "minLines": 280,
