@@ -32,14 +32,20 @@ import { consumeFixedWindowBucket } from "./rate-limit.mjs";
  * @property {string} kind Backend identity for observability (`memory` or `postgresql`).
  * @property {() => Promise<void>} [initialize]
  *   Startup probe run before the server listens; a backend that cannot reach
- *   or recognize its schema must reject so startup fails fast.
+ *   or recognize its schema must reject so startup fails fast. Calling it
+ *   again after `close()` re-opens the backend.
  * @property {(command: RateLimitConsumeCommand) => RateLimitOutcome} consumeRateLimit
  *   Atomically consume one request against the key's fixed-window bucket:
  *   create or reset the bucket when `now` is at or past `resetAt`, increment
  *   the count otherwise, deny when the count exceeds `limit` (or when a new
  *   bucket would exceed `maxKeys` live buckets). `now` always comes from the
- *   caller's clock — never the backend's wall clock.
+ *   caller's clock — never the backend's wall clock. Every backend answers
+ *   the same decision for the same command, including the same rejection:
+ *   a malformed command throws StoreCommandError and a consume attempted
+ *   before `initialize()` or after `close()` throws StoreUnavailableError.
  * @property {() => Promise<void>} close
+ *   Release the backend's resources; a consume issued afterwards fails
+ *   closed as StoreUnavailableError on every backend.
  */
 
 /** Base error for store failures; never carries the DSN or credentials. */
@@ -69,6 +75,57 @@ export class StoreConfigError extends StoreError {
   }
 }
 
+/** A consume command violates the seam contract — caller misuse, not a backend fault. */
+export class StoreCommandError extends StoreError {
+  /** @param {string} message */
+  constructor(message) {
+    super(message);
+    this.name = "StoreCommandError";
+  }
+}
+
+const BUCKET_KEY_MAX_CHARACTERS = 256;
+const NOT_INITIALIZED = "customer-api store is not initialized";
+
+/**
+ * The consume-command contract every backend answers identically. Bounds
+ * come from the weakest backend: bucket keys must fit a PostgreSQL primary-
+ * key index entry (well-formed text, no NUL — `text` admits neither — and a
+ * bounded length), and every numeric field must be a non-negative safe
+ * integer so a `bigint` column and the memory map hold the same value
+ * exactly.
+ *
+ * @param {RateLimitConsumeCommand} command
+ */
+export function assertRateLimitConsumeCommand({ key, now, windowMs, limit, maxKeys }) {
+  if (
+    typeof key !== "string" ||
+    key.length === 0 ||
+    key.length > BUCKET_KEY_MAX_CHARACTERS ||
+    !key.isWellFormed() ||
+    key.includes("\u0000")
+  ) {
+    throw new StoreCommandError(
+      "rate-limit consume key must be a well-formed string of 1-256 characters without NUL"
+    );
+  }
+  if (!Number.isSafeInteger(now) || now < 0) {
+    throw new StoreCommandError("rate-limit consume now must be a non-negative safe integer");
+  }
+  if (!Number.isSafeInteger(windowMs) || windowMs < 1) {
+    throw new StoreCommandError("rate-limit consume windowMs must be a positive safe integer");
+  }
+  if (!Number.isSafeInteger(now + windowMs)) {
+    throw new StoreCommandError("rate-limit consume now + windowMs must stay a safe integer");
+  }
+  if (!Number.isSafeInteger(limit) || limit < 1) {
+    throw new StoreCommandError("rate-limit consume limit must be a positive safe integer");
+  }
+  if (!Number.isSafeInteger(maxKeys) || maxKeys < 1) {
+    throw new StoreCommandError("rate-limit consume maxKeys must be a positive safe integer");
+  }
+}
+
 /**
  * The default backend: today's in-process bucket map behind the seam. The
  * consume is synchronous and identical to `createFixedWindowRateLimiter`.
@@ -78,12 +135,21 @@ export class StoreConfigError extends StoreError {
 export function createMemoryStore() {
   /** @type {Map<string, { count: number, resetAt: number }>} */
   const buckets = new Map();
+  let ready = false;
   return Object.freeze({
     kind: "memory",
-    async initialize() {},
+    async initialize() {
+      ready = true;
+    },
     consumeRateLimit(command) {
+      assertRateLimitConsumeCommand(command);
+      if (!ready) {
+        throw new StoreUnavailableError(NOT_INITIALIZED);
+      }
       return consumeFixedWindowBucket(buckets, command);
     },
-    async close() {}
+    async close() {
+      ready = false;
+    }
   });
 }
