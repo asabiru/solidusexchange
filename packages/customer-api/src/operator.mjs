@@ -235,7 +235,13 @@ export function validOperatorCapabilitiesView(view) {
   if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...CAPABILITIES_VIEW_KEYS].sort())) {
     return false;
   }
-  return validScopes(candidate.capabilities) && candidate.commands_enabled === false;
+  return (
+    validScopes(candidate.capabilities) &&
+    candidate.capabilities.every((capability) =>
+      OPERATOR_CAPABILITY_VOCABULARY.has(capability)
+    ) &&
+    candidate.commands_enabled === false
+  );
 }
 
 /** @returns {OperatorDirectory} */

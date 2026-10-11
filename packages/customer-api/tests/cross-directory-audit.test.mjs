@@ -51,7 +51,12 @@ import {
   createSyntheticAddressScreeningDirectory,
   validAddressScreeningsView
 } from "../src/address-screenings.mjs";
-import { createSyntheticOperatorDirectory, validOperatorAdminView } from "../src/operator.mjs";
+import {
+  createSyntheticOperatorDirectory,
+  operatorCapabilitiesViewFor,
+  validOperatorAdminView,
+  validOperatorCapabilitiesView
+} from "../src/operator.mjs";
 import { SUBJECT, VERIFIED_SUBJECT } from "./http-client.mjs";
 
 const SUBJECT_B = "syn_cust_bbbbbbbb";
@@ -410,7 +415,7 @@ test("operations validator pins the timeline inside the creation window", async 
   assert.equal(validOperationsView(view), true);
 });
 
-test("operator validator pins the echo to the declared capability vocabulary", async () => {
+test("operator validators pin the echo to the declared capability vocabulary", async () => {
   const { granted } = evaluateOperatorCapabilities();
   const view = await createSyntheticOperatorDirectory().viewFor("syn_oper_00000001", granted);
   const foreign = clone(view);
@@ -420,6 +425,15 @@ test("operator validator pins the echo to the declared capability vocabulary", a
   customer.granted_capabilities[0] = "customer.wallets.read";
   assert.equal(validOperatorAdminView(customer), false);
   assert.equal(validOperatorAdminView(view), true);
+
+  // The served capabilities view is held to the same vocabulary: a policy
+  // evaluation echoing an undeclared capability name must fail validation.
+  const evaluation = evaluateOperatorCapabilities();
+  const capabilities = operatorCapabilitiesViewFor(evaluation);
+  const foreignCapability = clone(capabilities);
+  foreignCapability.capabilities = Object.freeze([...capabilities.capabilities, "operator.secrets.read"]);
+  assert.equal(validOperatorCapabilitiesView(foreignCapability), false);
+  assert.equal(validOperatorCapabilitiesView(capabilities), true);
 });
 
 test("deposit-addresses and address-screenings pin exact target coverage", async () => {
