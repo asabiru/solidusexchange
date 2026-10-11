@@ -6,7 +6,11 @@ import { evaluateOperatorCapabilities } from "../src/capabilities.mjs";
 import {
   createSyntheticOperatorDirectory,
   OPERATOR_ROLES,
-  validOperatorAdminView
+  operatorCapabilitiesViewFor,
+  operatorSessionViewFor,
+  validOperatorAdminView,
+  validOperatorCapabilitiesView,
+  validOperatorSessionView
 } from "../src/operator.mjs";
 import {
   customerHeaders,
@@ -25,6 +29,8 @@ import {
 } from "./http-client.mjs";
 
 const ADMIN = "/api/v1/operator/admin";
+const OPERATOR_SESSION = "/api/v1/operator/session";
+const OPERATOR_CAPABILITIES = "/api/v1/operator/capabilities";
 const SESSION = "/api/v1/customer/session";
 const GRANTED = ["operator.session.read", "operator.capabilities.read", "operator.admin.read"];
 
@@ -223,4 +229,145 @@ test("the synthetic view stays deterministic, frozen and within the contract sha
     ),
     []
   );
+});
+
+const PRINCIPAL = {
+  subject: OPERATOR_SUBJECT,
+  actorType: "operator",
+  scopes: ["operator.session.read", "operator.capabilities.read"],
+  expiresAt: "2026-10-01T12:15:00.000Z"
+};
+
+function sessionView(overrides = {}) {
+  return {
+    subject: OPERATOR_SUBJECT,
+    actor_type: "operator",
+    scopes: [...PRINCIPAL.scopes],
+    expires_at: PRINCIPAL.expiresAt,
+    device_bound: true,
+    ...overrides
+  };
+}
+
+function capabilitiesView(overrides = {}) {
+  return {
+    capabilities: [...GRANTED],
+    commands_enabled: false,
+    ...overrides
+  };
+}
+
+test("operatorSessionViewFor projects the principal into the contract shape, frozen", () => {
+  const view = operatorSessionViewFor(PRINCIPAL);
+  assert.ok(Object.isFrozen(view));
+  assert.ok(Object.isFrozen(view.scopes));
+  assert.deepEqual({ ...view, scopes: [...view.scopes] }, sessionView());
+  assert.equal(validOperatorSessionView(view), true);
+  // The view answers the pinned contract schema exactly.
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/OperatorSessionView"),
+      { ...view, scopes: [...view.scopes] }
+    ),
+    []
+  );
+});
+
+test("a malformed operator session view fails closed", async () => {
+  const missingScopes = sessionView();
+  delete missingScopes.scopes;
+  const missingDeviceFlag = sessionView();
+  delete missingDeviceFlag.device_bound;
+  const malformed = [
+    sessionView({ subject: SUBJECT }),
+    sessionView({ subject: "syn_oper_UPPER" }),
+    sessionView({ subject: "syn_oper_short" }),
+    sessionView({ actor_type: "customer" }),
+    sessionView({ scopes: "operator.session.read" }),
+    sessionView({ scopes: ["operator.session.read", "operator.session.read"] }),
+    sessionView({ scopes: [""] }),
+    sessionView({ scopes: ["x".repeat(129)] }),
+    sessionView({ expires_at: "tomorrow" }),
+    sessionView({ expires_at: "2026-10-01 12:15:00" }),
+    sessionView({ device_bound: false }),
+    sessionView({ device_bound: "true" }),
+    { ...sessionView(), refresh_token: "abc" },
+    missingScopes,
+    missingDeviceFlag,
+    null,
+    "view"
+  ];
+  for (const view of malformed) {
+    assert.equal(validOperatorSessionView(view), false, JSON.stringify(view));
+  }
+  // The served view fails closed through the handler too: a principal that
+  // never matches the token grammar produces the client-safe 500 envelope.
+  await withServer(
+    {
+      verifier: {
+        async verify() {
+          return { subject: "syn_operator_1", actorType: "operator", scopes: [], expiresAt: "2026-10-01T13:00:00.000Z" };
+        }
+      }
+    },
+    async (port) => {
+      const response = await request(port, { path: OPERATOR_SESSION, headers: operatorHeaders() });
+      assert.equal(response.status, 500);
+      assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    }
+  );
+});
+
+test("operatorCapabilitiesViewFor projects the policy evaluation, frozen", () => {
+  const evaluation = evaluateOperatorCapabilities();
+  const view = operatorCapabilitiesViewFor(evaluation);
+  assert.ok(Object.isFrozen(view));
+  assert.ok(Object.isFrozen(view.capabilities));
+  assert.deepEqual({ ...view, capabilities: [...view.capabilities] }, capabilitiesView());
+  assert.equal(validOperatorCapabilitiesView(view), true);
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/CapabilitiesView"),
+      { ...view, capabilities: [...view.capabilities] }
+    ),
+    []
+  );
+});
+
+test("a malformed operator capabilities view fails closed", () => {
+  const missingCommands = capabilitiesView();
+  delete missingCommands.commands_enabled;
+  const malformed = [
+    capabilitiesView({ capabilities: "operator.admin.read" }),
+    capabilitiesView({ capabilities: ["operator.admin.read", "operator.admin.read"] }),
+    capabilitiesView({ capabilities: [""] }),
+    capabilitiesView({ capabilities: ["x".repeat(129)] }),
+    capabilitiesView({ commands_enabled: true }),
+    capabilitiesView({ commands_enabled: "false" }),
+    { ...capabilitiesView(), denied: [] },
+    missingCommands,
+    null,
+    "view"
+  ];
+  for (const view of malformed) {
+    assert.equal(validOperatorCapabilitiesView(view), false, JSON.stringify(view));
+  }
+});
+
+test("the operator meta pair serves the session and capability views for a synthetic operator token", async () => {
+  await withServer({}, async (port) => {
+    const session = await request(port, { path: OPERATOR_SESSION, headers: operatorHeaders() });
+    assert.equal(session.status, 200);
+    assert.deepEqual(JSON.parse(session.body), sessionView({ expires_at: JSON.parse(session.body).expires_at }));
+    assert.equal(header(session, "x-request-id"), REQUEST_ID);
+
+    const capabilities = await request(port, { path: OPERATOR_CAPABILITIES, headers: operatorHeaders() });
+    assert.equal(capabilities.status, 200);
+    assert.deepEqual(JSON.parse(capabilities.body), capabilitiesView());
+    assert.equal(header(capabilities, "x-request-id"), REQUEST_ID);
+
+    // A deny-all principal fails closed on both reads.
+    const denied = await request(port, { path: OPERATOR_SESSION, headers: customerHeaders({ "X-Device-Id": DEVICE_ID }) });
+    assert.equal(denied.status, 401);
+  });
 });
