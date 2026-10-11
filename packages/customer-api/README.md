@@ -294,9 +294,10 @@ The package is plain Node ESM (`.mjs`) and runs directly from `src/`, so there
 is no `build` script and nothing to compile or bundle. Types are JSDoc
 annotations checked by `npm run typecheck` (`tsconfig.json`, `noEmit`). The
 only runtime dependency is `pg`, pinned by `scripts/check-boundary.mjs` and
-imported only by the PostgreSQL store backend; the only devDependencies are
-the exact `typescript`, `@types/node` and `@types/pg` versions the boundary
-checker pins.
+lazy-loaded only inside the PostgreSQL store's `initialize()` — consumers
+importing the package in memory mode never touch the driver; the only
+devDependencies are the exact `typescript`, `@types/node` and `@types/pg`
+versions the boundary checker pins.
 
 ## Conformance tests
 

@@ -70,6 +70,19 @@ for (const directory of ["src", "scripts"]) {
         errors.push(`${directory}/${name}: import ${match[1]} is outside the dev runtime boundary`);
       }
     }
+    // Dynamic imports (runtime or JSDoc type position) follow the same
+    // boundary: node builtins are always allowed, and the PostgreSQL store
+    // may lazy-load its driver so consumers never touch it in memory mode.
+    for (const match of text.matchAll(/import\s*\(\s*"([^"]+)"\s*\)/gu)) {
+      const allowed =
+        match[1].startsWith("node:") ||
+        ALLOWED_IMPORTS.has(match[1]) ||
+        (directory === "scripts" && SCRIPT_ONLY_IMPORTS.has(match[1])) ||
+        (directory === "src" && POSTGRES_STORE_SOURCES.has(name) && match[1] === "pg");
+      if (!match[1].startsWith("./") && !match[1].startsWith("../") && !allowed) {
+        errors.push(`${directory}/${name}: dynamic import ${match[1]} is outside the dev runtime boundary`);
+      }
+    }
     if (directory === "src") {
       for (const pattern of FORBIDDEN_CALLS) {
         if (pattern.test(text)) {

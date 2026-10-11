@@ -1,5 +1,3 @@
-import { Pool } from "pg";
-
 import { StoreConfigError, StoreUnavailableError } from "./store.mjs";
 
 // PostgreSQL backend for the customer-api store seam (`CUSTOMER_API_STORE=
@@ -8,6 +6,11 @@ import { StoreConfigError, StoreUnavailableError } from "./store.mjs";
 // `migrations/0001_customer_api_store.sql`, applied through the package's
 // `verify:migrations`-governed source catalog. The store speaks only to the
 // `customer_api` schema and only for its own tables.
+//
+// The `pg` driver loads lazily inside initialize(): consumers that import
+// this module but never select the postgres backend never touch the driver,
+// so the package stays importable without the dependency installed, while a
+// postgres-mode startup without a working driver still fails fast.
 //
 // The fixed-window consume runs as one CTE statement so concurrent consumes
 // stay atomic without a client-managed transaction:
@@ -105,17 +108,22 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
   }
   // The DSN (user, password, host) is connection material: it is never logged,
   // and failure paths surface only StoreUnavailableError.
-  const pool = new Pool({
-    connectionString: dsn,
-    max: 4,
-    connectionTimeoutMillis: 5_000,
-    idleTimeoutMillis: 30_000
-  });
+  /** @type {import("pg").Pool | null} */
+  let pool = null;
 
   return Object.freeze({
     kind: "postgresql",
     async initialize() {
       try {
+        if (pool === null) {
+          const { Pool } = await import("pg");
+          pool = new Pool({
+            connectionString: dsn,
+            max: 4,
+            connectionTimeoutMillis: 5_000,
+            idleTimeoutMillis: 30_000
+          });
+        }
         const result = await pool.query(SCHEMA_VERSION_SQL);
         if (result.rows.length !== 1 || result.rows[0].version !== schemaVersion) {
           throw new StoreUnavailableError(
@@ -131,6 +139,9 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
      * @returns {Promise<import("./rate-limit.mjs").RateLimitResult>}
      */
     async consumeRateLimit({ key, now, windowMs, limit, maxKeys }) {
+      if (pool === null) {
+        throw new StoreUnavailableError("customer-api store is not initialized");
+      }
       try {
         const result = await pool.query(CONSUME_SQL, [key, now, windowMs, maxKeys, namespace]);
         const row = result.rows[0] ?? {};
@@ -153,7 +164,9 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
       }
     },
     async close() {
-      await pool.end();
+      const ending = pool;
+      pool = null;
+      await ending?.end();
     }
   });
 }
