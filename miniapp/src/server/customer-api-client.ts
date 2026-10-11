@@ -2739,6 +2739,14 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
   }
 
   async function addressScreening(bffSubject: string, screeningId: string, nowMs: number): Promise<CustomerApiAddressScreeningResult> {
+    // Same pre-flight guard as operation(): an id that cannot parse
+    // upstream resolves "missing" without spending a call on the shared
+    // upstream rate limit. Locally minted scr_* ids match the pattern and
+    // still reach upstream first — they 404 there and the route falls back
+    // to the local store.
+    if (!screeningIdPattern.test(screeningId)) {
+      return { status: "missing" };
+    }
     const subject = customerApiSubject(bffSubject);
     try {
       const token = mintSyntheticCustomerToken({

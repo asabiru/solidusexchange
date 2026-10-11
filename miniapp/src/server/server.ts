@@ -16,7 +16,8 @@ import type {
   SessionView,
   SupportRequestsView
 } from "../shared/api.js";
-import { isAssetCode } from "../shared/assets.js";
+import { assets, isAssetCode } from "../shared/assets.js";
+import { fromUnits } from "../shared/decimal.js";
 import { type ActivityLog, contractActivityView, createActivityLog, maxActivityPerSubject } from "./activity.js";
 import { type CheckBook, CheckError, contractChecksView, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
@@ -336,6 +337,33 @@ export function createMiniappServer(
       unread: outbox.unread(subject),
       notifications: outbox.list(subject, defaultMaxPerSubject)
     };
+  }
+
+  type PreviewAvailability =
+    | { readonly status: "ready"; readonly available: string }
+    | { readonly status: "skip" }
+    | { readonly status: "unavailable" };
+
+  // Preview affordability follows the wallet surface: a verified session
+  // with a configured customer-api judges against the served balances —
+  // the frozen local fixtures would answer "sufficient" against synthetic
+  // money the subject does not hold upstream. A refusal degrades to the
+  // gated zero balance (the fail-closed answer); any other upstream
+  // failure fails the preview with the sibling *_unavailable shape.
+  async function previewAvailability(session: CustomerSession, asset: string): Promise<PreviewAvailability> {
+    if (!isAssetCode(asset)) return { status: "skip" };
+    if (session.kyc !== "verified" || !customerApi.configured) {
+      return { status: "ready", available: syntheticData.available(session.kyc, asset) };
+    }
+    const upstream = await customerApi.wallets(session.subject, clock());
+    if (upstream.status === "ok") {
+      const wallet = upstream.wallets.find((entry) => entry.asset === asset);
+      return { status: "ready", available: wallet?.available ?? fromUnits(0n, assets[asset].scale) };
+    }
+    if (upstream.status === "denied") {
+      return { status: "ready", available: fromUnits(0n, assets[asset].scale) };
+    }
+    return { status: "unavailable" };
   }
 
   function currentSession(request: IncomingMessage): CustomerSession | undefined {
@@ -661,6 +689,25 @@ export function createMiniappServer(
           return;
         }
         const marked = outbox.markRead(session.subject, ids);
+        // The marks stay local either way — no upstream write exists — but
+        // when the contract feed owns the displayed list (verified session
+        // with configured customer-api) the response reports the served
+        // unread count: the local outbox count would contradict what the
+        // client sees. A refusal degrades to the local response; any other
+        // upstream failure answers the sibling *_unavailable shape.
+        if (session.kyc === "verified" && customerApi.configured) {
+          const upstream = await customerApi.notifications(session.subject, clock());
+          if (upstream.status === "ok") {
+            json(response, 200, { marked, unread: upstream.unread });
+            return;
+          }
+          if (upstream.status === "denied") {
+            json(response, 200, { marked, unread: outbox.unread(session.subject) });
+            return;
+          }
+          json(response, 503, { error: "notifications_unavailable" });
+          return;
+        }
         json(response, 200, { marked, unread: outbox.unread(session.subject) });
         return;
       }
@@ -1220,11 +1267,16 @@ export function createMiniappServer(
       const to = url.searchParams.get("to") ?? "";
       const amount = url.searchParams.get("amount") ?? "";
       try {
+        const availability = await previewAvailability(session, from);
+        if (availability.status === "unavailable") {
+          json(response, 503, { error: "quote_unavailable" });
+          return;
+        }
         const quote = await quoteProvider.preview({ from, to, amount }, {
           subject: session.subject,
           nowMs: clock(),
           ttlSeconds: config.quoteTtlSeconds,
-          available: isAssetCode(from) ? syntheticData.available(session.kyc, from) : undefined,
+          available: availability.status === "ready" ? availability.available : undefined,
           kycRequired: session.kyc !== "verified"
         });
         activity.recordQuote(session.subject, quote);
@@ -1275,9 +1327,14 @@ export function createMiniappServer(
         const asset = url.searchParams.get("asset") ?? "";
         const amount = url.searchParams.get("amount") ?? "";
         try {
+          const availability = await previewAvailability(session, asset);
+          if (availability.status === "unavailable") {
+            json(response, 503, { error: "checks_unavailable" });
+            return;
+          }
           const preview = checks.preview({ asset, amount }, {
             nowMs: clock(),
-            available: isAssetCode(asset) ? syntheticData.available(session.kyc, asset) : undefined,
+            available: availability.status === "ready" ? availability.available : undefined,
             kycRequired: session.kyc !== "verified"
           });
           json(response, 200, preview);
@@ -1294,12 +1351,42 @@ export function createMiniappServer(
         json(response, 400, { error: "invalid_request" });
         return;
       }
-      const found = checks.view(path.slice("/bff/checks/".length), session.kyc);
-      if (!found) {
-        json(response, 404, { error: "not_found" });
+      const reference = path.slice("/bff/checks/".length);
+      const localCheck = (kyc: KycStatus) => {
+        const found = checks.view(reference, kyc);
+        if (!found) {
+          json(response, 404, { error: "not_found" });
+          return;
+        }
+        json(response, 200, found);
+      };
+      // The detail read follows the same four-way as the list: a verified
+      // session with a configured customer-api resolves against the served
+      // contract list (upstream has no member read — the collection owns
+      // the reference space), a refusal degrades to the same gated fixture
+      // detail the list shows, and any other upstream failure fails closed
+      // as checks_unavailable. Local-only and gated sessions keep the
+      // fixture detail.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        localCheck(session.kyc);
         return;
       }
-      json(response, 200, found);
+      const upstream = await customerApi.checks(session.subject, clock());
+      if (upstream.status === "ok") {
+        const found = contractChecksView(upstream.checks, customerApiSubject(session.subject), session.kyc)
+          .checks.find((check) => check.reference === reference);
+        if (!found) {
+          json(response, 404, { error: "not_found" });
+          return;
+        }
+        json(response, 200, found);
+        return;
+      }
+      if (upstream.status === "denied") {
+        localCheck("kyc-gated");
+        return;
+      }
+      json(response, 503, { error: "checks_unavailable" });
       return;
     }
 
