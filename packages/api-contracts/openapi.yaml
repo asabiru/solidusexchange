@@ -1548,16 +1548,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/SessionView"
+                  "$ref": "#/components/schemas/OperatorSessionView"
                 }
               }
             }
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1612,9 +1609,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthenticated"
-          },
-          "403": {
-            "$ref": "#/components/responses/Forbidden"
           },
           "429": {
             "$ref": "#/components/responses/RateLimited"
@@ -1902,6 +1896,42 @@
           },
           "commands_enabled": {
             "const": false
+          }
+        }
+      },
+      "OperatorSessionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "actor_type",
+          "scopes",
+          "expires_at",
+          "device_bound"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "pattern": "^syn_oper_[a-z0-9]{8,32}$"
+          },
+          "actor_type": {
+            "const": "operator"
+          },
+          "scopes": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_bound": {
+            "const": true
           }
         }
       },
