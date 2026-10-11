@@ -293,7 +293,10 @@ export function parseOperatorSubjectsView(value: unknown): OperatorSubjectsView 
  * a bounded integer session count, unique bounded `dev_*` device refs and a
  * limits echo the counts always fit inside.
  */
-export function parseOperatorSubjectView(value: unknown): OperatorSubjectView | undefined {
+export function parseOperatorSubjectView(
+  value: unknown,
+  expectedSubject: string
+): OperatorSubjectView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, subjectDetailViewKeys)) {
     return undefined;
   }
@@ -303,6 +306,7 @@ export function parseOperatorSubjectView(value: unknown): OperatorSubjectView | 
     || !isRecord(item)
     || !hasExactKeys(item, subjectDetailKeys)
     || typeof item.subjectId !== "string"
+    || item.subjectId !== expectedSubject
     || !customerSubjectPattern.test(item.subjectId)
     || typeof item.displayName !== "string"
     || !displayNamePattern.test(item.displayName)
