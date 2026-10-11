@@ -220,6 +220,9 @@ test("served reads fail closed on shape-valid content drift", async () => {
         index === 0 ? { ...order, quote_amount: order.total_quote_amount } : order
       );
       return { ...view, orders };
+    },
+    async orderFor(subject, orderId) {
+      return createSyntheticExchangeOrderDirectory().orderFor(subject, orderId);
     }
   };
   const tamperedTrade = {

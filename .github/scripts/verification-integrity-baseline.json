@@ -1469,7 +1469,7 @@
       "minCases": 0
     },
     "packages/customer-api/tests/exchange-bridge-audit.test.mjs": {
-      "minLines": 429,
+      "minLines": 432,
       "minCases": 19
     }
   }
