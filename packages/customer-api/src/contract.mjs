@@ -219,6 +219,24 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The markets read is KYC-gated like the deposits, withdrawals, wallets,
+  // notifications, quotes, exchange-orders and trades reads, so it declares
+  // a 403: market data is an asset/activity surface — the subject's own
+  // synthetic book state derived from the same per-subject replay — not an
+  // onboarding or identity surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerMarkets",
+    method: "GET",
+    path: "/api/v1/customer/markets",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
   // The payments collection read is KYC-gated like the deposits, withdrawals,
   // wallets, notifications, quotes and exchange-orders reads, so it declares
   // a 403: payments are an asset/activity collection (the outbound fiat

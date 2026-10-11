@@ -180,6 +180,16 @@ export const CAPABILITY_POLICY = Object.freeze([
   // money-movement decisions: the unserved exchange-orders commands above
   // keep the financial denial with their decision reasons.
   entry("customer.trades.read", "read", true, []),
+  // The served markets read is KYC-gated like the exchange-orders and
+  // trades reads: market data is an asset/activity surface — the
+  // instrument-scoped state of the subject's own synthetic book (top
+  // levels and the book's last fills from the same per-subject replay the
+  // orders and trades views project), not an onboarding or identity
+  // surface. The read is synthetic and carries no ledger effect (posting
+  // stays "none"), so it needs no open money-movement decisions: the
+  // unserved exchange-orders commands above keep the financial denial
+  // with their decision reasons.
+  entry("customer.markets.read", "read", true, []),
   // The served payments collection read is KYC-gated like the deposits,
   // withdrawals, wallets, notifications, quotes and exchange-orders reads:
   // payments are an asset/activity collection (the outbound fiat payment

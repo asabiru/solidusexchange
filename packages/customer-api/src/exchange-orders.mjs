@@ -110,6 +110,23 @@ const ORDER_KEYS = Object.freeze([
 ]);
 const ORDER_ID_PATTERN = /^ord_[0-9a-f]{24}$/u;
 const TRADE_ID_PATTERN = /^trd_[0-9a-f]{24}$/u;
+const MARKETS_VIEW_KEYS = Object.freeze(["mode", "markets"]);
+const MARKET_KEYS = Object.freeze([
+  "instrument",
+  "base_asset",
+  "quote_asset",
+  "best_bid",
+  "best_ask",
+  "last_trade",
+  "spread_bps",
+  "base_scale",
+  "quote_scale",
+  "price_scale",
+  "as_of",
+  "posting"
+]);
+const MARKET_LEVEL_KEYS = Object.freeze(["price", "quantity", "order_count"]);
+const MARKET_LAST_TRADE_KEYS = Object.freeze(["price", "quantity", "executed_at"]);
 const TRADES_VIEW_KEYS = Object.freeze(["mode", "trades"]);
 const TRADE_KEYS = Object.freeze([
   "trade_id",
@@ -232,6 +249,68 @@ for (const pairDef of ORDER_PAIRS) {
 /**
  * @typedef {object} TradeDirectory
  * @property {(subject: string) => Promise<TradesView>} listFor
+ */
+
+/**
+ * One side of the book's top level as `bookSnapshot` reports it — the best
+ * price first, the aggregate resting quantity and the number of orders
+ * queued at the level. Both sides are null whenever the instrument's side
+ * is empty (the contract's nested-object nullability mirrors the activity
+ * feed's `money` precedent: the price/quantity members themselves never
+ * go null — the whole level does).
+ *
+ * @typedef {object} MarketLevelView
+ * @property {string} price
+ * @property {string} quantity
+ * @property {number} order_count
+ */
+
+/**
+ * The latest fill the subject's book recorded on an instrument, or null
+ * when the replay left no fills there. `price`/`quantity` are the fill's
+ * own (the maker price the legs crossed at) and `executed_at` is the
+ * journal stamp widened to contract milliseconds.
+ *
+ * @typedef {object} MarketLastTradeView
+ * @property {string} price
+ * @property {string} quantity
+ * @property {string} executed_at
+ */
+
+/**
+ * Instrument-scoped market data for the subject's synthetic book. The
+ * depth is whatever the replay leaves resting — the subject's own open
+ * orders plus counterparty remnants — so the view honestly mirrors that
+ * book rather than advertising global market data. `spread_bps` is the
+ * relative spread of the two top levels in integer basis points of the
+ * mid, or null when either side is empty. `as_of` is the simulated
+ * session close (the end of the scenario's clock), `posting` stays
+ * "none" — nothing here is a ledger entry or moves money.
+ *
+ * @typedef {object} MarketView
+ * @property {string} instrument
+ * @property {string} base_asset
+ * @property {string} quote_asset
+ * @property {MarketLevelView | null} best_bid
+ * @property {MarketLevelView | null} best_ask
+ * @property {MarketLastTradeView | null} last_trade
+ * @property {number | null} spread_bps
+ * @property {number} base_scale
+ * @property {number} quote_scale
+ * @property {number} price_scale
+ * @property {string} as_of
+ * @property {string} posting
+ */
+
+/**
+ * @typedef {object} MarketsView
+ * @property {string} mode
+ * @property {readonly MarketView[]} markets
+ */
+
+/**
+ * @typedef {object} MarketDirectory
+ * @property {(subject: string) => Promise<MarketsView>} listFor
  */
 
 /**
@@ -944,6 +1023,102 @@ export function projectExchangeTrades(engine, intents) {
   return Object.freeze(rows);
 }
 
+/**
+ * Folds the same replay into per-instrument market data: every declared
+ * pair reports its top-of-book state off `bookSnapshot` (best bid/ask with
+ * aggregate resting quantity and order count, null on an empty side), the
+ * journal's last fill as `last_trade`, the integer-basis-point relative
+ * spread of the two top levels against their mid (null when either side
+ * is empty, since no spread exists without both), and the simulated
+ * session close as `as_of`. Rows are emitted in `ORDER_PAIRS` order — the
+ * canonical instrument sequence the validator pins exactly. Depth is
+ * honest book state: whatever the subject's scenario left resting.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @param {ExchangeOrderScenario} scenario
+ * @returns {readonly MarketView[]}
+ */
+export function projectExchangeMarkets(engine, scenario) {
+  /** @type {Map<string, { price: string, quantity: string, at: string }>} */
+  const lastFills = new Map();
+  for (const event of engine.journal()) {
+    if (event.type !== "partially_filled" && event.type !== "filled") {
+      continue;
+    }
+    const fields = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (event));
+    if (
+      typeof fields.instrument !== "string" ||
+      typeof fields.price !== "string" ||
+      typeof fields.quantity !== "string"
+    ) {
+      // A fill event on this engine always carries its instrument, the
+      // maker price and the executed quantity; anything else is journal
+      // drift the view must not silently re-render as a last trade.
+      continue;
+    }
+    // Both legs of one fill share fill_id, price, quantity and `at`, so
+    // overwriting keeps the latest fill per instrument either way.
+    lastFills.set(fields.instrument, { price: fields.price, quantity: fields.quantity, at: event.at });
+  }
+  // The snapshot moment is the simulated session close — the replay's own
+  // clock end, derived like every other field from the scenario alone.
+  let endSeconds = scenario.start_seconds;
+  for (const step of scenario.steps) {
+    if (step.op === "advance") {
+      endSeconds += step.seconds ?? 0;
+    }
+  }
+  const asOf = new Date(endSeconds * 1_000).toISOString();
+  /** @type {MarketView[]} */
+  const rows = [];
+  for (const pairDef of ORDER_PAIRS) {
+    const book = engine.bookSnapshot(pairDef.pair);
+    const bestBid = book.bids[0];
+    const bestAsk = book.asks[0];
+    // Relative spread in integer basis points of the mid:
+    // (ask - bid) / mid * 10_000 == (ask - bid) * 20_000 / (ask + bid) in
+    // exact integer units — the book never rests crossed, so the result is
+    // never negative.
+    const spreadBps =
+      bestBid === undefined || bestAsk === undefined
+        ? null
+        : Number(
+            divideRounded(
+              (parseUnits(bestAsk.price) - parseUnits(bestBid.price)) * 20_000n,
+              parseUnits(bestAsk.price) + parseUnits(bestBid.price),
+              "half_even"
+            )
+          );
+    const lastFill = lastFills.get(pairDef.pair);
+    rows.push(
+      Object.freeze({
+        instrument: pairDef.pair,
+        base_asset: pairDef.base,
+        quote_asset: pairDef.quote,
+        best_bid:
+          bestBid === undefined
+            ? null
+            : Object.freeze({ price: bestBid.price, quantity: bestBid.quantity, order_count: bestBid.order_count }),
+        best_ask:
+          bestAsk === undefined
+            ? null
+            : Object.freeze({ price: bestAsk.price, quantity: bestAsk.quantity, order_count: bestAsk.order_count }),
+        last_trade:
+          lastFill === undefined
+            ? null
+            : Object.freeze({ price: lastFill.price, quantity: lastFill.quantity, executed_at: msIso(lastFill.at) }),
+        spread_bps: spreadBps,
+        base_scale: pairDef.baseScale,
+        quote_scale: pairDef.quoteScale,
+        price_scale: PRICE_SCALE,
+        as_of: asOf,
+        posting: "none"
+      })
+    );
+  }
+  return Object.freeze(rows);
+}
+
 /** @param {unknown} value */
 function isIsoTimestamp(value) {
   return (
@@ -1116,6 +1291,120 @@ export function validTradesView(view) {
   return candidate.trades.every(validTrade);
 }
 
+/**
+ * @param {unknown} level
+ * @param {{ baseScale: number }} pairDef
+ */
+function validMarketLevel(level, pairDef) {
+  if (level === null) {
+    return true;
+  }
+  if (typeof level !== "object" || Array.isArray(level)) {
+    return false;
+  }
+  const candidate = /** @type {MarketLevelView} */ (level);
+  return (
+    JSON.stringify(Object.keys(level).sort()) === JSON.stringify([...MARKET_LEVEL_KEYS].sort()) &&
+    isScaledDecimal(candidate.price, PRICE_SCALE) &&
+    parseUnits(candidate.price) > 0n &&
+    isScaledDecimal(candidate.quantity, pairDef.baseScale) &&
+    parseUnits(candidate.quantity) > 0n &&
+    Number.isSafeInteger(candidate.order_count) &&
+    candidate.order_count >= 1
+  );
+}
+
+/** @param {unknown} market */
+function validMarket(market) {
+  if (market === null || typeof market !== "object" || Array.isArray(market)) {
+    return false;
+  }
+  const candidate = /** @type {MarketView} */ (market);
+  if (JSON.stringify(Object.keys(market).sort()) !== JSON.stringify([...MARKET_KEYS].sort())) {
+    return false;
+  }
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === candidate.instrument);
+  if (
+    pairDef === undefined ||
+    candidate.base_asset !== pairDef.base ||
+    candidate.quote_asset !== pairDef.quote ||
+    candidate.base_scale !== pairDef.baseScale ||
+    candidate.quote_scale !== pairDef.quoteScale ||
+    candidate.price_scale !== PRICE_SCALE ||
+    candidate.posting !== "none"
+  ) {
+    return false;
+  }
+  if (!validMarketLevel(candidate.best_bid, pairDef) || !validMarketLevel(candidate.best_ask, pairDef)) {
+    return false;
+  }
+  // The engine never rests a crossed book: when both top levels exist the
+  // bid is strictly below the ask, and spread_bps is the exact integer
+  // recomputation of the relative mid spread — null exactly when either
+  // side is empty.
+  if (candidate.best_bid !== null && candidate.best_ask !== null) {
+    if (
+      !Number.isSafeInteger(candidate.spread_bps) ||
+      /** @type {number} */ (candidate.spread_bps) < 0 ||
+      parseUnits(candidate.best_bid.price) >= parseUnits(candidate.best_ask.price)
+    ) {
+      return false;
+    }
+    const recomputed = divideRounded(
+      (parseUnits(candidate.best_ask.price) - parseUnits(candidate.best_bid.price)) * 20_000n,
+      parseUnits(candidate.best_ask.price) + parseUnits(candidate.best_bid.price),
+      "half_even"
+    );
+    if (candidate.spread_bps !== Number(recomputed)) {
+      return false;
+    }
+  } else if (candidate.spread_bps !== null) {
+    return false;
+  }
+  if (candidate.last_trade !== null) {
+    if (
+      typeof candidate.last_trade !== "object" ||
+      Array.isArray(candidate.last_trade) ||
+      JSON.stringify(Object.keys(candidate.last_trade).sort()) !==
+        JSON.stringify([...MARKET_LAST_TRADE_KEYS].sort()) ||
+      !isScaledDecimal(candidate.last_trade.price, PRICE_SCALE) ||
+      parseUnits(candidate.last_trade.price) <= 0n ||
+      !isScaledDecimal(candidate.last_trade.quantity, pairDef.baseScale) ||
+      parseUnits(candidate.last_trade.quantity) <= 0n ||
+      !isIsoTimestamp(candidate.last_trade.executed_at)
+    ) {
+      return false;
+    }
+  }
+  return isIsoTimestamp(candidate.as_of);
+}
+
+/** @param {unknown} view */
+export function validMarketsView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {MarketsView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...MARKETS_VIEW_KEYS].sort())) {
+    return false;
+  }
+  if (
+    candidate.mode !== "test" ||
+    !Array.isArray(candidate.markets) ||
+    candidate.markets.length !== ORDER_PAIRS.length
+  ) {
+    return false;
+  }
+  // The canonical instrument sequence is pinned exactly: every declared
+  // pair reports precisely once, in ORDER_PAIRS order.
+  return (
+    candidate.markets.every(validMarket) &&
+    candidate.markets.every(
+      (market, index) => market.instrument === ORDER_PAIRS[index].pair
+    )
+  );
+}
+
 /** @param {unknown} view */
 export function validExchangeOrdersView(view) {
   if (view === null || typeof view !== "object" || Array.isArray(view)) {
@@ -1157,6 +1446,22 @@ export function createSyntheticTradeDirectory() {
       const engine = replayExchangeOrderScenario(scenario);
       const trades = Object.freeze(projectExchangeTrades(engine, scenario.intents).slice().reverse());
       return Object.freeze({ mode: "test", trades });
+    }
+  });
+}
+
+/** @returns {MarketDirectory} */
+export function createSyntheticMarketDirectory() {
+  // Same request-scoped invariant as the orders and trades directories:
+  // each read rebuilds the subject's scenario on a fresh engine and
+  // projects its book state — nothing is retained across subjects or
+  // calls (the cross-directory audit pins exactly that).
+  return Object.freeze({
+    async listFor(subject) {
+      const scenario = exchangeOrderScenario(subject);
+      const engine = replayExchangeOrderScenario(scenario);
+      const markets = projectExchangeMarkets(engine, scenario);
+      return Object.freeze({ mode: "test", markets });
     }
   });
 }
