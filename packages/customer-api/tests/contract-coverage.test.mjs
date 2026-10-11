@@ -16,6 +16,7 @@ import {
   customerHeaders,
   header,
   NOW_MS,
+  operationIdFor,
   operatorHeaders,
   rawExchange,
   REQUEST_ID,
@@ -26,7 +27,9 @@ import {
 } from "./http-client.mjs";
 
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"];
-const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001" });
+// The operationId pin is a real minted id for the verified test subject so
+// the served member read reaches its 200 path like every other served route.
+const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", operationId: await operationIdFor() });
 const OPERATOR_HEADERS = [
   ...customerHeaders({ "X-Platform": "operator-web" }),
   ["X-Device-Id", "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11"]

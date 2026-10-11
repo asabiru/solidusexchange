@@ -53,6 +53,8 @@ function kycStub(result: CustomerApiKyc | (() => Promise<CustomerApiKyc>)): KycS
     support: async () => ({ status: "not-configured" }),
     authSessions: async () => ({ status: "not-configured" }),
         activity: async () => ({ status: "not-configured" }),
+        operations: async () => ({ status: "not-configured" }),
+        operation: async () => ({ status: "not-configured" }),
         users: async () => ({ status: "not-configured" })
   };
   return { client, calls };

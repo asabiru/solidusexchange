@@ -55,6 +55,8 @@ function authSessionsStub(result: CustomerApiAuthSessions | (() => Promise<Custo
       return typeof result === "function" ? result() : result;
     },
     activity: async () => ({ status: "not-configured" }),
+        operations: async () => ({ status: "not-configured" }),
+        operation: async () => ({ status: "not-configured" }),
     users: async () => ({ status: "not-configured" })
   };
   return { client, calls };
