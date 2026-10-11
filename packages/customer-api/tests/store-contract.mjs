@@ -1,19 +1,24 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { StoreCommandError, StoreUnavailableError } from "../src/store.mjs";
+
 // Shared store-backend contract: the same suite runs against the memory and
 // PostgreSQL backends so both honor identical consume semantics. Each case
 // builds its store through `makeStore` and closes it through `t.after`, so a
 // backend may hold real connections (the PostgreSQL pool) without leaking.
+// `makeRawStore` builds a backend in the not-yet-initialized state so the
+// contract can pin identical lifecycle rejection on every implementation.
 
 /**
  * @param {{
  *   name: string,
  *   makeStore: () => Promise<import("../src/store.mjs").CustomerApiStore>,
+ *   makeRawStore: () => Promise<import("../src/store.mjs").CustomerApiStore>,
  *   freshKey?: () => string
  * }} options
  */
-export function registerStoreContract({ name, makeStore, freshKey = () => `key_${counter++}` }) {
+export function registerStoreContract({ name, makeStore, makeRawStore, freshKey = () => `key_${counter++}` }) {
   const command = (overrides = {}) => ({
     key: freshKey(),
     now: 1_000,
@@ -97,6 +102,56 @@ export function registerStoreContract({ name, makeStore, freshKey = () => `key_$
       await store.consumeRateLimit(command({ key: "aged_c", now: 61_000, maxKeys: 2 })),
       { allowed: true }
     );
+  });
+
+  test(`${name}: a consume before initialize fails closed`, async (t) => {
+    const store = await makeRawStore();
+    t.after(() => store.close());
+    await assert.rejects(async () => store.consumeRateLimit(command()), StoreUnavailableError);
+  });
+
+  test(`${name}: a closed store refuses consumes`, async (t) => {
+    const store = await makeStore();
+    await store.close();
+    await assert.rejects(async () => store.consumeRateLimit(command()), StoreUnavailableError);
+  });
+
+  test(`${name}: re-initializing after close restores consumes`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    await store.close();
+    await assert.rejects(async () => store.consumeRateLimit(command()), StoreUnavailableError);
+    await store.initialize?.();
+    assert.deepEqual(await store.consumeRateLimit(command()), { allowed: true });
+  });
+
+  test(`${name}: malformed consume commands fail identically`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const malformed = [
+      { key: "" },
+      { key: "x".repeat(257) },
+      { key: "bad\u0000key" },
+      { key: "bad\ud800key" },
+      { key: 42 },
+      { now: -1 },
+      { now: 1_000.5 },
+      { now: Number.MAX_SAFE_INTEGER + 1 },
+      { now: Number.MAX_SAFE_INTEGER - 10, windowMs: 60_000 },
+      { windowMs: 0 },
+      { windowMs: 1.5 },
+      { limit: 0 },
+      { limit: 2.5 },
+      { maxKeys: 0 },
+      { maxKeys: 2.5 }
+    ];
+    for (const overrides of malformed) {
+      await assert.rejects(
+        async () => store.consumeRateLimit(command(overrides)),
+        StoreCommandError,
+        `command overriden with ${JSON.stringify(overrides)}`
+      );
+    }
   });
 }
 

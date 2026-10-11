@@ -11,7 +11,8 @@ registerStoreContract({
     const store = createMemoryStore();
     await store.initialize?.();
     return store;
-  }
+  },
+  makeRawStore: async () => createMemoryStore()
 });
 
 test("the memory store identifies itself and lifecycle-hooks cleanly", async () => {
@@ -23,6 +24,7 @@ test("the memory store identifies itself and lifecycle-hooks cleanly", async () 
 
 test("a stored rate limiter delegates the consume to the backend", async () => {
   const store = createMemoryStore();
+  await store.initialize?.();
   const calls = [];
   const recorder = {
     kind: "memory",

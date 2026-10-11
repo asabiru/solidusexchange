@@ -1,4 +1,9 @@
-import { StoreConfigError, StoreUnavailableError } from "./store.mjs";
+import {
+  assertRateLimitConsumeCommand,
+  StoreConfigError,
+  StoreError,
+  StoreUnavailableError
+} from "./store.mjs";
 
 // PostgreSQL backend for the customer-api store seam (`CUSTOMER_API_STORE=
 // postgres`, DSN via `CUSTOMER_API_STORE_DSN`). Dev-only groundwork so the
@@ -15,15 +20,18 @@ import { StoreConfigError, StoreUnavailableError } from "./store.mjs";
 // The fixed-window consume runs as one CTE statement so concurrent consumes
 // stay atomic without a client-managed transaction:
 //   - `prior` sees the key's bucket (live or expired) as of statement start;
-//   - `expired` physically prunes OTHER keys' dead buckets (the key's own
-//     expired row is kept so the upsert below can reset it — deleting it
-//     would hide `prior`, not help it);
 //   - `occupancy` counts LIVE buckets, matching the memory backend's
 //     prune-then-size bound;
+//   - `row_total` counts every bucket row, matching the memory map's `size`;
+//   - `expired` physically prunes dead buckets only for a NEW key when the
+//     table already sits at the bound — the memory backend's lazy eviction
+//     exactly (the key's own expired row is kept so the upsert below can
+//     reset it, and pruning never runs for an existing key);
 //   - `write` inserts a fresh bucket only when the key has no bucket and the
 //     table is not full of live buckets, and otherwise resolves the row
 //     through ON CONFLICT: an expired bucket restarts the window, a live one
-//     increments.
+//     increments. The upsert re-reads the row post-conflict, so two racing
+//     consumes of one key serialize like the memory map's single thread.
 // Clock semantics never come from the database: `now` is the caller's
 // injected clock, exactly like the memory backend.
 
@@ -42,11 +50,18 @@ occupancy AS (
    WHERE bucket.namespace = $5
      AND bucket.reset_at_ms > $2
 ),
+row_total AS (
+  SELECT count(*) AS total
+    FROM customer_api.rate_limit_buckets AS bucket
+   WHERE bucket.namespace = $5
+),
 expired AS (
   DELETE FROM customer_api.rate_limit_buckets
    WHERE namespace = $5
      AND reset_at_ms <= $2
      AND bucket_key <> $1
+     AND NOT EXISTS (SELECT 1 FROM prior)
+     AND (SELECT total FROM row_total) >= $4
 ),
 write AS (
   INSERT INTO customer_api.rate_limit_buckets (namespace, bucket_key, request_count, reset_at_ms)
@@ -77,11 +92,15 @@ SELECT migration.version
  LIMIT 1;
 `;
 
+// Parameters for the startup surface probe: one valid consume command run
+// inside a transaction that is always rolled back, so the probe exercises
+// the whole consume statement — table, columns and the ON CONFLICT arbiter —
+// and leaves no trace.
+const PROBE_PARAMETERS = ["__schema_probe__", 1, 1, 1, "__schema_probe__"];
+
 /** @param {unknown} error */
 function unavailable(error) {
-  return error instanceof StoreUnavailableError
-    ? error
-    : new StoreUnavailableError();
+  return error instanceof StoreError ? error : new StoreUnavailableError();
 }
 
 const NAMESPACE_PATTERN = /^[a-z0-9_-]{1,64}$/u;
@@ -108,37 +127,101 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
   }
   // The DSN (user, password, host) is connection material: it is never logged,
   // and failure paths surface only StoreUnavailableError.
+  const connectionDsn = /** @type {string} */ (dsn);
   /** @type {import("pg").Pool | null} */
   let pool = null;
+  /** @type {Promise<void> | null} */
+  let opening = null;
+  let closed = false;
+
+  async function openPool() {
+    const { Pool } = await import("pg");
+    const created = new Pool({
+      connectionString: connectionDsn,
+      max: 4,
+      connectionTimeoutMillis: 5_000,
+      idleTimeoutMillis: 30_000,
+      // A query stuck on a dead or wedged connection must bound like a
+      // request, not hang the consume forever.
+      query_timeout: 15_000
+    });
+    // An idle pooled client can die outside any request (server restart,
+    // administrator kill); the pool forwards that as an 'error' event which
+    // is an unhandled EventEmitter error — Node rethrows it and kills the
+    // whole application. Query failures still surface per request as
+    // StoreUnavailableError, so the pool-level event only means "drop the
+    // dead client".
+    created.on("error", () => {});
+    pool = created;
+  }
+
+  /**
+   * The startup contract is not just reachability: the schema must carry
+   * every relation and constraint the consume statement relies on. The
+   * version check pins the catalog revision; the rolled-back consume probe
+   * proves the whole statement resolves (a missing table, renamed column or
+   * dropped primary key rejects here instead of per request at runtime).
+   */
+  async function probeSchema() {
+    const checked = /** @type {import("pg").Pool} */ (pool);
+    const result = await checked.query(SCHEMA_VERSION_SQL);
+    if (result.rows.length !== 1 || result.rows[0].version !== schemaVersion) {
+      throw new StoreUnavailableError("customer-api store schema is missing or incompatible");
+    }
+    const client = await checked.connect();
+    try {
+      await client.query("BEGIN");
+      try {
+        await client.query(CONSUME_SQL, PROBE_PARAMETERS);
+      } finally {
+        await client.query("ROLLBACK").catch(() => undefined);
+      }
+    } finally {
+      client.release();
+    }
+  }
+
+  async function openOnce() {
+    if (pool === null) {
+      await openPool();
+    }
+    try {
+      await probeSchema();
+    } catch (error) {
+      // A failed probe must not leave a reachable backend behind: drain the
+      // pool so every later consume fails closed instead of running against
+      // an unrecognized schema.
+      const ending = pool;
+      pool = null;
+      await ending?.end().catch(() => undefined);
+      throw unavailable(error);
+    }
+    // close() raced with this initialize: drain the pool it just opened.
+    if (closed) {
+      const orphan = pool;
+      pool = null;
+      await orphan?.end().catch(() => undefined);
+    }
+  }
 
   return Object.freeze({
     kind: "postgresql",
     async initialize() {
-      try {
-        if (pool === null) {
-          const { Pool } = await import("pg");
-          pool = new Pool({
-            connectionString: dsn,
-            max: 4,
-            connectionTimeoutMillis: 5_000,
-            idleTimeoutMillis: 30_000
-          });
-        }
-        const result = await pool.query(SCHEMA_VERSION_SQL);
-        if (result.rows.length !== 1 || result.rows[0].version !== schemaVersion) {
-          throw new StoreUnavailableError(
-            "customer-api store schema is missing or incompatible"
-          );
-        }
-      } catch (error) {
-        throw unavailable(error);
-      }
+      closed = false;
+      // Single-flight: concurrent callers share one probe so a racing pair
+      // can never create two pools and leak the loser.
+      opening ??= openOnce();
+      await opening.finally(() => {
+        opening = null;
+      });
     },
     /**
      * @param {import("./rate-limit.mjs").RateLimitConsumeCommand} command
      * @returns {Promise<import("./rate-limit.mjs").RateLimitResult>}
      */
-    async consumeRateLimit({ key, now, windowMs, limit, maxKeys }) {
+    async consumeRateLimit(command) {
+      assertRateLimitConsumeCommand(command);
+      const { key, now, windowMs, limit, maxKeys } = command;
       if (pool === null) {
         throw new StoreUnavailableError("customer-api store is not initialized");
       }
@@ -164,6 +247,7 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
       }
     },
     async close() {
+      closed = true;
       const ending = pool;
       pool = null;
       await ending?.end();

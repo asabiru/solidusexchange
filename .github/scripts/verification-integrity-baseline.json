@@ -1264,11 +1264,11 @@
       "minCases": 12
     },
     "packages/customer-api/tests/store-contract.mjs": {
-      "minLines": 81,
-      "minCases": 6
+      "minLines": 128,
+      "minCases": 10
     },
     "packages/customer-api/tests/store.test.mjs": {
-      "minLines": 66,
+      "minLines": 68,
       "minCases": 4
     },
     "packages/customer-api/tests/store-config.test.mjs": {
@@ -1276,11 +1276,11 @@
       "minCases": 7
     },
     "packages/customer-api/tests/postgres-store-contract.mjs": {
-      "minLines": 75,
-      "minCases": 4
+      "minLines": 268,
+      "minCases": 12
     },
     "packages/customer-api/tests/postgres-store.sh": {
-      "minLines": 32
+      "minLines": 95
     },
     "miniapp/src/server/address-screening-upstream.test.ts": {
       "minLines": 306,
