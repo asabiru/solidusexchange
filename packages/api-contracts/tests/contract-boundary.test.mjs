@@ -162,6 +162,19 @@ assertRejected(
 );
 
 assertRejected(
+  "rejects unbound order path templates",
+  "orderId path parameter must be bound exactly on its templated paths: getCustomerExchangeOrder",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/customer/exchange-orders/{orderId}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/OrderId"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
   "rejects bearer check types in canonical preview requests",
   "Canonical CheckPreviewRequest schema must remain pinned",
   (scratch) => {

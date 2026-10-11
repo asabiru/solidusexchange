@@ -10,7 +10,7 @@ import { createSyntheticCardDirectory } from "../src/cards.mjs";
 import { createSyntheticActivityDirectory } from "../src/activity.mjs";
 import { createSyntheticCheckDirectory } from "../src/checks.mjs";
 import { createSyntheticDepositDirectory } from "../src/deposits.mjs";
-import { createSyntheticExchangeOrderDirectory, createSyntheticMarketDirectory, createSyntheticTradeDirectory } from "../src/exchange-orders.mjs";
+import { createSyntheticExchangeOrderDirectory, createSyntheticMarketDirectory, createSyntheticTradeDirectory, exchangeOrderScenario } from "../src/exchange-orders.mjs";
 import { createSyntheticKycApplicationDirectory } from "../src/kyc.mjs";
 import { createSyntheticNotificationDirectory } from "../src/notifications.mjs";
 import { createSyntheticOperationDirectory } from "../src/operations.mjs";
@@ -252,4 +252,13 @@ export function operationPathFor(requestPath) {
 export async function operationIdFor(subject = VERIFIED_SUBJECT) {
   const view = await createSyntheticOperationDirectory().viewFor(subject);
   return view.operations[0].operation_id;
+}
+
+// The first minted order id for a subject — the scenario's first intent,
+// a limit order the counterparty sweep always fills completely (status
+// "filled"). The mint is subject-deterministic, so every synthetic
+// directory instance answers the same id.
+export async function orderIdFor(subject = VERIFIED_SUBJECT) {
+  const scenario = exchangeOrderScenario(subject);
+  return scenario.intents[0].order_id;
 }
