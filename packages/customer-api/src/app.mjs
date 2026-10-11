@@ -33,7 +33,8 @@ import {
   validOperatorAdminView,
   validOperatorCapabilitiesView,
   validOperatorSessionView,
-  validOperatorSubjectsView
+  validOperatorSubjectsView,
+  validOperatorSubjectDetailView
 } from "./operator.mjs";
 import { validProfileView } from "./profile.mjs";
 import { validQuotesView } from "./quotes.mjs";
@@ -402,7 +403,10 @@ export function createCustomerApiHandler({
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
   }
-  if (typeof operatorSubjectsDirectory?.subjectsFor !== "function") {
+  if (
+    typeof operatorSubjectsDirectory?.subjectsFor !== "function" ||
+    typeof operatorSubjectsDirectory?.subjectFor !== "function"
+  ) {
     throw new Error("An operator subjects directory is required");
   }
 
@@ -583,6 +587,30 @@ export function createCustomerApiHandler({
       const view = await operatorSubjectsDirectory.subjectsFor();
       if (!validOperatorSubjectsView(view)) {
         throw new Error("Operator subjects directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorSubject") {
+      // The member read shares the collection's operator.subjects.read
+      // capability: a detail is never wider than the list it belongs to.
+      // A well-formed id outside the shared universe fails closed as the
+      // pinned 404 — uniform for every id shape the template admits, so the
+      // response never reveals which ids exist.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.subjects.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const subjectId = parameters.get("subjectId");
+      const view = await operatorSubjectsDirectory.subjectFor(subjectId ?? "");
+      if (view === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validOperatorSubjectDetailView(view)) {
+        throw new Error("Operator subjects directory returned an invalid subject detail");
       }
       send(response, 200, { ...view }, requestId);
       return;

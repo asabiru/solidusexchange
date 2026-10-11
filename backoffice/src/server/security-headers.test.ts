@@ -365,6 +365,7 @@ describe("Backoffice BFF security headers on every route", () => {
       "/bff/api/kyc": () => get("/bff/api/kyc"),
       "/bff/api/operator/admin": () => get("/bff/api/operator/admin"),
       "/bff/api/operator/subjects": () => get("/bff/api/operator/subjects"),
+      "/bff/api/operator/subjects/:id": () => get("/bff/api/operator/subjects/CUS-10482"),
       "/bff/api/aml": () => get("/bff/api/aml"),
       "/bff/api/investigations": () => get("/bff/api/investigations"),
       "/bff/api/fraud-alerts": () => get("/bff/api/fraud-alerts"),

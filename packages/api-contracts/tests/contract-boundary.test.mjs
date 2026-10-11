@@ -337,6 +337,41 @@ assertRejected(
   }
 );
 
+assertRejected(
+  "rejects the served operator subject detail read without a device identifier",
+  "Missing X-Device-Id: getOperatorSubject",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/subjects/{subjectId}"].get;
+    operation.parameters = withoutDeviceId(operation.parameters);
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects the operator subject detail read with a missing path parameter binding",
+  "subjectId path parameter must be bound exactly",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    const operation = openapi.paths["/api/v1/operator/subjects/{subjectId}"].get;
+    operation.parameters = operation.parameters.filter(
+      (parameter) => parameter.$ref !== "#/components/parameters/SubjectId"
+    );
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
+assertRejected(
+  "rejects the operator subject detail read with a renamed placeholder",
+  "Operation path is not pinned: getOperatorSubject",
+  (scratch) => {
+    const openapi = readJson(scratch, "openapi.yaml");
+    openapi.paths["/api/v1/operator/subjects/{id}"] = openapi.paths["/api/v1/operator/subjects/{subjectId}"];
+    delete openapi.paths["/api/v1/operator/subjects/{subjectId}"];
+    writeJson(scratch, "openapi.yaml", openapi);
+  }
+);
+
 for (const [pathName, operationId] of [
   ["/api/v1/customer/session", "getCustomerSession"],
   ["/api/v1/customer/capabilities", "getCustomerCapabilities"],

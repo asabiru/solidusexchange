@@ -6,6 +6,7 @@ import { OPERATIONS } from "../src/contract.mjs";
 import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
+import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
 
 // A concrete operation id minted for the verified test subject: the
@@ -16,6 +17,10 @@ const VERIFIED_OPERATION_ID = await operationIdFor();
 const KNOWN_SCREENING_ID = (
   await createSyntheticAddressScreeningDirectory().listFor(VERIFIED_SUBJECT)
 ).screenings[0].screening_id;
+// The operator detail read likewise needs a real roster id to reach its 200.
+const KNOWN_OPERATOR_SUBJECT_ID = (
+  await createSyntheticOperatorSubjectsDirectory().subjectsFor()
+).subjects[0].subject_id;
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
@@ -74,7 +79,8 @@ test("every operation sends the security headers on success and on its error pat
       const { method } = operation;
       const path = operation.path
         .replaceAll("{operationId}", VERIFIED_OPERATION_ID)
-        .replaceAll("{screeningId}", KNOWN_SCREENING_ID);
+        .replaceAll("{screeningId}", KNOWN_SCREENING_ID)
+        .replaceAll("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
       const ok = await request(port, { method, path, headers: operationHeaders(operation) });
       assert.equal(ok.status, 200, path);
       assertSecurityHeaders(ok, `${method} ${path} 200`);

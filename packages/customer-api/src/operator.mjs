@@ -281,6 +281,28 @@ const SUBJECT_ROW_KEYS = Object.freeze([
 const CUSTOMER_SUBJECT_PATTERN = /^syn_cust_[a-z0-9]{8,32}$/u;
 const DISPLAY_NAME_PATTERN = /^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$/u;
 const SUBJECTS_COUNT = 24;
+const SUBJECT_ACCOUNT_STATUSES = Object.freeze(["active", "dormant", "restricted", "closed"]);
+const SUBJECT_DETAIL_VIEW_KEYS = Object.freeze(["mode", "subject"]);
+const SUBJECT_DETAIL_KEYS = Object.freeze([
+  "account_status",
+  "contact_hash",
+  "devices",
+  "display_name",
+  "flags",
+  "kyc_status",
+  "last_active_at",
+  "limits",
+  "posting",
+  "registered_at",
+  "sessions",
+  "subject_id"
+]);
+const SUBJECT_LIMIT_KEYS = Object.freeze(["max_devices", "max_sessions"]);
+const CONTACT_HASH_PATTERN = /^cth_[0-9a-f]{32}$/u;
+const DEVICE_REF_PATTERN = /^dev_[0-9a-f]{16}$/u;
+const SUBJECT_MAX_SESSIONS_BOUND = 8;
+const SUBJECT_MAX_DEVICES_BOUND = 6;
+const SUBJECT_DEVICE_DIGEST_PREFIX = "dev_";
 const SUBJECTS_MAX_ITEMS = 64;
 const FLAGS_BOUND = 8;
 const REGISTERED_WINDOW_MS = 120 * 86_400_000;
@@ -340,8 +362,37 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  */
 
 /**
+ * @typedef {object} OperatorSubjectLimits
+ * @property {number} max_sessions
+ * @property {number} max_devices
+ */
+
+/**
+ * @typedef {object} OperatorSubjectDetail
+ * @property {string} subject_id
+ * @property {string} display_name
+ * @property {string} kyc_status
+ * @property {number} flags
+ * @property {string} registered_at
+ * @property {string} last_active_at
+ * @property {string} posting
+ * @property {string} account_status
+ * @property {string} contact_hash
+ * @property {number} sessions
+ * @property {readonly string[]} devices
+ * @property {OperatorSubjectLimits} limits
+ */
+
+/**
+ * @typedef {object} OperatorSubjectDetailView
+ * @property {string} mode
+ * @property {OperatorSubjectDetail} subject
+ */
+
+/**
  * @typedef {object} OperatorSubjectsDirectory
  * @property {() => Promise<OperatorSubjectsView>} subjectsFor
+ * @property {(subjectId: string) => Promise<OperatorSubjectDetailView | null>} subjectFor
  */
 
 /**
@@ -382,6 +433,66 @@ function buildSubjectRow(index) {
     registered_at: new Date(registeredMs).toISOString(),
     last_active_at: new Date(lastActiveMs).toISOString(),
     posting: "none"
+  });
+}
+
+// The customer-360 detail extends the list row with fields derived solely
+// from the subject id through the same sha256 recipe — no new entropy
+// source. `contact_hash` stays a redacted digest (the contract boundary
+// rejects field names carrying raw-PII tokens), devices stay opaque `dev_*`
+// handles, and the limits echo is bounded so sessions/devices always fit
+// inside it. Because every field is a pure function of the id, the
+// validator can recompute the entire detail and compare it verbatim.
+/** @param {string} subjectId */
+function subjectRowIndex(subjectId) {
+  for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
+    if (buildSubjectRow(index).subject_id === subjectId) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+/**
+ * @param {string} subjectId
+ * @returns {{account_status: string, contact_hash: string, sessions: number, devices: readonly string[], limits: OperatorSubjectLimits}}
+ */
+function deriveSubjectDetailFields(subjectId) {
+  const maxSessions = Number(subjectsUnits(subjectId, "max-sessions", BigInt(SUBJECT_MAX_SESSIONS_BOUND))) + 1;
+  const sessions = Number(subjectsUnits(subjectId, "sessions", BigInt(maxSessions + 1)));
+  const maxDevices = Number(subjectsUnits(subjectId, "max-devices", BigInt(SUBJECT_MAX_DEVICES_BOUND))) + 1;
+  const deviceCount = Number(subjectsUnits(subjectId, "devices", BigInt(maxDevices + 1)));
+  const devices = [];
+  for (let index = 0; index < deviceCount; index += 1) {
+    devices.push(`${SUBJECT_DEVICE_DIGEST_PREFIX}${subjectsDigest(subjectId, `device-${index}`).toString("hex").slice(0, 16)}`);
+  }
+  return {
+    account_status: SUBJECT_ACCOUNT_STATUSES[
+      Number(subjectsUnits(subjectId, "account", BigInt(SUBJECT_ACCOUNT_STATUSES.length)))
+    ],
+    contact_hash: `cth_${subjectsDigest(subjectId, "contact").toString("hex").slice(0, 32)}`,
+    sessions,
+    devices: Object.freeze(devices),
+    limits: Object.freeze({
+      max_sessions: maxSessions,
+      max_devices: maxDevices
+    })
+  };
+}
+
+/**
+ * @param {OperatorSubjectRow} row
+ * @returns {OperatorSubjectDetail}
+ */
+function buildSubjectDetail(row) {
+  const derived = deriveSubjectDetailFields(row.subject_id);
+  return Object.freeze({
+    ...row,
+    account_status: derived.account_status,
+    contact_hash: derived.contact_hash,
+    sessions: derived.sessions,
+    devices: derived.devices,
+    limits: derived.limits
   });
 }
 
@@ -443,13 +554,116 @@ export function validOperatorSubjectsView(view) {
   );
 }
 
+/** @param {unknown} view */
+export function validOperatorSubjectDetailView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorSubjectDetailView} */ (view);
+  if (
+    JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...SUBJECT_DETAIL_VIEW_KEYS].sort()) ||
+    candidate.mode !== "test"
+  ) {
+    return false;
+  }
+  const detail = /** @type {unknown} */ (candidate.subject);
+  if (detail === null || typeof detail !== "object" || Array.isArray(detail)) {
+    return false;
+  }
+  const subject = /** @type {OperatorSubjectDetail} */ (detail);
+  if (JSON.stringify(Object.keys(detail).sort()) !== JSON.stringify([...SUBJECT_DETAIL_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !CUSTOMER_SUBJECT_PATTERN.test(subject.subject_id) ||
+    !DISPLAY_NAME_PATTERN.test(subject.display_name) ||
+    !KYC_STATUSES.includes(subject.kyc_status) ||
+    !Number.isInteger(subject.flags) ||
+    subject.flags < 0 ||
+    subject.posting !== "none" ||
+    !SUBJECT_ACCOUNT_STATUSES.includes(subject.account_status) ||
+    !CONTACT_HASH_PATTERN.test(subject.contact_hash) ||
+    !Number.isInteger(subject.sessions) ||
+    subject.sessions < 0 ||
+    subject.sessions > 16 ||
+    !Array.isArray(subject.devices) ||
+    subject.devices.length > 8 ||
+    new Set(subject.devices).size !== subject.devices.length ||
+    !subject.devices.every((device) => DEVICE_REF_PATTERN.test(device))
+  ) {
+    return false;
+  }
+  const limits = /** @type {unknown} */ (subject.limits);
+  if (limits === null || typeof limits !== "object" || Array.isArray(limits)) {
+    return false;
+  }
+  if (JSON.stringify(Object.keys(limits).sort()) !== JSON.stringify([...SUBJECT_LIMIT_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !Number.isInteger(subject.limits.max_sessions) ||
+    subject.limits.max_sessions < 1 ||
+    subject.limits.max_sessions > 16 ||
+    !Number.isInteger(subject.limits.max_devices) ||
+    subject.limits.max_devices < 1 ||
+    subject.limits.max_devices > 8 ||
+    subject.sessions > subject.limits.max_sessions ||
+    subject.devices.length > subject.limits.max_devices
+  ) {
+    return false;
+  }
+  if (!isIsoTimestamp(subject.registered_at) || !isIsoTimestamp(subject.last_active_at)) {
+    return false;
+  }
+  if (Date.parse(subject.last_active_at) < Date.parse(subject.registered_at)) {
+    return false;
+  }
+  // The detail is a pure function of the shared roster: the list fields
+  // must equal the row minted for the id's index, and every derived field
+  // must equal the deterministic derivation for that id. Anything else is
+  // a fabricated read and fails closed.
+  const index = subjectRowIndex(subject.subject_id);
+  if (index === -1) {
+    return false;
+  }
+  const row = buildSubjectRow(index);
+  const derived = deriveSubjectDetailFields(subject.subject_id);
+  return (
+    subject.display_name === row.display_name &&
+    subject.kyc_status === row.kyc_status &&
+    subject.flags === row.flags &&
+    subject.registered_at === row.registered_at &&
+    subject.last_active_at === row.last_active_at &&
+    subject.account_status === derived.account_status &&
+    subject.contact_hash === derived.contact_hash &&
+    subject.sessions === derived.sessions &&
+    JSON.stringify(subject.devices) === JSON.stringify(derived.devices) &&
+    JSON.stringify(subject.limits) === JSON.stringify(derived.limits)
+  );
+}
+
 /** @returns {OperatorSubjectsDirectory} */
 export function createSyntheticOperatorSubjectsDirectory() {
-  // The directory view is one pure function of the pinned roster — no
+  // The directory views are pure functions of the pinned roster — no
   // subject-scoped cache exists, so nothing can grow without bound.
   return Object.freeze({
     async subjectsFor() {
       return buildOperatorSubjectsView();
+    },
+    // The member read reuses the shared universe: the requested id resolves
+    // to its roster index (the bounded 24-row scan — no stored lookup) and
+    // the detail re-derives the row plus its id-bound extension, so the
+    // detail can never disagree with the list row for the same id.
+    /** @param {string} subjectId */
+    async subjectFor(subjectId) {
+      const index = subjectRowIndex(subjectId);
+      if (index === -1) {
+        return null;
+      }
+      return Object.freeze({
+        mode: "test",
+        subject: buildSubjectDetail(buildSubjectRow(index))
+      });
     }
   });
 }

@@ -500,6 +500,25 @@ export const OPERATIONS = Object.freeze([
       "x-device-id"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The operator subject detail read is the staff customer-360 view: it
+  // shares the collection's operator.subjects.read capability (a member
+  // read is never wider than the list it belongs to) and adds the declared
+  // 404 for a well-formed subject id outside the shared universe — uniform,
+  // never revealing which ids exist.
+  Object.freeze({
+    operationId: "getOperatorSubject",
+    method: "GET",
+    path: "/api/v1/operator/subjects/{subjectId}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 404, 429, 500])
   })
 ]);
 
