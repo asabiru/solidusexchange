@@ -101,13 +101,45 @@ export function idempotencyKey(value) {
 }
 
 /**
+ * @param {unknown} options
+ * @returns {number}
+ */
+export function maxResourcesOf(options) {
+  const maxResources =
+    options !== null && typeof options === "object"
+      ? (/** @type {{ maxResources?: number }} */ (options).maxResources ?? 10_000)
+      : 10_000;
+  if (!Number.isSafeInteger(maxResources) || maxResources < 1) {
+    throw new RangeError("maxResources must be a positive integer");
+  }
+  return maxResources;
+}
+
+/**
+ * @param {string} what
+ * @returns {ProviderError}
+ */
+export function capacityError(what) {
+  return new ProviderError("capacity_exceeded", `${what} capacity reached`);
+}
+
+/**
  * Exact-replay idempotency: the same key with the same request returns the
- * stored response; the same key with a different request fails closed.
+ * stored response; the same key with a different request fails closed. The
+ * registry is bounded: a new key past capacity fails closed instead of
+ * growing forever or evicting stored results.
  *
  * @template T
  */
 export class IdempotencyRegistry {
-  constructor() {
+  /**
+   * @param {{ maxEntries?: number }} [options]
+   */
+  constructor({ maxEntries = 10_000 } = {}) {
+    if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
+      throw new RangeError("maxEntries must be a positive integer");
+    }
+    this.maxEntries = maxEntries;
     /** @type {Map<string, { digest: string, response: T }>} */
     this.entries = new Map();
   }
@@ -129,6 +161,9 @@ export class IdempotencyRegistry {
         );
       }
       return structuredClone(existing.response);
+    }
+    if (this.entries.size >= this.maxEntries) {
+      throw capacityError("idempotency registry");
     }
     const response = create();
     this.entries.set(key, { digest, response: structuredClone(response) });
@@ -201,9 +236,16 @@ export function outageError(seconds = 0) {
  * when a callback is scheduled, so outputs do not depend on drain timing.
  */
 export class DeliveryQueue {
-  /** @param {CallbackSigner} signer */
-  constructor(signer) {
+  /**
+   * @param {CallbackSigner} signer
+   * @param {{ maxPending?: number }} [options]
+   */
+  constructor(signer, { maxPending = 10_000 } = {}) {
+    if (!Number.isSafeInteger(maxPending) || maxPending < 1) {
+      throw new RangeError("maxPending must be a positive integer");
+    }
     this.signer = signer;
+    this.maxPending = maxPending;
     /** @type {{ deliverAt: number, order: number, delivery: SignedDelivery }[]} */
     this.pending = [];
     this.order = 0;
@@ -215,6 +257,9 @@ export class DeliveryQueue {
    */
   schedule(payload, deliverAt) {
     assertEpochSeconds(deliverAt, "delivery time");
+    if (this.pending.length >= this.maxPending) {
+      throw capacityError("scheduled callback");
+    }
     const delivery = this.signer.sign(payload, deliverAt);
     this.pending.push({ deliverAt, order: this.order, delivery });
     this.order += 1;

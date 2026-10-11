@@ -21,6 +21,7 @@ export class ProviderError extends Error {
 
 /**
  * @typedef {"provider_unavailable"
+ *   | "capacity_exceeded"
  *   | "idempotency_conflict"
  *   | "invalid_request"
  *   | "not_found"

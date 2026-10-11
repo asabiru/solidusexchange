@@ -8,6 +8,7 @@ import {
   SIMULATOR_ENVIRONMENT,
 } from "./signing.mjs";
 import {
+  capacityError,
   DeliveryQueue,
   exactKeys,
   IdempotencyRegistry,
@@ -15,6 +16,7 @@ import {
   isIsoSeconds,
   isPositiveSequence,
   isStringMatching,
+  maxResourcesOf,
   oneOf,
   outageError,
   resolveScenario,
@@ -78,27 +80,27 @@ import {
  */
 
 export const BANK_SCENARIOS = Object.freeze({
-  payment_found: { events: ["payment_received"], delivery: "normal" },
-  payment_not_found: { events: ["expired_no_payment"], delivery: "normal" },
-  partial_payment: { events: ["partial_payment"], delivery: "normal" },
-  duplicate_payment: { events: ["payment_received", "duplicate_payment"], delivery: "normal" },
-  reversed_payment: { events: ["payment_received", "payment_reversed"], delivery: "normal" },
-  provider_outage: { events: [], delivery: "none" },
-  duplicate_callback: { events: ["payment_received"], delivery: "duplicate" },
-  out_of_order_callback: { events: ["payment_received", "payment_reversed"], delivery: "out_of_order" },
-  late_callback: { events: ["payment_received"], delivery: "late" },
+  payment_found: Object.freeze({ events: Object.freeze(["payment_received"]), delivery: "normal" }),
+  payment_not_found: Object.freeze({ events: Object.freeze(["expired_no_payment"]), delivery: "normal" }),
+  partial_payment: Object.freeze({ events: Object.freeze(["partial_payment"]), delivery: "normal" }),
+  duplicate_payment: Object.freeze({ events: Object.freeze(["payment_received", "duplicate_payment"]), delivery: "normal" }),
+  reversed_payment: Object.freeze({ events: Object.freeze(["payment_received", "payment_reversed"]), delivery: "normal" }),
+  provider_outage: Object.freeze({ events: Object.freeze([]), delivery: "none" }),
+  duplicate_callback: Object.freeze({ events: Object.freeze(["payment_received"]), delivery: "duplicate" }),
+  out_of_order_callback: Object.freeze({ events: Object.freeze(["payment_received", "payment_reversed"]), delivery: "out_of_order" }),
+  late_callback: Object.freeze({ events: Object.freeze(["payment_received"]), delivery: "late" }),
 });
 
 /** @typedef {keyof typeof BANK_SCENARIOS} BankScenario */
 
 const SCENARIO_NAMES = /** @type {BankScenario[]} */ (Object.keys(BANK_SCENARIOS));
-const CALLBACK_STATUSES = /** @type {const} */ ([
+const CALLBACK_STATUSES = Object.freeze(/** @type {const} */ ([
   "payment_received",
   "partial_payment",
   "duplicate_payment",
   "payment_reversed",
   "expired_no_payment",
-]);
+]));
 const BANK_TX = /^SIMBANK[0-9A-F]{16}$/;
 
 export const BANK_TRANSITIONS = Object.freeze({
@@ -111,7 +113,7 @@ export const BANK_TRANSITIONS = Object.freeze({
 });
 
 export const BANK_CALLBACK_SCHEMA = "solidchange.sim.bank.callback.v1";
-const CALLBACK_KEYS = [
+const CALLBACK_KEYS = Object.freeze([
   "bank_transaction_id",
   "currency",
   "domain",
@@ -127,7 +129,7 @@ const CALLBACK_KEYS = [
   "schema",
   "sequence",
   "status",
-];
+]);
 
 /**
  * @param {Record<string, JsonValue>} payload
@@ -208,6 +210,7 @@ export function createBankCallbackInbox() {
  * @property {Record<string, BankScenario>} [scenarios] intent_ref → scenario.
  * @property {BankScenario} [defaultScenario]
  * @property {number} [intentTtlSeconds]
+ * @property {number} [maxResources] Simultaneous payment intents kept in memory.
  */
 
 /**
@@ -228,9 +231,13 @@ export function createBankSimulator(options) {
   if (!Number.isSafeInteger(intentTtlSeconds) || intentTtlSeconds < 60 || intentTtlSeconds > 86_400) {
     throw new RangeError("intentTtlSeconds must be an integer between 60 and 86400");
   }
-  const queue = new DeliveryQueue(createCallbackSigner({ key: options.key, domain: "bank", random }));
+  const maxResources = maxResourcesOf(options);
+  const queue = new DeliveryQueue(
+    createCallbackSigner({ key: options.key, domain: "bank", random }),
+    { maxPending: maxResources * 16 },
+  );
   /** @type {IdempotencyRegistry<PaymentIntent>} */
-  const idempotency = new IdempotencyRegistry();
+  const idempotency = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {Map<string, { intent: PaymentIntent, events: { status: PaymentStatusName, sequence: number, occurredAt: number, paid: bigint }[] }>} */
   const intents = new Map();
 
@@ -265,6 +272,9 @@ export function createBankSimulator(options) {
         );
       }
       return idempotency.run(key, input, () => {
+        if (intents.size >= maxResources) {
+          throw capacityError("payment intent");
+        }
         const now = clock.now();
         const expiresAt = now + intentTtlSeconds;
         const intentId = random.id("bankint", "bank-intent");

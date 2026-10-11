@@ -21,11 +21,13 @@ import {
   SIMULATOR_ENVIRONMENT,
 } from "./signing.mjs";
 import {
+  capacityError,
   exactKeys,
   IdempotencyRegistry,
   idempotencyKey,
   isIsoSeconds,
   isStringMatching,
+  maxResourcesOf,
   oneOf,
   outageError,
   SIM_ID,
@@ -92,10 +94,10 @@ import {
  */
 
 export const QUOTE_SCENARIOS = Object.freeze({
-  fresh_quote: { outage: false, issuedOffset: 0, priceAge: 2 },
-  expired_quote: { outage: false, issuedOffset: -120, priceAge: 2 },
-  stale_price: { outage: false, issuedOffset: 0, priceAge: 900 },
-  provider_outage: { outage: true, issuedOffset: 0, priceAge: 0 },
+  fresh_quote: Object.freeze({ outage: false, issuedOffset: 0, priceAge: 2 }),
+  expired_quote: Object.freeze({ outage: false, issuedOffset: -120, priceAge: 2 }),
+  stale_price: Object.freeze({ outage: false, issuedOffset: 0, priceAge: 900 }),
+  provider_outage: Object.freeze({ outage: true, issuedOffset: 0, priceAge: 0 }),
 });
 
 /** @typedef {keyof typeof QUOTE_SCENARIOS} QuoteScenario */
@@ -109,10 +111,10 @@ export const SYNTHETIC_MID_PRICES = Object.freeze({
   "TON/USDT": "3.20000000",
 });
 const PAIRS = /** @type {QuotePair[]} */ (Object.keys(SYNTHETIC_MID_PRICES));
-const SIDES = /** @type {const} */ (["buy", "sell"]);
+const SIDES = Object.freeze(/** @type {const} */ (["buy", "sell"]));
 
 export const QUOTE_SCHEMA = "solidchange.sim.quote.v2";
-const QUOTE_KEYS = [
+const QUOTE_KEYS = Object.freeze([
   "amount_mode",
   "base_amount",
   "base_asset",
@@ -139,7 +141,7 @@ const QUOTE_KEYS = [
   "status",
   "total_quote_amount",
   "ttl_seconds",
-];
+]);
 
 /**
  * Recomputes every derived amount from the quote inputs.
@@ -343,6 +345,7 @@ export function assessQuote(quote, { now, maxPriceAgeSeconds = 60 }) {
  * @property {number} [ttlSeconds]
  * @property {number} [spreadBps]
  * @property {number} [feeBps]
+ * @property {number} [maxResources] Simultaneous quotes kept in memory.
  */
 
 /**
@@ -375,9 +378,10 @@ export function createQuoteSimulator(options) {
   if (!SCENARIO_NAMES.includes(fallback)) {
     throw new TypeError("unknown default quote scenario");
   }
+  const maxResources = maxResourcesOf(options);
   const signer = createCallbackSigner({ key: options.key, domain: "quote", random });
   /** @type {IdempotencyRegistry<Quote>} */
-  const idempotency = new IdempotencyRegistry();
+  const idempotency = new IdempotencyRegistry({ maxEntries: maxResources });
   /** @type {Map<string, Quote>} */
   const quotes = new Map();
 
@@ -411,6 +415,9 @@ export function createQuoteSimulator(options) {
         throw outageError(5);
       }
       return idempotency.run(key, input, () => {
+        if (quotes.size >= maxResources) {
+          throw capacityError("quote");
+        }
         const now = clock.now();
         const issuedAt = now + plan.issuedOffset;
         const reference = parseDecimal(SYNTHETIC_MID_PRICES[pair], PRICE_SCALE);
