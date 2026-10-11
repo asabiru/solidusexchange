@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "./i18n-context.js";
 import {
   AmlCaseDetail,
+  AmlView,
   ApprovalPreviewPanel,
   ApprovalsView,
   AuditView,
@@ -366,6 +367,91 @@ describe("NaN and numeric abuse", () => {
     const html = render(E(ApprovalPreviewPanel, { preview: hostile(preview) }));
     assert.doesNotMatch(html, /NaN/);
     assert.match(html, /—/);
+  });
+});
+
+describe("operator queue surfaces", () => {
+  const amlQueueItem = {
+    queueId: "qml_0123456789abcdef01234567",
+    subjectId: "syn_cust_alpha001",
+    alertType: "structuring",
+    evidenceRefs: ["evd_0123456789abcdef01234567"],
+    slaDueAt: "2026-10-12T10:00:00.000Z",
+    state: "in_review",
+    priority: "urgent",
+    assignee: { subject: "syn_oper_alice001" },
+    ageMs: 120000
+  } as const;
+
+  const amlQueuePayload = {
+    mode: "test",
+    queue: {
+      kind: "aml",
+      items: [amlQueueItem],
+      summary: { count: 1, byState: { pending: 0, inReview: 1, escalated: 0 } },
+      posting: "none"
+    }
+  } as const;
+
+  const ticketQueueItem = {
+    queueId: "qtick_0123456789abcdef01234567",
+    subjectId: "syn_cust_alpha001",
+    category: "complaint",
+    openedAt: "2026-10-09T10:00:00.000Z",
+    state: "open",
+    priority: "high",
+    assignee: null,
+    ageMs: 120000
+  } as const;
+
+  const ticketQueuePayload = {
+    mode: "test",
+    queue: {
+      kind: "tickets",
+      items: [ticketQueueItem],
+      summary: { count: 1, byState: { open: 1, waiting: 0, escalated: 0 } },
+      posting: "none"
+    }
+  } as const;
+
+  const demoAml = { cases: [{ id: "AML-CASE-1" }], providerEvidence: {} };
+  const demoSupport = { tickets: [{ id: "T-77" }], statuses: ["open"] };
+
+  it("aml renders the signed aml-kind queue with its own fields", () => {
+    const html = render(E(AmlView, { query: "", data: hostile(demoAml), operatorQueue: amlQueuePayload }));
+    assert.match(html, /qml_0123456789abcdef01234567/);
+    assert.match(html, /syn_cust_alpha001/);
+    assert.match(html, /evd_0123456789abcdef01234567/);
+    assert.doesNotMatch(html, /AML-CASE-1/);
+  });
+
+  it("aml falls back to the demo rows on a foreign kind or a malformed payload", () => {
+    for (const bad of [ticketQueuePayload, { mode: "test", queue: { kind: "aml", items: [{ ...amlQueueItem, alertType: "sanctions" }], summary: { count: 1, byState: { pending: 0, inReview: 1, escalated: 0 } }, posting: "none" } }, undefined, null, "x"]) {
+      const html = render(E(AmlView, { query: "", data: hostile(demoAml), operatorQueue: bad }));
+      assert.match(html, /AML-CASE-1/);
+      assert.doesNotMatch(html, /qml_0123456789abcdef01234567/);
+    }
+  });
+
+  it("support renders the signed tickets-kind queue with its own fields", () => {
+    const html = render(E(SupportView, { query: "", data: hostile(demoSupport), operatorQueue: ticketQueuePayload }));
+    assert.match(html, /qtick_0123456789abcdef01234567/);
+    assert.match(html, /syn_cust_alpha001/);
+    assert.doesNotMatch(html, /T-77/);
+  });
+
+  it("support falls back to the demo rows on a foreign kind or a malformed payload", () => {
+    for (const bad of [amlQueuePayload, { mode: "test", queue: { kind: "tickets", items: [{ ...ticketQueueItem, category: "appeal" }], summary: { count: 1, byState: { open: 1, waiting: 0, escalated: 0 } }, posting: "none" } }, undefined]) {
+      const html = render(E(SupportView, { query: "", data: hostile(demoSupport), operatorQueue: bad }));
+      assert.match(html, /T-77/);
+      assert.doesNotMatch(html, /qtick_0123456789abcdef01234567/);
+    }
+  });
+
+  it("kyc stays on its own kind: an aml payload does not hijack the screen", () => {
+    const html = render(E(KycView, { query: "", data: hostile({ cases: [{ id: "KYC-CASE-1" }], providerEvidence: {} }), operatorQueue: amlQueuePayload }));
+    assert.match(html, /KYC-CASE-1/);
+    assert.doesNotMatch(html, /qml_0123456789abcdef01234567/);
   });
 });
 

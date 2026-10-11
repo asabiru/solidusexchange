@@ -90,9 +90,11 @@ import {
   parseOperatorQueueView,
   parseOperatorSubjectView,
   parseOperatorSubjectsView,
+  type OperatorAmlQueueItem,
   type OperatorQueueItem,
   type OperatorSubjectDetail,
-  type OperatorSubjectRow
+  type OperatorSubjectRow,
+  type OperatorTicketQueueItem
 } from "../data/operator.js";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation.js";
 import { runtime } from "./runtime.js";
@@ -107,11 +109,14 @@ import {
   countToward,
   intOf,
   operatorAccountStatusKeyOf,
+  operatorAmlAlertTypeKeyOf,
   operatorKycStatusKeyOf,
   operatorQueuePriorityKeyOf,
   operatorQueueStateKeyOf,
   operatorRoleKeyOf,
   operatorRoleOf,
+  operatorTicketCategoryKeyOf,
+  operatorTicketQueueStateKeyOf,
   recordOf,
   rowsOf,
   subjectEntryLinkOf,
@@ -839,7 +844,98 @@ export function KycCaseDetail({ item, providerEvidence }: { item: KycCase; provi
   );
 }
 
-export function AmlView({ query, data }: { query: string; data: AmlPayload }) {
+export function AmlView({ query, data, operatorQueue }: { query: string; data: AmlPayload; operatorQueue?: unknown }) {
+  const upstream = useMemo(() => parseOperatorQueueView(operatorQueue), [operatorQueue]);
+  // The AML screen renders only the aml-kind projection; any other kind is
+  // a different view's payload and falls back to the local demo rows.
+  if (upstream !== undefined && upstream.queue.kind === "aml") {
+    return <OperatorAmlQueueScreen query={query} queue={upstream.queue} />;
+  }
+  return <DemoAmlView query={query} data={data} />;
+}
+
+/** Live mode: the signed operator AML alert queue; detail shows the item fields only. */
+function OperatorAmlQueueScreen({
+  query,
+  queue
+}: {
+  query: string;
+  queue: Extract<OperatorQueueView["queue"], { kind: "aml" }>;
+}) {
+  const { t, count, date } = useI18n();
+  const rows = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return queue.items;
+    return queue.items.filter((item) =>
+      `${item.queueId} ${item.subjectId} ${item.alertType} ${item.state} ${item.priority}`.toLocaleLowerCase("ru").includes(normalized));
+  }, [queue, query]);
+  const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.queueId ?? null);
+  const active = rows.find((item) => item.queueId === selectedId) ?? rows[0] ?? null;
+  return (
+    <>
+      <PageHeading title={t("screen.aml")} description={t("aml.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div>
+              <h2>{t("aml.queueTitle")}</h2>
+              <p>{t("aml.queueCount", { count: count(queue.summary.count), pending: count(queue.summary.byState.pending), inReview: count(queue.summary.byState.inReview), escalated: count(queue.summary.byState.escalated) })}</p>
+            </div>
+            <Status tone="info">{t("common.readOnly")}</Status>
+          </header>
+          <TableShell label={t("aml.queueTableLabel")}>
+            <table>
+              <thead><tr><th scope="col">{t("aml.queueItem")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.evidence")}</th><th scope="col">{t("aml.state")}</th><th scope="col">{t("common.priority")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
+              <tbody>
+                {rows.map((item, index) => (
+                  <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
+                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{enumText(t, operatorAmlAlertTypeKeyOf(item.alertType), item.alertType)}</small></td>
+                    <td><span className="mono">{item.subjectId}</span></td>
+                    <td className="numeric">{count(item.evidenceRefs.length)}</td>
+                    <td>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</td>
+                    <td><Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status></td>
+                    <td>{date(item.slaDueAt)}</td>
+                  </tr>
+                ))}
+                {!rows.length && (
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {active && <OperatorAmlQueueItemDetail item={active} />}
+      </section>
+    </>
+  );
+}
+
+function OperatorAmlQueueItemDetail({ item }: { item: OperatorAmlQueueItem }) {
+  const { t, count, date } = useI18n();
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2 className="mono">{item.queueId}</h2><p>{enumText(t, operatorAmlAlertTypeKeyOf(item.alertType), item.alertType)}</p></div>
+        <Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("common.subject")}</dt><dd className="mono">{item.subjectId}</dd></div>
+        <div><dt>{t("aml.alertType")}</dt><dd>{enumText(t, operatorAmlAlertTypeKeyOf(item.alertType), item.alertType)}</dd></div>
+        <div><dt>{t("aml.evidenceRefs")}</dt><dd>{item.evidenceRefs.map((ref) => <div key={ref} className="mono">{ref}</div>)}</dd></div>
+        <div><dt>{t("aml.state")}</dt><dd>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</dd></div>
+        <div><dt>{t("common.sla")}</dt><dd>{date(item.slaDueAt)}</dd></div>
+        <div><dt>{t("aml.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
+        <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("aml.unassigned") : item.assignee.subject}</dd></div>
+      </dl>
+      <div className="safe-action">
+        <strong>{t("common.readOnly")}</strong>
+        <p>{t("aml.queueNote")}</p>
+      </div>
+    </aside>
+  );
+}
+
+function DemoAmlView({ query, data }: { query: string; data: AmlPayload }) {
   const { t, count } = useI18n();
   const rows = rowsOf<AmlCase>(recordOf(data).cases);
   const cases = useMemo(() => {
@@ -868,6 +964,7 @@ export function AmlView({ query, data }: { query: string; data: AmlPayload }) {
             <div><h2>{t("aml.casesTitle")}</h2><p>{t("aml.count", { count: count(cases.length) })}</p></div>
             <Status tone="warning">{t("common.decisionGated")}</Status>
           </header>
+          <DegradedNotice title={t("aml.degradedTitle")} note={t("aml.degradedNote")} />
           <TableShell label={t("aml.casesTitle")}>
             <table>
               <thead><tr><th scope="col">{t("common.case")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.source")}</th><th scope="col">{t("common.severity")}</th><th scope="col">{t("common.exposure")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
@@ -1974,7 +2071,99 @@ export function TicketDetail({ item }: { item: SupportTicket }) {
   );
 }
 
-export function SupportView({ query, data, focusRef }: { query: string; data: SupportTicketsPayload; focusRef?: string }) {
+export function SupportView({ query, data, focusRef, operatorQueue }: { query: string; data: SupportTicketsPayload; focusRef?: string; operatorQueue?: unknown }) {
+  const upstream = useMemo(() => parseOperatorQueueView(operatorQueue), [operatorQueue]);
+  // The support screen renders only the tickets-kind projection; any other
+  // kind is a different view's payload and falls back to the local demo rows.
+  if (upstream !== undefined && upstream.queue.kind === "tickets") {
+    return <OperatorTicketQueueScreen query={query} focusRef={focusRef} queue={upstream.queue} />;
+  }
+  return <DemoSupportView query={query} data={data} focusRef={focusRef} />;
+}
+
+/** Live mode: the signed operator ticket work queue; detail shows the item fields only. */
+function OperatorTicketQueueScreen({
+  query,
+  focusRef,
+  queue
+}: {
+  query: string;
+  focusRef?: string;
+  queue: Extract<OperatorQueueView["queue"], { kind: "tickets" }>;
+}) {
+  const { t, count, date } = useI18n();
+  const rows = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return queue.items;
+    return queue.items.filter((item) =>
+      `${item.queueId} ${item.subjectId} ${item.category} ${item.state} ${item.priority}`.toLocaleLowerCase("ru").includes(normalized));
+  }, [queue, query]);
+  const [selectedId, setSelectedId] = useState<string | null>(focusRef ?? rows[0]?.queueId ?? null);
+  const active = rows.find((item) => item.queueId === selectedId) ?? rows[0] ?? null;
+  return (
+    <>
+      <PageHeading title={t("screen.support")} description={t("support.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div>
+              <h2>{t("support.queueTitle")}</h2>
+              <p>{t("support.queueCount", { count: count(queue.summary.count), open: count(queue.summary.byState.open), waiting: count(queue.summary.byState.waiting), escalated: count(queue.summary.byState.escalated) })}</p>
+            </div>
+            <Status tone="info">{t("common.readOnly")}</Status>
+          </header>
+          <TableShell label={t("support.queueTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("support.ticket")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.category")}</th><th scope="col">{t("support.status")}</th><th scope="col">{t("common.priority")}</th><th scope="col">{t("common.opened")}</th></tr></thead>
+              <tbody>
+                {rows.map((item, index) => (
+                  <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
+                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button></td>
+                    <td><span className="mono">{item.subjectId}</span></td>
+                    <td>{enumText(t, operatorTicketCategoryKeyOf(item.category), item.category)}</td>
+                    <td>{enumText(t, operatorTicketQueueStateKeyOf(item.state), item.state)}</td>
+                    <td><Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status></td>
+                    <td>{date(item.openedAt)}</td>
+                  </tr>
+                ))}
+                {!rows.length && (
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {active && <OperatorTicketQueueItemDetail item={active} />}
+      </section>
+    </>
+  );
+}
+
+function OperatorTicketQueueItemDetail({ item }: { item: OperatorTicketQueueItem }) {
+  const { t, count, date } = useI18n();
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2 className="mono">{item.queueId}</h2><p>{enumText(t, operatorTicketCategoryKeyOf(item.category), item.category)}</p></div>
+        <Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("common.subject")}</dt><dd className="mono">{item.subjectId}</dd></div>
+        <div><dt>{t("common.category")}</dt><dd>{enumText(t, operatorTicketCategoryKeyOf(item.category), item.category)}</dd></div>
+        <div><dt>{t("support.status")}</dt><dd>{enumText(t, operatorTicketQueueStateKeyOf(item.state), item.state)}</dd></div>
+        <div><dt>{t("common.opened")}</dt><dd>{date(item.openedAt)}</dd></div>
+        <div><dt>{t("support.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
+        <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("support.unassigned") : item.assignee.subject}</dd></div>
+      </dl>
+      <div className="safe-action">
+        <strong>{t("common.readOnly")}</strong>
+        <p>{t("support.queueNote")}</p>
+      </div>
+    </aside>
+  );
+}
+
+function DemoSupportView({ query, data, focusRef }: { query: string; data: SupportTicketsPayload; focusRef?: string }) {
   const { t, count } = useI18n();
   const statuses = arrayOf<SupportTicketStatus>(recordOf(data).statuses).filter((status) => ticketStatusOf(status) !== undefined);
   const [statusFilter, setStatusFilter] = useState<TicketStatusFilter>("all");
@@ -2051,6 +2240,7 @@ export function SupportView({ query, data, focusRef }: { query: string; data: Su
               <Status tone="info">{t("common.readOnly")}</Status>
             </div>
           </header>
+          <DegradedNotice title={t("support.degradedTitle")} note={t("support.degradedNote")} />
           <LiveStatus
             message={exportState === "loading" ? t("support.loadingList") : detailState === "loading" ? t("support.loadingDetail") : ""}
           />
@@ -2483,6 +2673,8 @@ interface WorkspaceData {
   kyc?: KycPayload;
   operatorSubjects?: OperatorSubjectsPayload;
   operatorQueue?: OperatorQueuePayload;
+  operatorQueueAml?: OperatorQueuePayload;
+  operatorQueueTickets?: OperatorQueuePayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
   fraud?: FraudPayload;
@@ -2634,7 +2826,7 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
@@ -2646,6 +2838,8 @@ export function App() {
         // the whole workspace load.
         hasCapability(session, "customers:read") ? getOperatorSubjects().catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getOperatorQueue().catch(() => undefined) : Promise.resolve(undefined),
+        hasCapability(session, "aml:read") ? getOperatorQueue("aml").catch(() => undefined) : Promise.resolve(undefined),
+        hasCapability(session, "support:read") ? getOperatorQueue("tickets").catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
         hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
@@ -2656,7 +2850,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -2930,6 +3124,7 @@ export function App() {
               query={query}
               data={access.data.support}
               focusRef={entityFocus?.screen === "support" ? entityFocus.ref : undefined}
+              operatorQueue={access.data.operatorQueueTickets}
             />
           )}
           {screen === "withdrawal" && access.data.withdrawals && (
@@ -2946,7 +3141,7 @@ export function App() {
             <KycView query={query} data={access.data.kyc} operatorQueue={access.data.operatorQueue} />
           )}
           {screen === "aml" && access.data.aml && (
-            <AmlView query={query} data={access.data.aml} />
+            <AmlView query={query} data={access.data.aml} operatorQueue={access.data.operatorQueueAml} />
           )}
           {screen === "investigations" && access.data.investigations && (
             <InvestigationsView query={query} data={access.data.investigations} />

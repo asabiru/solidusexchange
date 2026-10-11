@@ -1,9 +1,12 @@
 import type { Capability, OperatorRole } from "../auth/access.js";
 import type {
   OperatorAccountStatus,
+  OperatorAmlAlertType,
   OperatorKycStatus,
   OperatorQueuePriority,
-  OperatorQueueState
+  OperatorQueueState,
+  OperatorTicketCategory,
+  OperatorTicketQueueState
 } from "../data/operator.js";
 import type {
   CheckStatus,
@@ -288,4 +291,35 @@ const operatorQueuePriorities: Readonly<Record<OperatorQueuePriority, MessageKey
 
 export function operatorQueuePriorityKeyOf(value: unknown): MessageKey | undefined {
   return member(operatorQueuePriorities, textOf(value, ""));
+}
+
+const operatorAmlAlertTypes: Readonly<Record<OperatorAmlAlertType, MessageKey>> = {
+  structuring: "aml.alertType.structuring",
+  velocity: "aml.alertType.velocity",
+  geo_mismatch: "aml.alertType.geoMismatch"
+};
+
+export function operatorAmlAlertTypeKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorAmlAlertTypes, textOf(value, ""));
+}
+
+const operatorTicketQueueStates: Readonly<Record<OperatorTicketQueueState, MessageKey>> = {
+  open: "support.queueState.open",
+  waiting: "support.queueState.waiting",
+  escalated: "support.queueState.escalated"
+};
+
+export function operatorTicketQueueStateKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorTicketQueueStates, textOf(value, ""));
+}
+
+const operatorTicketCategories: Readonly<Record<OperatorTicketCategory, MessageKey>> = {
+  question: "support.category.question",
+  operation_problem: "support.category.operationProblem",
+  complaint: "support.category.complaint",
+  data_request: "support.category.dataRequest"
+};
+
+export function operatorTicketCategoryKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorTicketCategories, textOf(value, ""));
 }

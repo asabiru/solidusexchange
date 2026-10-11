@@ -461,20 +461,20 @@
       "minCases": 29
     },
     "backoffice/src/app/app-render.test.ts": {
-      "minLines": 360,
-      "minCases": 20
+      "minLines": 436,
+      "minCases": 25
     },
     "backoffice/src/app/checks.test.ts": {
       "minLines": 51,
       "minCases": 4
     },
     "backoffice/src/app/i18n.test.ts": {
-      "minLines": 427,
+      "minLines": 428,
       "minCases": 38
     },
     "backoffice/src/app/server-fields.test.ts": {
-      "minLines": 222,
-      "minCases": 21
+      "minLines": 245,
+      "minCases": 22
     },
     "backoffice/src/app/subjects.test.ts": {
       "minLines": 89,

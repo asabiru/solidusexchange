@@ -142,6 +142,7 @@ describe("i18n: catalog parity", () => {
       "subjects.kind.audit",
       "evidence.projection",
       "aml.screening",
+      "aml.queueItem",
       "investigations.timeline",
       "fraud.alert",
       "fraud.score",
