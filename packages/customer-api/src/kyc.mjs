@@ -248,30 +248,54 @@ export function validKycStatusView(view) {
   ) {
     return false;
   }
-  const applicationFields = [
-    "application_id",
-    "submitted_at",
-    "review_deadline",
-    "reason_codes",
-    "requested_items"
-  ];
-  const hasApplicationField = applicationFields.some((field) => Object.hasOwn(view, field));
+  // The session's KYC state bounds which application status the view may
+  // report: a verified session only ever maps to an approved application,
+  // a pending session to an application inside the review window, and an
+  // unverified session never shows a submitted or approved record.
   if (
-    hasApplicationField &&
-    !(
-      APPLICATION_ID_PATTERN.test(candidate.application_id ?? "") &&
-      isIsoTimestamp(candidate.submitted_at)
-    )
+    (candidate.session_kyc === "verified" && candidate.status !== "approved") ||
+    (candidate.session_kyc === "pending" && !IN_REVIEW_STATUSES.includes(candidate.status)) ||
+    (candidate.session_kyc === "unverified" &&
+      (candidate.status === "approved" || IN_REVIEW_STATUSES.includes(candidate.status)))
   ) {
     return false;
   }
-  if (Object.hasOwn(view, "review_deadline") && !isIsoTimestamp(candidate.review_deadline)) {
+  // can_submit is a pure function of the resubmittable status set.
+  if (candidate.can_submit !== RESUBMITTABLE_STATUSES.includes(candidate.status)) {
     return false;
   }
-  if (Object.hasOwn(view, "reason_codes") && !isCodeList(candidate.reason_codes, KYC_REASON_CODES)) {
+  // Each optional field pair exists exactly when its status demands it.
+  const hasApplication = !NO_APPLICATION_STATUSES.includes(candidate.status);
+  if (
+    Object.hasOwn(view, "application_id") !== hasApplication ||
+    Object.hasOwn(view, "submitted_at") !== hasApplication ||
+    (hasApplication &&
+      !(
+        APPLICATION_ID_PATTERN.test(candidate.application_id ?? "") &&
+        isIsoTimestamp(candidate.submitted_at) &&
+        Date.parse(/** @type {string} */ (candidate.submitted_at)) <=
+          Date.parse(candidate.updated_at)
+      ))
+  ) {
     return false;
   }
-  if (Object.hasOwn(view, "requested_items") && !isCodeList(candidate.requested_items, KYC_REQUESTED_ITEMS)) {
+  if (
+    Object.hasOwn(view, "review_deadline") !== IN_REVIEW_STATUSES.includes(candidate.status) ||
+    (Object.hasOwn(view, "review_deadline") && !isIsoTimestamp(candidate.review_deadline))
+  ) {
+    return false;
+  }
+  if (
+    Object.hasOwn(view, "reason_codes") !== (candidate.status === "rejected") ||
+    (Object.hasOwn(view, "reason_codes") && !isCodeList(candidate.reason_codes, KYC_REASON_CODES))
+  ) {
+    return false;
+  }
+  if (
+    Object.hasOwn(view, "requested_items") !== (candidate.status === "needs_more_data") ||
+    (Object.hasOwn(view, "requested_items") &&
+      !isCodeList(candidate.requested_items, KYC_REQUESTED_ITEMS))
+  ) {
     return false;
   }
   return true;
@@ -279,19 +303,14 @@ export function validKycStatusView(view) {
 
 /** @returns {KycApplicationDirectory} */
 export function createSyntheticKycApplicationDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject and the
+  // session's KYC state, and a retained cache would grow without bound.
   return Object.freeze({
     async viewFor(subject, sessionKyc) {
       if (!KYC_STATUSES.includes(sessionKyc)) {
         throw new Error("Unknown session KYC status");
       }
-      const key = `${subject}${sessionKyc}`;
-      let view = cache.get(key);
-      if (view === undefined) {
-        view = buildKycStatusView(subject, sessionKyc);
-        cache.set(key, view);
-      }
-      return view;
+      return buildKycStatusView(subject, sessionKyc);
     }
   });
 }

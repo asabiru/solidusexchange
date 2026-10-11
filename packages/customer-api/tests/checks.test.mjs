@@ -45,7 +45,7 @@ test("synthetic check directory returns deterministic frozen views per subject",
   const directory = createSyntheticCheckDirectory();
   const first = await directory.viewFor(VERIFIED_SUBJECT);
   const second = await directory.viewFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.checks));
   for (const check of first.checks) {
     assert.ok(Object.isFrozen(check));

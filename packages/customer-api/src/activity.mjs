@@ -303,9 +303,10 @@ export function validActivityView(view) {
     return false;
   }
   const seen = new Set();
+  const seenKinds = new Set();
   let previous = Number.POSITIVE_INFINITY;
   for (const item of candidate.activity) {
-    if (!validActivityItem(item) || seen.has(item.activity_id)) {
+    if (!validActivityItem(item) || seen.has(item.activity_id) || seenKinds.has(item.kind)) {
       return false;
     }
     const at = Date.parse(item.created_at);
@@ -313,6 +314,7 @@ export function validActivityView(view) {
       return false;
     }
     seen.add(item.activity_id);
+    seenKinds.add(item.kind);
     previous = at;
   }
   return true;
@@ -320,15 +322,11 @@ export function validActivityView(view) {
 
 /** @returns {ActivityDirectory} */
 export function createSyntheticActivityDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async viewFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildActivityView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildActivityView(subject);
     }
   });
 }

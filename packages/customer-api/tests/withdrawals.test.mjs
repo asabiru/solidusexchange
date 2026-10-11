@@ -50,7 +50,7 @@ test("synthetic withdrawal directory returns deterministic frozen views per subj
   const directory = createSyntheticWithdrawalDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.withdrawals));
   for (const withdrawal of first.withdrawals) {
     assert.ok(Object.isFrozen(withdrawal));

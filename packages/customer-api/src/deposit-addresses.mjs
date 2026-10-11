@@ -185,39 +185,52 @@ export function validDepositAddressesView(view) {
   if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...VIEW_KEYS].sort())) {
     return false;
   }
-  if (candidate.mode !== "test" || !Array.isArray(candidate.deposit_addresses)) {
+  if (
+    candidate.mode !== "test" ||
+    !Array.isArray(candidate.deposit_addresses) ||
+    // The set is exactly the allowlisted receiving targets: one entry per
+    // (asset, network) pair — a duplicate or a missing pair fails closed.
+    candidate.deposit_addresses.length !== DEPOSIT_ADDRESS_TARGETS.length
+  ) {
     return false;
   }
-  return candidate.deposit_addresses.every(
-    (entry) =>
-      entry !== null &&
-      typeof entry === "object" &&
-      !Array.isArray(entry) &&
-      JSON.stringify(Object.keys(entry).sort()) === JSON.stringify([...DEPOSIT_ADDRESS_KEYS].sort()) &&
-      Object.values(entry).every((value) => typeof value === "string") &&
-      DEPOSIT_ADDRESS_ID_PATTERN.test(entry.deposit_address_id) &&
-      ASSET_PATTERN.test(entry.asset) &&
-      TESTNET_PATTERN.test(entry.network) &&
-      DEPOSIT_ADDRESS_TARGETS.some((target) => target.asset === entry.asset && target.network === entry.network) &&
-      ((entry.network === "TON_TESTNET" && TON_TESTNET_ADDRESS_PATTERN.test(entry.address)) ||
-        (entry.network === "TRON_TESTNET" && TRON_ADDRESS_PATTERN.test(entry.address))) &&
-      DEPOSIT_ADDRESS_STATUSES.includes(entry.status) &&
-      isIsoTimestamp(entry.created_at) &&
-      entry.posting === "none"
-  );
+  const seen = new Set();
+  for (const entry of candidate.deposit_addresses) {
+    if (
+      entry === null ||
+      typeof entry !== "object" ||
+      Array.isArray(entry) ||
+      JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify([...DEPOSIT_ADDRESS_KEYS].sort()) ||
+      !Object.values(entry).every((value) => typeof value === "string") ||
+      !DEPOSIT_ADDRESS_ID_PATTERN.test(entry.deposit_address_id) ||
+      !ASSET_PATTERN.test(entry.asset) ||
+      !TESTNET_PATTERN.test(entry.network) ||
+      !DEPOSIT_ADDRESS_TARGETS.some(
+        (target) => target.asset === entry.asset && target.network === entry.network
+      ) ||
+      seen.has(`${entry.asset}/${entry.network}`) ||
+      !(
+        (entry.network === "TON_TESTNET" && TON_TESTNET_ADDRESS_PATTERN.test(entry.address)) ||
+        (entry.network === "TRON_TESTNET" && TRON_ADDRESS_PATTERN.test(entry.address))
+      ) ||
+      !DEPOSIT_ADDRESS_STATUSES.includes(entry.status) ||
+      !isIsoTimestamp(entry.created_at) ||
+      entry.posting !== "none"
+    ) {
+      return false;
+    }
+    seen.add(`${entry.asset}/${entry.network}`);
+  }
+  return true;
 }
 
 /** @returns {DepositAddressDirectory} */
 export function createSyntheticDepositAddressDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildDepositAddressesView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildDepositAddressesView(subject);
     }
   });
 }

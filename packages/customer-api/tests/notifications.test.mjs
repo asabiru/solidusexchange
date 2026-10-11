@@ -40,7 +40,7 @@ test("synthetic notification directory returns deterministic frozen views per su
   const directory = createSyntheticNotificationDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.notifications));
   for (const notification of first.notifications) {
     assert.ok(Object.isFrozen(notification));

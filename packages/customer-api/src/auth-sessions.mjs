@@ -193,15 +193,11 @@ export function validAuthSessionsView(view) {
 
 /** @returns {AuthSessionDirectory} */
 export function createSyntheticAuthSessionDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildAuthSessionsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildAuthSessionsView(subject);
     }
   });
 }

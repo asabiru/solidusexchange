@@ -51,6 +51,11 @@ const NOTIFICATION_TYPES = /** @type {Readonly<Record<string, string>>} */ (
   })
 );
 const VIEW_KEYS = Object.freeze(["delivery", "mode", "notifications", "unread"]);
+// The NotificationView field contract from packages/api-contracts/openapi.yaml:
+// fixed channel/locale/mode constants, the template enum, an opaque ntf_* id
+// and a bounded text body. The runtime guard rejects a view violating them.
+const NOTIFICATION_ID_PATTERN = /^ntf_[0-9a-f]{24}$/u;
+const TEXT_MAX_LENGTH = 128;
 const BASE_MS = Date.parse("2026-09-01T00:00:00.000Z");
 const STEP_MS = 86_400_000;
 
@@ -95,6 +100,15 @@ function digest(subject, salt) {
  */
 function units(subject, salt, bound) {
   return digest(subject, salt).readBigUInt64BE(0) % bound;
+}
+
+/** @param {unknown} value */
+function isIsoTimestamp(value) {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
+    new Date(Date.parse(value)).toISOString() === value
+  );
 }
 
 /**
@@ -155,28 +169,45 @@ export function validNotificationsView(view) {
   ) {
     return false;
   }
-  return candidate.notifications.every(
-    (notification) =>
-      notification !== null &&
-      typeof notification === "object" &&
-      !Array.isArray(notification) &&
-      JSON.stringify(Object.keys(notification).sort()) ===
-        JSON.stringify([...NOTIFICATION_KEYS].sort()) &&
-      Object.entries(notification).every(([key, value]) => typeof value === NOTIFICATION_TYPES[key])
+  const seen = new Set();
+  const validItems = candidate.notifications.every((notification) => {
+    if (
+      notification === null ||
+      typeof notification !== "object" ||
+      Array.isArray(notification) ||
+      JSON.stringify(Object.keys(notification).sort()) !==
+        JSON.stringify([...NOTIFICATION_KEYS].sort()) ||
+      !Object.entries(notification).every(([key, value]) => typeof value === NOTIFICATION_TYPES[key]) ||
+      !NOTIFICATION_ID_PATTERN.test(notification.notification_id) ||
+      seen.has(notification.notification_id) ||
+      !isIsoTimestamp(notification.created_at) ||
+      notification.channel !== "telegram-draft" ||
+      !NOTIFICATION_TEMPLATES.includes(notification.template) ||
+      notification.locale !== "ru" ||
+      notification.text.length < 1 ||
+      notification.text.length > TEXT_MAX_LENGTH ||
+      notification.mode !== "test" ||
+      notification.delivered !== false
+    ) {
+      return false;
+    }
+    seen.add(notification.notification_id);
+    return true;
+  });
+  // The unread counter is a derived field: it must recount the read flags.
+  return (
+    validItems &&
+    candidate.unread === candidate.notifications.filter((notification) => !notification.read).length
   );
 }
 
 /** @returns {NotificationDirectory} */
 export function createSyntheticNotificationDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildNotificationsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildNotificationsView(subject);
     }
   });
 }

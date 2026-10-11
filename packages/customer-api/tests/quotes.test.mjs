@@ -43,7 +43,7 @@ test("synthetic quote directory returns deterministic frozen views per subject",
   const directory = createSyntheticQuoteDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.quotes));
   for (const quote of first.quotes) {
     assert.ok(Object.isFrozen(quote));

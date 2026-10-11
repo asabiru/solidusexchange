@@ -42,7 +42,7 @@ test("synthetic user directory returns deterministic frozen views per subject", 
   const directory = createSyntheticUserDirectory();
   const first = await directory.viewFor(VERIFIED_SUBJECT);
   const second = await directory.viewFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.flags));
   assert.equal(first.mode, "test");
   assert.equal(first.subject, VERIFIED_SUBJECT);

@@ -42,7 +42,7 @@ test("synthetic deposit directory returns deterministic frozen views per subject
   const directory = createSyntheticDepositDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.deposits));
   for (const deposit of first.deposits) {
     assert.ok(Object.isFrozen(deposit));

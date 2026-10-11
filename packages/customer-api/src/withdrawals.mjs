@@ -249,37 +249,56 @@ export function validWithdrawalsView(view) {
   if (candidate.mode !== "test" || !Array.isArray(candidate.withdrawals)) {
     return false;
   }
-  return candidate.withdrawals.every(
-    (withdrawal) =>
-      withdrawal !== null &&
-      typeof withdrawal === "object" &&
-      !Array.isArray(withdrawal) &&
-      JSON.stringify(Object.keys(withdrawal).sort()) === JSON.stringify([...WITHDRAWAL_KEYS].sort()) &&
-      WITHDRAWAL_ID_PATTERN.test(withdrawal.withdrawal_id) &&
-      allowedPair(withdrawal.asset, withdrawal.network) &&
-      WITHDRAWAL_STATUSES.includes(withdrawal.status) &&
-      DECIMAL_PATTERN.test(withdrawal.amount) &&
-      DECIMAL_PATTERN.test(withdrawal.fee_amount) &&
-      DESTINATION_REFERENCE_PATTERN.test(withdrawal.destination_reference) &&
-      validLegs(withdrawal.legs, withdrawal.asset, withdrawal.amount, withdrawal.fee_amount) &&
-      isIsoTimestamp(withdrawal.created_at) &&
-      isIsoTimestamp(withdrawal.updated_at) &&
-      isIsoTimestamp(withdrawal.expires_at) &&
-      withdrawal.posting === "none"
-  );
+  return candidate.withdrawals.every((withdrawal) => {
+    if (
+      withdrawal === null ||
+      typeof withdrawal !== "object" ||
+      Array.isArray(withdrawal) ||
+      JSON.stringify(Object.keys(withdrawal).sort()) !== JSON.stringify([...WITHDRAWAL_KEYS].sort()) ||
+      !WITHDRAWAL_ID_PATTERN.test(withdrawal.withdrawal_id) ||
+      !allowedPair(withdrawal.asset, withdrawal.network) ||
+      !WITHDRAWAL_STATUSES.includes(withdrawal.status) ||
+      !DECIMAL_PATTERN.test(withdrawal.amount) ||
+      !DECIMAL_PATTERN.test(withdrawal.fee_amount) ||
+      !DESTINATION_REFERENCE_PATTERN.test(withdrawal.destination_reference) ||
+      !validLegs(withdrawal.legs, withdrawal.asset, withdrawal.amount, withdrawal.fee_amount) ||
+      !isIsoTimestamp(withdrawal.created_at) ||
+      !isIsoTimestamp(withdrawal.updated_at) ||
+      !isIsoTimestamp(withdrawal.expires_at) ||
+      withdrawal.posting !== "none"
+    ) {
+      return false;
+    }
+    const createdMs = Date.parse(withdrawal.created_at);
+    const updatedMs = Date.parse(withdrawal.updated_at);
+    const expiresMs = Date.parse(withdrawal.expires_at);
+    // The intent carries a fixed TTL from creation, and the lifecycle pins
+    // the last-touch timestamp per status: drafts untouched, expired
+    // intents at their expiry, confirmations after it, everything else in
+    // flight between creation and expiry.
+    if (expiresMs - createdMs !== INTENT_TTL_MS || updatedMs < createdMs) {
+      return false;
+    }
+    switch (withdrawal.status) {
+      case "draft":
+        return updatedMs === createdMs;
+      case "expired":
+        return updatedMs === expiresMs;
+      case "confirmed":
+        return updatedMs > expiresMs;
+      default:
+        return updatedMs > createdMs && updatedMs < expiresMs;
+    }
+  });
 }
 
 /** @returns {WithdrawalDirectory} */
 export function createSyntheticWithdrawalDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildWithdrawalsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildWithdrawalsView(subject);
     }
   });
 }

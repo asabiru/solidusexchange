@@ -17,7 +17,6 @@ const WALLET_KEYS = Object.freeze(["wallet_id", "asset", "available", "hold"]);
 // runtime guard rejects a directory view that would violate the declared body.
 const WALLET_ID_PATTERN = /^syn_wal_[a-z0-9]{8,32}$/u;
 const ASSET_PATTERN = /^[A-Z0-9]{2,16}$/u;
-const DECIMAL_PATTERN = /^(0|[1-9][0-9]*)(\.[0-9]+)?$/u;
 
 /**
  * @typedef {object} WalletEntry
@@ -64,6 +63,17 @@ function decimal(value, scale) {
 }
 
 /**
+ * Canonical non-negative decimal string with exactly `scale` fraction digits.
+ * @param {unknown} value
+ * @param {number} scale
+ */
+function isScaledDecimal(value, scale) {
+  return (
+    typeof value === "string" && new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(value)
+  );
+}
+
+/**
  * @param {string} subject
  * @returns {WalletsView}
  */
@@ -86,36 +96,46 @@ export function validWalletsView(view) {
   }
   const keys = Object.keys(view);
   const wallets = /** @type {WalletsView} */ (view).wallets;
-  return (
-    keys.length === 1 &&
-    keys[0] === "wallets" &&
-    Array.isArray(wallets) &&
-    wallets.every(
-      (wallet) =>
-        wallet !== null &&
-        typeof wallet === "object" &&
-        !Array.isArray(wallet) &&
-        JSON.stringify(Object.keys(wallet).sort()) === JSON.stringify([...WALLET_KEYS].sort()) &&
-        Object.values(wallet).every((value) => typeof value === "string") &&
-        WALLET_ID_PATTERN.test(wallet.wallet_id) &&
-        ASSET_PATTERN.test(wallet.asset) &&
-        DECIMAL_PATTERN.test(wallet.available) &&
-        DECIMAL_PATTERN.test(wallet.hold)
-    )
-  );
+  if (
+    keys.length !== 1 ||
+    keys[0] !== "wallets" ||
+    !Array.isArray(wallets) ||
+    // The wallet set is the fixed asset table: exactly one entry per
+    // asset code — nothing more, nothing less.
+    wallets.length !== WALLET_ASSETS.length
+  ) {
+    return false;
+  }
+  const seen = new Set();
+  return wallets.every((wallet) => {
+    const spec =
+      wallet !== null && typeof wallet === "object" && !Array.isArray(wallet)
+        ? WALLET_ASSETS.find(({ code }) => code === wallet.asset)
+        : undefined;
+    if (
+      spec === undefined ||
+      seen.has(wallet.asset) ||
+      JSON.stringify(Object.keys(wallet).sort()) !== JSON.stringify([...WALLET_KEYS].sort()) ||
+      !Object.values(wallet).every((value) => typeof value === "string") ||
+      !WALLET_ID_PATTERN.test(wallet.wallet_id) ||
+      !ASSET_PATTERN.test(wallet.asset) ||
+      !isScaledDecimal(wallet.available, spec.scale) ||
+      !isScaledDecimal(wallet.hold, spec.scale)
+    ) {
+      return false;
+    }
+    seen.add(wallet.asset);
+    return true;
+  });
 }
 
 /** @returns {WalletDirectory} */
 export function createSyntheticWalletDirectory() {
-  const cache = new Map();
+  // No per-subject memo: views are pure functions of the subject, and a
+  // retained cache would grow without bound across distinct subjects.
   return Object.freeze({
     async listFor(subject) {
-      let view = cache.get(subject);
-      if (view === undefined) {
-        view = buildWalletsView(subject);
-        cache.set(subject, view);
-      }
-      return view;
+      return buildWalletsView(subject);
     }
   });
 }

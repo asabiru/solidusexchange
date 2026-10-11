@@ -65,27 +65,38 @@ test("request id generation stays a valid UUIDv7 under a drifting clock", () => 
 });
 
 test("the wallets view guard enforces the contract field formats, not only the shape", () => {
-  const good = { wallet_id: "syn_wal_0123456789ab", asset: "USDT", available: "12.34", hold: "0.00" };
-  assert.equal(validWalletsView({ wallets: [good] }), true);
+  const good = [
+    { wallet_id: "syn_wal_0123456789ab", asset: "RUB", available: "12.34", hold: "0.00" },
+    { wallet_id: "syn_wal_0123456789cd", asset: "TON", available: "12.345678901", hold: "0.000000000" },
+    { wallet_id: "syn_wal_0123456789ef", asset: "USDT", available: "12.345678", hold: "0.000000" }
+  ];
+  assert.equal(validWalletsView({ wallets: good }), true);
+  // The wallet set is the fixed asset table: a missing, extra or foreign
+  // asset entry fails closed, as does an amount off the asset's scale.
+  assert.equal(validWalletsView({ wallets: good.slice(0, 2) }), false);
+  assert.equal(validWalletsView({ wallets: [...good, good[0]] }), false);
+  assert.equal(validWalletsView({ wallets: [{ ...good[0], asset: "BTC" }, good[1], good[2]] }), false);
+  assert.equal(validWalletsView({ wallets: [{ ...good[0], available: "12.345" }, good[1], good[2]] }), false);
+  const goodWallet = good[2];
   const drifted = [
-    { ...good, wallet_id: "wal_0123" },
-    { ...good, wallet_id: "syn_wal_0123" },
-    { ...good, wallet_id: "SYN_WAL_0123456789AB" },
-    { ...good, wallet_id: "syn_wal_0123 45" },
-    { ...good, asset: "usdt" },
-    { ...good, asset: "U" },
-    { ...good, asset: "US D" },
-    { ...good, available: "soon" },
-    { ...good, available: "01.00" },
-    { ...good, available: "-1.00" },
-    { ...good, available: "1e5" },
-    { ...good, available: "+1.00" },
-    { ...good, hold: ".5" },
-    { ...good, hold: "1." },
-    { ...good, hold: "1,00" }
+    { ...goodWallet, wallet_id: "wal_0123" },
+    { ...goodWallet, wallet_id: "syn_wal_0123" },
+    { ...goodWallet, wallet_id: "SYN_WAL_0123456789AB" },
+    { ...goodWallet, wallet_id: "syn_wal_0123 45" },
+    { ...goodWallet, asset: "usdt" },
+    { ...goodWallet, asset: "U" },
+    { ...goodWallet, asset: "US D" },
+    { ...goodWallet, available: "soon" },
+    { ...goodWallet, available: "01.00" },
+    { ...goodWallet, available: "-1.00" },
+    { ...goodWallet, available: "1e5" },
+    { ...goodWallet, available: "+1.00" },
+    { ...goodWallet, hold: ".5" },
+    { ...goodWallet, hold: "1." },
+    { ...goodWallet, hold: "1,00" }
   ];
   for (const wallet of drifted) {
-    assert.equal(validWalletsView({ wallets: [wallet] }), false, JSON.stringify(wallet));
+    assert.equal(validWalletsView({ wallets: [wallet, good[0], good[1]] }), false, JSON.stringify(wallet));
   }
 });
 

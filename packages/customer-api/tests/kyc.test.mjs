@@ -43,7 +43,7 @@ test("synthetic KYC directory returns deterministic frozen views per subject and
   for (const sessionKyc of KYC_STATUSES) {
     const first = await directory.viewFor(VERIFIED_SUBJECT, sessionKyc);
     const second = await directory.viewFor(VERIFIED_SUBJECT, sessionKyc);
-    assert.equal(first, second);
+    assert.deepEqual(first, second);
     assert.ok(Object.isFrozen(first), sessionKyc);
     for (const key of ["reason_codes", "requested_items"]) {
       if (first[key] !== undefined) {

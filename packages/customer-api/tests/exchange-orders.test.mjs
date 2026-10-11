@@ -45,7 +45,7 @@ test("synthetic exchange order directory returns deterministic frozen views per 
   const directory = createSyntheticExchangeOrderDirectory();
   const first = await directory.listFor(VERIFIED_SUBJECT);
   const second = await directory.listFor(VERIFIED_SUBJECT);
-  assert.equal(first, second);
+  assert.deepEqual(first, second);
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.orders));
   for (const order of first.orders) {
     assert.ok(Object.isFrozen(order));
