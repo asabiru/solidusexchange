@@ -1,14 +1,20 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { createSimulatedClock } from "../../matching-core/src/deterministic.mjs";
+import { createMatchingEngine } from "../../matching-core/src/engine.mjs";
 import { createSyntheticKycDirectory } from "../src/capabilities.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {
   createSyntheticExchangeOrderDirectory,
+  exchangeOrderScenario,
   ORDER_PAIRS,
   ORDER_SIDES,
   ORDER_STATUSES,
   ORDER_TYPES,
+  projectExchangeOrders,
+  replayExchangeOrderScenario,
   validExchangeOrdersView
 } from "../src/exchange-orders.mjs";
 import {
@@ -312,4 +318,189 @@ test("exchange order subpaths and method variants stay contract-only 404s", asyn
       assert.equal(response.status, 404, method);
     }
   });
+});
+
+test("exchange order views are projections of a real matching engine replay", async () => {
+  const directory = createSyntheticExchangeOrderDirectory();
+  for (const subject of [SUBJECT, VERIFIED_SUBJECT, "syn_cust_order0007", "syn_cust_order0013"]) {
+    const scenario = exchangeOrderScenario(subject);
+    // Replaying the same scenario on an independent engine instance must
+    // yield the directory's view exactly: the read is a pure projection
+    // of engine state — the scenario carries every input the engine saw.
+    const clock = createSimulatedClock(scenario.start_seconds);
+    const engine = createMatchingEngine({ clock });
+    for (const step of scenario.steps) {
+      if (step.op === "advance") {
+        clock.advance(step.seconds);
+      } else if (step.op === "submit") {
+        engine.submitOrder(step.input);
+      } else {
+        engine.cancelOrder(step.instrument, step.order_id);
+      }
+    }
+    const replayed = {
+      mode: "test",
+      orders: projectExchangeOrders(engine, scenario.intents).slice().reverse()
+    };
+    assert.deepEqual(await directory.listFor(subject), replayed, subject);
+  }
+});
+
+test("the per-subject scenario is a pure deterministic function", () => {
+  assert.deepEqual(exchangeOrderScenario(VERIFIED_SUBJECT), exchangeOrderScenario(VERIFIED_SUBJECT));
+  assert.notDeepEqual(exchangeOrderScenario(VERIFIED_SUBJECT), exchangeOrderScenario(SUBJECT));
+});
+
+test("different subjects replay into different engine state", () => {
+  // Subject isolation: each scenario replays its own orders and
+  // counterparty liquidity — the journals (and therefore the books) can
+  // never overlap.
+  const first = replayExchangeOrderScenario(exchangeOrderScenario(SUBJECT));
+  const second = replayExchangeOrderScenario(exchangeOrderScenario(VERIFIED_SUBJECT));
+  assert.notDeepEqual(first.journal(), second.journal());
+});
+
+test("a partially filled resting order reports its reduced remaining quantity", () => {
+  const engine = createMatchingEngine({ clock: createSimulatedClock(1_772_380_800) });
+  engine.submitOrder({
+    order_id: "ord_0123456789abcdef01234567",
+    instrument: "USDT/RUB",
+    side: "sell",
+    type: "limit",
+    price: "90.00000000",
+    quantity: "10.000000",
+    owner: "cust_pin"
+  });
+  engine.submitOrder({
+    order_id: "ord_89abcdef0123456789abcdef",
+    instrument: "USDT/RUB",
+    side: "buy",
+    type: "market",
+    quantity: "4.000000",
+    owner: "mm_pin"
+  });
+  const rows = projectExchangeOrders(engine, [
+    {
+      order_id: "ord_0123456789abcdef01234567",
+      pair: "USDT/RUB",
+      side: "sell",
+      order_type: "limit",
+      price: "90.00000000",
+      quantity: "10.000000",
+      fee_bps: 25,
+      expires: false
+    }
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "open");
+  // 10 placed, 4 executed: the view reports the 6 still resting.
+  assert.equal(rows[0].base_amount, "6.000000");
+  assert.equal(rows[0].price, "90.00000000");
+  assert.equal(rows[0].updated_at, rows[0].created_at);
+  assert.equal(validExchangeOrdersView({ mode: "test", orders: rows }), true);
+});
+
+test("fully executed orders are excluded — the contract never advertises fills", () => {
+  const engine = createMatchingEngine({ clock: createSimulatedClock(1_772_380_800) });
+  engine.submitOrder({
+    order_id: "ord_0123456789abcdef01234567",
+    instrument: "USDT/RUB",
+    side: "sell",
+    type: "limit",
+    price: "90.00000000",
+    quantity: "10.000000",
+    owner: "cust_pin"
+  });
+  engine.submitOrder({
+    order_id: "ord_89abcdef0123456789abcdef",
+    instrument: "USDT/RUB",
+    side: "buy",
+    type: "market",
+    quantity: "10.000000",
+    owner: "mm_pin"
+  });
+  const rows = projectExchangeOrders(engine, [
+    {
+      order_id: "ord_0123456789abcdef01234567",
+      pair: "USDT/RUB",
+      side: "sell",
+      order_type: "limit",
+      price: "90.00000000",
+      quantity: "10.000000",
+      fee_bps: 25,
+      expires: false
+    }
+  ]);
+  assert.deepEqual(rows, []);
+});
+
+test("engine states map to the contract's four non-executed statuses", () => {
+  const engine = createMatchingEngine({ clock: createSimulatedClock(1_772_380_800) });
+  // resting -> open
+  engine.submitOrder({ order_id: "ord_000000000000000000000001", instrument: "USDT/RUB", side: "sell", type: "limit", price: "90.00000000", quantity: "10.000000", owner: "cust_pin" });
+  // cancelled -> cancelled
+  engine.submitOrder({ order_id: "ord_000000000000000000000002", instrument: "USDT/RUB", side: "buy", type: "limit", price: "80.00000000", quantity: "5.000000", owner: "cust_pin" });
+  engine.cancelOrder("USDT/RUB", "ord_000000000000000000000002");
+  // cancelled with the intent's expires flag -> expired (TTL sweep)
+  engine.submitOrder({ order_id: "ord_000000000000000000000003", instrument: "TON/RUB", side: "sell", type: "limit", price: "300.00000000", quantity: "7.000000000", owner: "cust_pin" });
+  engine.cancelOrder("TON/RUB", "ord_000000000000000000000003");
+  // rejected after acceptance: a market order the book cannot serve
+  engine.submitOrder({ order_id: "ord_000000000000000000000004", instrument: "TON/USDT", side: "buy", type: "market", quantity: "5.000000000", owner: "cust_pin" });
+  // rejected before tracking: the unknown key fails input validation
+  engine.submitOrder({ order_id: "ord_000000000000000000000005", instrument: "USDT/RUB", side: "sell", type: "limit", price: "90.00000000", quantity: "1.000000", owner: "cust_pin", note: "bad" });
+  // rejected by the self-trade policy: the crossing order meets order 001
+  engine.submitOrder({ order_id: "ord_000000000000000000000006", instrument: "USDT/RUB", side: "buy", type: "limit", price: "90.00000000", quantity: "2.000000", owner: "cust_pin" });
+  const rows = projectExchangeOrders(engine, [
+    { order_id: "ord_000000000000000000000001", pair: "USDT/RUB", side: "sell", order_type: "limit", price: "90.00000000", quantity: "10.000000", fee_bps: 25, expires: false },
+    { order_id: "ord_000000000000000000000002", pair: "USDT/RUB", side: "buy", order_type: "limit", price: "80.00000000", quantity: "5.000000", fee_bps: 25, expires: false },
+    { order_id: "ord_000000000000000000000003", pair: "TON/RUB", side: "sell", order_type: "limit", price: "300.00000000", quantity: "7.000000000", fee_bps: 25, expires: true },
+    { order_id: "ord_000000000000000000000004", pair: "TON/USDT", side: "buy", order_type: "market", price: "3.20000000", quantity: "5.000000000", fee_bps: 25, expires: false },
+    { order_id: "ord_000000000000000000000005", pair: "USDT/RUB", side: "sell", order_type: "limit", price: "90.00000000", quantity: "1.000000", fee_bps: 25, expires: false },
+    { order_id: "ord_000000000000000000000006", pair: "USDT/RUB", side: "buy", order_type: "limit", price: "90.00000000", quantity: "2.000000", fee_bps: 25, expires: false }
+  ]);
+  const byId = new Map(rows.map((row) => [row.order_id, row]));
+  assert.equal(rows.length, 6);
+  assert.equal(byId.get("ord_000000000000000000000001")?.status, "open");
+  assert.equal(byId.get("ord_000000000000000000000002")?.status, "cancelled");
+  assert.equal(byId.get("ord_000000000000000000000003")?.status, "expired");
+  assert.equal(byId.get("ord_000000000000000000000004")?.status, "rejected");
+  assert.equal(byId.get("ord_000000000000000000000005")?.status, "rejected");
+  assert.equal(byId.get("ord_000000000000000000000006")?.status, "rejected");
+  // Removed and refused rows carry the never-executed remainder.
+  assert.equal(byId.get("ord_000000000000000000000001")?.base_amount, "10.000000");
+  assert.equal(byId.get("ord_000000000000000000000002")?.base_amount, "5.000000");
+  assert.equal(byId.get("ord_000000000000000000000003")?.base_amount, "7.000000000");
+  assert.equal(byId.get("ord_000000000000000000000004")?.base_amount, "5.000000000");
+  assert.equal(byId.get("ord_000000000000000000000006")?.base_amount, "2.000000");
+  assert.equal(validExchangeOrdersView({ mode: "test", orders: rows }), true);
+});
+
+test("a rejected market order's price is the VWAP of its own fills", () => {
+  const engine = createMatchingEngine({ clock: createSimulatedClock(1_772_380_800) });
+  // Two thin makers at different prices; the market order sweeps both and
+  // its leftover is rejected — the row's price is the fill-weighted mean.
+  engine.submitOrder({ order_id: "ord_000000000000000000000011", instrument: "USDT/RUB", side: "sell", type: "limit", price: "90.00000000", quantity: "2.000000", owner: "mm_a" });
+  engine.submitOrder({ order_id: "ord_000000000000000000000012", instrument: "USDT/RUB", side: "sell", type: "limit", price: "91.00000000", quantity: "2.000000", owner: "mm_b" });
+  engine.submitOrder({ order_id: "ord_000000000000000000000013", instrument: "USDT/RUB", side: "buy", type: "market", quantity: "10.000000", owner: "cust_pin" });
+  const rows = projectExchangeOrders(engine, [
+    { order_id: "ord_000000000000000000000013", pair: "USDT/RUB", side: "buy", order_type: "market", price: "90.00000000", quantity: "10.000000", fee_bps: 25, expires: false }
+  ]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].status, "rejected");
+  assert.equal(rows[0].base_amount, "6.000000");
+  assert.equal(rows[0].price, "90.50000000");
+  assert.equal(validExchangeOrdersView({ mode: "test", orders: rows }), true);
+});
+
+test("the directory retains no per-subject engine or cache across calls", async () => {
+  const directory = createSyntheticExchangeOrderDirectory();
+  const first = await directory.listFor(VERIFIED_SUBJECT);
+  for (let index = 0; index < 48; index += 1) {
+    await directory.listFor(`syn_cust_cache_probe_${index}`);
+  }
+  assert.deepEqual(await directory.listFor(VERIFIED_SUBJECT), first);
+  // Structural pin: a per-subject engine memo would be mutable module
+  // state — the source holds none at top level.
+  const source = readFileSync(new URL("../src/exchange-orders.mjs", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /^const\s+[A-Z_a-z]+\s*=\s*new\s+(?:Map|Set|WeakMap|WeakSet)\(/mu);
 });
