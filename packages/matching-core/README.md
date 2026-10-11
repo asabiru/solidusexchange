@@ -52,10 +52,30 @@ immutable audit, ledger effect and reconciliation path).
   the best opposite price level shares the taker's owner, the taker's
   remaining quantity is rejected with `self_trade` instead of matching or
   skipping its own order.
+- `amendOrder({ order_id, price?, quantity? })` replaces a resting order's
+  price and/or quantity in place — cancel-replace that keeps the
+  `order_id`, instrument, side, type and owner. `quantity` is the new
+  TOTAL order quantity (the FIX OrderCancelReplace `OrderQty` convention):
+  it includes the already-executed part, so a total at or below the filled
+  amount is rejected `quantity_below_filled`.
+- Time priority follows the dominant venue convention (CME/Eurex-style):
+  a price change loses priority and re-queues at the tail of the new
+  level's FIFO; a quantity decrease keeps the slot; a quantity INCREASE
+  also loses priority and re-queues — pinned so an order can never grow
+  into queue head ahead of orders it was behind. An amend that changes
+  nothing is rejected `no_change`.
+- A priority-losing amend whose new price crosses the book matches inside
+  the same call: the stream is `amended` then the usual fill pairs at
+  maker prices, then `resting` for the remainder — the order never rests
+  at a crossed price, and the self-trade policy applies mid-sweep exactly
+  as on submission. Amending an id that is not resting — unknown, filled,
+  cancelled, rejected or a market order (markets never rest) — is rejected
+  `order_not_resting`.
 
 ## Events
 
-`submitOrder` / `cancelOrder` return the events they produced, in order.
+`submitOrder` / `cancelOrder` / `amendOrder` return the events they
+produced, in order.
 Every event is a frozen record `{ seq, at, type, order_id, instrument,
 side, posting, ... }` with `posting: "none"`. `seq` is a strictly
 increasing engine-scoped integer; `at` comes from the injected clock
@@ -68,14 +88,15 @@ increasing engine-scoped integer; `at` comes from the injected clock
 | `partially_filled` | This order still has remainder after one execution | same as `filled` |
 | `resting` | Order remainder entered the book | `price`, `quantity` |
 | `cancelled` | Resting order removed by id | `price`, `quantity` (removed remainder) |
-| `rejected` | Submission or cancel refused | `reason` (see below), plus `quantity` for a `self_trade` or `insufficient_liquidity` remainder |
+| `amended` | Resting order replaced in place | `previous_price`, `previous_quantity` (old values), `price`, `quantity` (new totals) |
+| `rejected` | Submission, cancel or amend refused | `reason` (see below), plus `quantity` for a `self_trade` or `insufficient_liquidity` remainder |
 
 Each execution emits at most two events sharing one `fill_id`
 (`fll_` + 24 hex): the maker's event first, then the taker's — each is
 `filled` or `partially_filled` depending on that order's own remainder.
 
-All events produced by one `submitOrder` or `cancelOrder` share a single
-timestamp: the injected clock is read once per operation, before any state
+All events produced by one `submitOrder`, `cancelOrder` or `amendOrder`
+share a single timestamp: the injected clock is read once per operation, before any state
 is touched, so a backwards or malformed clock fails the whole call atomically
 — no order is tracked, removed or partially filled, and no `seq` is consumed,
 when the call throws.
@@ -84,7 +105,8 @@ Rejection reasons: `invalid_order`, `invalid_order_id`,
 `invalid_instrument`, `unknown_instrument`, `invalid_side`,
 `invalid_owner`, `invalid_type`, `invalid_price`, `non_positive_price`,
 `invalid_quantity`, `non_positive_quantity`, `duplicate_order_id`,
-`self_trade`, `insufficient_liquidity`, `order_not_resting`.
+`self_trade`, `insufficient_liquidity`, `order_not_resting`, `no_change`,
+`quantity_below_filled`.
 
 Rejected submissions do not consume order ids; a resubmission of the same
 id is judged on its own merits. Cancelling an id that is not resting —
@@ -111,6 +133,8 @@ engine.submitOrder({ order_id: "ord_…", instrument: "USDT/RUB", side: "buy",
                      type: "market", quantity: "6" });   // sweeps asks; leftover rejected
 engine.bookSnapshot("USDT/RUB");   // { instrument, bids: [...], asks: [...] }
 engine.cancelOrder("USDT/RUB", "ord_…");
+engine.amendOrder({ order_id: "ord_…", price: "92" });   // re-queues at 92
+engine.amendOrder({ order_id: "ord_…", quantity: "7" }); // new TOTAL qty; increase loses priority
 engine.orderStatus("ord_…");       // tracked state or null (price: null on market orders)
 ```
 
@@ -149,7 +173,12 @@ state, it never writes storage, does I/O, or posts anything.
   canonical timestamps, known types and fields only, fill pairs
   consecutive maker-then-taker sharing sequential `fill_id`s, every
   referenced order accepted by the stream, fill/cancel arithmetic
-  matching the tracked remainder, a limit taker never filling at a price
+  matching the tracked remainder, `amended` events only on resting
+  orders whose `previous_*` fields match the tracked state (with the
+  same priority rule the live engine applies: keep the slot on a
+  decrease at an unchanged price, re-queue on a price change or an
+  increase, and the follow-up `resting` / fill / `rejected` events the
+  re-queue produces), a limit taker never filling at a price
   outside its own limit, and the market-order rules — no `price`
   on a market `accepted`, never a `resting` for one, and
   `insufficient_liquidity` rejections only on market orders with the exact

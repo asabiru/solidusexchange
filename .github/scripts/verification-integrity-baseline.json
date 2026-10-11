@@ -1183,8 +1183,12 @@
       "minLines": 97,
       "minCases": 7
     },
+    "packages/matching-core/tests/amend.test.mjs": {
+      "minLines": 557,
+      "minCases": 30
+    },
     "packages/matching-core/tests/boundary.test.mjs": {
-      "minLines": 56,
+      "minLines": 60,
       "minCases": 5
     },
     "packages/matching-core/tests/decimal.test.mjs": {
@@ -1200,7 +1204,7 @@
       "minCases": 20
     },
     "packages/matching-core/tests/invariants.test.mjs": {
-      "minLines": 134,
+      "minLines": 149,
       "minCases": 5
     },
     "packages/matching-core/tests/journal.test.mjs": {

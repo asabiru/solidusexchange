@@ -44,12 +44,14 @@ export function marketOrder(orderId, fields = {}) {
 /**
  * A busy deterministic scenario exercising crossed books, partial fills on
  * both maker and taker sides, cancels, validation rejects, a self-trade
- * reject, market orders (a clean fill, a zero-fill rejection and a partial
- * sweep whose remainder is rejected) and a second instrument. Returns
- * every emitted event in order — the same stream `engine.journal()` should
- * hold afterwards.
+ * reject, amendments on every priority path (a kept-slot decrease, a
+ * re-queued increase, a re-queued price change, a crossed amend, and a
+ * rejected amend of a non-resting order), market orders (a clean fill, a
+ * zero-fill rejection and a partial sweep whose remainder is rejected) and
+ * a second instrument. Returns every emitted event in order — the same
+ * stream `engine.journal()` should hold afterwards.
  *
- * @param {{ submitOrder: (input: unknown) => readonly unknown[], cancelOrder: (instrument: unknown, orderId: unknown) => readonly unknown[] }} engine
+ * @param {{ submitOrder: (input: unknown) => readonly unknown[], cancelOrder: (instrument: unknown, orderId: unknown) => readonly unknown[], amendOrder: (input: unknown) => readonly unknown[] }} engine
  */
 export function mixedScenario(engine) {
   return [
@@ -62,8 +64,16 @@ export function mixedScenario(engine) {
     engine.cancelOrder("USDT/RUB", ord(6)),
     engine.submitOrder(order(7, { side: "sell", price: "88", quantity: "3", owner: "desk-a" })),
     engine.submitOrder(order(8, { side: "buy", price: "91", quantity: "3", owner: "desk-e" })),
+    // ord 3 keeps its slot on the decrease, then re-queues on the increase.
+    engine.amendOrder({ order_id: ord(3), quantity: "4" }),
+    engine.amendOrder({ order_id: ord(3), quantity: "5" }),
     engine.submitOrder(order(9, { side: "sell", price: "92", quantity: "4", owner: "desk-a" })),
+    // ord 9 re-prices to 88: no bids remain to cross, so it rests at the
+    // new level's tail.
+    engine.amendOrder({ order_id: ord(9), price: "88" }),
     engine.submitOrder(order(10, { side: "buy", price: "95", quantity: "10", owner: "desk-a" })),
+    // ord 1 is long filled, so its amend is rejected as non-resting.
+    engine.amendOrder({ order_id: ord(1), price: "89" }),
     engine.cancelOrder("USDT/RUB", ord(5)),
     engine.submitOrder(order(11, { price: "junk" })),
     engine.submitOrder(order(20, { instrument: "TON/RUB", side: "sell", price: "150", quantity: "1" })),

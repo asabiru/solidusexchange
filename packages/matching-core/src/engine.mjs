@@ -2,6 +2,7 @@ import { createOrderBook } from "./book.mjs";
 import { formatScaledDecimal, isScaledDecimal, parseScaledDecimal } from "./decimal.mjs";
 import { assertEpochSeconds, createSimulatedClock, toIsoSeconds } from "./deterministic.mjs";
 import {
+  AMEND_KEYS,
   isOrderId,
   isOrderType,
   isOwner,
@@ -317,6 +318,96 @@ export function createMatchingEngineFromState(index, timeSource, state) {
     }
   }
 
+  /**
+   * Sweeps the opposite side of `book` with `taker` in price/time order,
+   * emitting one fill pair per execution, then resolves the taker: a
+   * remainder rests (`resting` emitted) for limit orders, is `rejected`
+   * `insufficient_liquidity` for market orders, or is `rejected`
+   * `self_trade` when the policy bites mid-sweep. Shared by `submitOrder`
+   * and `amendOrder` — a crossed amendment re-enters matching exactly like
+   * a new submission.
+   *
+   * @param {MatchingEvent[]} events
+   * @param {ReturnType<typeof createOrderBook>} book
+   * @param {TrackedOrder} taker
+   * @param {InstrumentDefinition} definition
+   */
+  function matchTaker(events, book, taker, definition) {
+    const opposite = taker.side === "buy" ? "sell" : "buy";
+    let rejected = false;
+    for (;;) {
+      const maker = book.bestHead(opposite);
+      if (
+        maker === undefined ||
+        taker.remaining_units === 0n ||
+        (taker.order_type === "limit" &&
+          (taker.side === "buy"
+            ? /** @type {bigint} */ (taker.price_units) < maker.price_units
+            : /** @type {bigint} */ (taker.price_units) > maker.price_units))
+      ) {
+        break;
+      }
+      if (
+        SELF_TRADE_POLICY === "reject" &&
+        taker.owner !== undefined &&
+        maker.owner !== undefined &&
+        taker.owner === maker.owner
+      ) {
+        taker.state = "rejected";
+        emit(events, "rejected", {
+          order_id: taker.order_id,
+          instrument: taker.instrument,
+          side: taker.side,
+          reason: "self_trade",
+          quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
+        });
+        rejected = true;
+        break;
+      }
+      const quantityUnits =
+        taker.remaining_units < maker.remaining_units
+          ? taker.remaining_units
+          : maker.remaining_units;
+      const fillId = `fll_${state.nextFill.toString(16).padStart(24, "0")}`;
+      state.nextFill += 1;
+      maker.remaining_units -= quantityUnits;
+      taker.remaining_units -= quantityUnits;
+      emitFill(events, taker, maker, fillId, quantityUnits, definition.base_scale);
+      if (maker.remaining_units === 0n) {
+        book.shiftBest(opposite);
+        const makerTracked = tracked.get(maker.order_id);
+        if (makerTracked !== undefined) {
+          makerTracked.state = "filled";
+        }
+      }
+    }
+
+    if (!rejected && taker.remaining_units > 0n) {
+      if (taker.order_type === "market") {
+        // Market orders never rest: a leftover after the sweep is rejected.
+        taker.state = "rejected";
+        emit(events, "rejected", {
+          order_id: taker.order_id,
+          instrument: taker.instrument,
+          side: taker.side,
+          reason: "insufficient_liquidity",
+          quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
+        });
+      } else {
+        book.addResting(/** @type {RestingOrder} */ (taker));
+        emit(events, "resting", {
+          order_id: taker.order_id,
+          instrument: taker.instrument,
+          side: taker.side,
+          price: taker.price,
+          quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
+        });
+      }
+    } else if (!rejected) {
+      taker.state = "filled";
+    }
+  }
+
   return Object.freeze({
     /**
      * Validates and matches one order, returning the events it produced
@@ -364,79 +455,7 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         quantity: taker.quantity,
       });
 
-      const opposite = taker.side === "buy" ? "sell" : "buy";
-      let rejected = false;
-      for (;;) {
-        const maker = book.bestHead(opposite);
-        if (
-          maker === undefined ||
-          taker.remaining_units === 0n ||
-          (taker.order_type === "limit" &&
-            (taker.side === "buy"
-              ? /** @type {bigint} */ (taker.price_units) < maker.price_units
-              : /** @type {bigint} */ (taker.price_units) > maker.price_units))
-        ) {
-          break;
-        }
-        if (
-          SELF_TRADE_POLICY === "reject" &&
-          taker.owner !== undefined &&
-          maker.owner !== undefined &&
-          taker.owner === maker.owner
-        ) {
-          taker.state = "rejected";
-          emit(events, "rejected", {
-            order_id: taker.order_id,
-            instrument: taker.instrument,
-            side: taker.side,
-            reason: "self_trade",
-            quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
-          });
-          rejected = true;
-          break;
-        }
-        const quantityUnits =
-          taker.remaining_units < maker.remaining_units
-            ? taker.remaining_units
-            : maker.remaining_units;
-        const fillId = `fll_${state.nextFill.toString(16).padStart(24, "0")}`;
-        state.nextFill += 1;
-        maker.remaining_units -= quantityUnits;
-        taker.remaining_units -= quantityUnits;
-        emitFill(events, taker, maker, fillId, quantityUnits, definition.base_scale);
-        if (maker.remaining_units === 0n) {
-          book.shiftBest(opposite);
-          const makerTracked = tracked.get(maker.order_id);
-          if (makerTracked !== undefined) {
-            makerTracked.state = "filled";
-          }
-        }
-      }
-
-      if (!rejected && taker.remaining_units > 0n) {
-        if (taker.order_type === "market") {
-          // Market orders never rest: a leftover after the sweep is rejected.
-          taker.state = "rejected";
-          emit(events, "rejected", {
-            order_id: taker.order_id,
-            instrument: taker.instrument,
-            side: taker.side,
-            reason: "insufficient_liquidity",
-            quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
-          });
-        } else {
-          book.addResting(/** @type {RestingOrder} */ (taker));
-          emit(events, "resting", {
-            order_id: taker.order_id,
-            instrument: taker.instrument,
-            side: taker.side,
-            price: taker.price,
-            quantity: formatScaledDecimal(taker.remaining_units, definition.base_scale),
-          });
-        }
-      } else if (!rejected) {
-        taker.state = "filled";
-      }
+      matchTaker(events, book, taker, definition);
       return Object.freeze(events);
     },
 
@@ -489,6 +508,159 @@ export function createMatchingEngineFromState(index, timeSource, state) {
         price: resting.price,
         quantity: formatScaledDecimal(removedUnits, definition.base_scale),
       });
+      return Object.freeze(events);
+    },
+
+    /**
+     * Amends a resting limit order's price and/or quantity in place —
+     * cancel-replace that keeps the `order_id`. The input is a plain object
+     * `{ order_id, price?, quantity? }`; the instrument, side, type and
+     * owner were fixed at acceptance and cannot change.
+     *
+     * `quantity` is the new TOTAL order quantity (the FIX
+     * OrderCancelReplace `OrderQty` convention): it includes whatever
+     * already executed, so a total at or below the filled part is rejected
+     * `quantity_below_filled`.
+     *
+     * Time priority follows the dominant venue convention (CME/Eurex-style):
+     * a price change loses priority — the order re-queues at the tail of
+     * its new level; a quantity decrease keeps its slot; a quantity
+     * INCREASE also loses priority and re-queues at the tail. Venues differ
+     * on the increase case (some keep the slot) — the increase-is-worse
+     * choice is pinned so a resting order can never grow into queue head
+     * ahead of orders it was behind.
+     *
+     * An amend that changes nothing is rejected `no_change`; an id that is
+     * not resting — unknown, filled, cancelled, rejected or a market order
+     * (markets never rest, so they are never amendable) — is rejected
+     * `order_not_resting`. A priority-losing amend whose new price crosses
+     * the book matches in the same call, emitting `amended` then the usual
+     * fill pairs at maker prices, then `resting` for whatever is left — it
+     * never rests at a crossed price.
+     *
+     * @param {unknown} input
+     * @returns {readonly MatchingEvent[]}
+     */
+    amendOrder(input) {
+      /** @type {MatchingEvent[]} */
+      const events = [];
+      beginOperation();
+      /** @type {unknown} */
+      let snapshot;
+      try {
+        snapshot = snapshotPlainData(input);
+      } catch {
+        emitRejected(events, {}, "invalid_order");
+        return Object.freeze(events);
+      }
+      if (
+        snapshot === null ||
+        typeof snapshot !== "object" ||
+        Array.isArray(snapshot) ||
+        Object.keys(snapshot).some((key) => !AMEND_KEYS.includes(key)) ||
+        !Object.hasOwn(snapshot, "order_id") ||
+        (!Object.hasOwn(snapshot, "price") && !Object.hasOwn(snapshot, "quantity"))
+      ) {
+        emitRejected(events, {}, "invalid_order");
+        return Object.freeze(events);
+      }
+      const candidate = /** @type {import("./events.mjs").AmendInput} */ (snapshot);
+      /** @type {{ order_id: unknown, instrument: unknown, side: unknown }} */
+      const echo = { order_id: candidate.order_id, instrument: null, side: null };
+      if (!isOrderId(candidate.order_id)) {
+        emitRejected(events, echo, "invalid_order_id");
+        return Object.freeze(events);
+      }
+      const entry = tracked.get(candidate.order_id);
+      if (entry !== undefined) {
+        echo.instrument = entry.instrument;
+        echo.side = entry.side;
+      }
+      // Market orders can never be here: they never rest, so this check is
+      // also the market-amendment rejection.
+      if (entry === undefined || entry.state !== "resting") {
+        emitRejected(events, echo, "order_not_resting");
+        return Object.freeze(events);
+      }
+      const book = bookFor(entry.instrument);
+      const resting = book.restingOrder(entry.order_id);
+      if (resting === undefined) {
+        emitRejected(events, echo, "order_not_resting");
+        return Object.freeze(events);
+      }
+      const definition = /** @type {InstrumentDefinition} */ (
+        index.get(entry.instrument)
+      );
+      let priceUnits = /** @type {bigint} */ (entry.price_units);
+      if (Object.hasOwn(snapshot, "price")) {
+        if (!isScaledDecimal(candidate.price, definition.price_scale)) {
+          emitRejected(events, echo, "invalid_price");
+          return Object.freeze(events);
+        }
+        priceUnits = parseScaledDecimal(candidate.price, definition.price_scale);
+        if (priceUnits === 0n) {
+          emitRejected(events, echo, "non_positive_price");
+          return Object.freeze(events);
+        }
+      }
+      let totalUnits = entry.quantity_units;
+      if (Object.hasOwn(snapshot, "quantity")) {
+        if (!isScaledDecimal(candidate.quantity, definition.base_scale)) {
+          emitRejected(events, echo, "invalid_quantity");
+          return Object.freeze(events);
+        }
+        totalUnits = parseScaledDecimal(candidate.quantity, definition.base_scale);
+        if (totalUnits === 0n) {
+          emitRejected(events, echo, "non_positive_quantity");
+          return Object.freeze(events);
+        }
+      }
+      const priceChanged = priceUnits !== entry.price_units;
+      const quantityChanged = totalUnits !== entry.quantity_units;
+      if (!priceChanged && !quantityChanged) {
+        emitRejected(events, echo, "no_change");
+        return Object.freeze(events);
+      }
+      const executedUnits = entry.quantity_units - entry.remaining_units;
+      if (totalUnits <= executedUnits) {
+        emitRejected(events, echo, "quantity_below_filled");
+        return Object.freeze(events);
+      }
+      const previousPrice = entry.price;
+      const previousQuantity = entry.quantity;
+      // A quantity decrease at an unchanged price keeps its queue slot;
+      // everything else — a price change or a quantity increase — loses
+      // time priority and re-queues at the tail.
+      const keepsPriority = !priceChanged && totalUnits < entry.quantity_units;
+      if (!keepsPriority) {
+        // Removal must run before the fields move: `book.remove` locates
+        // the level through the order's current `price_units`. The
+        // tracked-map slot moves to the end with the re-queue, keeping
+        // tracked insertion order equal to book order for snapshots.
+        book.remove(resting);
+        tracked.delete(entry.order_id);
+        tracked.set(entry.order_id, entry);
+      }
+      entry.price = formatScaledDecimal(priceUnits, definition.price_scale);
+      entry.price_units = priceUnits;
+      entry.quantity_units = totalUnits;
+      entry.quantity = formatScaledDecimal(totalUnits, definition.base_scale);
+      entry.remaining_units = totalUnits - executedUnits;
+      emit(events, "amended", {
+        order_id: entry.order_id,
+        instrument: entry.instrument,
+        side: entry.side,
+        previous_price: previousPrice,
+        previous_quantity: previousQuantity,
+        price: entry.price,
+        quantity: entry.quantity,
+      });
+      if (!keepsPriority) {
+        // The re-queued order sweeps like a new submission: it can fill at
+        // maker prices, be rejected `self_trade` on its owner's order, or
+        // rest its remainder at the tail of the (uncrossed) new level.
+        matchTaker(events, book, entry, definition);
+      }
       return Object.freeze(events);
     },
 

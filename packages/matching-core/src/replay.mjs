@@ -30,8 +30,10 @@ import {
  * emitted: contiguous `seq` from 1, non-decreasing canonical timestamps,
  * known event types and fields only, fill pairs consecutive maker-then-taker
  * with sequentially numbered fill ids, every referenced order accepted by
- * the stream, and fill/cancel arithmetic matching the tracked remainder.
- * Anything else throws `TypeError` with an `invalid event stream:` reason.
+ * the stream, `amended` events only on resting orders whose recorded
+ * previous values match the tracked state, and fill/cancel arithmetic
+ * matching the tracked remainder. Anything else throws `TypeError` with an
+ * `invalid event stream:` reason.
  *
  * @typedef {import("./book.mjs").RestingOrder} RestingOrder
  * @typedef {import("./deterministic.mjs").SimulatedClock} SimulatedClock
@@ -50,6 +52,7 @@ const EVENT_KEYS = {
   partially_filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
   filled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "fill_id", "maker_order_id", "taker_order_id", "price", "quantity", "remaining_quantity"]),
   cancelled: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "price", "quantity"]),
+  amended: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "previous_price", "previous_quantity", "price", "quantity"]),
   rejected: new Set(["seq", "at", "type", "posting", "order_id", "instrument", "side", "reason", "quantity"]),
 };
 
@@ -144,8 +147,6 @@ export function replayMatchingEngine(options = {}) {
   const books = new Map();
   /** @type {Set<string>} */
   const inBook = new Set();
-  /** @type {string[]} Book-insertion order of every order that ever rested. */
-  const restingOrder = [];
   /** @type {MatchingEvent[]} */
   const journal = [];
   /** @type {{ fill_id: string, maker_order_id: string, taker_order_id: string, quantity: unknown } | null} */
@@ -424,7 +425,6 @@ export function replayMatchingEngine(options = {}) {
           invalid(`event seq ${event.seq}: resting quantity is not the tracked remainder`);
         }
         inBook.add(entry.order_id);
-        restingOrder.push(entry.order_id);
         bookFor(entry.instrument).addResting(/** @type {RestingOrder} */ (entry));
         break;
       }
@@ -453,6 +453,53 @@ export function replayMatchingEngine(options = {}) {
         bookFor(entry.instrument).remove(/** @type {RestingOrder} */ (entry));
         entry.state = "cancelled";
         entry.remaining_units = 0n;
+        break;
+      }
+      case "amended": {
+        const entry = trackedOrder(event);
+        if (pendingMaker !== null) {
+          invalid(`event seq ${event.seq}: event inside a fill pair`);
+        }
+        if (entry.state !== "resting" || !inBook.has(entry.order_id)) {
+          invalid(`event seq ${event.seq}: amended order is not resting`);
+        }
+        if (event.previous_price !== entry.price) {
+          invalid(`event seq ${event.seq}: amended previous price does not match the resting order`);
+        }
+        if (event.previous_quantity !== entry.quantity) {
+          invalid(`event seq ${event.seq}: amended previous quantity does not match the resting order`);
+        }
+        const definition = /** @type {InstrumentDefinition} */ (index.get(entry.instrument));
+        const priceUnits = unitsOf(event.price, "amended price", definition.price_scale);
+        if (priceUnits === 0n) {
+          invalid(`event seq ${event.seq}: non-positive amended price`);
+        }
+        const totalUnits = unitsOf(event.quantity, "amended quantity", definition.base_scale);
+        if (totalUnits === 0n) {
+          invalid(`event seq ${event.seq}: non-positive amended quantity`);
+        }
+        const executedUnits = entry.quantity_units - entry.remaining_units;
+        if (totalUnits <= executedUnits) {
+          invalid(`event seq ${event.seq}: amended quantity is not above the filled amount`);
+        }
+        if (priceUnits === entry.price_units && totalUnits === entry.quantity_units) {
+          invalid(`event seq ${event.seq}: amended event changes nothing`);
+        }
+        // Mirror the live priority rule: a decrease at an unchanged price
+        // keeps the queue slot; a price change or an increase re-queues.
+        const keepsPriority =
+          priceUnits === entry.price_units && totalUnits < entry.quantity_units;
+        if (!keepsPriority) {
+          inBook.delete(entry.order_id);
+          bookFor(entry.instrument).remove(/** @type {RestingOrder} */ (entry));
+          tracked.delete(entry.order_id);
+          tracked.set(entry.order_id, entry);
+        }
+        entry.price = formatScaledDecimal(priceUnits, definition.price_scale);
+        entry.price_units = priceUnits;
+        entry.quantity_units = totalUnits;
+        entry.quantity = formatScaledDecimal(totalUnits, definition.base_scale);
+        entry.remaining_units = totalUnits - executedUnits;
         break;
       }
       case "rejected": {
@@ -497,7 +544,7 @@ export function replayMatchingEngine(options = {}) {
     invalid("stream ends inside a fill pair");
   }
 
-  const resting = restingOrder.filter((orderId) => inBook.has(orderId));
+  const resting = [...tracked.keys()].filter((orderId) => inBook.has(orderId));
   const orders = [...tracked.values()].map((entry) => {
     const definition = /** @type {InstrumentDefinition} */ (index.get(entry.instrument));
     return {
