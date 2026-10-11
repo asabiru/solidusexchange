@@ -39,6 +39,8 @@
     "src/app/app-render.test.ts",
     "src/data/demo.ts",
     "src/data/demo.test.ts",
+    "src/data/operator.ts",
+    "src/data/operator.test.ts",
     "src/data/provider-evidence.ts",
     "src/data/reports.ts",
     "src/data/client.ts",

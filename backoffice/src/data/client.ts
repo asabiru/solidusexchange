@@ -75,6 +75,22 @@ export interface CustomersPayload {
   customers: readonly CustomerRow[];
 }
 
+/** Signed payloads for the operator reads; shape is enforced by the strict adapters in `data/operator.ts`. */
+export interface OperatorSubjectsPayload {
+  mode: string;
+  subjects: readonly unknown[];
+}
+
+export interface OperatorSubjectPayload {
+  mode: string;
+  subject: unknown;
+}
+
+export interface OperatorQueuePayload {
+  mode: string;
+  queue: unknown;
+}
+
 export interface ChecksPayload {
   statuses: readonly CheckStatus[];
   checks: readonly ChatCheck[];
@@ -441,6 +457,18 @@ export function getDashboard(): Promise<DashboardPayload> {
 
 export function getCustomers(): Promise<CustomersPayload> {
   return getSigned("/bff/api/customers", "customers");
+}
+
+export function getOperatorSubjects(): Promise<OperatorSubjectsPayload> {
+  return getSigned("/bff/api/operator/subjects", "operator-subjects");
+}
+
+export function getOperatorSubject(subjectId: string): Promise<OperatorSubjectPayload> {
+  return getSigned(`/bff/api/operator/subjects/${encodeURIComponent(subjectId)}`, "operator-subject");
+}
+
+export function getOperatorQueue(): Promise<OperatorQueuePayload> {
+  return getSigned("/bff/api/operator/queue", "operator-queue");
 }
 
 export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {

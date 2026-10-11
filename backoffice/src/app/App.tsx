@@ -17,6 +17,9 @@ import {
   getHealth,
   getInvestigations,
   getKycCases,
+  getOperatorQueue,
+  getOperatorSubject,
+  getOperatorSubjects,
   getReport,
   getReportExport,
   getReports,
@@ -39,6 +42,8 @@ import {
   type HealthPayload,
   type InvestigationsPayload,
   type KycPayload,
+  type OperatorQueuePayload,
+  type OperatorSubjectsPayload,
   type SessionPayload,
   type StepUpChallengePayload,
   type SubjectTimelinePayload,
@@ -80,6 +85,15 @@ import type {
   ProviderCallbackRecord,
   ProviderEvidenceFeed
 } from "../data/provider-evidence.js";
+import {
+  parseOperatorQueueView,
+  parseOperatorSubjectView,
+  parseOperatorSubjectsView,
+  type OperatorQueueItem,
+  type OperatorQueueView,
+  type OperatorSubjectDetail,
+  type OperatorSubjectRow
+} from "../data/operator.js";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation.js";
 import { runtime } from "./runtime.js";
 import { ScreenIcon, UiIcon } from "./icons.js";
@@ -92,6 +106,10 @@ import {
   checkStatusOf,
   countToward,
   intOf,
+  operatorAccountStatusKeyOf,
+  operatorKycStatusKeyOf,
+  operatorQueuePriorityKeyOf,
+  operatorQueueStateKeyOf,
   operatorRoleKeyOf,
   operatorRoleOf,
   recordOf,
@@ -256,7 +274,25 @@ export function DashboardView({ data }: { data: DashboardPayload }) {
   );
 }
 
-export function CustomersView({ query, data }: { query: string; data: CustomersPayload }) {
+/** Degraded-read flag: the same safe-action banner every limited surface uses, never a new visual. */
+function DegradedNotice({ title, note }: { title: string; note: string }) {
+  return (
+    <div className="safe-action">
+      <strong>{title}</strong>
+      <p>{note}</p>
+    </div>
+  );
+}
+
+export function CustomersView({ query, data, operatorSubjects }: { query: string; data: CustomersPayload; operatorSubjects?: unknown }) {
+  const upstream = useMemo(() => parseOperatorSubjectsView(operatorSubjects), [operatorSubjects]);
+  if (upstream !== undefined) {
+    return <OperatorSubjectsView query={query} subjects={upstream.subjects} />;
+  }
+  return <DemoCustomersView query={query} data={data} />;
+}
+
+function DemoCustomersView({ query, data }: { query: string; data: CustomersPayload }) {
   const { t, count } = useI18n();
   const rows = rowsOf<CustomerRow>(recordOf(data).customers);
   const customers = useMemo(() => {
@@ -286,6 +322,7 @@ export function CustomersView({ query, data }: { query: string; data: CustomersP
             <div><h2>{t("customers.title")}</h2><p>{t("customers.count", { count: count(customers.length) })}</p></div>
             <Status tone="info">{t("customers.noRawPii")}</Status>
           </header>
+          <DegradedNotice title={t("customers.degradedTitle")} note={t("customers.degradedNote")} />
           <TableShell label={t("customers.listLabel")}>
             <table>
               <thead><tr><th scope="col">{t("customers.customer")}</th><th scope="col">{t("customers.kyc")}</th><th scope="col">{t("common.risk")}</th><th scope="col">{t("customers.volume")}</th><th scope="col">{t("customers.nextAction")}</th></tr></thead>
@@ -345,6 +382,117 @@ export function CustomersView({ query, data }: { query: string; data: CustomersP
       </section>
     </>
   );
+}
+
+/** Live mode: subject list read straight from the signed operator payload; detail is fetched lazily. */
+function OperatorSubjectsView({ query, subjects }: { query: string; subjects: readonly OperatorSubjectRow[] }) {
+  const { t, count, date } = useI18n();
+  const rows = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return subjects;
+    return subjects.filter((row) =>
+      `${row.subjectId} ${row.displayName} ${row.kycStatus}`.toLocaleLowerCase("ru").includes(normalized));
+  }, [subjects, query]);
+  const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.subjectId ?? null);
+  const active = useMemo(() => rows.find((row) => row.subjectId === selectedId) ?? null, [rows, selectedId]);
+  return (
+    <>
+      <PageHeading title={t("screen.customers")} description={t("customers.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("customers.upstreamTitle")}</h2><p>{t("customers.upstreamCount", { count: count(rows.length) })}</p></div>
+            <Status tone="info">{t("customers.noRawPii")}</Status>
+          </header>
+          <TableShell label={t("customers.upstreamListLabel")}>
+            <table>
+              <thead><tr><th scope="col">{t("customers.customer")}</th><th scope="col">{t("customers.kyc")}</th><th scope="col">{t("customers.colFlags")}</th><th scope="col">{t("customers.colRegistered")}</th><th scope="col">{t("customers.colLastActive")}</th></tr></thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={row.subjectId} data-selected={row.subjectId === active?.subjectId}>
+                    <td><button className="link" type="button" aria-current={index === 0 ? "page" : undefined} onClick={() => setSelectedId(row.subjectId)}><strong>{row.displayName}</strong><br /><span className="mono">{row.subjectId}</span></button></td>
+                    <td>{enumText(t, operatorKycStatusKeyOf(row.kycStatus), row.kycStatus)}</td>
+                    <td>{count(row.flags)}</td>
+                    <td>{date(row.registeredAt)}</td>
+                    <td>{date(row.lastActiveAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <OperatorSubjectPanel selected={active} />
+      </section>
+    </>
+  );
+}
+
+/** Lazily fetches `/bff/api/operator/subjects/{id}` for the picked row; failures fall back to the demo projection. */
+function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | null }) {
+  const { t, count, date } = useI18n();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed" | "not-found">("idle");
+  const [detail, setDetail] = useState<OperatorSubjectDetail | null>(null);
+  useEffect(() => {
+    if (selected === null) {
+      setDetail(null);
+      setDetailState("idle");
+      return;
+    }
+    setDetailState("loading");
+    setDetail(null);
+    let alive = true;
+    getOperatorSubject(selected.subjectId)
+      .then((payload) => {
+        if (!alive) return;
+        const parsed = parseOperatorSubjectView(payload);
+        if (parsed === undefined) {
+          setDetailState("failed");
+          return;
+        }
+        setDetail(parsed.subject);
+        setDetailState("idle");
+      })
+      .catch((error: unknown) => {
+        if (!alive) return;
+        setDetailState(error instanceof ApiError && error.code === "operator_subject_not_found" ? "not-found" : "failed");
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selected]);
+
+  let body: React.ReactElement;
+  if (selected === null) {
+    body = <div className="empty"><p>{t("common.noMatches")}</p></div>;
+  } else if (detailState === "loading") {
+    body = <div className="empty"><p>{t("customers.loadingDetail")}</p></div>;
+  } else if (detailState === "not-found") {
+    body = <div className="preview-error" role="alert">{t("customers.detailNotFound")}</div>;
+  } else if (detailState === "failed" || detail === null) {
+    body = <div className="preview-error" role="alert">{t("customers.detailFailed")}</div>;
+  } else {
+    body = (
+      <>
+        <header className="panel-heading">
+          <div><h2>{detail.displayName}</h2><p className="mono">{detail.subjectId}</p></div>
+          <Status tone={detail.accountStatus === "active" ? "success" : "warning"}>{enumText(t, operatorAccountStatusKeyOf(detail.accountStatus), detail.accountStatus)}</Status>
+        </header>
+        <dl className="detail-list">
+          <div><dt>{t("customers.kyc")}</dt><dd>{enumText(t, operatorKycStatusKeyOf(detail.kycStatus), detail.kycStatus)}</dd></div>
+          <div><dt>{t("customers.contact")}</dt><dd className="mono">{detail.contactHash}</dd></div>
+          <div><dt>{t("customers.sessions")}</dt><dd>{count(detail.sessions)}</dd></div>
+          <div><dt>{t("customers.devices")}</dt><dd>{detail.devices.length === 0 ? "—" : detail.devices.map((device) => <div key={device} className="mono">{device}</div>)}</dd></div>
+          <div><dt>{t("customers.limits")}</dt><dd>{count(detail.limits.maxSessions)} / {count(detail.limits.maxDevices)}</dd></div>
+          <div><dt>{t("customers.colLastActive")}</dt><dd>{date(detail.lastActiveAt)}</dd></div>
+        </dl>
+        <div className="safe-action">
+          <strong>{t("customers.projectionTitle")}</strong>
+          <p>{t("customers.operatorNote")}</p>
+        </div>
+      </>
+    );
+  }
+  return <aside className="panel case-detail">{body}</aside>;
 }
 
 export function EvidenceList({ items }: { items: readonly EvidenceItem[] }) {
@@ -507,7 +655,88 @@ export function ProviderEvidencePanel<T extends KycProviderEvidence | KytProvide
   );
 }
 
-export function KycView({ query, data }: { query: string; data: KycPayload }) {
+export function KycView({ query, data, operatorQueue }: { query: string; data: KycPayload; operatorQueue?: unknown }) {
+  const upstream = useMemo(() => parseOperatorQueueView(operatorQueue), [operatorQueue]);
+  if (upstream !== undefined) {
+    return <OperatorQueueScreen query={query} queue={upstream.queue} />;
+  }
+  return <DemoKycView query={query} data={data} />;
+}
+
+/** Live mode: the signed operator KYC work queue; detail shows the item fields only. */
+function OperatorQueueScreen({ query, queue }: { query: string; queue: OperatorQueueView["queue"] }) {
+  const { t, count, date } = useI18n();
+  const rows = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return queue.items;
+    return queue.items.filter((item) =>
+      `${item.queueId} ${item.subjectId} ${item.displayName} ${item.state} ${item.priority}`.toLocaleLowerCase("ru").includes(normalized));
+  }, [queue, query]);
+  const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.queueId ?? null);
+  const active = rows.find((item) => item.queueId === selectedId) ?? rows[0] ?? null;
+  return (
+    <>
+      <PageHeading title={t("screen.kyc")} description={t("kyc.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div>
+              <h2>{t("kyc.queueTitle")}</h2>
+              <p>{t("kyc.queueCount", { count: count(queue.summary.count), pending: count(queue.summary.byState.pending), inReview: count(queue.summary.byState.inReview), escalated: count(queue.summary.byState.escalated) })}</p>
+            </div>
+            <Status tone="info">{t("common.readOnly")}</Status>
+          </header>
+          <TableShell label={t("kyc.queueTableLabel")}>
+            <table>
+              <thead><tr><th scope="col">{t("kyc.queueItem")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("kyc.state")}</th><th scope="col">{t("common.priority")}</th><th scope="col">{t("kyc.submitted")}</th></tr></thead>
+              <tbody>
+                {rows.map((item, index) => (
+                  <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
+                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{item.displayName}</small></td>
+                    <td><span className="mono">{item.subjectId}</span></td>
+                    <td>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</td>
+                    <td><Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status></td>
+                    <td>{date(item.submittedAt)}</td>
+                  </tr>
+                ))}
+                {!rows.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        {active && <OperatorQueueItemDetail item={active} />}
+      </section>
+    </>
+  );
+}
+
+function OperatorQueueItemDetail({ item }: { item: OperatorQueueItem }) {
+  const { t, count, date } = useI18n();
+  return (
+    <aside className="panel case-detail">
+      <header className="panel-heading">
+        <div><h2 className="mono">{item.queueId}</h2><p>{item.displayName}</p></div>
+        <Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("common.subject")}</dt><dd className="mono">{item.subjectId}</dd></div>
+        <div><dt>{t("kyc.state")}</dt><dd>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</dd></div>
+        <div><dt>{t("kyc.submitted")}</dt><dd>{date(item.submittedAt)}</dd></div>
+        <div><dt>{t("common.sla")}</dt><dd>{date(item.slaDueAt)}</dd></div>
+        <div><dt>{t("kyc.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
+        <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("kyc.unassigned") : item.assignee.subject}</dd></div>
+      </dl>
+      <div className="safe-action">
+        <strong>{t("common.readOnly")}</strong>
+        <p>{t("kyc.queueNote")}</p>
+      </div>
+    </aside>
+  );
+}
+
+function DemoKycView({ query, data }: { query: string; data: KycPayload }) {
   const { t, count } = useI18n();
   const rows = rowsOf<KycCase>(recordOf(data).cases);
   const cases = useMemo(() => {
@@ -537,6 +766,7 @@ export function KycView({ query, data }: { query: string; data: KycPayload }) {
             <div><h2>{t("kyc.casesTitle")}</h2><p>{t("kyc.count", { count: count(cases.length) })}</p></div>
             <Status tone="info">{t("common.readOnly")}</Status>
           </header>
+          <DegradedNotice title={t("kyc.degradedTitle")} note={t("kyc.degradedNote")} />
           <TableShell label={t("kyc.tableLabel")}>
             <table>
               <thead><tr><th scope="col">{t("common.case")}</th><th scope="col">{t("common.subject")}</th><th scope="col">{t("common.stage")}</th><th scope="col">{t("common.risk")}</th><th scope="col">{t("common.sla")}</th></tr></thead>
@@ -2243,6 +2473,8 @@ interface WorkspaceData {
   support?: SupportTicketsPayload;
   withdrawals?: WithdrawalsPayload;
   kyc?: KycPayload;
+  operatorSubjects?: OperatorSubjectsPayload;
+  operatorQueue?: OperatorQueuePayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
   fraud?: FraudPayload;
@@ -2394,13 +2626,18 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, support, withdrawals, kyc, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
         hasCapability(session, "support:read") ? getSupportTickets() : Promise.resolve(undefined),
         hasCapability(session, "custody:read") ? getWithdrawals() : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
+        // Degrade-tolerant: a denied/unavailable/unconfigured operator read resolves
+        // to undefined and the views fall back to the demo rows instead of failing
+        // the whole workspace load.
+        hasCapability(session, "customers:read") ? getOperatorSubjects().catch(() => undefined) : Promise.resolve(undefined),
+        hasCapability(session, "kyc:read") ? getOperatorQueue().catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
         hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
@@ -2411,7 +2648,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, support, withdrawals, kyc, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -2671,7 +2908,7 @@ export function App() {
           </nav>
           {screen === "dashboard" && <DashboardView data={access.data.dashboard} />}
           {screen === "customers" && (
-            <CustomersView query={query} data={access.data.customers} />
+            <CustomersView query={query} data={access.data.customers} operatorSubjects={access.data.operatorSubjects} />
           )}
           {screen === "checks" && access.data.checks && (
             <ChecksView
@@ -2698,7 +2935,7 @@ export function App() {
             <SubjectsView session={access.data.session} onOpen={openEntityDetail} />
           )}
           {screen === "kyc" && access.data.kyc && (
-            <KycView query={query} data={access.data.kyc} />
+            <KycView query={query} data={access.data.kyc} operatorQueue={access.data.operatorQueue} />
           )}
           {screen === "aml" && access.data.aml && (
             <AmlView query={query} data={access.data.aml} />
