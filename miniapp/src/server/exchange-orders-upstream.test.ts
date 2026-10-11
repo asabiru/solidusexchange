@@ -43,6 +43,7 @@ function exchangeOrdersStub(
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
+    trades: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),

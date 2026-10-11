@@ -171,6 +171,15 @@ export const CAPABILITY_POLICY = Object.freeze([
     "D-007",
     "D-014"
   ]),
+  // The served trades collection read is KYC-gated like the exchange-orders
+  // read: trades are an asset/activity collection (the engine's recorded
+  // fills on the subject's own orders — the miniapp gates the trade
+  // history surface to verified sessions), not an onboarding or identity
+  // surface. The read is synthetic and carries no ledger effect (posting
+  // stays "none", execution stays "not_supported"), so it needs no open
+  // money-movement decisions: the unserved exchange-orders commands above
+  // keep the financial denial with their decision reasons.
+  entry("customer.trades.read", "read", true, []),
   // The served payments collection read is KYC-gated like the deposits,
   // withdrawals, wallets, notifications, quotes and exchange-orders reads:
   // payments are an asset/activity collection (the outbound fiat payment

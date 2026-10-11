@@ -529,6 +529,34 @@ export interface ExchangeOrdersView {
   orders: readonly ExchangeOrderView[];
 }
 
+/** Mirrors the customer-api trades contract: recorded engine fill legs. */
+export type TradeLiquidity = "maker" | "taker";
+
+export interface TradeView {
+  id: string;
+  orderId: string;
+  pair: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  side: QuoteSide;
+  liquidity: TradeLiquidity;
+  price: string;
+  quantity: string;
+  quoteAmount: string;
+  feeBps: number;
+  feeAmount: string;
+  totalQuoteAmount: string;
+  executedAt: number;
+  execution: "not_supported";
+  posting: "none";
+}
+
+export interface TradesView {
+  mode: "test";
+  kyc: KycStatus;
+  trades: readonly TradeView[];
+}
+
 /** Mirrors the customer-api payments contract outbound status set exactly. */
 export type PaymentStatus =
   | "created"

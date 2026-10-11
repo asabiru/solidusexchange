@@ -12,7 +12,9 @@ import { INSTRUMENTS } from "../../matching-core/src/instruments.mjs";
 // — the sweeps that rest, partially fill, exhaust or leave gaps), a fresh
 // `createMatchingEngine` replays it inside the call, and
 // `projectExchangeOrders` folds the journal and tracked-order state into
-// the contract rows — no row is hand-written fixture data. The engine
+// the contract rows — no row is hand-written fixture data — and
+// `projectExchangeTrades` folds the same journal's fill pairs into the
+// trades read's execution rows. The engine
 // trades in the provider-simulators market model
 // (packages/provider-simulators/src/quotes.mjs): the pair set, asset
 // scales, price scale, side semantics and fee bounds are the same, and the
@@ -78,6 +80,10 @@ export const ORDER_TYPES = Object.freeze(["market", "limit"]);
 // never appear — a fully executed order is excluded rather than shown,
 // since the contract's statuses never describe executed volume.
 export const ORDER_STATUSES = Object.freeze(["open", "cancelled", "expired", "rejected"]);
+// A trade's liquidity leg is read straight off the fill pair it came from:
+// the subject leg is "maker" when its order rested on the book and "taker"
+// when it swept.
+export const TRADE_LIQUIDITIES = Object.freeze(["maker", "taker"]);
 const PRICE_SCALE = 8;
 const MAX_BPS = 1000;
 
@@ -103,6 +109,26 @@ const ORDER_KEYS = Object.freeze([
   "posting"
 ]);
 const ORDER_ID_PATTERN = /^ord_[0-9a-f]{24}$/u;
+const TRADE_ID_PATTERN = /^trd_[0-9a-f]{24}$/u;
+const TRADES_VIEW_KEYS = Object.freeze(["mode", "trades"]);
+const TRADE_KEYS = Object.freeze([
+  "trade_id",
+  "order_id",
+  "pair",
+  "base_asset",
+  "quote_asset",
+  "side",
+  "liquidity",
+  "price",
+  "quantity",
+  "quote_amount",
+  "fee_bps",
+  "fee_amount",
+  "total_quote_amount",
+  "executed_at",
+  "execution",
+  "posting"
+]);
 const ISO_TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/u;
 const BASE_SECONDS = Math.trunc(Date.parse("2026-09-01T00:00:00.000Z") / 1_000);
 const STEP_SECONDS = 86_400;
@@ -175,6 +201,37 @@ for (const pairDef of ORDER_PAIRS) {
 /**
  * @typedef {object} ExchangeOrderDirectory
  * @property {(subject: string) => Promise<ExchangeOrdersView>} listFor
+ */
+
+/**
+ * @typedef {object} TradeView
+ * @property {string} trade_id
+ * @property {string} order_id
+ * @property {string} pair
+ * @property {string} base_asset
+ * @property {string} quote_asset
+ * @property {string} side
+ * @property {string} liquidity
+ * @property {string} price
+ * @property {string} quantity
+ * @property {string} quote_amount
+ * @property {number} fee_bps
+ * @property {string} fee_amount
+ * @property {string} total_quote_amount
+ * @property {string} executed_at
+ * @property {string} execution
+ * @property {string} posting
+ */
+
+/**
+ * @typedef {object} TradesView
+ * @property {string} mode
+ * @property {readonly TradeView[]} trades
+ */
+
+/**
+ * @typedef {object} TradeDirectory
+ * @property {(subject: string) => Promise<TradesView>} listFor
  */
 
 /**
@@ -497,6 +554,76 @@ export function exchangeOrderScenario(subject) {
     submit(limitInput(crossId, pairDef, crossSide, owner, priceText, quantityText));
   };
 
+  // Two opening acts run on an empty book, so no stale level can ever
+  // intercept them: they are the trades read's guaranteed rows. Both
+  // subject orders fill completely — a resting limit order swept by a
+  // counterparty market taker (a maker leg) and a subject market order
+  // that fills inside an exact-size counterparty level (a taker leg) —
+  // so, like the ghost acts, the orders projection drops them and every
+  // later act replays on the empty book they leave behind.
+  {
+    const salt = "trade:maker";
+    const pairDef = pairFor(salt);
+    const side = sideFor(salt);
+    const { price, baseAmount } = placedFields(subject, pairDef, salt);
+    const priceText = decimal(price, PRICE_SCALE);
+    const quantityText = decimal(baseAmount, pairDef.baseScale);
+    const orderId = idFor(salt);
+    advance(betweenActs(salt));
+    intent(limitIntent(orderId, pairDef, side, "limit", priceText, quantityText, feeFor(salt), false));
+    submit(limitInput(orderId, pairDef, side, owner, priceText, quantityText));
+    advance(gapFor(`${salt}:sweep`));
+    // A counterparty market order sized past the resting order's whole
+    // quantity fills the book's only opposite level completely, then its
+    // own remainder is rejected on the empty book.
+    submit(
+      marketInput(
+        counterpartyId(`${salt}:taker`),
+        pairDef,
+        OPPOSITE_SIDE[side],
+        counterpartyOwner(`${salt}:taker`),
+        decimal(baseAmount + baseAmount / 4n + 1n, pairDef.baseScale)
+      )
+    );
+  }
+  {
+    const salt = "trade:taker";
+    const pairDef = pairFor(salt);
+    const side = sideFor(salt);
+    const { price, baseAmount } = placedFields(subject, pairDef, salt);
+    const quantityText = decimal(baseAmount, pairDef.baseScale);
+    const orderId = idFor(salt);
+    const maker = placedFields(subject, pairDef, `cp:${salt}`);
+    advance(betweenActs(salt));
+    // A counterparty maker sized exactly to the subject's market sweep:
+    // the taker fills completely at that one level and both legs close,
+    // leaving the book empty again for the first ordinary act.
+    submit(
+      limitInput(
+        counterpartyId(`${salt}:maker`),
+        pairDef,
+        OPPOSITE_SIDE[side],
+        counterpartyOwner(`${salt}:maker`),
+        decimal(maker.price, PRICE_SCALE),
+        quantityText
+      )
+    );
+    advance(gapFor(`${salt}:sweep`));
+    intent(
+      limitIntent(
+        orderId,
+        pairDef,
+        side,
+        "market",
+        decimal(price, PRICE_SCALE),
+        quantityText,
+        feeFor(salt),
+        false
+      )
+    );
+    submit(marketInput(orderId, pairDef, side, owner, quantityText));
+  }
+
   const count = 1 + Number(units(subject, "count", 4n));
   const roleOffset = Number(units(subject, "role", BigInt(SCENARIO_ROLES.length)));
   for (let index = 0; index < count; index += 1) {
@@ -727,6 +854,96 @@ export function projectExchangeOrders(engine, intents) {
   return Object.freeze(rows);
 }
 
+/**
+ * Folds the same replay's journal into the subject's execution rows: a
+ * fill pair emits one event per leg, so a leg is one of the subject's
+ * trades exactly when its `order_id` belongs to a subject intent —
+ * counterparty-only fills and the counterparty side of a shared fill are
+ * never the subject's trades. `liquidity` reads straight off the pair's
+ * maker/taker ids, `price`/`quantity` come from the fill event (the maker
+ * price the legs actually crossed at, not the intent's estimate), and the
+ * derived amounts recompute with the intent's own fee through the same
+ * simulator arithmetic the orders view uses. Rows are emitted in journal
+ * (execution) order — the directory reverses for newest-first display.
+ *
+ * @param {ReturnType<typeof createMatchingEngine>} engine
+ * @param {readonly ScenarioOrderIntent[]} intents
+ * @returns {readonly TradeView[]}
+ */
+export function projectExchangeTrades(engine, intents) {
+  /** @type {Map<string, ScenarioOrderIntent>} */
+  const subjectOrders = new Map(intents.map((intent) => [intent.order_id, intent]));
+  /** @type {TradeView[]} */
+  const rows = [];
+  for (const event of engine.journal()) {
+    if (event.type !== "partially_filled" && event.type !== "filled") {
+      continue;
+    }
+    if (typeof event.order_id !== "string") {
+      continue;
+    }
+    const intent = subjectOrders.get(event.order_id);
+    if (intent === undefined) {
+      continue;
+    }
+    const fields = /** @type {Record<string, unknown>} */ (/** @type {unknown} */ (event));
+    const liquidity =
+      event.order_id === fields.maker_order_id
+        ? "maker"
+        : event.order_id === fields.taker_order_id
+          ? "taker"
+          : null;
+    const pairDef = ORDER_PAIRS.find((entry) => entry.pair === intent.pair);
+    if (
+      pairDef === undefined ||
+      liquidity === null ||
+      typeof fields.fill_id !== "string" ||
+      typeof fields.price !== "string" ||
+      typeof fields.quantity !== "string"
+    ) {
+      // Fill events always carry both leg ids, the maker price and the
+      // executed quantity on this engine; anything else is a scenario
+      // drift the view must not re-render as a trade.
+      continue;
+    }
+    const priceUnits = parseUnits(fields.price);
+    const quantityUnits = parseUnits(fields.quantity);
+    const { quoteUnits, fee, total } = computeAmounts(
+      pairDef,
+      intent.side,
+      quantityUnits,
+      priceUnits,
+      intent.fee_bps
+    );
+    rows.push(
+      Object.freeze({
+        // The engine's fill_id counter restarts on every replay, so it is
+        // identical across subjects — the row id is derived like every
+        // other view's: a subject-scoped digest on the order id plus the
+        // fill it executed in (unique within a subject's list because the
+        // self-trade policy keeps a subject off both legs of one fill).
+        trade_id: `trd_${digest(intent.order_id, `trade:${fields.fill_id}`).toString("hex").slice(0, 24)}`,
+        order_id: intent.order_id,
+        pair: intent.pair,
+        base_asset: pairDef.base,
+        quote_asset: pairDef.quote,
+        side: intent.side,
+        liquidity,
+        price: decimal(priceUnits, PRICE_SCALE),
+        quantity: decimal(quantityUnits, pairDef.baseScale),
+        quote_amount: decimal(quoteUnits, pairDef.quoteScale),
+        fee_bps: intent.fee_bps,
+        fee_amount: decimal(fee, pairDef.quoteScale),
+        total_quote_amount: decimal(total, pairDef.quoteScale),
+        executed_at: msIso(event.at),
+        execution: "not_supported",
+        posting: "none"
+      })
+    );
+  }
+  return Object.freeze(rows);
+}
+
 /** @param {unknown} value */
 function isIsoTimestamp(value) {
   return (
@@ -820,6 +1037,85 @@ function validOrder(order) {
   );
 }
 
+/** @param {unknown} trade */
+function validTrade(trade) {
+  if (trade === null || typeof trade !== "object" || Array.isArray(trade)) {
+    return false;
+  }
+  const candidate = /** @type {TradeView} */ (trade);
+  if (JSON.stringify(Object.keys(trade).sort()) !== JSON.stringify([...TRADE_KEYS].sort())) {
+    return false;
+  }
+  const pairDef = ORDER_PAIRS.find((entry) => entry.pair === candidate.pair);
+  if (
+    pairDef === undefined ||
+    candidate.base_asset !== pairDef.base ||
+    candidate.quote_asset !== pairDef.quote
+  ) {
+    return false;
+  }
+  if (
+    !ORDER_SIDES.includes(candidate.side) ||
+    !TRADE_LIQUIDITIES.includes(candidate.liquidity) ||
+    candidate.execution !== "not_supported" ||
+    candidate.posting !== "none"
+  ) {
+    return false;
+  }
+  if (
+    !Number.isSafeInteger(candidate.fee_bps) ||
+    candidate.fee_bps < 0 ||
+    candidate.fee_bps > MAX_BPS
+  ) {
+    return false;
+  }
+  if (
+    !TRADE_ID_PATTERN.test(candidate.trade_id) ||
+    !ORDER_ID_PATTERN.test(candidate.order_id) ||
+    !isScaledDecimal(candidate.price, PRICE_SCALE) ||
+    !isScaledDecimal(candidate.quantity, pairDef.baseScale) ||
+    !isScaledDecimal(candidate.quote_amount, pairDef.quoteScale) ||
+    !isScaledDecimal(candidate.fee_amount, pairDef.quoteScale) ||
+    !isScaledDecimal(candidate.total_quote_amount, pairDef.quoteScale)
+  ) {
+    return false;
+  }
+  if (!isIsoTimestamp(candidate.executed_at)) {
+    return false;
+  }
+  // Fail closed unless every derived amount recomputes exactly like the
+  // simulator's quote arithmetic at the fill's fixed price.
+  const recomputed = computeAmounts(
+    pairDef,
+    candidate.side,
+    parseUnits(candidate.quantity),
+    parseUnits(candidate.price),
+    candidate.fee_bps
+  );
+  return (
+    decimal(recomputed.quoteUnits, pairDef.quoteScale) === candidate.quote_amount &&
+    decimal(recomputed.fee, pairDef.quoteScale) === candidate.fee_amount &&
+    decimal(recomputed.total, pairDef.quoteScale) === candidate.total_quote_amount &&
+    recomputed.quoteUnits > 0n &&
+    recomputed.total > 0n
+  );
+}
+
+/** @param {unknown} view */
+export function validTradesView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {TradesView} */ (view);
+  if (JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...TRADES_VIEW_KEYS].sort())) {
+    return false;
+  }
+  if (candidate.mode !== "test" || !Array.isArray(candidate.trades)) {
+    return false;
+  }
+  return candidate.trades.every(validTrade);
+}
+
 /** @param {unknown} view */
 export function validExchangeOrdersView(view) {
   if (view === null || typeof view !== "object" || Array.isArray(view)) {
@@ -846,6 +1142,21 @@ export function createSyntheticExchangeOrderDirectory() {
       const engine = replayExchangeOrderScenario(scenario);
       const orders = Object.freeze(projectExchangeOrders(engine, scenario.intents).slice().reverse());
       return Object.freeze({ mode: "test", orders });
+    }
+  });
+}
+
+/** @returns {TradeDirectory} */
+export function createSyntheticTradeDirectory() {
+  // Same request-scoped invariant as the orders directory: each read
+  // rebuilds the subject's scenario on a fresh engine and projects its
+  // fills — nothing is retained across subjects or calls.
+  return Object.freeze({
+    async listFor(subject) {
+      const scenario = exchangeOrderScenario(subject);
+      const engine = replayExchangeOrderScenario(scenario);
+      const trades = Object.freeze(projectExchangeTrades(engine, scenario.intents).slice().reverse());
+      return Object.freeze({ mode: "test", trades });
     }
   });
 }
