@@ -10,6 +10,7 @@ import {
   PLATFORMS
 } from "./contract.mjs";
 import { validActivityView } from "./activity.mjs";
+import { validOperationsView, validOperationView } from "./operations.mjs";
 import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
@@ -61,6 +62,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
  * @property {import("./checks.mjs").CheckDirectory} checkDirectory
  * @property {import("./activity.mjs").ActivityDirectory} activityDirectory
+ * @property {import("./operations.mjs").OperationDirectory} operationDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
@@ -102,6 +104,62 @@ export const SECURITY_HEADERS = Object.freeze({
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY"
 });
+const PATH_PARAMETER_PATTERN = /^[a-z][a-z0-9_-]{2,127}$/u;
+
+/**
+ * Route matching mirrors the declared contract surface exactly: literal
+ * paths compare by string equality; templated paths ({operationId}) match
+ * segment-wise and capture values only when every captured segment
+ * satisfies the canonical path-parameter pattern. Anything else falls
+ * through to the pinned 404.
+ *
+ * @param {string | undefined} method
+ * @param {string | undefined} url
+ * @returns {{ operation: Operation, parameters: ReadonlyMap<string, string> } | null}
+ */
+function matchOperation(method, url) {
+  for (const operation of OPERATIONS) {
+    if (operation.method !== method) {
+      continue;
+    }
+    if (operation.path === url) {
+      return { operation, parameters: new Map() };
+    }
+    if (!operation.path.includes("{") || url === undefined) {
+      continue;
+    }
+    const templateSegments = operation.path.split("/");
+    const urlSegments = url.split("/");
+    if (templateSegments.length !== urlSegments.length) {
+      continue;
+    }
+    /** @type {Map<string, string>} */
+    const parameters = new Map();
+    let matched = true;
+    for (let index = 0; index < templateSegments.length; index += 1) {
+      const segment = templateSegments[index];
+      const placeholder = /^\{([^{}]+)\}$/u.exec(segment);
+      if (placeholder === null) {
+        if (segment !== urlSegments[index]) {
+          matched = false;
+          break;
+        }
+        continue;
+      }
+      const value = urlSegments[index];
+      if (!PATH_PARAMETER_PATTERN.test(value)) {
+        matched = false;
+        break;
+      }
+      parameters.set(placeholder[1], value);
+    }
+    if (matched) {
+      return { operation, parameters };
+    }
+  }
+  return null;
+}
+
 const BASE_HEADERS = Object.freeze({
   ...SECURITY_HEADERS,
   "content-type": "application/json; charset=utf-8"
@@ -247,6 +305,7 @@ export function createCustomerApiHandler({
   cardDirectory,
   checkDirectory,
   activityDirectory,
+  operationDirectory,
   operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
@@ -306,6 +365,9 @@ export function createCustomerApiHandler({
   if (typeof activityDirectory?.viewFor !== "function") {
     throw new Error("An activity directory is required");
   }
+  if (typeof operationDirectory?.viewFor !== "function" || typeof operationDirectory?.operationFor !== "function") {
+    throw new Error("An operation directory is required");
+  }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
   }
@@ -316,8 +378,9 @@ export function createCustomerApiHandler({
    * @param {Headers} headers
    * @param {string} requestId
    * @param {Operation} operation
+   * @param {ReadonlyMap<string, string>} parameters
    */
-  async function handleOperation(request, response, headers, requestId, operation) {
+  async function handleOperation(request, response, headers, requestId, operation, parameters) {
     /**
      * @param {number} status
      * @param {ErrorCode} code
@@ -662,6 +725,45 @@ export function createCustomerApiHandler({
       send(response, 200, { ...view }, requestId);
       return;
     }
+    if (operation.operationId === "getCustomerOperations") {
+      // customer.operations.read is KYC-gated like the other
+      // asset/activity collections: the feed is a derived-only projection
+      // over the subject's own records — it can never mint posting state
+      // (posting stays "none"), so unverified and pending subjects are
+      // denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.operations.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const operationsView = await operationDirectory.viewFor(principal.subject);
+      if (!validOperationsView(operationsView)) {
+        throw new Error("Operation directory returned an invalid view");
+      }
+      send(response, 200, { ...operationsView }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerOperation") {
+      // Same capability as the collection: a member read can never be
+      // wider than the list it belongs to. An id the subject does not own
+      // (or a well-formed id that was never minted) fails closed as the
+      // pinned 404 envelope — the synthetic directory is the only source
+      // of truth and denies by default.
+      if (!evaluation.granted.includes("customer.operations.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const operationId = parameters.get("operationId") ?? "";
+      const item = await operationDirectory.operationFor(principal.subject, operationId);
+      if (item === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validOperationView(item)) {
+        throw new Error("Operation directory returned an invalid operation");
+      }
+      send(response, 200, { ...item }, requestId);
+      return;
+    }
     if (operation.operationId === "getCustomerWallets") {
       if (!evaluation.granted.includes("customer.wallets.read")) {
         fail(403, "CAPABILITY_DENIED");
@@ -743,14 +845,12 @@ export function createCustomerApiHandler({
         handleMetrics(request, response, headers, requestId);
         return;
       }
-      const operation = OPERATIONS.find(
-        (candidate) => candidate.method === request.method && candidate.path === request.url
-      );
-      if (!operation) {
+      const match = matchOperation(request.method, request.url);
+      if (!match) {
         send(response, 404, errorBody("CAPABILITY_DENIED", requestId), requestId);
         return;
       }
-      await handleOperation(request, response, headers, requestId, operation);
+      await handleOperation(request, response, headers, requestId, match.operation, match.parameters);
     } catch {
       if (!response.headersSent) {
         send(response, 500, errorBody("INTERNAL_ERROR", requestId), requestId, {

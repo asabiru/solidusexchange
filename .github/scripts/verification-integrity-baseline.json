@@ -18,7 +18,7 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/withdrawals-upstream.test.js .test-dist/server/quotes-upstream.test.js .test-dist/server/exchange-orders-upstream.test.js .test-dist/server/payments-upstream.test.js .test-dist/server/cards-upstream.test.js .test-dist/server/checks-upstream.test.js .test-dist/server/activity-upstream.test.js .test-dist/server/sessions-upstream.test.js .test-dist/server/account-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/withdrawals-upstream.test.js .test-dist/server/quotes-upstream.test.js .test-dist/server/exchange-orders-upstream.test.js .test-dist/server/payments-upstream.test.js .test-dist/server/cards-upstream.test.js .test-dist/server/checks-upstream.test.js .test-dist/server/activity-upstream.test.js .test-dist/server/operations-upstream.test.js .test-dist/server/sessions-upstream.test.js .test-dist/server/account-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -651,7 +651,7 @@
       "minCases": 10
     },
     "miniapp/src/server/kyc-status-upstream.test.ts": {
-      "minLines": 252,
+      "minLines": 254,
       "minCases": 8
     },
     "miniapp/src/server/kyc.test.ts": {
@@ -663,7 +663,7 @@
       "minCases": 4
     },
     "miniapp/src/server/notifications-upstream.test.ts": {
-      "minLines": 247,
+      "minLines": 249,
       "minCases": 7
     },
     "miniapp/src/server/notifications.test.ts": {
@@ -675,7 +675,7 @@
       "minCases": 13
     },
     "miniapp/src/server/profile-upstream.test.ts": {
-      "minLines": 236,
+      "minLines": 238,
       "minCases": 7
     },
     "miniapp/src/server/provider-quotes.test.ts": {
@@ -687,7 +687,7 @@
       "minCases": 8
     },
     "miniapp/src/server/security-headers.test.ts": {
-      "minLines": 496,
+      "minLines": 498,
       "minCases": 12
     },
     "miniapp/src/server/server.test.ts": {
@@ -707,7 +707,7 @@
       "minCases": 15
     },
     "miniapp/src/server/wallet-routes.test.ts": {
-      "minLines": 211,
+      "minLines": 213,
       "minCases": 7
     },
     "miniapp/src/shared/decimal.test.ts": {
@@ -793,15 +793,15 @@
       "minCases": 11
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
-      "minLines": 231,
+      "minLines": 236,
       "minCases": 8
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 541,
-      "minCases": 30
+      "minLines": 584,
+      "minCases": 32
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 274,
+      "minLines": 275,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -816,7 +816,8 @@
       "minCases": 10
     },
     "packages/customer-api/tests/http-client.mjs": {
-      "minLines": 183
+      "minLines": 221,
+      "minCases": 1
     },
     "packages/customer-api/tests/kyc.test.mjs": {
       "minLines": 281,
@@ -851,7 +852,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
-      "minLines": 131,
+      "minLines": 133,
       "minCases": 6
     },
     "packages/customer-api/tests/support.test.mjs": {
@@ -867,15 +868,15 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 740,
-      "minCases": 23
+      "minLines": 752,
+      "minCases": 24
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 478,
+      "minLines": 487,
       "minCases": 5
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 1729,
+      "minLines": 1792,
       "minCases": 21
     },
     "packages/e2e-dev/tests/stack.mjs": {
@@ -1112,7 +1113,7 @@
       "minLines": 13
     },
     "miniapp/src/server/support-requests-upstream.test.ts": {
-      "minLines": 261,
+      "minLines": 263,
       "minCases": 7
     },
     "miniapp/src/app/server-fields.test.ts": {
@@ -1120,7 +1121,7 @@
       "minCases": 28
     },
     "miniapp/src/server/deposits-upstream.test.ts": {
-      "minLines": 263,
+      "minLines": 265,
       "minCases": 7
     },
     "packages/customer-api/tests/withdrawals.test.mjs": {
@@ -1132,11 +1133,11 @@
       "minCases": 8
     },
     "miniapp/src/server/withdrawals-upstream.test.ts": {
-      "minLines": 286,
+      "minLines": 288,
       "minCases": 7
     },
     "miniapp/src/server/quotes-upstream.test.ts": {
-      "minLines": 302,
+      "minLines": 305,
       "minCases": 7
     },
     "packages/customer-api/tests/exchange-orders.test.mjs": {
@@ -1148,11 +1149,11 @@
       "minCases": 10
     },
     "miniapp/src/server/exchange-orders-upstream.test.ts": {
-      "minLines": 296,
+      "minLines": 298,
       "minCases": 7
     },
     "miniapp/src/server/payments-upstream.test.ts": {
-      "minLines": 287,
+      "minLines": 289,
       "minCases": 7
     },
     "packages/customer-api/tests/cards.test.mjs": {
@@ -1160,7 +1161,7 @@
       "minCases": 10
     },
     "miniapp/src/server/cards-upstream.test.ts": {
-      "minLines": 283,
+      "minLines": 285,
       "minCases": 7
     },
     "packages/customer-api/tests/auth-sessions.test.mjs": {
@@ -1172,7 +1173,7 @@
       "minCases": 9
     },
     "miniapp/src/server/sessions-upstream.test.ts": {
-      "minLines": 270,
+      "minLines": 272,
       "minCases": 8
     },
     "packages/matching-core/tests/book.test.mjs": {
@@ -1212,7 +1213,7 @@
       "minCases": 12
     },
     "miniapp/src/server/account-upstream.test.ts": {
-      "minLines": 266,
+      "minLines": 268,
       "minCases": 7
     },
     "packages/customer-api/tests/operator.test.mjs": {
@@ -1240,7 +1241,7 @@
       "minCases": 15
     },
     "miniapp/src/server/checks-upstream.test.ts": {
-      "minLines": 310,
+      "minLines": 312,
       "minCases": 7
     },
     "packages/customer-api/tests/activity.test.mjs": {
@@ -1248,7 +1249,7 @@
       "minCases": 4
     },
     "miniapp/src/server/activity-upstream.test.ts": {
-      "minLines": 256,
+      "minLines": 258,
       "minCases": 7
     },
     "packages/matching-core/tests/audit.test.mjs": {
@@ -1273,6 +1274,14 @@
     },
     "packages/customer-api/tests/postgres-store.sh": {
       "minLines": 32
+    },
+    "packages/customer-api/tests/operations.test.mjs": {
+      "minLines": 142,
+      "minCases": 5
+    },
+    "miniapp/src/server/operations-upstream.test.ts": {
+      "minLines": 314,
+      "minCases": 10
     }
   }
 }
