@@ -30,5 +30,14 @@ export {
   SIDES,
 } from "./events.mjs";
 export { INSTRUMENTS, instrumentIndex, validInstrumentDefinition } from "./instruments.mjs";
-export { replayMatchingEngine, restoreMatchingEngine } from "./replay.mjs";
+export {
+  createMemoryJournalStore,
+  resolveJournalStoreEnv,
+  StoreConfigError,
+  StoreError,
+  StoreUnavailableError,
+  validJournalStore,
+} from "./journal-store.mjs";
+export { createPostgresJournalStore } from "./postgres-journal-store.mjs";
+export { replayMatchingEngine, replayMatchingJournalStore, restoreMatchingEngine } from "./replay.mjs";
 export { snapshotPlainData } from "./snapshot.mjs";
