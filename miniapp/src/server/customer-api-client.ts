@@ -223,6 +223,43 @@ export type CustomerApiTrades =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/**
+ * The markets read is KYC-gated like quotes and trades, so a 403 is a
+ * real outcome: "denied" lets the BFF degrade to the gated empty view.
+ */
+export interface CustomerApiMarketLevel {
+  price: string;
+  quantity: string;
+  order_count: number;
+}
+
+export interface CustomerApiMarketLastTrade {
+  price: string;
+  quantity: string;
+  executed_at: string;
+}
+
+export interface CustomerApiMarket {
+  instrument: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  best_bid: CustomerApiMarketLevel | null;
+  best_ask: CustomerApiMarketLevel | null;
+  last_trade: CustomerApiMarketLastTrade | null;
+  spread_bps: number | null;
+  base_scale: number;
+  quote_scale: number;
+  price_scale: number;
+  as_of: string;
+  posting: "none";
+}
+
+export type CustomerApiMarkets =
+  | { status: "ok"; markets: readonly CustomerApiMarket[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiPayment {
   payment_id: string;
   asset: "RUB";
@@ -630,6 +667,7 @@ export interface CustomerApiClient {
   quotes(bffSubject: string, nowMs: number): Promise<CustomerApiQuotes>;
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
   trades(bffSubject: string, nowMs: number): Promise<CustomerApiTrades>;
+  markets(bffSubject: string, nowMs: number): Promise<CustomerApiMarkets>;
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
@@ -1216,6 +1254,142 @@ function parseTradesView(value: unknown): readonly CustomerApiTrade[] | undefine
     }));
   }
   return Object.freeze(trades);
+}
+
+const marketKeys = [
+  "instrument",
+  "base_asset",
+  "quote_asset",
+  "best_bid",
+  "best_ask",
+  "last_trade",
+  "spread_bps",
+  "base_scale",
+  "quote_scale",
+  "price_scale",
+  "as_of",
+  "posting"
+] as const;
+
+const marketLevelKeys = ["price", "quantity", "order_count"] as const;
+const marketLastTradeKeys = ["price", "quantity", "executed_at"] as const;
+
+function parseMarketLevel(value: unknown, pairDef: { baseScale: number }): CustomerApiMarketLevel | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, marketLevelKeys)
+    || !isScaledDecimal(value.price, exchangeOrderPriceScale)
+    || toUnits(value.price, exchangeOrderPriceScale) <= 0n
+    || !isScaledDecimal(value.quantity, pairDef.baseScale)
+    || toUnits(value.quantity, pairDef.baseScale) <= 0n
+    || typeof value.order_count !== "number"
+    || !Number.isSafeInteger(value.order_count)
+    || value.order_count < 1
+  ) {
+    return undefined;
+  }
+  return Object.freeze({ price: value.price, quantity: value.quantity, order_count: value.order_count });
+}
+
+function parseMarketsView(value: unknown): readonly CustomerApiMarket[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "markets"])
+    || value.mode !== "test"
+    || !Array.isArray(value.markets)
+  ) {
+    return undefined;
+  }
+  const markets: CustomerApiMarket[] = [];
+  const seen = new Set<string>();
+  for (const entry of value.markets) {
+    const pairDef = isRecord(entry) ? contractQuotePair(entry.instrument) : undefined;
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, marketKeys)
+      || pairDef === undefined
+      || seen.has(pairDef.pair)
+      || entry.base_asset !== pairDef.base
+      || entry.quote_asset !== pairDef.quote
+      || entry.base_scale !== pairDef.baseScale
+      || entry.quote_scale !== pairDef.quoteScale
+      || entry.price_scale !== exchangeOrderPriceScale
+      || !isIsoTimestamp(entry.as_of)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    seen.add(pairDef.pair);
+    const bestBid = parseMarketLevel(entry.best_bid, pairDef);
+    const bestAsk = parseMarketLevel(entry.best_ask, pairDef);
+    if (bestBid === undefined || bestAsk === undefined) {
+      return undefined;
+    }
+    // Fail closed unless spread_bps recomputes exactly like the upstream
+    // contract validator requires — the relative spread of the two top
+    // levels in integer basis points of the mid, null exactly when a side
+    // is empty (the book never rests crossed).
+    if (bestBid !== null && bestAsk !== null) {
+      const bidUnits = toUnits(bestBid.price, exchangeOrderPriceScale);
+      const askUnits = toUnits(bestAsk.price, exchangeOrderPriceScale);
+      const numerator = (askUnits - bidUnits) * 20_000n;
+      const divisor = askUnits + bidUnits;
+      const quotient = numerator / divisor;
+      // Half-even on the positive fraction, like the upstream validator:
+      // ties break toward the even quotient.
+      const doubled = (numerator - quotient * divisor) * 2n;
+      const recomputed =
+        doubled > divisor || (doubled === divisor && quotient % 2n !== 0n) ? quotient + 1n : quotient;
+      if (
+        bidUnits >= askUnits
+        || typeof entry.spread_bps !== "number"
+        || !Number.isSafeInteger(entry.spread_bps)
+        || entry.spread_bps < 0
+        || BigInt(entry.spread_bps) !== recomputed
+      ) {
+        return undefined;
+      }
+    } else if (entry.spread_bps !== null) {
+      return undefined;
+    }
+    let lastTrade: CustomerApiMarketLastTrade | null = null;
+    if (entry.last_trade !== null) {
+      if (
+        !isRecord(entry.last_trade)
+        || !hasExactKeys(entry.last_trade, marketLastTradeKeys)
+        || !isScaledDecimal(entry.last_trade.price, exchangeOrderPriceScale)
+        || toUnits(entry.last_trade.price, exchangeOrderPriceScale) <= 0n
+        || !isScaledDecimal(entry.last_trade.quantity, pairDef.baseScale)
+        || toUnits(entry.last_trade.quantity, pairDef.baseScale) <= 0n
+        || !isIsoTimestamp(entry.last_trade.executed_at)
+      ) {
+        return undefined;
+      }
+      lastTrade = Object.freeze({
+        price: entry.last_trade.price,
+        quantity: entry.last_trade.quantity,
+        executed_at: entry.last_trade.executed_at
+      });
+    }
+    markets.push(Object.freeze({
+      instrument: pairDef.pair,
+      base_asset: pairDef.base,
+      quote_asset: pairDef.quote,
+      best_bid: bestBid,
+      best_ask: bestAsk,
+      last_trade: lastTrade,
+      spread_bps: entry.spread_bps as number | null,
+      base_scale: pairDef.baseScale,
+      quote_scale: pairDef.quoteScale,
+      price_scale: exchangeOrderPriceScale,
+      as_of: entry.as_of,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(markets);
 }
 
 const paymentKeys = [
@@ -2454,6 +2628,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       quotes: async (): Promise<CustomerApiQuotes> => ({ status: "not-configured" }),
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
       trades: async (): Promise<CustomerApiTrades> => ({ status: "not-configured" }),
+      markets: async (): Promise<CustomerApiMarkets> => ({ status: "not-configured" }),
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
@@ -2635,6 +2810,25 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       const body = await get("/api/v1/customer/trades", token, nowMs);
       const view = parseTradesView(body);
       return view === undefined ? { status: "unavailable" } : { status: "ok", trades: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function markets(bffSubject: string, nowMs: number): Promise<CustomerApiMarkets> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/markets", token, nowMs);
+      const view = parseMarketsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", markets: view };
     } catch (error) {
       if (error instanceof CustomerApiHttpError && error.status === 403) {
         return { status: "denied" };
@@ -2953,5 +3147,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, trades, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, trades, markets, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
 }

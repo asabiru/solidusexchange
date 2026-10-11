@@ -335,6 +335,12 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(trades.mode, "test");
     assert.equal(trades.kyc, "kyc-gated");
     assert.equal(trades.trades.length, 0);
+    // customer.markets.read carries the same upstream KYC gate, so
+    // /bff/markets degrades in place to the emptied gated list too.
+    const markets = await getMiniapp("/bff/markets", cookie);
+    assert.equal(markets.mode, "test");
+    assert.equal(markets.kyc, "kyc-gated");
+    assert.equal(markets.markets.length, 0);
     // customer.payments.read carries the same upstream KYC gate, so
     // /bff/payments degrades in place to the emptied gated list too.
     const payments = await getMiniapp("/bff/payments", cookie);

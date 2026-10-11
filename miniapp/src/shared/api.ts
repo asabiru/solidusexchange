@@ -557,6 +557,40 @@ export interface TradesView {
   trades: readonly TradeView[];
 }
 
+/** Mirrors the customer-api markets contract: instrument-scoped book state. */
+export interface MarketLevelView {
+  price: string;
+  quantity: string;
+  orderCount: number;
+}
+
+export interface MarketLastTradeView {
+  price: string;
+  quantity: string;
+  executedAt: number;
+}
+
+export interface MarketView {
+  instrument: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  bestBid: MarketLevelView | null;
+  bestAsk: MarketLevelView | null;
+  lastTrade: MarketLastTradeView | null;
+  spreadBps: number | null;
+  baseScale: number;
+  quoteScale: number;
+  priceScale: number;
+  asOf: number;
+  posting: "none";
+}
+
+export interface MarketsView {
+  mode: "test";
+  kyc: KycStatus;
+  markets: readonly MarketView[];
+}
+
 /** Mirrors the customer-api payments contract outbound status set exactly. */
 export type PaymentStatus =
   | "created"

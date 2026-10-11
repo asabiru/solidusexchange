@@ -70,6 +70,7 @@ import {
 import { contractCardsView, cardsView } from "./cards.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
+import { contractMarketsView, marketsView } from "./markets.js";
 import { contractTradesView, tradesView } from "./trades.js";
 import { contractOperationDetail, contractOperationsView } from "./operations.js";
 import { contractPaymentsView, paymentsView } from "./payments.js";
@@ -104,6 +105,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/quotes/preview" },
   { method: "GET", path: "/bff/exchange-orders" },
   { method: "GET", path: "/bff/trades" },
+  { method: "GET", path: "/bff/markets" },
   { method: "GET", path: "/bff/payments" },
   { method: "GET", path: "/bff/cards" },
   { method: "GET", path: "/bff/checks" },
@@ -1212,6 +1214,29 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "trades_unavailable" });
+      return;
+    }
+    if (path === "/bff/markets") {
+      // Same gating as /bff/trades: the local KYC gate and the standalone
+      // (unconfigured) dev BFF keep the synthetic markets view; only a
+      // verified session with customer-api access reads the contract
+      // view. An upstream refusal degrades to the same emptied view a
+      // gated session sees (in place); any other upstream failure answers
+      // the sibling *_unavailable error shape.
+      if (session.kyc !== "verified" || !customerApi.configured) {
+        json(response, 200, marketsView(session.kyc));
+        return;
+      }
+      const upstream = await customerApi.markets(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractMarketsView(upstream.markets, session.kyc));
+        return;
+      }
+      if (upstream.status === "denied") {
+        json(response, 200, marketsView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "markets_unavailable" });
       return;
     }
     if (path === "/bff/payments") {

@@ -17,7 +17,7 @@ import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
 import { validDepositsView } from "./deposits.mjs";
-import { validExchangeOrdersView, validTradesView } from "./exchange-orders.mjs";
+import { validExchangeOrdersView, validMarketsView, validTradesView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
 import { validPaymentsView } from "./payments.mjs";
 import {
@@ -68,6 +68,7 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./quotes.mjs").QuoteDirectory} quoteDirectory
  * @property {import("./exchange-orders.mjs").ExchangeOrderDirectory} exchangeOrderDirectory
  * @property {import("./exchange-orders.mjs").TradeDirectory} tradeDirectory
+ * @property {import("./exchange-orders.mjs").MarketDirectory} marketDirectory
  * @property {import("./payments.mjs").PaymentDirectory} paymentDirectory
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
  * @property {import("./checks.mjs").CheckDirectory} checkDirectory
@@ -315,6 +316,7 @@ export function createCustomerApiHandler({
   quoteDirectory,
   exchangeOrderDirectory,
   tradeDirectory,
+  marketDirectory,
   paymentDirectory,
   cardDirectory,
   checkDirectory,
@@ -372,6 +374,9 @@ export function createCustomerApiHandler({
   }
   if (typeof tradeDirectory?.listFor !== "function") {
     throw new Error("A trade directory is required");
+  }
+  if (typeof marketDirectory?.listFor !== "function") {
+    throw new Error("A market directory is required");
   }
   if (typeof paymentDirectory?.listFor !== "function") {
     throw new Error("A payment directory is required");
@@ -747,6 +752,25 @@ export function createCustomerApiHandler({
       const view = await tradeDirectory.listFor(principal.subject);
       if (!validTradesView(view)) {
         throw new Error("Trade directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerMarkets") {
+      // customer.markets.read is KYC-gated like
+      // deposits/withdrawals/quotes/exchange-orders/trades: market data is
+      // an asset/activity surface (the instrument-scoped state of the
+      // subject's own synthetic book from the same replay), so unverified
+      // and pending subjects are denied with the 403 envelope. The payload
+      // is synthetic and execution-free (posting "none") — it authorizes
+      // nothing.
+      if (!evaluation.granted.includes("customer.markets.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await marketDirectory.listFor(principal.subject);
+      if (!validMarketsView(view)) {
+        throw new Error("Market directory returned an invalid view");
       }
       send(response, 200, { ...view }, requestId);
       return;

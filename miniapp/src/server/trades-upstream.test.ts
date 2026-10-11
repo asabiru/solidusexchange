@@ -45,6 +45,7 @@ function tradesStub(
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
+    markets: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),

@@ -876,6 +876,77 @@ const pinnedResponseSchemas = {
       posting: { const: "none" }
     }
   },
+  MarketsView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "markets"],
+    properties: {
+      mode: { const: "test" },
+      markets: {
+        type: "array",
+        items: { $ref: "#/components/schemas/MarketView" }
+      }
+    }
+  },
+  MarketView: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "instrument",
+      "base_asset",
+      "quote_asset",
+      "best_bid",
+      "best_ask",
+      "last_trade",
+      "spread_bps",
+      "base_scale",
+      "quote_scale",
+      "price_scale",
+      "as_of",
+      "posting"
+    ],
+    properties: {
+      instrument: { type: "string", enum: ["USDT/RUB", "TON/RUB", "TON/USDT"] },
+      base_asset: { $ref: "#/$defs/assetCode" },
+      quote_asset: { $ref: "#/$defs/assetCode" },
+      best_bid: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["price", "quantity", "order_count"],
+        properties: {
+          price: { $ref: "#/$defs/decimalAmount" },
+          quantity: { $ref: "#/$defs/decimalAmount" },
+          order_count: { type: "integer", minimum: 1 }
+        }
+      },
+      best_ask: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["price", "quantity", "order_count"],
+        properties: {
+          price: { $ref: "#/$defs/decimalAmount" },
+          quantity: { $ref: "#/$defs/decimalAmount" },
+          order_count: { type: "integer", minimum: 1 }
+        }
+      },
+      last_trade: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["price", "quantity", "executed_at"],
+        properties: {
+          price: { $ref: "#/$defs/decimalAmount" },
+          quantity: { $ref: "#/$defs/decimalAmount" },
+          executed_at: { type: "string", format: "date-time" }
+        }
+      },
+      spread_bps: { type: ["integer", "null"], minimum: 0 },
+      base_scale: { type: "integer", minimum: 0, maximum: 18 },
+      quote_scale: { type: "integer", minimum: 0, maximum: 18 },
+      price_scale: { type: "integer", minimum: 0, maximum: 18 },
+      as_of: { type: "string", format: "date-time" },
+      posting: { const: "none" }
+    }
+  },
   PaymentsView: {
     type: "object",
     additionalProperties: false,
@@ -1525,7 +1596,8 @@ function checkOpenApi() {
     ["getCustomerDepositAddresses", "/api/v1/customer/deposit-addresses"],
     ["getCustomerAddressScreenings", "/api/v1/customer/address-screenings"],
     ["getCustomerAddressScreening", "/api/v1/customer/address-screenings/{screeningId}"],
-    ["getCustomerTrades", "/api/v1/customer/trades"]
+    ["getCustomerTrades", "/api/v1/customer/trades"],
+    ["getCustomerMarkets", "/api/v1/customer/markets"]
   ]);
   const commandOperations = new Set([
     "previewCustomerCheck",
@@ -1582,7 +1654,8 @@ function checkOpenApi() {
     ["getCustomerDepositAddresses", gatedReadStatuses],
     ["getCustomerAddressScreenings", gatedReadStatuses],
     ["getCustomerAddressScreening", ["200", "401", "403", "404", "429", "500"]],
-    ["getCustomerTrades", gatedReadStatuses]
+    ["getCustomerTrades", gatedReadStatuses],
+    ["getCustomerMarkets", gatedReadStatuses]
   ]);
   const successSchemas = new Map([
     ["getApiMetadata", "#/components/schemas/ApiMetadata"],
@@ -1616,7 +1689,8 @@ function checkOpenApi() {
     ["getCustomerDepositAddresses", "#/components/schemas/DepositAddressesView"],
     ["getCustomerAddressScreenings", "#/components/schemas/AddressScreeningsView"],
     ["getCustomerAddressScreening", "#/components/schemas/AddressScreeningView"],
-    ["getCustomerTrades", "#/components/schemas/TradesView"]
+    ["getCustomerTrades", "#/components/schemas/TradesView"],
+    ["getCustomerMarkets", "#/components/schemas/MarketsView"]
   ]);
   const allowedPathItemFields = new Set([...methodNames, "parameters"]);
   const allowedOperationFields = new Set([

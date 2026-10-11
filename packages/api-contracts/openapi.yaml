@@ -695,6 +695,60 @@
         }
       }
     },
+    "/api/v1/customer/markets": {
+      "get": {
+        "operationId": "getCustomerMarkets",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Read the synthetic market data of the authenticated customer's order book",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Instrument-scoped market data in test mode mirroring the subject's synthetic book",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/customer/payments": {
       "get": {
         "operationId": "getCustomerPayments",
@@ -3247,6 +3301,160 @@
           },
           "execution": {
             "const": "not_supported"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "MarketsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "markets"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "markets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MarketView"
+            }
+          }
+        }
+      },
+      "MarketView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "instrument",
+          "base_asset",
+          "quote_asset",
+          "best_bid",
+          "best_ask",
+          "last_trade",
+          "spread_bps",
+          "base_scale",
+          "quote_scale",
+          "price_scale",
+          "as_of",
+          "posting"
+        ],
+        "properties": {
+          "instrument": {
+            "type": "string",
+            "enum": [
+              "USDT/RUB",
+              "TON/RUB",
+              "TON/USDT"
+            ]
+          },
+          "base_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "quote_asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "best_bid": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "price",
+              "quantity",
+              "order_count"
+            ],
+            "properties": {
+              "price": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "quantity": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "order_count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "best_ask": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "price",
+              "quantity",
+              "order_count"
+            ],
+            "properties": {
+              "price": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "quantity": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "order_count": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "last_trade": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": false,
+            "required": [
+              "price",
+              "quantity",
+              "executed_at"
+            ],
+            "properties": {
+              "price": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "quantity": {
+                "$ref": "#/$defs/decimalAmount"
+              },
+              "executed_at": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          "spread_bps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "base_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18
+          },
+          "quote_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18
+          },
+          "price_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18
+          },
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
           },
           "posting": {
             "const": "none"
