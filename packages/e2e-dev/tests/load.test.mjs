@@ -361,7 +361,17 @@ describe("bounded load on the dev stack", () => {
       assert.deepEqual(result.body, { error: "kyc_unavailable" });
     }
     assert.deepEqual(countBy(results, "quote"), { 200: total / 23 });
-    assert.deepEqual(countBy(results, "verified-quote"), { 200: total / 23 });
+    // /bff/quotes/preview for a verified session consults upstream through
+    // previewAvailability (customer.wallets.read) before judging, so under
+    // the saturated rate budget some previews degrade to the documented
+    // 503 quote_unavailable — gated sessions stay on the synthetic estimate.
+    const verifiedQuotes = countBy(results, "verified-quote");
+    assert.equal((verifiedQuotes[200] ?? 0) + (verifiedQuotes[503] ?? 0), total / 23);
+    assert.ok((verifiedQuotes[200] ?? 0) > 0, "customer-api answered at least one verified quote preview");
+    assert.ok((verifiedQuotes[503] ?? 0) > 0, "customer-api rate limit applies to verified quote previews");
+    for (const result of results.filter((entry) => entry.kind === "verified-quote" && entry.status === 503)) {
+      assert.deepEqual(result.body, { error: "quote_unavailable" });
+    }
     assert.deepEqual(countBy(results, "notifications"), { 200: total / 23 });
     // /bff/sessions consults upstream for gated sessions too
     // (customer.auth.read is never denied), so under the saturated
