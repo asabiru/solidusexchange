@@ -9,8 +9,11 @@ import {
   countToward,
   intOf,
   numberOf,
+  operatorAmlAlertTypeKeyOf,
   operatorRoleKeyOf,
   operatorRoleOf,
+  operatorTicketCategoryKeyOf,
+  operatorTicketQueueStateKeyOf,
   recordOf,
   rowsOf,
   subjectEntryLinkOf,
@@ -137,6 +140,9 @@ describe("prototype-key lookups fail closed", () => {
       assert.equal(withdrawalDecisionKeyOf(hostile), undefined, hostile);
       assert.equal(subjectKindKeyOf(hostile), undefined, hostile);
       assert.equal(operatorRoleKeyOf(hostile), undefined, hostile);
+      assert.equal(operatorAmlAlertTypeKeyOf(hostile), undefined, hostile);
+      assert.equal(operatorTicketCategoryKeyOf(hostile), undefined, hostile);
+      assert.equal(operatorTicketQueueStateKeyOf(hostile), undefined, hostile);
     }
   });
 });
@@ -190,6 +196,24 @@ describe("enum whitelists cover exactly the documented members", () => {
       assert.equal(withdrawalStatusKeyOf(hostile), undefined);
       assert.equal(withdrawalRoleKeyOf(hostile), undefined);
       assert.equal(withdrawalDecisionKeyOf(hostile), undefined);
+    }
+  });
+
+  it("operator queue enums for the aml and tickets projections", () => {
+    for (const alertType of ["structuring", "velocity", "geo_mismatch"]) {
+      assert.equal(operatorAmlAlertTypeKeyOf(alertType), `aml.alertType.${alertType === "geo_mismatch" ? "geoMismatch" : alertType}`);
+    }
+    for (const category of ["question", "operation_problem", "complaint", "data_request"]) {
+      const suffix = category === "operation_problem" ? "operationProblem" : category === "data_request" ? "dataRequest" : category;
+      assert.equal(operatorTicketCategoryKeyOf(category), `support.category.${suffix}`);
+    }
+    for (const state of ["open", "waiting", "escalated"]) {
+      assert.equal(operatorTicketQueueStateKeyOf(state), `support.queueState.${state}`);
+    }
+    for (const hostile of ["sanctions", "appeal", "pending", "in_review", {}, [], null, undefined, 5]) {
+      assert.equal(operatorAmlAlertTypeKeyOf(hostile), undefined);
+      assert.equal(operatorTicketCategoryKeyOf(hostile), undefined);
+      assert.equal(operatorTicketQueueStateKeyOf(hostile), undefined);
     }
   });
 
