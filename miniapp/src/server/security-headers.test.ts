@@ -250,6 +250,9 @@ describe("Mini App BFF security headers on every route", () => {
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),
+        depositAddresses: async () => ({ status: "not-configured" }),
+        addressScreenings: async () => ({ status: "not-configured" }),
+        addressScreening: async () => ({ status: "not-configured" }),
         notifications: async () => ({ status: "not-configured" }),
         kyc: async () => ({ status: "not-configured" }),
         profile: async () => ({ status: "not-configured" }),
@@ -326,6 +329,7 @@ describe("Mini App BFF security headers on every route", () => {
       },
       "POST /bff/kyc/applications": () => postJson(port, "/bff/kyc/applications", {}, { cookie: gated }),
       "POST /bff/address-screening": () => postJson(port, "/bff/address-screening", screening, { cookie: verified }),
+      "GET /bff/address-screening": () => get("/bff/address-screening"),
       "GET /bff/address-screening/:id": async () => {
         const created = JSON.parse((await postJson(port, "/bff/address-screening", screening, { cookie: verified })).body) as { id: string };
         return get(`/bff/address-screening/${created.id}`);

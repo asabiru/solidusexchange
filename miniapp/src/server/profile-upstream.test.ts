@@ -60,6 +60,9 @@ function profileStub(
     },
     support: async () => ({ status: "not-configured" }),
     authSessions: async () => ({ status: "not-configured" }),
+        depositAddresses: async () => ({ status: "not-configured" }),
+        addressScreenings: async () => ({ status: "not-configured" }),
+        addressScreening: async () => ({ status: "not-configured" }),
         activity: async () => ({ status: "not-configured" }),
         users: async () => ({ status: "not-configured" })
   };

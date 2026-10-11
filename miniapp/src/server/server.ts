@@ -28,6 +28,7 @@ import {
   ScreeningInputError,
   ScreeningRateLimitError,
   ScreeningUnavailableError,
+  contractAddressScreeningView,
   createAddressScreeningService
 } from "./address-screening.js";
 import {
@@ -70,7 +71,7 @@ import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
 import { contractPaymentsView, paymentsView } from "./payments.js";
 import { contractWithdrawalsView, withdrawalsView } from "./withdrawals.js";
-import { syntheticData, walletView } from "./synthetic.js";
+import { contractDepositAddressView, syntheticData, walletView } from "./synthetic.js";
 
 export const sessionCookie = "solidchange_ma_session";
 const displayName = "Тестовый клиент";
@@ -106,6 +107,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/checks/:id" },
   { method: "POST", path: "/bff/kyc/applications" },
   { method: "POST", path: "/bff/address-screening" },
+  { method: "GET", path: "/bff/address-screening" },
   { method: "GET", path: "/bff/address-screening/:id" },
   { method: "GET", path: "/bff/kyc/status" },
   { method: "GET", path: "/bff/notifications" },
@@ -733,11 +735,25 @@ export function createMiniappServer(
       }
       const upstream = await customerApi.wallets(session.subject, clock());
       if (upstream.status === "ok") {
-        json(response, 200, walletView(session.kyc, upstream.wallets.map((wallet) => ({
+        const balances = upstream.wallets.map((wallet) => ({
           code: wallet.asset,
           available: wallet.available,
           hold: wallet.hold
-        }))));
+        }));
+        // The depositAddresses section reads the new served deposit-addresses
+        // contract alongside balances: the local surface has no address data
+        // of its own, so a refusal degrades the section in place to empty and
+        // any other upstream failure shares the wallet_unavailable shape.
+        const addresses = await customerApi.depositAddresses(session.subject, clock());
+        if (addresses.status === "ok") {
+          json(response, 200, walletView(session.kyc, balances, addresses.depositAddresses.map(contractDepositAddressView)));
+          return;
+        }
+        if (addresses.status === "denied" || addresses.status === "not-configured") {
+          json(response, 200, walletView(session.kyc, balances));
+          return;
+        }
+        json(response, 503, { error: "wallet_unavailable" });
         return;
       }
       if (upstream.status === "denied") {
@@ -971,6 +987,36 @@ export function createMiniappServer(
       json(response, 200, found);
       return;
     }
+    if (path === "/bff/address-screening") {
+      if (url.search !== "") {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
+      if (session.kyc !== "verified") {
+        json(response, 403, { error: "kyc_required" });
+        return;
+      }
+      // Canonical four-way like the sibling reads: only a verified session
+      // with customer-api access reads the contract list; an upstream refusal
+      // degrades in place to the subject's locally-tracked screenings (the
+      // POST submit stays local, so local-only records still render), and any
+      // other upstream failure answers the sibling *_unavailable shape.
+      if (!customerApi.configured) {
+        json(response, 200, { mode: "test", screenings: addressScreening.list(session.subject) });
+        return;
+      }
+      const upstream = await customerApi.addressScreenings(session.subject, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, { mode: "test", screenings: upstream.screenings.map(contractAddressScreeningView) });
+        return;
+      }
+      if (upstream.status === "denied" || upstream.status === "not-configured") {
+        json(response, 200, { mode: "test", screenings: addressScreening.list(session.subject) });
+        return;
+      }
+      json(response, 503, { error: "screening_unavailable" });
+      return;
+    }
     if (path.startsWith("/bff/address-screening/")) {
       if (url.search !== "") {
         json(response, 400, { error: "invalid_request" });
@@ -980,7 +1026,25 @@ export function createMiniappServer(
         json(response, 403, { error: "kyc_required" });
         return;
       }
-      const screening = addressScreening.view(session.subject, path.slice("/bff/address-screening/".length));
+      const screeningId = path.slice("/bff/address-screening/".length);
+      // The detail read follows the same four-way with one pinned difference:
+      // an upstream 404 (the "missing" arm) falls back to the local store —
+      // POST-submitted screenings keep their locally minted scr_* ids, so a
+      // locally created record still renders while the POST stays unserved.
+      if (customerApi.configured) {
+        const upstream = await customerApi.addressScreening(session.subject, screeningId, clock());
+        if (upstream.status === "ok") {
+          json(response, 200, contractAddressScreeningView(upstream.screening));
+          return;
+        }
+        if (upstream.status === "unavailable") {
+          json(response, 503, { error: "screening_unavailable" });
+          return;
+        }
+        // "denied" degrades in place and "missing" means the id is not owned
+        // upstream — both resolve through the local lookup below.
+      }
+      const screening = addressScreening.view(session.subject, screeningId);
       if (!screening) {
         json(response, 404, { error: "not_found" });
         return;

@@ -1229,6 +1229,174 @@
         }
       }
     },
+    "/api/v1/customer/deposit-addresses": {
+      "get": {
+        "operationId": "getCustomerDepositAddresses",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's testnet deposit addresses",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer deposit addresses in test mode mirroring the custody-dev-v1 asset/network allowlist",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DepositAddressesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/address-screenings": {
+      "get": {
+        "operationId": "getCustomerAddressScreenings",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "List the authenticated customer's advisory outbound address screenings",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Customer address screenings in test mode mirroring the miniapp screening surface",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressScreeningsView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/v1/customer/address-screenings/{screeningId}": {
+      "get": {
+        "operationId": "getCustomerAddressScreening",
+        "tags": [
+          "Customer"
+        ],
+        "summary": "Get one advisory outbound address screening owned by the authenticated customer",
+        "security": [
+          {
+            "CustomerBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/ScreeningId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Address screening",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AddressScreeningView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
     "/api/v1/operator/session": {
       "get": {
         "operationId": "getOperatorSession",
@@ -1477,6 +1645,16 @@
         "schema": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9_-]{2,127}$"
+        }
+      },
+      "ScreeningId": {
+        "name": "screeningId",
+        "in": "path",
+        "required": true,
+        "description": "Address screening identifier.",
+        "schema": {
+          "type": "string",
+          "pattern": "^scr_[0-9a-f]{32}$"
         }
       }
     },
@@ -2091,6 +2269,172 @@
             "format": "date-time"
           },
           "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "DepositAddressesView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "deposit_addresses"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "deposit_addresses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DepositAddressView"
+            }
+          }
+        }
+      },
+      "DepositAddressView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "deposit_address_id",
+          "asset",
+          "network",
+          "address",
+          "status",
+          "created_at",
+          "posting"
+        ],
+        "properties": {
+          "deposit_address_id": {
+            "type": "string",
+            "pattern": "^dpa_[0-9a-f]{24}$"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "network": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+_TESTNET$"
+          },
+          "address": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{20,64}$"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "posting": {
+            "const": "none"
+          }
+        }
+      },
+      "AddressScreeningsView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "screenings"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "screenings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AddressScreeningView"
+            }
+          }
+        }
+      },
+      "AddressScreeningView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "screening_id",
+          "asset",
+          "network",
+          "direction",
+          "status",
+          "verdict",
+          "risk_level",
+          "advisory",
+          "executable",
+          "submitted_at",
+          "deadline",
+          "posting"
+        ],
+        "properties": {
+          "screening_id": {
+            "type": "string",
+            "pattern": "^scr_[0-9a-f]{32}$"
+          },
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "network": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]+_TESTNET$"
+          },
+          "direction": {
+            "const": "outbound"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "low",
+              "medium",
+              "high",
+              "severe",
+              "unavailable",
+              "timed_out"
+            ]
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "clear",
+              "review",
+              "flagged",
+              "none"
+            ]
+          },
+          "risk_level": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "severe",
+              null
+            ]
+          },
+          "advisory": {
+            "const": true
+          },
+          "executable": {
+            "const": false
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deadline": {
             "type": "string",
             "format": "date-time"
           },

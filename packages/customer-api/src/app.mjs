@@ -10,9 +10,14 @@ import {
   PLATFORMS
 } from "./contract.mjs";
 import { validActivityView } from "./activity.mjs";
+import {
+  validAddressScreeningsView,
+  validAddressScreeningView
+} from "./address-screenings.mjs";
 import { validAuthSessionsView } from "./auth-sessions.mjs";
 import { validCardsView } from "./cards.mjs";
 import { validChecksView } from "./checks.mjs";
+import { validDepositAddressesView } from "./deposit-addresses.mjs";
 import { validDepositsView } from "./deposits.mjs";
 import { validExchangeOrdersView } from "./exchange-orders.mjs";
 import { validKycStatusView } from "./kyc.mjs";
@@ -61,6 +66,8 @@ import { validWithdrawalsView } from "./withdrawals.mjs";
  * @property {import("./cards.mjs").CardDirectory} cardDirectory
  * @property {import("./checks.mjs").CheckDirectory} checkDirectory
  * @property {import("./activity.mjs").ActivityDirectory} activityDirectory
+ * @property {import("./deposit-addresses.mjs").DepositAddressDirectory} depositAddressDirectory
+ * @property {import("./address-screenings.mjs").AddressScreeningDirectory} addressScreeningDirectory
  * @property {import("./operator.mjs").OperatorDirectory} operatorDirectory
  * @property {() => number} [clock]
  * @property {() => string} [generateRequestId]
@@ -156,6 +163,58 @@ function errorBody(code, requestId, message = ERROR_MESSAGES[code]) {
   return { code, message, request_id: requestId, details: {} };
 }
 
+// Served routes stay exact-match only; declared templated routes bind each
+// `{name}` segment verbatim and leave the value to the handler's fail-closed
+// lookup (an unknown or malformed id 404s like an unmatched path).
+const TEMPLATED_OPERATIONS = OPERATIONS.filter((candidate) => candidate.path.includes("{"));
+
+/**
+ * @param {IncomingMessage} request
+ * @returns {{ operation: Operation, params: Map<string, string> } | null}
+ */
+function matchOperation(request) {
+  const exact = OPERATIONS.find(
+    (candidate) => candidate.method === request.method && candidate.path === request.url
+  );
+  if (exact) {
+    return { operation: exact, params: new Map() };
+  }
+  const segments = (request.url ?? "").split("/");
+  for (const candidate of TEMPLATED_OPERATIONS) {
+    if (candidate.method !== request.method) {
+      continue;
+    }
+    const templateSegments = candidate.path.split("/");
+    if (templateSegments.length !== segments.length) {
+      continue;
+    }
+    /** @type {Map<string, string>} */
+    const params = new Map();
+    let matches = true;
+    for (let index = 0; index < templateSegments.length; index += 1) {
+      const part = templateSegments[index] ?? "";
+      const segment = segments[index] ?? "";
+      if (part.startsWith("{") && part.endsWith("}")) {
+        // A path parameter binds a single non-empty raw segment: a trailing
+        // slash, doubled separator, percent-encoded byte or literal brace
+        // never produces a match (each stays a 404).
+        if (segment.length === 0 || /[%{}]/u.test(segment)) {
+          matches = false;
+          break;
+        }
+        params.set(part.slice(1, -1), segment);
+      } else if (part !== segment) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return { operation: candidate, params };
+    }
+  }
+  return null;
+}
+
 /**
  * @param {number} status
  * @param {Record<string, string | number>} headers
@@ -247,6 +306,8 @@ export function createCustomerApiHandler({
   cardDirectory,
   checkDirectory,
   activityDirectory,
+  depositAddressDirectory,
+  addressScreeningDirectory,
   operatorDirectory,
   clock = () => Date.now(),
   generateRequestId = () => generateUuidV7(clock()),
@@ -306,6 +367,15 @@ export function createCustomerApiHandler({
   if (typeof activityDirectory?.viewFor !== "function") {
     throw new Error("An activity directory is required");
   }
+  if (typeof depositAddressDirectory?.listFor !== "function") {
+    throw new Error("A deposit address directory is required");
+  }
+  if (
+    typeof addressScreeningDirectory?.listFor !== "function" ||
+    typeof addressScreeningDirectory?.viewFor !== "function"
+  ) {
+    throw new Error("An address screening directory is required");
+  }
   if (typeof operatorDirectory?.viewFor !== "function") {
     throw new Error("An operator directory is required");
   }
@@ -316,8 +386,9 @@ export function createCustomerApiHandler({
    * @param {Headers} headers
    * @param {string} requestId
    * @param {Operation} operation
+   * @param {ReadonlyMap<string, string>} pathParams
    */
-  async function handleOperation(request, response, headers, requestId, operation) {
+  async function handleOperation(request, response, headers, requestId, operation, pathParams) {
     /**
      * @param {number} status
      * @param {ErrorCode} code
@@ -662,6 +733,63 @@ export function createCustomerApiHandler({
       send(response, 200, { ...view }, requestId);
       return;
     }
+    if (operation.operationId === "getCustomerDepositAddresses") {
+      // customer.deposit-addresses.read is KYC-gated like the other
+      // asset/activity collections: the subject's own testnet receiving
+      // endpoints are opaque synthetic addresses only — never key
+      // material, never a custody intent (posting stays "none") — so
+      // unverified and pending subjects are denied with the 403 envelope.
+      if (!evaluation.granted.includes("customer.deposit-addresses.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await depositAddressDirectory.listFor(principal.subject);
+      if (!validDepositAddressesView(view)) {
+        throw new Error("Deposit address directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerAddressScreenings") {
+      // customer.address-screenings.read is KYC-gated like the other
+      // asset/activity collections: the subject's own advisory outbound
+      // screening records — advisory risk badges only, never a
+      // compliance decision or money movement (posting stays "none") —
+      // so unverified and pending subjects are denied with the 403
+      // envelope.
+      if (!evaluation.granted.includes("customer.address-screenings.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const view = await addressScreeningDirectory.listFor(principal.subject);
+      if (!validAddressScreeningsView(view)) {
+        throw new Error("Address screening directory returned an invalid view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+    if (operation.operationId === "getCustomerAddressScreening") {
+      // The detail read shares the collection gate; the declared 404 then
+      // covers any well-formed screening id the subject does not own — a
+      // malformed or foreign id can never leak another subject's record.
+      if (!evaluation.granted.includes("customer.address-screenings.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const screening = await addressScreeningDirectory.viewFor(
+        principal.subject,
+        pathParams.get("screeningId") ?? ""
+      );
+      if (screening === undefined) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validAddressScreeningView(screening)) {
+        throw new Error("Address screening directory returned an invalid view");
+      }
+      send(response, 200, { ...screening }, requestId);
+      return;
+    }
     if (operation.operationId === "getCustomerWallets") {
       if (!evaluation.granted.includes("customer.wallets.read")) {
         fail(403, "CAPABILITY_DENIED");
@@ -743,14 +871,12 @@ export function createCustomerApiHandler({
         handleMetrics(request, response, headers, requestId);
         return;
       }
-      const operation = OPERATIONS.find(
-        (candidate) => candidate.method === request.method && candidate.path === request.url
-      );
-      if (!operation) {
+      const match = matchOperation(request);
+      if (!match) {
         send(response, 404, errorBody("CAPABILITY_DENIED", requestId), requestId);
         return;
       }
-      await handleOperation(request, response, headers, requestId, operation);
+      await handleOperation(request, response, headers, requestId, match.operation, match.params);
     } catch {
       if (!response.headersSent) {
         send(response, 500, errorBody("INTERNAL_ERROR", requestId), requestId, {

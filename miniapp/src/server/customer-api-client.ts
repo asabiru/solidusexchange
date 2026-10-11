@@ -302,6 +302,77 @@ export type CustomerApiActivity =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/**
+ * The served deposit-address record: an opaque synthetic testnet-looking
+ * string only — the contract shape can never carry key material.
+ */
+export interface CustomerApiDepositAddress {
+  deposit_address_id: string;
+  asset: string;
+  network: string;
+  address: string;
+  status: "active";
+  created_at: string;
+  posting: "none";
+}
+
+export type CustomerApiDepositAddresses =
+  | { status: "ok"; depositAddresses: readonly CustomerApiDepositAddress[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+export type CustomerApiAddressScreeningStatus =
+  | "pending"
+  | "low"
+  | "medium"
+  | "high"
+  | "severe"
+  | "unavailable"
+  | "timed_out";
+
+export type CustomerApiAddressScreeningRiskLevel = "low" | "medium" | "high" | "severe";
+export type CustomerApiAddressScreeningVerdict = "clear" | "review" | "flagged" | "none";
+
+/**
+ * The served advisory screening record: risk badge fields mirror the local
+ * surface vocabulary and stay advisory-only (executable is always false,
+ * posting always "none" — a screening is never a compliance decision or
+ * money movement).
+ */
+export interface CustomerApiAddressScreening {
+  screening_id: string;
+  asset: string;
+  network: string;
+  direction: "outbound";
+  status: CustomerApiAddressScreeningStatus;
+  verdict: CustomerApiAddressScreeningVerdict;
+  risk_level: CustomerApiAddressScreeningRiskLevel | null;
+  advisory: true;
+  executable: false;
+  submitted_at: string;
+  deadline: string;
+  posting: "none";
+}
+
+export type CustomerApiAddressScreenings =
+  | { status: "ok"; screenings: readonly CustomerApiAddressScreening[] }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
+/**
+ * The detail read adds a "missing" arm for the declared 404: a well-formed
+ * screening id the subject does not own upstream — including a locally
+ * minted id whose submit stayed local — is a miss, not an error.
+ */
+export type CustomerApiAddressScreeningResult =
+  | { status: "ok"; screening: CustomerApiAddressScreening }
+  | { status: "missing" }
+  | { status: "denied" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiNotification {
   notification_id: string;
   created_at: string;
@@ -473,6 +544,9 @@ export interface CustomerApiClient {
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
+  depositAddresses(bffSubject: string, nowMs: number): Promise<CustomerApiDepositAddresses>;
+  addressScreenings(bffSubject: string, nowMs: number): Promise<CustomerApiAddressScreenings>;
+  addressScreening(bffSubject: string, screeningId: string, nowMs: number): Promise<CustomerApiAddressScreeningResult>;
   activity(bffSubject: string, nowMs: number): Promise<CustomerApiActivity>;
   notifications(bffSubject: string, nowMs: number): Promise<CustomerApiNotifications>;
   kyc(bffSubject: string, nowMs: number): Promise<CustomerApiKyc>;
@@ -1792,6 +1866,181 @@ function parseUserView(value: unknown, expectedSubject: string): CustomerApiUser
   });
 }
 
+const depositAddressIdPattern = /^dpa_[0-9a-f]{24}$/;
+const depositAddressNetworkPattern = /^[A-Z0-9]+_TESTNET$/;
+const depositAddressValuePattern = /^[A-Za-z0-9_-]{20,64}$/;
+// custody-dev-v1 pairs — the same allowlist the local wallet surface offers.
+const depositAddressTargets = new Set(["TON|TON_TESTNET", "USDT|TON_TESTNET", "USDT|TRON_TESTNET"]);
+const depositAddressKeys = [
+  "deposit_address_id",
+  "asset",
+  "network",
+  "address",
+  "status",
+  "created_at",
+  "posting"
+] as const;
+
+/**
+ * Validates an upstream DepositAddressesView. The exact key set is also the
+ * key-material boundary: the contract carries opaque address strings only,
+ * so a private-key-, seed- or signature-shaped field (or any other carrier)
+ * fails closed here rather than flowing into the app.
+ */
+function parseDepositAddressesView(value: unknown): readonly CustomerApiDepositAddress[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "deposit_addresses"])
+    || value.mode !== "test"
+    || !Array.isArray(value.deposit_addresses)
+  ) {
+    return undefined;
+  }
+  const addresses: CustomerApiDepositAddress[] = [];
+  for (const entry of value.deposit_addresses) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, depositAddressKeys)
+      || typeof entry.deposit_address_id !== "string"
+      || !depositAddressIdPattern.test(entry.deposit_address_id)
+      || typeof entry.asset !== "string"
+      || typeof entry.network !== "string"
+      || !depositAddressNetworkPattern.test(entry.network)
+      || !depositAddressTargets.has(`${entry.asset}|${entry.network}`)
+      || typeof entry.address !== "string"
+      || !depositAddressValuePattern.test(entry.address)
+      || entry.status !== "active"
+      || !isIsoTimestamp(entry.created_at)
+      || entry.posting !== "none"
+    ) {
+      return undefined;
+    }
+    addresses.push(Object.freeze({
+      deposit_address_id: entry.deposit_address_id,
+      asset: entry.asset,
+      network: entry.network,
+      address: entry.address,
+      status: "active",
+      created_at: entry.created_at,
+      posting: "none"
+    }));
+  }
+  return Object.freeze(addresses);
+}
+
+const screeningIdPattern = /^scr_[0-9a-f]{32}$/;
+const customerApiScreeningStatuses = new Set<string>([
+  "pending",
+  "low",
+  "medium",
+  "high",
+  "severe",
+  "unavailable",
+  "timed_out"
+]);
+const customerApiScreeningRiskLevels = new Set<string>(["low", "medium", "high", "severe"]);
+const customerApiScreeningVerdicts = new Set<string>(["clear", "review", "flagged", "none"]);
+const verdictByRiskLevel = new Map<string, string>([
+  ["low", "clear"],
+  ["medium", "review"],
+  ["high", "flagged"],
+  ["severe", "flagged"]
+]);
+const screeningTargets = new Set(["TON|TON_TESTNET", "USDT|TON_TESTNET", "USDT|TRON_TESTNET"]);
+const screeningKeys = [
+  "screening_id",
+  "asset",
+  "network",
+  "direction",
+  "status",
+  "verdict",
+  "risk_level",
+  "advisory",
+  "executable",
+  "submitted_at",
+  "deadline",
+  "posting"
+] as const;
+
+/**
+ * Validates one upstream AddressScreeningView record: the advisory outbound
+ * screening stays bound to the local surface's exact status and risk-badge
+ * vocabulary, keeps its terminal invariant (risk_level mirrors a terminal
+ * status and null otherwise), and can never carry an executable decision.
+ */
+function parseAddressScreeningRecord(entry: unknown): CustomerApiAddressScreening | undefined {
+  if (
+    !isRecord(entry)
+    || !hasExactKeys(entry, screeningKeys)
+    || typeof entry.screening_id !== "string"
+    || !screeningIdPattern.test(entry.screening_id)
+    || typeof entry.asset !== "string"
+    || typeof entry.network !== "string"
+    || !depositAddressNetworkPattern.test(entry.network)
+    || !screeningTargets.has(`${entry.asset}|${entry.network}`)
+    || entry.direction !== "outbound"
+    || typeof entry.status !== "string"
+    || !customerApiScreeningStatuses.has(entry.status)
+    || typeof entry.verdict !== "string"
+    || !customerApiScreeningVerdicts.has(entry.verdict)
+    || (entry.risk_level !== null && (typeof entry.risk_level !== "string" || !customerApiScreeningRiskLevels.has(entry.risk_level)))
+    || entry.advisory !== true
+    || entry.executable !== false
+    || !isIsoTimestamp(entry.submitted_at)
+    || !isIsoTimestamp(entry.deadline)
+    || entry.posting !== "none"
+  ) {
+    return undefined;
+  }
+  const terminal = customerApiScreeningRiskLevels.has(entry.status);
+  if (terminal !== (entry.risk_level !== null)) {
+    return undefined;
+  }
+  if (terminal && entry.risk_level !== entry.status) {
+    return undefined;
+  }
+  if (entry.verdict !== (entry.risk_level === null ? "none" : verdictByRiskLevel.get(entry.risk_level))) {
+    return undefined;
+  }
+  if (!(Date.parse(entry.deadline as string) > Date.parse(entry.submitted_at as string))) {
+    return undefined;
+  }
+  return Object.freeze({
+    screening_id: entry.screening_id,
+    asset: entry.asset as string,
+    network: entry.network as string,
+    direction: "outbound",
+    status: entry.status as CustomerApiAddressScreeningStatus,
+    verdict: entry.verdict as CustomerApiAddressScreeningVerdict,
+    risk_level: entry.risk_level as CustomerApiAddressScreeningRiskLevel | null,
+    advisory: true,
+    executable: false,
+    submitted_at: entry.submitted_at,
+    deadline: entry.deadline,
+    posting: "none"
+  });
+}
+
+function parseAddressScreeningsView(value: unknown): readonly CustomerApiAddressScreening[] | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["mode", "screenings"])
+    || value.mode !== "test"
+    || !Array.isArray(value.screenings)
+  ) {
+    return undefined;
+  }
+  const screenings: CustomerApiAddressScreening[] = [];
+  for (const entry of value.screenings) {
+    const record = parseAddressScreeningRecord(entry);
+    if (record === undefined) {
+      return undefined;
+    }
+    screenings.push(record);
+  }
+  return Object.freeze(screenings);
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -1802,7 +2051,8 @@ class CustomerApiHttpError extends Error {
 /**
  * Server-side, read-only client for the dev customer API. It only issues the
  * customer session, capabilities, wallets, deposits, withdrawals, quotes,
- * exchange-orders, payments, cards, notifications, kyc, profile, support,
+ * exchange-orders, payments, cards, checks, deposit-addresses,
+ * address-screenings, activity, notifications, kyc, profile, support,
  * auth sessions and users GETs, never sends X-Device-Id and
  * fails closed to "unavailable" on
  * any unexpected response, including a non-JSON content type or a body above
@@ -1826,6 +2076,9 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
+      depositAddresses: async (): Promise<CustomerApiDepositAddresses> => ({ status: "not-configured" }),
+      addressScreenings: async (): Promise<CustomerApiAddressScreenings> => ({ status: "not-configured" }),
+      addressScreening: async (): Promise<CustomerApiAddressScreeningResult> => ({ status: "not-configured" }),
       activity: async (): Promise<CustomerApiActivity> => ({ status: "not-configured" }),
       notifications: async (): Promise<CustomerApiNotifications> => ({ status: "not-configured" }),
       kyc: async (): Promise<CustomerApiKyc> => ({ status: "not-configured" }),
@@ -2045,6 +2298,68 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
+  async function depositAddresses(bffSubject: string, nowMs: number): Promise<CustomerApiDepositAddresses> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/deposit-addresses", token, nowMs);
+      const view = parseDepositAddressesView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", depositAddresses: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function addressScreenings(bffSubject: string, nowMs: number): Promise<CustomerApiAddressScreenings> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get("/api/v1/customer/address-screenings", token, nowMs);
+      const view = parseAddressScreeningsView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", screenings: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function addressScreening(bffSubject: string, screeningId: string, nowMs: number): Promise<CustomerApiAddressScreeningResult> {
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(`/api/v1/customer/address-screenings/${encodeURIComponent(screeningId)}`, token, nowMs);
+      const view = parseAddressScreeningRecord(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", screening: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError) {
+        if (error.status === 404) {
+          return { status: "missing" };
+        }
+        if (error.status === 403) {
+          return { status: "denied" };
+        }
+      }
+      return { status: "unavailable" };
+    }
+  }
+
   async function activity(bffSubject: string, nowMs: number): Promise<CustomerApiActivity> {
     const subject = customerApiSubject(bffSubject);
     try {
@@ -2178,5 +2493,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, activity, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, notifications, kyc, profile, support, authSessions, users });
 }

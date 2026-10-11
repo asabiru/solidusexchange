@@ -49,6 +49,9 @@ function walletStub(result: CustomerApiWallets | (() => Promise<CustomerApiWalle
     profile: async () => ({ status: "not-configured" }),
     support: async () => ({ status: "not-configured" }),
     authSessions: async () => ({ status: "not-configured" }),
+        depositAddresses: async () => ({ status: "not-configured" }),
+        addressScreenings: async () => ({ status: "not-configured" }),
+        addressScreening: async () => ({ status: "not-configured" }),
         activity: async () => ({ status: "not-configured" }),
         users: async () => ({ status: "not-configured" })
   };
@@ -153,7 +156,7 @@ describe("GET /bff/wallet through the customer-api seam", () => {
       assert.equal(text.includes(marker), false, "upstream wallet ids must not leak");
       assert.equal(text.includes("syn_wal_"), false, "upstream wallet ids must not leak");
       const view = JSON.parse(text) as WalletView;
-      assert.deepEqual(Object.keys(view).sort(), ["assets", "availableRub", "holdRub", "kyc", "totalRub"]);
+      assert.deepEqual(Object.keys(view).sort(), ["assets", "availableRub", "depositAddresses", "holdRub", "kyc", "totalRub"]);
       assert.equal(view.kyc, "verified");
       assert.deepEqual(
         view.assets.map((asset) => Object.keys(asset).sort()),

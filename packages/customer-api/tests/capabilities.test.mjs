@@ -30,12 +30,14 @@ function decisionStatus(id) {
 test("only served read operations are ever granted", () => {
   // getCustomerWallets, getCustomerNotifications, getCustomerDeposits,
   // getCustomerWithdrawals, getCustomerQuotes, getCustomerExchangeOrders,
-  // getCustomerPayments, getCustomerCards, getCustomerChecks and
-  // getCustomerActivity are the only KYC-gated served operations today.
+  // getCustomerPayments, getCustomerCards, getCustomerChecks,
+  // getCustomerDepositAddresses, getCustomerAddressScreenings,
+  // getCustomerAddressScreening and getCustomerActivity are the only
+  // KYC-gated served operations today.
   const gated = OPERATIONS.filter((operation) =>
-    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerActivity"].includes(operation.operationId)
+    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerDepositAddresses", "getCustomerAddressScreenings", "getCustomerAddressScreening", "getCustomerActivity"].includes(operation.operationId)
   ).length;
-  assert.equal(gated, 10);
+  assert.equal(gated, 13);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     // customer.kyc.read, customer.profile.read, customer.support.read,
@@ -46,7 +48,7 @@ test("only served read operations are ever granted", () => {
     // subjects.
     const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"];
     if (kycStatus === "verified") {
-      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.activity.read");
+      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.deposit-addresses.read", "customer.address-screenings.read", "customer.activity.read");
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
@@ -56,9 +58,13 @@ test("only served read operations are ever granted", () => {
     const customerOperations = OPERATIONS.filter(
       (operation) => operation.authenticated && !operation.path.startsWith("/api/v1/operator/")
     ).length;
+    // For a verified subject every served customer operation is granted
+    // through some capability, except that the address-screenings list and
+    // detail reads share the single customer.address-screenings.read grant
+    // (13 gated operations behind 12 gated capabilities).
     assert.equal(
       granted.length,
-      customerOperations - (kycStatus === "verified" ? 0 : gated)
+      customerOperations - (kycStatus === "verified" ? 1 : gated)
     );
   }
 });

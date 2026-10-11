@@ -53,6 +53,9 @@ function activityStub(
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),
+    depositAddresses: async () => ({ status: "not-configured" }),
+    addressScreenings: async () => ({ status: "not-configured" }),
+    addressScreening: async () => ({ status: "not-configured" }),
     activity: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;

@@ -65,12 +65,29 @@ export interface AssetBalance {
   valueRub: string;
 }
 
+/**
+ * The wallet surface's receiving-address view: an opaque synthetic
+ * testnet-looking address string per custody-dev-v1 asset/network pair.
+ * `posting` stays "none" — the address is advisory information, never a
+ * ledger instruction, and the contract shape can never carry key material.
+ */
+export interface DepositAddressView {
+  id: string;
+  asset: ScreeningAsset;
+  network: ScreeningNetwork;
+  address: string;
+  status: "active";
+  createdAt: number;
+  posting: "none";
+}
+
 export interface WalletView {
   kyc: KycStatus;
   totalRub: string;
   availableRub: string;
   holdRub: string;
   assets: readonly AssetBalance[];
+  depositAddresses: readonly DepositAddressView[];
 }
 
 export type OperationKind = "exchange" | "deposit" | "withdrawal" | "qr";
@@ -236,6 +253,11 @@ export interface AddressScreeningView {
   executable: false;
   submittedAt: number;
   deadline: number;
+}
+
+export interface AddressScreeningsView {
+  mode: "test";
+  screenings: readonly AddressScreeningView[];
 }
 
 export type ActivityKycState = Exclude<KycVerificationState, "not_started">;

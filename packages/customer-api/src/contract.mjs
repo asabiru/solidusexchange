@@ -312,6 +312,57 @@ export const OPERATIONS = Object.freeze([
     ]),
     statuses: Object.freeze([200, 401, 403, 429, 500])
   }),
+  // The deposit-addresses collection read is KYC-gated like the deposits,
+  // withdrawals, wallets, notifications, quotes, exchange-orders, payments,
+  // cards, checks and activity reads: it is an asset/activity collection
+  // (the subject's own testnet receiving endpoints), not an onboarding or
+  // identity surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerDepositAddresses",
+    method: "GET",
+    path: "/api/v1/customer/deposit-addresses",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The address-screenings collection read is KYC-gated like the deposit
+  // addresses read: screenings are the subject's own advisory outbound KYT
+  // records, not an onboarding or identity surface (see capabilities.mjs).
+  Object.freeze({
+    operationId: "getCustomerAddressScreenings",
+    method: "GET",
+    path: "/api/v1/customer/address-screenings",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 429, 500])
+  }),
+  // The screening detail read shares the collection's gate and adds the
+  // declared 404 for a well-formed screening id the subject does not own
+  // (and never had); the id fails closed, never leaks another subject's
+  // record.
+  Object.freeze({
+    operationId: "getCustomerAddressScreening",
+    method: "GET",
+    path: "/api/v1/customer/address-screenings/{screeningId}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 404, 429, 500])
+  }),
   // First operator-namespaced read. Operator operations require the
   // X-Device-Id header and an operator-audience token instead of a customer
   // one; KYC evaluation never applies to them.

@@ -214,6 +214,21 @@ export const CAPABILITY_POLICY = Object.freeze([
   // needs no open money-movement decisions: the unserved check commands
   // below keep the financial denial with their decision reasons.
   entry("customer.checks.read", "read", true, []),
+  // The served deposit-addresses collection read is KYC-gated like the
+  // other asset/activity collections: it is the subject's own set of
+  // testnet receiving endpoints (opaque synthetic addresses only — never
+  // key material, never a custody intent, posting stays "none"), not an
+  // onboarding or identity surface, so it reads with the same
+  // verified-KYC gate and no write capability exists.
+  entry("customer.deposit-addresses.read", "read", true, []),
+  // The served address-screenings collection read (list and detail share
+  // it) is KYC-gated like the other asset/activity collections: it is the
+  // subject's own advisory outbound KYT records — advisory risk badges
+  // only, never a compliance decision or money movement (posting stays
+  // "none"), so it reads with the same verified-KYC gate. Submitting a
+  // screening stays unserved and denied: no customer.address-screenings.*
+  // write capability exists at all.
+  entry("customer.address-screenings.read", "read", true, []),
   // The served customer activity feed is KYC-gated like the other asset
   // collections: it is a derived-only projection over the subject's own
   // deposits, withdrawals, quotes, orders, payments, cards, checks, kyc and

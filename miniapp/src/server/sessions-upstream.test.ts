@@ -54,6 +54,9 @@ function authSessionsStub(result: CustomerApiAuthSessions | (() => Promise<Custo
       calls.push(subject);
       return typeof result === "function" ? result() : result;
     },
+    depositAddresses: async () => ({ status: "not-configured" }),
+    addressScreenings: async () => ({ status: "not-configured" }),
+    addressScreening: async () => ({ status: "not-configured" }),
     activity: async () => ({ status: "not-configured" }),
     users: async () => ({ status: "not-configured" })
   };

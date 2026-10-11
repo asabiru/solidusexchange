@@ -40,15 +40,30 @@ const PAYMENTS = "/api/v1/customer/payments";
 const CARDS = "/api/v1/customer/cards";
 const CHECKS = "/api/v1/customer/checks";
 const ACTIVITY = "/api/v1/customer/activity";
+const DEPOSIT_ADDRESSES = "/api/v1/customer/deposit-addresses";
+const ADDRESS_SCREENINGS = "/api/v1/customer/address-screenings";
 const AUTH = "/api/v1/customer/auth";
 const USERS = "/api/v1/customer/users";
 const ADMIN = "/api/v1/operator/admin";
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
+// Templated operations observe under their declared template path, so a
+// status probed on a concrete path still counts for the reachability pin.
+const TEMPLATED_PATHS = OPERATIONS.filter((operation) => operation.path.includes("{")).map(
+  (operation) => ({
+    template: operation.path,
+    pattern: new RegExp(`^${operation.path.replace(/\{[^{}]+\}/gu, "[^/]+")}$`, "u")
+  })
+);
+
+function observedPath(path) {
+  return TEMPLATED_PATHS.find((entry) => entry.pattern.test(path))?.template ?? path;
+}
+
 async function observe(port, options) {
   const response = await checkedRequest(port, options);
-  observed.add(`${options.path} ${response.status}`);
+  observed.add(`${observedPath(options.path)} ${response.status}`);
   return response;
 }
 
@@ -165,7 +180,7 @@ test("GET /api/v1/customer/capabilities grants only read capabilities, even afte
       assert.equal(response.status, 200);
       assert.deepEqual(JSON.parse(response.body), {
         capabilities: subject === "syn_cust_verified01"
-          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.activity.read"]
+          ? ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read", "customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.deposit-addresses.read", "customer.address-screenings.read", "customer.activity.read"]
           : ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"],
         commands_enabled: false
       });
@@ -184,7 +199,7 @@ test("every platform enum value is accepted on customer operations", async () =>
 
 test("deny-all verifier rejects every token with 401", async () => {
   await withServer({ verifier: createDenyAllVerifier() }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
       const response = await observe(port, { path, headers: customerHeaders() });
       assert.equal(response.status, 401);
       assert.equal(JSON.parse(response.body).code, "AUTHENTICATION_REQUIRED");
@@ -197,7 +212,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
   let now = NOW_MS;
   const rateLimiter = createFixedWindowRateLimiter({ limit: 2, clock: () => now });
   await withServer({ rateLimiter }, async (port) => {
-    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY]) {
+    for (const path of [SESSION, CAPABILITIES, WALLETS, NOTIFICATIONS, KYC, PROFILE, SUPPORT, AUTH, USERS, DEPOSITS, WITHDRAWALS, QUOTES, EXCHANGE_ORDERS, PAYMENTS, CARDS, CHECKS, ACTIVITY, DEPOSIT_ADDRESSES, ADDRESS_SCREENINGS]) {
       now += 61_000;
       assert.equal((await observe(port, { path, headers: verifiedCustomerHeaders() })).status, 200);
       assert.equal((await observe(port, { path, headers: customerHeaders({ Authorization: null }) })).status, 401);
@@ -206,6 +221,16 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
       assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
       assert.equal(header(limited, "retry-after"), "60");
     }
+    now += 61_000;
+    const listed = await observe(port, { path: ADDRESS_SCREENINGS, headers: verifiedCustomerHeaders() });
+    const screeningId = JSON.parse(listed.body).screenings[0].screening_id;
+    now += 61_000;
+    const screeningPath = `${ADDRESS_SCREENINGS}/${screeningId}`;
+    assert.equal((await observe(port, { path: screeningPath, headers: verifiedCustomerHeaders() })).status, 200);
+    assert.equal((await observe(port, { path: screeningPath, headers: customerHeaders({ Authorization: null }) })).status, 401);
+    const limitedScreening = await observe(port, { path: screeningPath, headers: verifiedCustomerHeaders() });
+    assert.equal(limitedScreening.status, 429);
+    assert.equal(JSON.parse(limitedScreening.body).code, "RATE_LIMITED");
     now += 61_000;
     assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders() })).status, 200);
     assert.equal((await observe(port, { path: ADMIN, headers: operatorHeaders({ Authorization: null }) })).status, 401);
@@ -326,6 +351,29 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     assert.equal(response.status, 500);
     assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
     assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
+  await withServer({ depositAddressDirectory: { async listFor() { throw new Error("deposit address store exploded: secret=abc"); } } }, async (port) => {
+    const response = await observe(port, { path: DEPOSIT_ADDRESSES, headers: verifiedCustomerHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
+  });
+  await withServer({
+    addressScreeningDirectory: {
+      async listFor() {
+        throw new Error("screening store exploded: secret=abc");
+      },
+      async viewFor() {
+        throw new Error("screening store exploded: secret=abc");
+      }
+    }
+  }, async (port) => {
+    for (const path of [ADDRESS_SCREENINGS, `${ADDRESS_SCREENINGS}/scr_${"0".repeat(32)}`]) {
+      const response = await observe(port, { path, headers: verifiedCustomerHeaders() });
+      assert.equal(response.status, 500, path);
+      assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      assert.doesNotMatch(response.body, /secret|exploded/u);
+    }
   });
   await withServer({ authSessionDirectory: { async listFor() { throw new Error("session store exploded: secret=abc"); } } }, async (port) => {
     const response = await observe(port, { path: AUTH, headers: verifiedCustomerHeaders() });
@@ -552,6 +600,60 @@ test("GET /api/v1/customer/activity serves verified customers and gates the rest
     assert.equal(granted.status, 200);
     for (const headers of [customerHeaders()]) {
       const denied = await observe(port, { path: ACTIVITY, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/deposit-addresses serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: DEPOSIT_ADDRESSES, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: DEPOSIT_ADDRESSES, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/address-screenings serves verified customers and gates the rest", async () => {
+  await withServer({}, async (port) => {
+    const granted = await observe(port, { path: ADDRESS_SCREENINGS, headers: verifiedCustomerHeaders() });
+    assert.equal(granted.status, 200);
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, { path: ADDRESS_SCREENINGS, headers });
+      assert.equal(denied.status, 403);
+      assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+    }
+  });
+});
+
+test("GET /api/v1/customer/address-screenings/{screeningId} serves the owned record and 404s the rest", async () => {
+  await withServer({}, async (port) => {
+    const list = await observe(port, { path: ADDRESS_SCREENINGS, headers: verifiedCustomerHeaders() });
+    assert.equal(list.status, 200);
+    const screenings = JSON.parse(list.body).screenings;
+    assert.ok(screenings.length >= 1);
+    for (const entry of screenings) {
+      const detail = await observe(port, {
+        path: `${ADDRESS_SCREENINGS}/${entry.screening_id}`,
+        headers: verifiedCustomerHeaders()
+      });
+      assert.equal(detail.status, 200, entry.screening_id);
+    }
+    const missing = await observe(port, {
+      path: `${ADDRESS_SCREENINGS}/scr_${"f".repeat(32)}`,
+      headers: verifiedCustomerHeaders()
+    });
+    assert.equal(missing.status, 404);
+    assert.equal(JSON.parse(missing.body).code, "CAPABILITY_DENIED");
+    for (const headers of [customerHeaders()]) {
+      const denied = await observe(port, {
+        path: `${ADDRESS_SCREENINGS}/${screenings[0].screening_id}`,
+        headers
+      });
       assert.equal(denied.status, 403);
       assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
     }

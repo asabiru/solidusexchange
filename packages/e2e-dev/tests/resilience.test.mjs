@@ -380,6 +380,62 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.endsWith("/deposit-addresses")) {
+      return {
+        mode: "test",
+        deposit_addresses: [
+          {
+            deposit_address_id: "dpa_0123456789abcdef01234567",
+            asset: "USDT",
+            network: "TON_TESTNET",
+            address: `kQ${"A".repeat(46)}`,
+            status: "active",
+            created_at: "2026-09-02T00:00:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
+    if (request.url.includes("/address-screenings/")) {
+      return {
+        screening_id: "scr_0123456789abcdef0123456789abcdef",
+        asset: "USDT",
+        network: "TON_TESTNET",
+        direction: "outbound",
+        status: "low",
+        verdict: "clear",
+        risk_level: "low",
+        advisory: true,
+        executable: false,
+        submitted_at: "2026-10-01T10:00:00.000Z",
+        deadline: "2026-10-01T11:00:00.000Z",
+        posting: "none",
+        ...extra
+      };
+    }
+    if (request.url.endsWith("/address-screenings")) {
+      return {
+        mode: "test",
+        screenings: [
+          {
+            screening_id: "scr_0123456789abcdef0123456789abcdef",
+            asset: "USDT",
+            network: "TON_TESTNET",
+            direction: "outbound",
+            status: "low",
+            verdict: "clear",
+            risk_level: "low",
+            advisory: true,
+            executable: false,
+            submitted_at: "2026-10-01T10:00:00.000Z",
+            deadline: "2026-10-01T11:00:00.000Z",
+            posting: "none"
+          }
+        ],
+        ...extra
+      };
+    }
     if (request.url.endsWith("/activity")) {
       return {
         mode: "test",
@@ -748,6 +804,57 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(gatedText.includes("syn_peer_"), false, label);
     assert.equal(JSON.parse(gatedText).mode, "test", label);
     assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function screeningsFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/address-screening", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("scr_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "screening_unavailable" }, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session never consults upstream: the surface's own KYC gate
+    // answers kyc_required (leak-free) while the verified session fails
+    // closed.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/address-screening", { cookie });
+    assert.equal(gatedResponse.status, 403, label);
+    const gatedText = await gatedResponse.text();
+    assert.equal(gatedText.includes(marker), false, label);
+    assert.equal(gatedText.includes(key), false, label);
+    assert.equal(gatedText.includes("syn_cust_"), false, label);
+    assert.deepEqual(JSON.parse(gatedText), { error: "kyc_required" }, label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function screeningDetailFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, `/bff/address-screening/scr_${"0".repeat(32)}`, { cookie: verifiedCookie });
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    if (response.status === 404) {
+      // An upstream 404 means "missing": the BFF falls back to the local store
+      // (POST stays local) and this id was never submitted — clean not_found.
+      assert.deepEqual(JSON.parse(text), { error: "not_found" }, label);
+    } else {
+      assert.equal(response.status, 503, label);
+      assert.deepEqual(JSON.parse(text), { error: "screening_unavailable" }, label);
+    }
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
 
@@ -1508,6 +1615,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await screeningsFailsClosed(name);
+      await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
@@ -1534,6 +1643,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await screeningsFailsClosed(name);
+      await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
       await notificationsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
