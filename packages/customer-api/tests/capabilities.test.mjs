@@ -30,12 +30,13 @@ function decisionStatus(id) {
 test("only served read operations are ever granted", () => {
   // getCustomerWallets, getCustomerNotifications, getCustomerDeposits,
   // getCustomerWithdrawals, getCustomerQuotes, getCustomerExchangeOrders,
-  // getCustomerPayments, getCustomerCards, getCustomerChecks and
-  // getCustomerActivity are the only KYC-gated served operations today.
+  // getCustomerPayments, getCustomerCards, getCustomerChecks,
+  // getCustomerActivity and the two getCustomerOperations reads are the only
+  // KYC-gated served operations today.
   const gated = OPERATIONS.filter((operation) =>
-    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerActivity"].includes(operation.operationId)
+    ["getCustomerWallets", "getCustomerNotifications", "getCustomerDeposits", "getCustomerWithdrawals", "getCustomerQuotes", "getCustomerExchangeOrders", "getCustomerPayments", "getCustomerCards", "getCustomerChecks", "getCustomerActivity", "getCustomerOperations", "getCustomerOperation"].includes(operation.operationId)
   ).length;
-  assert.equal(gated, 10);
+  assert.equal(gated, 12);
   for (const kycStatus of KYC_STATUSES) {
     const { granted, commandsEnabled } = evaluateCapabilities({ kycStatus });
     // customer.kyc.read, customer.profile.read, customer.support.read,
@@ -46,7 +47,7 @@ test("only served read operations are ever granted", () => {
     // subjects.
     const expected = ["customer.session.read", "customer.capabilities.read", "customer.kyc.read", "customer.profile.read", "customer.support.read", "customer.auth.read", "customer.users.read"];
     if (kycStatus === "verified") {
-      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.activity.read");
+      expected.push("customer.wallets.read", "customer.notifications.read", "customer.deposits.read", "customer.withdrawals.read", "customer.quotes.read", "customer.exchange-orders.read", "customer.payments.read", "customer.cards.read", "customer.checks.read", "customer.activity.read", "customer.operations.read");
     }
     assert.deepEqual([...granted], expected);
     assert.equal(commandsEnabled, false);
@@ -58,7 +59,9 @@ test("only served read operations are ever granted", () => {
     ).length;
     assert.equal(
       granted.length,
-      customerOperations - (kycStatus === "verified" ? 0 : gated)
+      // getCustomerOperation shares getCustomerOperations' capability, so a
+      // verified subject sees one fewer grant than served operations.
+      customerOperations - (kycStatus === "verified" ? 1 : gated)
     );
   }
 });
@@ -228,6 +231,15 @@ test("money-moving and balance capabilities reference limits and scope decisions
   assert.deepEqual(
     CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.activity.")).map((item) => item.capability),
     ["customer.activity.read"]
+  );
+  // The operations namespace is likewise a read-only projection surface:
+  // the served collection read and its templated member read share the
+  // single customer.operations.* capability — no write or command
+  // capability exists, and it stays out of MONEY_NAMESPACES like activity.
+  assert.ok(!MONEY_NAMESPACES.includes("operations"));
+  assert.deepEqual(
+    CAPABILITY_POLICY.filter((item) => item.capability.startsWith("customer.operations.")).map((item) => item.capability),
+    ["customer.operations.read"]
   );
   for (const capability of ["customer.checks.preview", "customer.checks.claim", "customer.checks.cancel"]) {
     const command = financial.find((item) => item.capability === capability);

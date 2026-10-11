@@ -54,6 +54,8 @@ function usersStub(result: CustomerApiUsers | (() => Promise<CustomerApiUsers>))
     support: async () => ({ status: "not-configured" }),
     authSessions: async () => ({ status: "not-configured" }),
     activity: async () => ({ status: "not-configured" }),
+        operations: async () => ({ status: "not-configured" }),
+        operation: async () => ({ status: "not-configured" }),
     users: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;

@@ -97,6 +97,11 @@ export function createRequestObserver({
   wallClock = () => Date.now()
 }) {
   const templates = new Set(routes);
+  // Templated routes ({param} segments) label requests by their template so
+  // per-id detail reads never mint unbounded route labels.
+  const templatedRoutes = routes
+    .filter((route) => route.includes("{"))
+    .map((route) => route.split("/"));
   /** @type {Map<string, number>} */
   const counters = new Map();
   /** @type {Map<string, { buckets: number[], sum: number, count: number }>} */
@@ -105,7 +110,34 @@ export function createRequestObserver({
 
   /** @param {string} url */
   function routeOf(url) {
-    return templates.has(url) ? url : UNMATCHED_ROUTE;
+    if (templates.has(url)) {
+      return url;
+    }
+    const urlSegments = url.split("/");
+    for (const templateSegments of templatedRoutes) {
+      if (templateSegments.length !== urlSegments.length) {
+        continue;
+      }
+      let matched = true;
+      for (let index = 0; index < templateSegments.length; index += 1) {
+        const segment = templateSegments[index];
+        if (segment.startsWith("{") && segment.endsWith("}")) {
+          if (urlSegments[index].length === 0) {
+            matched = false;
+            break;
+          }
+          continue;
+        }
+        if (segment !== urlSegments[index]) {
+          matched = false;
+          break;
+        }
+      }
+      if (matched) {
+        return templateSegments.join("/");
+      }
+    }
+    return UNMATCHED_ROUTE;
   }
 
   /**
