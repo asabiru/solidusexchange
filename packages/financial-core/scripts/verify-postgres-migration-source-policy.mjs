@@ -32,6 +32,14 @@ const historyChangePattern = new RegExp(
   String.raw`\b(?:(?:INSERT\s+INTO(?:\s+ONLY)?|UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?(?:\s+ONLY)?|MERGE\s+INTO(?:\s+ONLY)?|ALTER\s+TABLE(?:\s+IF\s+EXISTS)?(?:\s+ONLY)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?)\s+${historyTablePattern}|COPY\s+${historyTablePattern}(?:\s*\([^)]*\))?\s+FROM\b)`,
   "iu"
 );
+const historyTableNamePattern = new RegExp(
+  String.raw`(?:^|[^a-z0-9_$])${historyTablePattern}`,
+  "iu"
+);
+const historyWriteHeadPattern = new RegExp(
+  String.raw`^\s*(?:INSERT\s+INTO(?:\s+ONLY)?|UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?(?:\s+ONLY)?|MERGE\s+INTO(?:\s+ONLY)?|ALTER\s+TABLE(?:\s+IF\s+EXISTS)?(?:\s+ONLY)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?|CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?|COPY)\b`,
+  "iu"
+);
 const canonicalHistoryRowPattern =
   /^\s*INSERT\s+INTO\s+financial_core\.schema_migrations\s*\(\s*version\s*,\s*migration_name\s*\)\s*VALUES\s*\(\s*([0-9]+)\s*,\s*'([a-z0-9_]+)'\s*\)\s*;\s*$/iu;
 const transactionControlPattern =
@@ -43,6 +51,7 @@ function dollarQuoteDelimiterAt(source, offset) {
 
 function analyzeSql(source) {
   const masked = [...source];
+  const maskedMeta = [...source];
   const dollarQuotedBodies = [];
   const singleQuotedLiterals = [];
   const unicodeEscapedIdentifiers = [];
@@ -51,6 +60,13 @@ function analyzeSql(source) {
   function mask(start, end) {
     for (let offset = start; offset < end; offset += 1) {
       if (masked[offset] !== "\n") masked[offset] = " ";
+      if (maskedMeta[offset] !== "\n") maskedMeta[offset] = " ";
+    }
+  }
+
+  function maskMeta(start, end) {
+    for (let offset = start; offset < end; offset += 1) {
+      if (maskedMeta[offset] !== "\n") maskedMeta[offset] = " ";
     }
   }
 
@@ -79,7 +95,10 @@ function analyzeSql(source) {
     } else if (source[index] === "'") {
       const start = index;
       singleQuotedLiterals.push(start);
-      const usesBackslashEscapes = start > 0 && /e/iu.test(source[start - 1]);
+      const usesBackslashEscapes =
+        start > 0 &&
+        /e/iu.test(source[start - 1]) &&
+        (start === 1 || !/[a-z0-9_$]/iu.test(source[start - 2]));
       index += 1;
       while (index < source.length) {
         if (source[index] === "'" && source[index + 1] === "'") {
@@ -105,6 +124,7 @@ function analyzeSql(source) {
       unicodeEscapedIdentifiers.push(index);
       index += 2;
     } else if (source[index] === '"') {
+      const start = index;
       index += 1;
       while (index < source.length) {
         if (source[index] === '"' && source[index + 1] === '"') {
@@ -116,8 +136,12 @@ function analyzeSql(source) {
           index += 1;
         }
       }
+      maskMeta(start, index);
     } else {
-      const delimiter = dollarQuoteDelimiterAt(source, index);
+      const delimiter =
+        index === 0 || !/[a-z0-9_$]/iu.test(source[index - 1])
+          ? dollarQuoteDelimiterAt(source, index)
+          : null;
       if (delimiter !== null) {
         const start = index;
         const bodyStart = index + delimiter.length;
@@ -140,6 +164,7 @@ function analyzeSql(source) {
 
   return {
     masked: masked.join(""),
+    maskedMeta: maskedMeta.join(""),
     dollarQuotedBodies,
     singleQuotedLiterals,
     unicodeEscapedIdentifiers
@@ -164,8 +189,13 @@ function splitSqlStatements(source) {
   return statements;
 }
 
+function maskedStatementTouchesHistoryTable(masked) {
+  if (!historyTableNamePattern.test(masked)) return false;
+  return historyWriteHeadPattern.test(masked) || historyChangePattern.test(masked);
+}
+
 function containsHistoryChange(source) {
-  return historyChangePattern.test(analyzeSql(source).masked);
+  return maskedStatementTouchesHistoryTable(analyzeSql(source).masked);
 }
 
 function containsUnicodeEscapedIdentifier(source) {
@@ -189,8 +219,9 @@ function containsDisallowedProceduralStatement(source) {
     if (analysis.singleQuotedLiterals.length > 0) return true;
     return analysis.dollarQuotedBodies.some(({ value }) => {
       const body = analyzeSql(value).masked;
-      return (
-        /\bEXECUTE\b(?!\s+FUNCTION\b)/iu.test(body) || historyChangePattern.test(body)
+      if (/\bEXECUTE\b(?!\s+FUNCTION\b)/iu.test(body)) return true;
+      return splitSqlStatements(value).some((bodyStatement) =>
+        maskedStatementTouchesHistoryTable(analyzeSql(bodyStatement).masked)
       );
     });
   });
@@ -228,9 +259,8 @@ for (const { name, migrationName, version } of migrations) {
     statement.trim().replace(/\s+/gu, " ").toUpperCase()
   );
 
-  assert.equal(
-    (source.match(/^[ \t]*\\\S+/gmu) ?? []).length,
-    0,
+  assert(
+    !/\\/u.test(analyzeSql(source).maskedMeta),
     `PostgreSQL migration must not execute psql meta-commands: ${name}`
   );
   assert(

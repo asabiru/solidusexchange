@@ -21,6 +21,7 @@ WITH runtime_role AS (
 runtime_memberships AS (
   SELECT
     parent_role.rolname::TEXT AS parent_role,
+    member_role.rolname::TEXT AS member_role,
     grantor_role.rolname::TEXT AS grantor,
     membership.admin_option,
     membership.inherit_option,
@@ -28,15 +29,13 @@ runtime_memberships AS (
   FROM pg_catalog.pg_auth_members AS membership
   JOIN runtime_role
     ON runtime_role.oid = membership.member
+    OR runtime_role.oid = membership.roleid
   JOIN pg_catalog.pg_roles AS parent_role
     ON parent_role.oid = membership.roleid
+  JOIN pg_catalog.pg_roles AS member_role
+    ON member_role.oid = membership.member
   JOIN pg_catalog.pg_roles AS grantor_role
     ON grantor_role.oid = membership.grantor
-),
-grantees (oid, label) AS (
-  SELECT runtime_role.oid, 'runtime' FROM runtime_role
-  UNION ALL
-  SELECT 0::OID, 'public'
 ),
 database_grants AS (
   SELECT
@@ -45,7 +44,8 @@ database_grants AS (
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    database.datdba AS object_owner
   FROM pg_catalog.pg_database AS database
   CROSS JOIN LATERAL pg_catalog.aclexplode(
     COALESCE(
@@ -62,7 +62,8 @@ schema_grants AS (
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    namespace.nspowner AS object_owner
   FROM pg_catalog.pg_namespace AS namespace
   CROSS JOIN LATERAL pg_catalog.aclexplode(
     COALESCE(
@@ -87,7 +88,8 @@ relation_grants AS (
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    relation.relowner AS object_owner
   FROM pg_catalog.pg_class AS relation
   JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = relation.relnamespace
@@ -110,7 +112,8 @@ column_grants AS (
     attribute.attname::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    relation.relowner AS object_owner
   FROM pg_catalog.pg_attribute AS attribute
   JOIN pg_catalog.pg_class AS relation
     ON relation.oid = attribute.attrelid
@@ -130,7 +133,8 @@ function_grants AS (
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    procedure.proowner AS object_owner
   FROM pg_catalog.pg_proc AS procedure
   JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = procedure.pronamespace
@@ -149,7 +153,8 @@ type_grants AS (
     NULL::TEXT AS column_name,
     acl.grantee,
     acl.privilege_type,
-    acl.is_grantable
+    acl.is_grantable,
+    type.typowner AS object_owner
   FROM pg_catalog.pg_type AS type
   JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = type.typnamespace
@@ -174,12 +179,15 @@ effective_grants AS (
     all_grants.object_type,
     all_grants.object_name,
     all_grants.column_name,
-    grantees.label AS grantee,
+    CASE
+      WHEN all_grants.grantee = 0 THEN 'public'
+      WHEN all_grants.grantee = (SELECT oid FROM runtime_role) THEN 'runtime'
+      ELSE 'role:' || pg_catalog.pg_get_userbyid(all_grants.grantee)
+    END AS grantee,
     all_grants.privilege_type AS privilege,
     all_grants.is_grantable AS grantable
   FROM all_grants
-  JOIN grantees
-    ON grantees.oid = all_grants.grantee
+  WHERE all_grants.grantee <> all_grants.object_owner
 ),
 default_privileges AS (
   SELECT
@@ -190,17 +198,22 @@ default_privileges AS (
     default_acl.defaclobjtype::TEXT AS object_type,
     pg_catalog.pg_get_userbyid(default_acl.defaclrole) =
       :'ledger_runtime_role' AS defined_by_runtime,
-    grantees.label AS grantee,
+    CASE
+      WHEN acl.grantee = 0 THEN 'public'
+      WHEN acl.grantee = (SELECT oid FROM runtime_role) THEN 'runtime'
+      ELSE 'role:' || pg_catalog.pg_get_userbyid(acl.grantee)
+    END AS grantee,
     acl.privilege_type AS privilege,
     acl.is_grantable AS grantable
   FROM pg_catalog.pg_default_acl AS default_acl
   LEFT JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = default_acl.defaclnamespace
   CROSS JOIN LATERAL pg_catalog.aclexplode(default_acl.defaclacl) AS acl
-  JOIN grantees
-    ON grantees.oid = acl.grantee
-  WHERE default_acl.defaclnamespace = 0
-     OR namespace.nspname = 'financial_core'
+  WHERE acl.grantee <> default_acl.defaclrole
+    AND (
+      default_acl.defaclnamespace = 0
+      OR namespace.nspname = 'financial_core'
+    )
 ),
 runtime_ownership AS (
   SELECT
@@ -291,6 +304,7 @@ SELECT jsonb_build_object(
         to_jsonb(runtime_memberships)
         ORDER BY
           runtime_memberships.parent_role COLLATE "C",
+          runtime_memberships.member_role COLLATE "C",
           runtime_memberships.grantor COLLATE "C",
           runtime_memberships.admin_option,
           runtime_memberships.inherit_option,

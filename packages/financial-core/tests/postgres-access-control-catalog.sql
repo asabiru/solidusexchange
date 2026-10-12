@@ -10,11 +10,11 @@ WITH schema_rows AS (
             'grantee', CASE
               WHEN acl.grantee = 0 THEN 'public'
               WHEN acl.grantee = namespace.nspowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantee)
             END,
             'grantor', CASE
               WHEN acl.grantor = namespace.nspowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantor)
             END,
             'privilege', acl.privilege_type,
             'grantable', acl.is_grantable
@@ -43,7 +43,11 @@ relation_rows AS (
     'relation_name', relation.relname,
     'relation_type', CASE relation.relkind
       WHEN 'r' THEN 'table'
+      WHEN 'p' THEN 'partitioned_table'
       WHEN 'v' THEN 'view'
+      WHEN 'm' THEN 'materialized_view'
+      WHEN 'S' THEN 'sequence'
+      WHEN 'f' THEN 'foreign_table'
       ELSE relation.relkind::TEXT
     END,
     'owner_is_current_user',
@@ -55,11 +59,11 @@ relation_rows AS (
             'grantee', CASE
               WHEN acl.grantee = 0 THEN 'public'
               WHEN acl.grantee = relation.relowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantee)
             END,
             'grantor', CASE
               WHEN acl.grantor = relation.relowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantor)
             END,
             'privilege', acl.privilege_type,
             'grantable', acl.is_grantable
@@ -73,7 +77,10 @@ relation_rows AS (
         FROM pg_catalog.aclexplode(
           COALESCE(
             relation.relacl,
-            pg_catalog.acldefault('r', relation.relowner)
+            pg_catalog.acldefault(
+              CASE WHEN relation.relkind = 'S' THEN 's' ELSE 'r' END::"char",
+              relation.relowner
+            )
           )
         ) AS acl
       ),
@@ -84,7 +91,7 @@ relation_rows AS (
   JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = relation.relnamespace
   WHERE namespace.nspname = 'financial_core'
-    AND relation.relkind IN ('r', 'v')
+    AND relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
 ),
 function_rows AS (
   SELECT jsonb_build_object(
@@ -100,11 +107,11 @@ function_rows AS (
             'grantee', CASE
               WHEN acl.grantee = 0 THEN 'public'
               WHEN acl.grantee = procedure.proowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantee)
             END,
             'grantor', CASE
               WHEN acl.grantor = procedure.proowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantor)
             END,
             'privilege', acl.privilege_type,
             'grantable', acl.is_grantable
@@ -141,11 +148,11 @@ column_rows AS (
             'grantee', CASE
               WHEN acl.grantee = 0 THEN 'public'
               WHEN acl.grantee = relation.relowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantee)
             END,
             'grantor', CASE
               WHEN acl.grantor = relation.relowner THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantor)
             END,
             'privilege', acl.privilege_type,
             'grantable', acl.is_grantable
@@ -167,7 +174,7 @@ column_rows AS (
   JOIN pg_catalog.pg_namespace AS namespace
     ON namespace.oid = relation.relnamespace
   WHERE namespace.nspname = 'financial_core'
-    AND relation.relkind IN ('r', 'v')
+    AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
     AND attribute.attnum > 0
     AND NOT attribute.attisdropped
 ),
@@ -191,11 +198,11 @@ default_acl_rows AS (
             'grantee', CASE
               WHEN acl.grantee = 0 THEN 'public'
               WHEN acl.grantee = default_acl.defaclrole THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantee)
             END,
             'grantor', CASE
               WHEN acl.grantor = default_acl.defaclrole THEN 'owner'
-              ELSE 'non_owner'
+              ELSE pg_catalog.pg_get_userbyid(acl.grantor)
             END,
             'privilege', acl.privilege_type,
             'grantable', acl.is_grantable
