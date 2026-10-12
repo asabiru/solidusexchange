@@ -319,7 +319,8 @@ const pinnedResponseSchemas = {
       "contact_hash",
       "sessions",
       "devices",
-      "limits"
+      "limits",
+      "recent_activity"
     ],
     properties: {
       subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
@@ -345,6 +346,92 @@ const pinnedResponseSchemas = {
         properties: {
           max_sessions: { type: "integer", minimum: 1, maximum: 16 },
           max_devices: { type: "integer", minimum: 1, maximum: 8 }
+        }
+      },
+      recent_activity: {
+        type: "array",
+        maxItems: 8,
+        items: { $ref: "#/components/schemas/OperatorSubjectActivityItem" }
+      }
+    }
+  },
+  OperatorSubjectActivityItem: {
+    type: "object",
+    additionalProperties: false,
+    required: ["activity_id", "kind", "occurred_at", "summary", "money"],
+    properties: {
+      activity_id: { type: "string", pattern: "^(act|opact)_[0-9a-f]{24}$" },
+      kind: {
+        type: "string",
+        enum: [
+          "deposit",
+          "withdrawal",
+          "quote",
+          "order",
+          "payment",
+          "card",
+          "check",
+          "kyc",
+          "security",
+          "kyc_transition",
+          "flag_added"
+        ]
+      },
+      occurred_at: { type: "string", format: "date-time" },
+      summary: {
+        type: "string",
+        enum: [
+          "awaiting_payment",
+          "payment_received",
+          "partial_payment",
+          "duplicate_payment",
+          "payment_reversed",
+          "expired_no_payment",
+          "draft",
+          "screened",
+          "pending_maker_approval",
+          "pending_checker_approval",
+          "unsigned_intent_ready",
+          "broadcast",
+          "confirmed",
+          "rejected",
+          "cancelled",
+          "expired",
+          "indicative",
+          "open",
+          "created",
+          "processing",
+          "completed",
+          "failed",
+          "reversed",
+          "pending_activation",
+          "active",
+          "frozen",
+          "blocked",
+          "terminated",
+          "awaiting_confirmation",
+          "awaiting_recipient_kyc",
+          "claimed",
+          "submitted",
+          "in_review",
+          "approved",
+          "needs_more_data",
+          "timed_out",
+          "unavailable",
+          "login",
+          "revoked",
+          "structuring",
+          "velocity",
+          "geo_mismatch"
+        ]
+      },
+      money: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["amount", "asset"],
+        properties: {
+          amount: { $ref: "#/$defs/decimalAmount" },
+          asset: { $ref: "#/$defs/assetCode" }
         }
       }
     }

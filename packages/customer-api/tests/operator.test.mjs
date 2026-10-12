@@ -6,6 +6,7 @@ import { evaluateOperatorCapabilities } from "../src/capabilities.mjs";
 import {
   createSyntheticOperatorDirectory,
   createSyntheticOperatorSubjectsDirectory,
+  OPERATOR_ACTIVITY_KINDS,
   OPERATOR_QUEUE_KINDS,
   OPERATOR_ROLES,
   OPERATOR_TICKET_QUEUE_STATES,
@@ -516,11 +517,64 @@ test("the synthetic subject detail stays deterministic, frozen and within the co
   for (const key of ["subject_id", "display_name", "kyc_status", "flags", "registered_at", "last_active_at", "posting"]) {
     assert.deepEqual(first.subject[key], row[key], key);
   }
+  // The recent_activity page is frozen, newest-first and bounded like the
+  // operator page size.
+  const activity = first.subject.recent_activity;
+  assert.ok(Object.isFrozen(activity));
+  assert.ok(activity.length >= 1 && activity.length <= 8);
+  for (const item of activity) {
+    assert.ok(Object.isFrozen(item));
+    assert.ok(OPERATOR_ACTIVITY_KINDS.includes(item.kind), item.kind);
+  }
+  for (let index = 1; index < activity.length; index += 1) {
+    const prev = activity[index - 1];
+    const next = activity[index];
+    assert.ok(
+      next.occurred_at < prev.occurred_at || (next.occurred_at === prev.occurred_at && next.activity_id > prev.activity_id),
+      `ordering at ${index}`
+    );
+  }
   // An id outside the shared universe resolves to null — the route maps it
   // onto the pinned uniform 404.
   assert.equal(await directory.subjectFor(`syn_cust_${"f".repeat(24)}`), null);
   assert.equal(await directory.subjectFor("syn_oper_00000001"), null);
   assert.equal(await directory.subjectFor(""), null);
+});
+
+test("the recent_activity projection cross-checks the roster recipe", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const view = await directory.subjectsFor();
+  const details = await Promise.all(view.subjects.map((row) => directory.subjectFor(row.subject_id)));
+  // Operator-side events exist exactly when the roster projects them.
+  assert.ok(details.some((detail) => detail.subject.recent_activity.some((item) => item.kind === "kyc_transition")));
+  assert.ok(details.some((detail) => detail.subject.recent_activity.some((item) => item.kind === "flag_added")));
+  for (const detail of details) {
+    const subject = detail.subject;
+    // Every roster detail validates — a rejected view would 500 the route.
+    assert.equal(validOperatorSubjectDetailView(detail), true, subject.subject_id);
+    const transitions = subject.recent_activity.filter((item) => item.kind === "kyc_transition");
+    const flagEvents = subject.recent_activity.filter((item) => item.kind === "flag_added");
+    // The newest-first page drops the oldest events once full, so projected
+    // operator events are a subset of the roster recipe, never an invention.
+    if (subject.kyc_status === "unverified") {
+      assert.equal(transitions.length, 0, subject.subject_id);
+    } else if (subject.kyc_status === "pending") {
+      for (const item of transitions) assert.equal(item.summary, "submitted", subject.subject_id);
+    } else {
+      for (const item of transitions) assert.ok(item.summary === "submitted" || item.summary === "approved", subject.subject_id);
+    }
+    assert.ok(flagEvents.length <= subject.flags, subject.subject_id);
+    // The merged page keeps the customer items verbatim: kind/status/created
+    // map onto kind/summary/occurred_at and the money pair passes through.
+    for (const item of subject.recent_activity) {
+      if (item.activity_id.startsWith("act_")) {
+        assert.ok(item.kind !== "kyc_transition" && item.kind !== "flag_added");
+      } else {
+        assert.ok(item.activity_id.startsWith("opact_"));
+        assert.equal(item.money, null);
+      }
+    }
+  }
 });
 
 test("unknown or malformed subject ids fail closed with the uniform 404", async () => {
@@ -574,6 +628,11 @@ test("a malformed operator subject detail fails closed", async () => {
     detailView({}, { email: "a@b.test" }),
     detailView({}, { last_active_at: "2000-01-01T00:00:00.000Z" }),
     detailView({}, { posting: "pending" }),
+    detailView({}, { recent_activity: [] }),
+    detailView({}, { recent_activity: [...real.subject.recent_activity].reverse() }),
+    detailView({}, { recent_activity: real.subject.recent_activity.map((item) => ({ ...item, summary: "approved" })) }),
+    detailView({}, { recent_activity: real.subject.recent_activity.map((item) => ({ ...item, activity_id: `act_${"e".repeat(24)}` })) }),
+    detailView({}, { recent_activity: [...real.subject.recent_activity, { ...real.subject.recent_activity[0], activity_id: `opact_${"9".repeat(24)}` }] }),
     missingSubject,
     "view"
   ];

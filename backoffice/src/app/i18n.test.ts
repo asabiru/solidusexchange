@@ -120,6 +120,8 @@ describe("i18n: catalog parity", () => {
       "common.subject",
       "common.category",
       "common.scenario",
+      "activity.kind.card",
+      "activity.kind.check",
       "checks.check",
       "checks.amount",
       "checks.status",

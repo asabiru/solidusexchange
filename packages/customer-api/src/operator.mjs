@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { ACTIVITY_ASSETS, ACTIVITY_KINDS, ACTIVITY_STATUSES, syntheticActivityItems } from "./activity.mjs";
 import { KYC_STATUSES, OPERATOR_CAPABILITY_POLICY } from "./capabilities.mjs";
 import { syntheticSupportTickets, TICKET_CATEGORIES } from "./support.mjs";
 
@@ -294,10 +295,38 @@ const SUBJECT_DETAIL_KEYS = Object.freeze([
   "last_active_at",
   "limits",
   "posting",
+  "recent_activity",
   "registered_at",
   "sessions",
   "subject_id"
 ]);
+
+// The recent_activity page merges the subject's own customer feed items
+// (the #276 recipe, re-mapped onto the operator summary shape) with
+// operator-side events — kyc transitions following the roster kyc_status
+// lifecycle and one flag_added row per open flag — re-sorted newest
+// first and bounded to the operator page size. `occurred_at` never
+// exceeds the roster's pinned as-of instant (QUEUE_SNAPSHOT_MS).
+const RECENT_ACTIVITY_BOUND = 8;
+const OPERATOR_ACTIVITY_ITEM_KEYS = Object.freeze(["activity_id", "kind", "occurred_at", "summary", "money"]);
+const OPERATOR_ACTIVITY_MONEY_KEYS = Object.freeze(["amount", "asset"]);
+const OPERATOR_ACTIVITY_ID_PATTERN = /^(act|opact)_[0-9a-f]{24}$/u;
+const OPERATOR_ONLY_KINDS = Object.freeze(["kyc_transition", "flag_added"]);
+const KYC_TRANSITION_SUMMARIES = Object.freeze(["submitted", "approved"]);
+const KYC_APPROVED_BASE_MS = 86_400_000;
+const KYC_APPROVED_JITTER_MS = 14 * 86_400_000;
+const AML_ALERT_TYPES = Object.freeze(["structuring", "velocity", "geo_mismatch"]);
+const ACTIVITY_ASSET_SCALES = new Map(Object.entries(ACTIVITY_ASSETS));
+// The money-carrying kinds mirror the activity recipe's money set — every
+// customer kind but kyc and security; operator kinds never carry money.
+const ACTIVITY_MONEY_KINDS = new Set(ACTIVITY_KINDS.filter((kind) => kind !== "kyc" && kind !== "security"));
+const OPERATOR_ACTIVITY_SUMMARIES = new Set([
+  ...Object.values(ACTIVITY_STATUSES).flat(),
+  ...KYC_TRANSITION_SUMMARIES,
+  ...AML_ALERT_TYPES
+]);
+/** The customer feed's kind set plus the two operator-side event kinds. */
+export const OPERATOR_ACTIVITY_KINDS = Object.freeze([...ACTIVITY_KINDS, ...OPERATOR_ONLY_KINDS]);
 const SUBJECT_LIMIT_KEYS = Object.freeze(["max_devices", "max_sessions"]);
 const CONTACT_HASH_PATTERN = /^cth_[0-9a-f]{32}$/u;
 const DEVICE_REF_PATTERN = /^dev_[0-9a-f]{16}$/u;
@@ -363,6 +392,15 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  */
 
 /**
+ * @typedef {object} OperatorSubjectActivityItem
+ * @property {string} activity_id
+ * @property {string} kind
+ * @property {string} occurred_at
+ * @property {string} summary
+ * @property {{ amount: string, asset: string } | null} money
+ */
+
+/**
  * @typedef {object} OperatorSubjectLimits
  * @property {number} max_sessions
  * @property {number} max_devices
@@ -382,6 +420,7 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  * @property {number} sessions
  * @property {readonly string[]} devices
  * @property {OperatorSubjectLimits} limits
+ * @property {readonly OperatorSubjectActivityItem[]} recent_activity
  */
 
 /**
@@ -541,6 +580,81 @@ function deriveSubjectDetailFields(subjectId) {
 }
 
 /**
+ * One deterministic operator-side kyc_transition item. Its summary is the
+ * kyc application status the transition reached.
+ * @param {string} subjectId
+ * @param {string} summary
+ * @param {number} atMs
+ * @returns {OperatorSubjectActivityItem}
+ */
+function kycTransitionItem(subjectId, summary, atMs) {
+  return Object.freeze({
+    activity_id: `opact_${subjectsDigest(subjectId, `kyc-${summary}`).toString("hex").slice(0, 24)}`,
+    kind: "kyc_transition",
+    occurred_at: new Date(atMs).toISOString(),
+    summary,
+    money: null
+  });
+}
+
+/**
+ * The subject's recent_activity page: its own customer feed items
+ * re-mapped onto the operator summary shape (kind kept, status becomes
+ * the i18n-safe summary, created_at becomes occurred_at), merged with
+ * operator-side kyc transitions and flag_added rows, re-sorted newest
+ * first and bounded to the operator page size. Pure function of the
+ * roster row — no cache, no stored lookup.
+ * @param {OperatorSubjectRow} row
+ * @returns {readonly OperatorSubjectActivityItem[]}
+ */
+function deriveSubjectRecentActivity(row) {
+  const subjectId = row.subject_id;
+  /** @type {OperatorSubjectActivityItem[]} */
+  const items = syntheticActivityItems(subjectId).map((item) =>
+    Object.freeze({
+      activity_id: item.activity_id,
+      kind: item.kind,
+      occurred_at: item.created_at,
+      summary: item.status,
+      money: item.money
+    }));
+  const registeredMs = Date.parse(row.registered_at);
+  // kyc transitions reuse the same submitted_at the kyc queue projects.
+  if (row.kyc_status !== "unverified") {
+    const submittedMs = Math.max(
+      registeredMs,
+      QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
+    );
+    items.push(kycTransitionItem(subjectId, "submitted", submittedMs));
+    if (row.kyc_status === "verified") {
+      const approvedMs = Math.min(
+        submittedMs + KYC_APPROVED_BASE_MS + Number(subjectsUnits(subjectId, "kyc-approved", BigInt(KYC_APPROVED_JITTER_MS))),
+        QUEUE_SNAPSHOT_MS
+      );
+      items.push(kycTransitionItem(subjectId, "approved", approvedMs));
+    }
+  }
+  // One flag_added row per open roster flag; its summary names the AML
+  // alert type the flag was raised for.
+  for (let index = 0; index < row.flags; index += 1) {
+    const flagMs = registeredMs + Number(
+      subjectsUnits(subjectId, `flag-at-${index}`, BigInt(QUEUE_SNAPSHOT_MS - registeredMs))
+    );
+    items.push(Object.freeze({
+      activity_id: `opact_${subjectsDigest(subjectId, `flag-${index}`).toString("hex").slice(0, 24)}`,
+      kind: "flag_added",
+      occurred_at: new Date(flagMs).toISOString(),
+      summary: AML_ALERT_TYPES[Number(subjectsUnits(subjectId, `flag-type-${index}`, BigInt(AML_ALERT_TYPES.length)))],
+      money: null
+    }));
+  }
+  items.sort((a, b) => (a.occurred_at === b.occurred_at
+    ? a.activity_id.localeCompare(b.activity_id)
+    : b.occurred_at.localeCompare(a.occurred_at)));
+  return Object.freeze(items.slice(0, RECENT_ACTIVITY_BOUND));
+}
+
+/**
  * @param {OperatorSubjectRow} row
  * @returns {OperatorSubjectDetail}
  */
@@ -552,7 +666,8 @@ function buildSubjectDetail(row) {
     contact_hash: derived.contact_hash,
     sessions: derived.sessions,
     devices: derived.devices,
-    limits: derived.limits
+    limits: derived.limits,
+    recent_activity: deriveSubjectRecentActivity(row)
   });
 }
 
@@ -612,6 +727,77 @@ export function validOperatorSubjectsView(view) {
     candidate.subjects.every(validOperatorSubjectRow) &&
     new Set(candidate.subjects.map((row) => row.subject_id)).size === candidate.subjects.length
   );
+}
+
+/**
+ * Canonical non-negative decimal string with exactly `scale` fraction digits.
+ *
+ * @param {unknown} value
+ * @param {number} scale
+ */
+function isScaledDecimal(value, scale) {
+  return (
+    typeof value === "string" &&
+    new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(value)
+  );
+}
+
+/**
+ * @param {string} text
+ * @returns {bigint}
+ */
+function parseUnits(text) {
+  return BigInt(text.replace(".", ""));
+}
+
+/** @param {unknown} item */
+function validOperatorSubjectActivityItem(item) {
+  if (item === null || typeof item !== "object" || Array.isArray(item)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorSubjectActivityItem} */ (item);
+  if (JSON.stringify(Object.keys(item).sort()) !== JSON.stringify([...OPERATOR_ACTIVITY_ITEM_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !OPERATOR_ACTIVITY_ID_PATTERN.test(candidate.activity_id) ||
+    !OPERATOR_ACTIVITY_KINDS.includes(candidate.kind) ||
+    !OPERATOR_ACTIVITY_SUMMARIES.has(candidate.summary) ||
+    !isIsoTimestamp(candidate.occurred_at)
+  ) {
+    return false;
+  }
+  const operatorKind = OPERATOR_ONLY_KINDS.includes(candidate.kind);
+  // `act_*` ids name the subject's own customer feed items; `opact_*` ids
+  // are minted for the operator-side event kinds only.
+  if (operatorKind !== candidate.activity_id.startsWith("opact_")) {
+    return false;
+  }
+  if (operatorKind) {
+    if (candidate.kind === "kyc_transition" && !KYC_TRANSITION_SUMMARIES.includes(candidate.summary)) {
+      return false;
+    }
+    if (candidate.kind === "flag_added" && !AML_ALERT_TYPES.includes(candidate.summary)) {
+      return false;
+    }
+  } else if (!ACTIVITY_STATUSES[candidate.kind].includes(candidate.summary)) {
+    // A customer-kind item's summary is the referenced record's status.
+    return false;
+  }
+  const money = /** @type {unknown} */ (candidate.money);
+  if (money === null) {
+    // Money-free kinds never carry an amount; money kinds always do.
+    return !ACTIVITY_MONEY_KINDS.has(candidate.kind);
+  }
+  if (!ACTIVITY_MONEY_KINDS.has(candidate.kind) || typeof money !== "object" || Array.isArray(money)) {
+    return false;
+  }
+  if (JSON.stringify(Object.keys(money).sort()) !== JSON.stringify([...OPERATOR_ACTIVITY_MONEY_KEYS].sort())) {
+    return false;
+  }
+  const entry = /** @type {{ amount: string, asset: string }} */ (money);
+  const scale = ACTIVITY_ASSET_SCALES.get(entry.asset);
+  return scale !== undefined && isScaledDecimal(entry.amount, scale) && parseUnits(entry.amount) > 0n;
 }
 
 /** @param {unknown} view */
@@ -678,6 +864,51 @@ export function validOperatorSubjectDetailView(view) {
   if (Date.parse(subject.last_active_at) < Date.parse(subject.registered_at)) {
     return false;
   }
+  const activity = /** @type {unknown} */ (subject.recent_activity);
+  if (!Array.isArray(activity) || activity.length < 1 || activity.length > RECENT_ACTIVITY_BOUND) {
+    return false;
+  }
+  const activityIds = new Set();
+  let previousActivityMs = Number.POSITIVE_INFINITY;
+  let previousActivityId = "";
+  for (const item of activity) {
+    if (!validOperatorSubjectActivityItem(item) || activityIds.has(item.activity_id)) {
+      return false;
+    }
+    activityIds.add(item.activity_id);
+    const occurredMs = Date.parse(item.occurred_at);
+    // occurred_at never exceeds the roster's pinned as-of instant.
+    if (occurredMs > QUEUE_SNAPSHOT_MS) {
+      return false;
+    }
+    // The page is sorted newest first; same-instant items order by id.
+    if (
+      occurredMs > previousActivityMs ||
+      (occurredMs === previousActivityMs && item.activity_id.localeCompare(previousActivityId) <= 0)
+    ) {
+      return false;
+    }
+    previousActivityMs = occurredMs;
+    previousActivityId = item.activity_id;
+  }
+  // The operator-side events cross-check against the roster recipe within
+  // the page bound: unverified subjects mint no kyc_transition, pending
+  // ones only submitted, and flag_added rows never exceed the roster's open
+  // flag count — the newest-first page drops the oldest events once full,
+  // so presence is a subset of the recipe, never an invention.
+  const transitions = activity.filter((item) => item.kind === "kyc_transition");
+  if (subject.kyc_status === "unverified" && transitions.length !== 0) {
+    return false;
+  }
+  if (subject.kyc_status === "pending" && transitions.some((item) => item.summary !== "submitted")) {
+    return false;
+  }
+  if (new Set(transitions.map((item) => item.summary)).size !== transitions.length) {
+    return false;
+  }
+  if (activity.filter((item) => item.kind === "flag_added").length > subject.flags) {
+    return false;
+  }
   // The detail is a pure function of the shared roster: the list fields
   // must equal the row minted for the id's index, and every derived field
   // must equal the deterministic derivation for that id. Anything else is
@@ -698,7 +929,8 @@ export function validOperatorSubjectDetailView(view) {
     subject.contact_hash === derived.contact_hash &&
     subject.sessions === derived.sessions &&
     JSON.stringify(subject.devices) === JSON.stringify(derived.devices) &&
-    JSON.stringify(subject.limits) === JSON.stringify(derived.limits)
+    JSON.stringify(subject.limits) === JSON.stringify(derived.limits) &&
+    JSON.stringify(subject.recent_activity) === JSON.stringify(deriveSubjectRecentActivity(row))
   );
 }
 
@@ -822,7 +1054,6 @@ const AML_QUEUE_ID_PATTERN = /^qml_[0-9a-f]{24}$/u;
 const TICKET_QUEUE_ID_PATTERN = /^qtick_[0-9a-f]{24}$/u;
 const EVIDENCE_REF_PATTERN = /^evd_[0-9a-f]{24}$/u;
 const EVIDENCE_REFS_MAX_ITEMS = 8;
-const AML_ALERT_TYPES = Object.freeze(["structuring", "velocity", "geo_mismatch"]);
 const QUEUE_MAX_ITEMS = 64;
 // The pinned snapshot instant the queue ages against. The read is a pure
 // function, so its "now" is part of the derivation — it lands after every

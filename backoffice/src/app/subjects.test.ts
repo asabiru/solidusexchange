@@ -5,6 +5,7 @@ import { demoRepository, type SubjectTimelineKind } from "../data/demo.js";
 import { isSubjectRef } from "../server/subjects.js";
 import { hasMessage } from "./i18n.js";
 import { navigation } from "./navigation.js";
+import { operatorActivityKindKeyOf, operatorActivitySummaryKeyOf } from "./server-fields.js";
 
 const timelineKinds = [
   "check",
@@ -80,6 +81,35 @@ describe("subject timeline wiring", () => {
         []
       );
     }
+  });
+
+  it("covers every operator activity kind and summary with a localized label", () => {
+    const kinds = [
+      "deposit", "withdrawal", "quote", "order", "payment", "card", "check", "kyc", "security",
+      "kyc_transition", "flag_added"
+    ] as const;
+    for (const kind of kinds) {
+      const key = operatorActivityKindKeyOf(kind);
+      assert.ok(key !== undefined, kind);
+      assert.equal(hasMessage(key), true, `${kind} -> ${key}`);
+    }
+    const summaries = [
+      "awaiting_payment", "payment_received", "partial_payment", "duplicate_payment", "payment_reversed",
+      "expired_no_payment", "draft", "screened", "pending_maker_approval", "pending_checker_approval",
+      "unsigned_intent_ready", "broadcast", "confirmed", "rejected", "cancelled", "expired", "indicative",
+      "open", "created", "processing", "completed", "failed", "reversed", "pending_activation", "active",
+      "frozen", "blocked", "terminated", "awaiting_confirmation", "awaiting_recipient_kyc", "claimed",
+      "submitted", "in_review", "approved", "needs_more_data", "timed_out", "unavailable", "login",
+      "revoked", "structuring", "velocity", "geo_mismatch"
+    ] as const;
+    for (const summary of summaries) {
+      const key = operatorActivitySummaryKeyOf(summary);
+      assert.ok(key !== undefined, summary);
+      assert.equal(hasMessage(key), true, `${summary} -> ${key}`);
+    }
+    assert.equal(operatorActivityKindKeyOf("unknown-kind"), undefined);
+    assert.equal(operatorActivitySummaryKeyOf("free text"), undefined);
+    assert.equal(hasMessage("customers.recentActivity"), true);
   });
 
   it("returns undefined for unmatched refs and stays silent about coverage", () => {

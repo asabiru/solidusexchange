@@ -469,7 +469,7 @@
       "minCases": 4
     },
     "backoffice/src/app/i18n.test.ts": {
-      "minLines": 428,
+      "minLines": 430,
       "minCases": 38
     },
     "backoffice/src/app/server-fields.test.ts": {
@@ -477,8 +477,8 @@
       "minCases": 22
     },
     "backoffice/src/app/subjects.test.ts": {
-      "minLines": 89,
-      "minCases": 6
+      "minLines": 118,
+      "minCases": 7
     },
     "backoffice/src/app/support.test.ts": {
       "minLines": 50,
@@ -501,8 +501,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 296,
-      "minCases": 13
+      "minLines": 353,
+      "minCases": 14
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -513,7 +513,7 @@
       "minCases": 8
     },
     "backoffice/src/server/backoffice-upstream-audit.test.ts": {
-      "minLines": 538,
+      "minLines": 563,
       "minCases": 22
     },
     "backoffice/src/server/bff-core.test.ts": {
@@ -533,7 +533,7 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 741,
+      "minLines": 775,
       "minCases": 27
     },
     "backoffice/src/server/dev-server.test.ts": {
@@ -565,7 +565,7 @@
       "minCases": 9
     },
     "backoffice/src/server/operator-subject-upstream.test.ts": {
-      "minLines": 297,
+      "minLines": 330,
       "minCases": 9
     },
     "backoffice/src/server/operator-subjects-upstream.test.ts": {
@@ -1049,8 +1049,8 @@
       "minCases": 5
     },
     "packages/customer-api/tests/operator.test.mjs": {
-      "minLines": 851,
-      "minCases": 25
+      "minLines": 901,
+      "minCases": 26
     },
     "packages/customer-api/tests/payments.test.mjs": {
       "minLines": 280,

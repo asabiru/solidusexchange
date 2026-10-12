@@ -36,7 +36,23 @@ const subjectDetailPayload = {
     contactHash: "cth_5f4dcc3b5aa765d61d8327deb882cf99",
     sessions: 3,
     devices: ["dev_00112233aabbccdd", "dev_0123456789abcdef"],
-    limits: { maxSessions: 8, maxDevices: 4 }
+    limits: { maxSessions: 8, maxDevices: 4 },
+    recentActivity: [
+      {
+        activityId: `opact_${"c".repeat(24)}`,
+        kind: "flag_added",
+        occurredAt: "2026-10-10T12:00:00.000Z",
+        summary: "velocity",
+        money: null
+      },
+      {
+        activityId: `act_${"d".repeat(24)}`,
+        kind: "deposit",
+        occurredAt: "2026-10-09T08:00:00.000Z",
+        summary: "payment_received",
+        money: { amount: "1250.00", asset: "RUB" }
+      }
+    ]
   }
 } as const;
 
@@ -111,6 +127,14 @@ describe("operator subject detail adapter", () => {
     assert.deepEqual([...subject.devices], ["dev_00112233aabbccdd", "dev_0123456789abcdef"]);
     assert.equal(subject.limits.maxSessions, 8);
     assert.equal(subject.limits.maxDevices, 4);
+    assert.equal(subject.recentActivity.length, 2);
+    const first = subject.recentActivity[0];
+    assert.equal(first.kind, "flag_added");
+    assert.equal(first.money, null);
+    const second = subject.recentActivity[1];
+    assert.equal(second.activityId, `act_${"d".repeat(24)}`);
+    assert.equal(second.summary, "payment_received");
+    assert.deepEqual(second.money, { amount: "1250.00", asset: "RUB" });
   });
 
   it("rejects forged envelopes and invalid detail axes", () => {
@@ -120,7 +144,8 @@ describe("operator subject detail adapter", () => {
       contactHash: "aibek@example.dev",
       sessions: 17,
       devices: ["not-a-device"],
-      limits: { maxSessions: 8 }
+      limits: { maxSessions: 8 },
+      recentActivity: []
     };
     for (const [key, value] of Object.entries(cases)) {
       assert.equal(parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, [key]: value } }, subjectDetailPayload.subject.subjectId), undefined, key);
@@ -135,6 +160,39 @@ describe("operator subject detail adapter", () => {
       undefined,
       "duplicated device ref"
     );
+  });
+
+  it("rejects malformed recent_activity items", () => {
+    const [first, second] = subjectDetailPayload.subject.recentActivity;
+    const subjectId = subjectDetailPayload.subject.subjectId;
+    const drifts: readonly unknown[] = [
+      "not-an-array",
+      [{ ...first, activityId: `act_${"c".repeat(24)}` }],
+      [{ ...first, kind: "deposit" }],
+      [{ ...first, summary: "free text" }],
+      [{ ...first, summary: "approved" }],
+      [{ ...second, summary: "approved" }],
+      [{ ...first, occurredAt: "yesterday" }],
+      [{ ...first, money: { amount: "1.00", asset: "RUB" } }],
+      [{ ...second, money: null }],
+      [{ ...second, money: { amount: "1250.0", asset: "RUB" } }],
+      [{ ...second, money: { amount: "1250.00", asset: "XXX" } }],
+      [{ ...second, money: { amount: "0.00", asset: "RUB" } }],
+      [second, first],
+      [first, { ...second, activityId: first.activityId }],
+      Array.from({ length: 9 }, (_value, index) => ({
+        ...first,
+        activityId: `opact_${"0".repeat(23)}${index}`,
+        occurredAt: `2026-10-${String(20 - index).padStart(2, "0")}T00:00:00.000Z`
+      }))
+    ];
+    for (const recentActivity of drifts) {
+      assert.equal(
+        parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, recentActivity } }, subjectId),
+        undefined,
+        JSON.stringify(recentActivity).slice(0, 96)
+      );
+    }
   });
 });
 
