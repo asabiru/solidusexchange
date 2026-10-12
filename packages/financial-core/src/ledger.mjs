@@ -12,8 +12,16 @@ const JOURNAL_TYPE_PATTERN = /^[A-Z][A-Z0-9_]{2,63}$/;
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
 const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{15,127}$/;
 const DATE_TIME_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(?:Z|[+-](\d{2}):(\d{2}))$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:Z|[+-](\d{2}):(\d{2}))$/;
 const MAX_ENTRIES = 1000;
+const MAX_JOURNALS = 10_000;
+// The PostgreSQL timestamp range bounds (migration 0013) expressed as instants:
+// '0001-01-01 00:00:00+14:00' and '9999-12-31 23:59:59.999999-14:00'. Literals
+// passing DATE_TIME_PATTERN must still denote instants inside that interval —
+// nanosecond fractions past the microsecond bound would otherwise be accepted
+// here and rejected on write.
+const MIN_INSTANT_NANOSECONDS = -62_135_647_200_000_000_000n;
+const MAX_INSTANT_NANOSECONDS = 253_402_351_199_999_999_000n;
 const ARRAY_INDEX_PATTERN = /^(?:0|[1-9][0-9]*)$/;
 
 const CHART_KEYS = new Set([
@@ -128,8 +136,8 @@ function assertDateTime(value, label) {
   const hour = Number(hourValue);
   const minute = Number(minuteValue);
   const second = Number(secondValue);
-  const offsetHour = match[7] === undefined ? 0 : Number(match[7]);
-  const offsetMinute = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8]);
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9]);
   const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   const daysInMonth = [
     31,
@@ -161,6 +169,16 @@ function assertDateTime(value, label) {
   ) {
     reject("LEDGER_VALIDATION_FAILED", `${label} must be an ISO date-time.`);
   }
+  const subMillisecondNanoseconds =
+    match[7] === undefined ? 0n : BigInt(match[7].padEnd(9, "0")) % 1_000_000n;
+  const instantNanoseconds =
+    BigInt(Date.parse(value)) * 1_000_000n + subMillisecondNanoseconds;
+  if (
+    instantNanoseconds < MIN_INSTANT_NANOSECONDS ||
+    instantNanoseconds > MAX_INSTANT_NANOSECONDS
+  ) {
+    reject("LEDGER_VALIDATION_FAILED", `${label} must be an ISO date-time.`);
+  }
 }
 
 function canonicalize(value) {
@@ -181,6 +199,11 @@ function digest(value) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+// Canonical byte order ("C" collation), independent of runtime collation.
+function compareCodeUnits(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 // UUID identity is canonicalized to lowercase, matching the PostgreSQL `uuid`
@@ -586,7 +609,8 @@ export function createInMemoryLedger({
   assets: assetsInput,
   chart: chartInput,
   postingRules: postingRulesInput,
-  clock = () => new Date().toISOString()
+  clock = () => new Date().toISOString(),
+  maxJournals = MAX_JOURNALS
 }) {
   const chart = snapshotPlainData(chartInput, "LEDGER_CHART_INVALID", "Chart of accounts");
   const postingRules = snapshotPlainData(
@@ -603,6 +627,12 @@ export function createInMemoryLedger({
   validateChart(chart);
   if (typeof clock !== "function") {
     reject("LEDGER_CONFIGURATION_INVALID", "Ledger clock must be a function.");
+  }
+  if (!Number.isSafeInteger(maxJournals) || maxJournals < 1) {
+    reject(
+      "LEDGER_CONFIGURATION_INVALID",
+      "Ledger journal capacity must be a positive safe integer."
+    );
   }
   const definitions = new Map(
     chart.account_definitions.map((definition) => [definition.code, freezeDeep(clone(definition))])
@@ -637,6 +667,9 @@ export function createInMemoryLedger({
       if (postedEntryIds.has(entry.entry_id)) {
         reject("LEDGER_DUPLICATE_ENTRY", `Entry ID ${entry.entry_id} already exists.`);
       }
+    }
+    if (journals.size >= maxJournals) {
+      reject("LEDGER_CAPACITY_EXCEEDED", "Ledger journal capacity is exhausted.");
     }
 
     const acceptedAt = clock();
@@ -708,8 +741,8 @@ export function createInMemoryLedger({
       [...totals.values()]
         .sort(
           (left, right) =>
-            left.legalEntityId.localeCompare(right.legalEntityId) ||
-            left.assetCode.localeCompare(right.assetCode)
+            compareCodeUnits(left.legalEntityId, right.legalEntityId) ||
+            compareCodeUnits(left.assetCode, right.assetCode)
         )
         .map((row) => {
           const scale = assetRegistry.get(row.assetCode).scale;
