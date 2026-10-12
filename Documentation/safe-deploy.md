@@ -1,5 +1,7 @@
 # Safe Deploy
 
+> **Статус: legacy-документация.** Описывает деплой legacy Laravel-приложения из корня репозитория на реальный VPS. По текущей политике репозитория (dev-only/synthetic, см. `Documentation/regulated-core/`) production-контур не разворачивается; workflow запускается только вручную через `workflow_dispatch`.
+
 ## Цель
 
 Безопасный деплой для Linux/VPS с:
@@ -36,9 +38,10 @@
 
 ## Что уже добавлено
 
-- deploy script: [`deployment/deploy.sh`](/c:/Users/stasb/Desktop/проект/deployment/deploy.sh)
-- rollback script: [`deployment/rollback.sh`](/c:/Users/stasb/Desktop/проект/deployment/rollback.sh)
-- GitHub Actions template: [`.github/workflows/deploy.yml.example`](/c:/Users/stasb/Desktop/проект/.github/workflows/deploy.yml.example)
+- deploy script: [`deployment/deploy.sh`](../deployment/deploy.sh)
+- rollback script: [`deployment/rollback.sh`](../deployment/rollback.sh)
+- вариант для shared-хостинга (git pull в `APP_DIR`, без releases): [`deployment/sweb-deploy.sh`](../deployment/sweb-deploy.sh)
+- GitHub Actions workflow: [`.github/workflows/deploy.yml`](../.github/workflows/deploy.yml) — уже добавлен, запуск только через `workflow_dispatch`
 
 ## One-time setup на сервере
 
@@ -90,8 +93,8 @@ bash /var/www/coinectra/current/deployment/rollback.sh
 2. Клонирует новый релиз в `releases/<timestamp>`.
 3. Подключает `shared/.env` и `shared/storage`.
 4. Выполняет `composer install --no-dev`.
-5. Выполняет `artisan migrate --force`.
-6. Собирает Laravel caches.
+5. Выполняет `artisan optimize:clear`, `artisan migrate --force` и bootstrap-команды проекта (`app:switch-project-to-rub`, `app:popular-crypto-bootstrap --activate`, `app:crypto-currency-update-cron`, `artisan storage:link`).
+6. Собирает Laravel caches (`config:cache`, `route:cache`, `view:cache`).
 7. Переключает symlink `current`.
 8. Выполняет `artisan up` и `queue:restart`.
 9. Очищает старые релизы.
@@ -106,22 +109,20 @@ bash /var/www/coinectra/current/deployment/rollback.sh
 
 ## GitHub Actions
 
-Когда проект будет в git-репозитории:
+Workflow `.github/workflows/deploy.yml` уже добавлен в репозиторий и запускается только вручную (`workflow_dispatch`). Для его работы добавьте secrets:
 
-1. Переименуйте `.github/workflows/deploy.yml.example` в `deploy.yml`
-2. Добавьте secrets:
-   - `DEPLOY_HOST`
-   - `DEPLOY_PORT`
-   - `DEPLOY_USER`
-   - `DEPLOY_SSH_KEY`
-   - `DEPLOY_PATH`
-   - `DEPLOY_REPO`
-   - `DEPLOY_BRANCH`
-   - `DEPLOY_PHP_BIN`
-   - `DEPLOY_COMPOSER_BIN`
-   - `DEPLOY_KEEP_RELEASES`
+- `DEPLOY_HOST`
+- `DEPLOY_PORT`
+- `DEPLOY_USER`
+- `DEPLOY_SSH_KEY`
+- `DEPLOY_PATH`
+- `DEPLOY_REPO`
+- `DEPLOY_BRANCH`
+- `DEPLOY_PHP_BIN`
+- `DEPLOY_COMPOSER_BIN`
+- `DEPLOY_KEEP_RELEASES`
 
-На первом этапе лучше оставить только `workflow_dispatch`, а автодеплой на `push` включать уже после ручной проверки.
+Автодеплой на `push` не включать: workflow намеренно остаётся `workflow_dispatch`-only и под dev-only политику репозитория не используется.
 
 ## Очереди и scheduler
 

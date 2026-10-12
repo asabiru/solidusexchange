@@ -1,5 +1,7 @@
 # CryptoCloud Setup
 
+> **Status: legacy documentation.** Describes the legacy Laravel application at the repository root. The repo posture is dev-only/synthetic (see `Documentation/regulated-core/`): do not configure live provider credentials or production endpoints here — liquidity, custody and payout decisions remain open in the decision register (D-002/D-003/D-007).
+
 Use `CryptoCloud` as the automatic crypto method when `CoinPayments` is unavailable.
 
 ## Required keys

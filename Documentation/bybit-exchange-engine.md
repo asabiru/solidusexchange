@@ -1,5 +1,7 @@
 # Bybit Exchange Engine
 
+> **Статус: legacy-документация.** Описывает возможности legacy Laravel-приложения в корне репозитория. По текущей политике репозитория (dev-only/synthetic, см. `Documentation/regulated-core/`) живые ключи Bybit и production-контур не настраиваются: решение по внешней ликвидности открыто в decision-register (D-007).
+
 ## Что Делает Этот Модуль
 
 - Для `exchange` на поддержанных парах вида `USDT -> coin` котировка теперь может браться не из локального `usd_rate`, а из Bybit spot.
@@ -16,6 +18,7 @@
 EXCHANGE_ENGINE_ENABLED=true
 EXCHANGE_ENGINE_DRIVER=bybit
 EXCHANGE_ENGINE_SUPPORTED_SEND_CURRENCIES=USDT
+EXCHANGE_ENGINE_FALLBACK_TO_INTERNAL_ON_QUOTE_ERROR=true
 EXCHANGE_ENGINE_QUOTE_TTL_SECONDS=30
 EXCHANGE_ENGINE_MARKUP_PERCENT=1.00
 EXCHANGE_ENGINE_SLIPPAGE_PERCENT=0.20
