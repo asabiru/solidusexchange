@@ -761,8 +761,8 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-audit.test.ts": {
-      "minLines": 597,
-      "minCases": 12
+      "minLines": 1267,
+      "minCases": 26
     },
     "miniapp/src/server/customer-api-client.test.ts": {
       "minLines": 2217,
