@@ -110,15 +110,17 @@ function oauthErrorRedirect(redirectUri, params) {
   return redirectResponse(target.toString());
 }
 
+const DUPLICATE = Symbol("duplicate-parameter");
+
 /**
  * @param {URLSearchParams} params
  * @param {string} name
- * @returns {string | null | "duplicate"}
+ * @returns {string | null | typeof DUPLICATE}
  */
 function singleParam(params, name) {
   const values = params.getAll(name);
   if (values.length === 0) return null;
-  if (values.length > 1) return "duplicate";
+  if (values.length > 1) return DUPLICATE;
   return values[0];
 }
 
@@ -281,11 +283,11 @@ export function createOidcIssuer(config) {
       "code_challenge_method",
       "login_hint",
     ];
-    /** @type {Record<string, string | null>} */
+    /** @type {Record<string, string | null | typeof DUPLICATE>} */
     const seen = {};
     for (const name of names) {
       const value = singleParam(params, name);
-      if (value === "duplicate") {
+      if (value === DUPLICATE) {
         return jsonResponse(400, { error: "invalid_request" });
       }
       seen[name] = value;
@@ -302,7 +304,8 @@ export function createOidcIssuer(config) {
     const fail = (error) => {
       /** @type {Record<string, string>} */
       const body = { error };
-      if (typeof state === "string") body.state = state;
+      // Only a bounded state may be reflected back into the Location.
+      if (typeof state === "string" && state.length <= MAX_STATE_LENGTH) body.state = state;
       return oauthErrorRedirect(redirectUri, body);
     };
     if (seen.response_type !== "code") {
@@ -379,11 +382,14 @@ export function createOidcIssuer(config) {
    * @returns {OidcResponse}
    */
   function token(request) {
-    const contentType = request.headers?.["content-type"] ?? "";
+    const contentType = (request.headers?.["content-type"] ?? "")
+      .split(";")[0]
+      .trim()
+      .toLowerCase();
     if (
       typeof request.body !== "string" ||
       request.body.length > MAX_FORM_BYTES ||
-      !contentType.toLowerCase().startsWith("application/x-www-form-urlencoded")
+      contentType !== "application/x-www-form-urlencoded"
     ) {
       return jsonResponse(400, { error: "invalid_request" });
     }
@@ -393,13 +399,20 @@ export function createOidcIssuer(config) {
     } catch {
       return jsonResponse(400, { error: "invalid_request" });
     }
-    if (singleParam(params, "grant_type") !== "authorization_code") {
+    const grantType = singleParam(params, "grant_type");
+    if (grantType === DUPLICATE || grantType === null) {
+      return jsonResponse(400, { error: "invalid_request" });
+    }
+    if (grantType !== "authorization_code") {
       return jsonResponse(400, { error: "unsupported_grant_type" });
     }
     const code = singleParam(params, "code");
     const redirectUri = singleParam(params, "redirect_uri");
     const presentedClientId = singleParam(params, "client_id");
     const verifier = singleParam(params, "code_verifier");
+    if ([code, redirectUri, presentedClientId, verifier].includes(DUPLICATE)) {
+      return jsonResponse(400, { error: "invalid_request" });
+    }
     if (
       !boundedParam(code, MAX_PARAMETER_LENGTH) ||
       !boundedParam(redirectUri, MAX_PARAMETER_LENGTH) ||
@@ -438,6 +451,9 @@ export function createOidcIssuer(config) {
     });
   }
 
+  const issuerUrl = new URL(issuer);
+  const issuerPathPrefix = issuerUrl.pathname === "/" ? "" : issuerUrl.pathname;
+
   /**
    * @param {OidcRequest} request
    * @returns {Promise<OidcResponse>}
@@ -449,22 +465,37 @@ export function createOidcIssuer(config) {
     } catch {
       return jsonResponse(400, { error: "invalid_request" });
     }
-    if (request.method === "GET" && url.pathname === "/.well-known/openid-configuration") {
+    // The issuer only answers requests addressed to its own authority and
+    // mounted under its declared path prefix; absolute-form or
+    // scheme-relative request targets naming another authority are refused.
+    if (url.origin !== issuerUrl.origin || !url.pathname.startsWith(issuerPathPrefix)) {
+      return jsonResponse(404, { error: "not_found" });
+    }
+    const relative = url.pathname.slice(issuerPathPrefix.length);
+    /** @type {Readonly<Record<string, string>>} */
+    const endpoints = {
+      "/.well-known/openid-configuration": "GET",
+      "/.well-known/jwks.json": "GET",
+      "/authorize": "GET",
+      "/token": "POST",
+    };
+    const expected = endpoints[relative];
+    if (expected === undefined) {
+      return jsonResponse(404, { error: "not_found" });
+    }
+    if (request.method !== expected) {
+      return jsonResponse(405, { error: "invalid_request" }, { allow: expected });
+    }
+    if (relative === "/.well-known/openid-configuration") {
       return jsonResponse(200, metadataDocument());
     }
-    if (request.method === "GET" && url.pathname === "/.well-known/jwks.json") {
+    if (relative === "/.well-known/jwks.json") {
       return jsonResponse(200, jwksDocument());
     }
-    if (request.method === "GET" && url.pathname === "/authorize") {
+    if (relative === "/authorize") {
       return authorize(url);
     }
-    if (url.pathname === "/token") {
-      if (request.method !== "POST") {
-        return jsonResponse(405, { error: "invalid_request" }, { allow: "POST" });
-      }
-      return token(request);
-    }
-    return jsonResponse(404, { error: "not_found" });
+    return token(request);
   }
 
   return Object.freeze({

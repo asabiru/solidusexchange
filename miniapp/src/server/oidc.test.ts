@@ -9,6 +9,7 @@ import {
 } from "@solidchange/provider-simulators";
 import { loadServerConfig, type OidcConfig, type ServerConfig } from "./config.js";
 import {
+  type OidcFetch,
   authorizationUrl,
   createCodeChallenge,
   exchangeAuthorizationCode,
@@ -394,5 +395,244 @@ describe("oidc login routes", () => {
     });
     assert.equal(oldest.status, 302);
     assert.equal(oldest.headers.get("location"), `${origin}/?error=auth_failed`);
+  });
+});
+
+// Wave-65 adversarial pins: forged tokens are signed with a test-owned RSA key
+// and reach the verifier through the suppliedJwks seam or a stub fetch, so the
+// claims/key rules are exercised without a real issuer.
+
+interface RsaFixture {
+  privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
+  jwkN: string;
+  jwkE: string;
+}
+
+function rsaFixture(exponent = 0x10001): RsaFixture {
+  const { privateKey, publicKey } = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicExponent: exponent
+  });
+  const jwk = publicKey.export({ format: "jwk" }) as { n: string; e: string };
+  return { privateKey, jwkN: jwk.n, jwkE: jwk.e };
+}
+
+function signToken(
+  fixture: RsaFixture,
+  claims: Record<string, unknown>,
+  headerClaims: Record<string, unknown> = {}
+): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "RS256", typ: "JWT", kid: "forge", ...headerClaims })
+  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signature = createSign("RSA-SHA256")
+    .update(`${header}.${payload}`)
+    .sign(fixture.privateKey, "base64url");
+  return `${header}.${payload}.${signature}`;
+}
+
+function jwksFor(n: string, e: string): { keys: { kty: string; kid: string; n: string; e: string }[] } {
+  return { keys: [{ kty: "RSA", kid: "forge", n, e }] };
+}
+
+function baseClaims(issuer: string, nonce: string): Record<string, unknown> {
+  const now = Math.floor(Date.now() / 1_000);
+  return { iss: issuer, sub: "dev-customer-1", aud: clientId, exp: now + 300, iat: now, nonce };
+}
+
+const stubFetch = (text: string): OidcFetch =>
+  (async () => new Response(text, { status: 200 })) as OidcFetch;
+
+describe("oidc verifier adversarial pins (wave-65)", () => {
+  const config = oidcConfigFor("http://127.0.0.1:9080").oidc as OidcConfig;
+
+  it("requires at_hash whenever an access token is present", async () => {
+    const fixture = rsaFixture();
+    const claims = baseClaims(config.issuer, "n-at");
+    const token = signToken(fixture, claims);
+    const jwks = jwksFor(fixture.jwkN, fixture.jwkE);
+    // access token present + at_hash absent is a stripped exchange: reject.
+    await assert.rejects(() => verifyIdToken(token, config, "n-at", "sat_x", jwks));
+    // no access token + at_hash absent stays legal.
+    const identity = await verifyIdToken(token, config, "n-at", undefined, jwks);
+    assert.equal(identity.subject, "dev-customer-1");
+  });
+
+  it("pins at_hash equality against the issued access token", async () => {
+    const fixture = rsaFixture();
+    const accessToken = "sat_abc";
+    const atHash = createHash("sha256")
+      .update(accessToken)
+      .digest()
+      .subarray(0, 16)
+      .toString("base64url");
+    const jwks = jwksFor(fixture.jwkN, fixture.jwkE);
+    const good = signToken(fixture, { ...baseClaims(config.issuer, "n-ah"), at_hash: atHash });
+    const accepted = await verifyIdToken(good, config, "n-ah", accessToken, jwks);
+    assert.equal(accepted.subject, "dev-customer-1");
+    await assert.rejects(() => verifyIdToken(good, config, "n-ah", `${accessToken}x`, jwks));
+    const wrong = signToken(fixture, { ...baseClaims(config.issuer, "n-ah"), at_hash: "AAAA" });
+    await assert.rejects(() => verifyIdToken(wrong, config, "n-ah", accessToken, jwks));
+  });
+
+  it("rejects JWKs with weak exponents or non-canonical members", async () => {
+    const fixture = rsaFixture();
+    const token = signToken(fixture, baseClaims(config.issuer, "n-jwk"));
+    for (const [n, e] of [
+      [fixture.jwkN, "AQ"],
+      [fixture.jwkN, "Ag"],
+      [`${fixture.jwkN}=`, fixture.jwkE],
+      [fixture.jwkN, "AQAB="],
+      [fixture.jwkN, "A QAB"],
+      [`${fixture.jwkN}\n`, fixture.jwkE]
+    ] as const) {
+      await assert.rejects(
+        () => verifyIdToken(token, config, "n-jwk", undefined, jwksFor(n, e)),
+        JSON.stringify([n.slice(-12), e])
+      );
+    }
+    // An honest odd exponent of at least 3 still verifies end to end.
+    const e3 = rsaFixture(3);
+    const e3Token = signToken(e3, baseClaims(config.issuer, "n-e3"));
+    const identity = await verifyIdToken(e3Token, config, "n-e3", undefined, jwksFor(e3.jwkN, e3.jwkE));
+    assert.equal(identity.subject, "dev-customer-1");
+  });
+
+  it("requires a Bearer token_type in the exchange", async () => {
+    for (const payload of [
+      { access_token: "a", token_type: "MAC", id_token: "x" },
+      { access_token: "a", id_token: "x" },
+      { access_token: "a", token_type: "bearer", id_token: "x" }
+    ]) {
+      await assert.rejects(() =>
+        exchangeAuthorizationCode(config, "c", "v", stubFetch(JSON.stringify(payload)))
+      );
+    }
+    const ok = await exchangeAuthorizationCode(
+      config,
+      "c",
+      "v",
+      stubFetch(JSON.stringify({ access_token: "a", token_type: "Bearer", id_token: "x" }))
+    );
+    assert.equal(ok.idToken, "x");
+    assert.equal(ok.accessToken, "a");
+  });
+
+  it("rejects duplicate JSON members in fetched documents", async () => {
+    const fixture = rsaFixture();
+    const token = signToken(fixture, baseClaims(config.issuer, "n-dup"));
+    // `e` duplicated: JSON.parse takes the last member (AQAB) so a naive
+    // verifier accepts; the raw-text scan must reject instead.
+    const dupJwks = `{"keys":[{"kty":"RSA","kid":"forge","e":"AQ","e":"${fixture.jwkE}","n":"${fixture.jwkN}","use":"sig"}]}`;
+    await assert.rejects(() =>
+      verifyIdToken(token, config, "n-dup", undefined, undefined, stubFetch(dupJwks))
+    );
+    const dupToken = `{"access_token":"a","token_type":"Bearer","id_token":"x","id_token":"${token}"}`;
+    await assert.rejects(() =>
+      exchangeAuthorizationCode(config, "c", "v", stubFetch(dupToken))
+    );
+  });
+
+  it("pins NumericDate and azp/aud edges", async () => {
+    const fixture = rsaFixture();
+    const jwks = jwksFor(fixture.jwkN, fixture.jwkE);
+    const now = Math.floor(Date.now() / 1_000);
+    const forge = (over: Record<string, unknown>) =>
+      signToken(fixture, { ...baseClaims(config.issuer, "n-dt"), ...over });
+    const accept = async (over: Record<string, unknown>) =>
+      verifyIdToken(forge(over), config, "n-dt", undefined, jwks);
+    const reject = (over: Record<string, unknown>) =>
+      assert.rejects(() => accept(over), JSON.stringify(over));
+    await reject({ exp: now - 1 });
+    await accept({ exp: now + 120 });
+    await reject({ iat: now + 90 });
+    await accept({ iat: now + 30 });
+    await reject({ nbf: now + 90 });
+    await accept({ nbf: now - 10 });
+    await reject({ nbf: "soon" });
+    await reject({ nbf: null });
+    await reject({ exp: "later" });
+    await reject({ aud: [clientId, "other"], azp: "other" });
+    await reject({ aud: [clientId, "other"] });
+    await accept({ aud: [clientId, "other"], azp: clientId });
+    await reject({ aud: 42 });
+    await reject({ aud: [] });
+    await reject({ iss: `${config.issuer}/` });
+    await reject({ nonce: 42 });
+  });
+
+  it("bounds sub to printable ASCII and returns it verbatim", async () => {
+    const fixture = rsaFixture();
+    const jwks = jwksFor(fixture.jwkN, fixture.jwkE);
+    const check = (sub: unknown) =>
+      verifyIdToken(
+        signToken(fixture, { ...baseClaims(config.issuer, "n-sub"), sub }),
+        config,
+        "n-sub",
+        undefined,
+        jwks
+      );
+    assert.equal((await check("a b/c\\d\"e~!")).subject, "a b/c\\d\"e~!");
+    assert.equal((await check("x".repeat(255))).subject.length, 255);
+    await assert.rejects(() => check(""));
+    await assert.rejects(() => check("x".repeat(256)));
+    await assert.rejects(() => check("süb"));
+    await assert.rejects(() => check("a b"));
+    await assert.rejects(() => check(42));
+  });
+});
+
+describe("oidc cookie binding (wave-65)", () => {
+  it("uses the first same-name cookie for the transaction binding", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const authorize = new URL(login.headers.get("location") ?? "");
+    const callback = new URL(
+      (await fetch(authorize, { redirect: "manual" })).headers.get("location") ?? ""
+    );
+    // Browser order: the narrower-path cookie arrives first, a broad-path
+    // forgery trails it and must not shadow the real transaction.
+    const response = await fetch(`${base}${callback.pathname}${callback.search}`, {
+      redirect: "manual",
+      headers: { cookie: `${tx}; solidchange_ma_oidc_tx=forged.forged` }
+    });
+    assert.equal(response.headers.get("location"), origin);
+  });
+
+  it("keeps first-cookie semantics on the session cookie too", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const authorize = new URL(login.headers.get("location") ?? "");
+    const callback = new URL(
+      (await fetch(authorize, { redirect: "manual" })).headers.get("location") ?? ""
+    );
+    const settled = await fetch(`${base}${callback.pathname}${callback.search}`, {
+      redirect: "manual",
+      headers: { cookie: `__proto__=junk; ${tx}` }
+    });
+    assert.equal(settled.headers.get("location"), origin);
+    const session = (sessionCookieOf(settled) ?? "").split(";")[0];
+    const profile = await fetch(`${base}/bff/profile`, {
+      headers: { cookie: `${session}; solidchange_ma_session=forged` }
+    });
+    assert.equal(profile.status, 200);
+  });
+
+  it("answers byte-identical 404 for auth routes when unconfigured", async () => {
+    const { base } = await startBff(loadServerConfig({ MINIAPP_ALLOW_DEV_LOGIN: "true" }));
+    const login = await fetch(`${base}/bff/auth/login`);
+    const other = await fetch(`${base}/bff/no-such-route`);
+    assert.equal(login.status, 404);
+    assert.equal(other.status, 404);
+    assert.equal(await login.text(), await other.text());
+    const callback = await fetch(`${base}/bff/auth/callback?code=x&state=y`);
+    const otherCallback = await fetch(`${base}/bff/no-such-callback?code=x&state=y`);
+    assert.equal(callback.status, 404);
+    assert.equal(await callback.text(), await otherCallback.text());
   });
 });
