@@ -108,6 +108,93 @@ const KEY_LINE = /^["']?([A-Za-z_][\w-]*)["']?\s*:/;
 const NODE_OPTIONS = /\bNODE_OPTIONS\b/;
 const FLOW_CONTROL_KEY = /[{,]\s*['"`]?(?:env|shell|working-directory|defaults)['"`]?\s*:/;
 
+// Boundary between the new core (packages/, miniapp/, backoffice/, .github/)
+// and the legacy Laravel application that still lives at the repository
+// root. New-core files must never name it: not by bare repo-root path segment
+// ("routes/...", "SQL/install.sql"), not by artifact name ("artisan",
+// "composer.json", "index.php"), and not by a ../ traversal that resolves to
+// a legacy root entry. Files that legitimately touch legacy paths (the
+// deployment workflow, this checker and its test, the doc-vocabulary
+// baseline) are exempted explicitly.
+const LEGACY_BOUNDARY_PREFIX = /^(?:packages|miniapp|backoffice|\.github)\//;
+const LEGACY_BOUNDARY_EXEMPT = new Set([
+  ".github/workflows/deploy.yml",
+  ".github/scripts/check-verification-integrity.mjs",
+  ".github/scripts/check-verification-integrity.test.mjs",
+  ".github/scripts/regulated-core-status-baseline.json",
+]);
+const LEGACY_BOUNDARY_BINARY =
+  /\.(?:png|jpe?g|gif|webp|avif|ico|woff2?|eot|ttf|otf|pdf|zip|gz|tgz|br|wasm|mp[34]|bin|jar|class|so|dll|dylib|exe)$/i;
+const LEGACY_ROOT_DIRS = new Set([
+  "app",
+  "routes",
+  "config",
+  "database",
+  "resources",
+  "tests",
+  "SQL",
+  "deployment",
+  "assets",
+  "bootstrap",
+  "storage",
+  "vendor",
+]);
+const LEGACY_ROOT_FILES = new Set([
+  "artisan",
+  "composer.json",
+  "composer.lock",
+  "phpunit.xml",
+  "index.php",
+  "firebase-messaging-sw.js",
+  "vite.config.js",
+  ".htaccess",
+  "package-lock.json",
+  ".env",
+  ".env.example",
+  ".env.local",
+  ".env.production",
+  "README.md",
+  ".gitignore",
+  ".gitattributes",
+  ".editorconfig",
+  "php.local.ini",
+]);
+// The miniapp tree conventionally spells its own sources as "app/...", so
+// that segment stays legal there; "../" resolution still catches real
+// escapes into the root "app/" directory.
+const LEGACY_SEGMENTS =
+  "(?:app|routes|config|database|resources|SQL|deployment|assets|bootstrap|storage|vendor)\\/";
+const LEGACY_SEGMENTS_NO_APP =
+  "(?:routes|config|database|resources|SQL|deployment|assets|bootstrap|storage|vendor)\\/";
+// A segment spells the repo root when it starts a path: right after a
+// non-path delimiter ("routes/...") or after a "/" that itself starts a
+// path ("/routes/api.php"). A "/" inside a longer relative path
+// ("src/routes/x", "missing-history-bootstrap/") is never the repo root.
+const LEGACY_SEGMENT = new RegExp(
+  `(?<![\\w./-])${LEGACY_SEGMENTS}|(?<![\\w.-])/${LEGACY_SEGMENTS}`,
+);
+const LEGACY_SEGMENT_NO_APP = new RegExp(
+  `(?<![\\w./-])${LEGACY_SEGMENTS_NO_APP}|(?<![\\w.-])/${LEGACY_SEGMENTS_NO_APP}`,
+);
+const LEGACY_LITERAL = new RegExp(
+  "\\b(?:arti" +
+    "san|compo" +
+    "ser\\.(?:json|lock)|php" +
+    "unit|fire" +
+    "base-messaging-sw\\.js|insta" +
+    "ll\\.sql|ind" +
+    "ex\\.php|lara" +
+    "vel[\\w-]+|ven" +
+    "dor\\/auto" +
+    "load|dep" +
+    "loy\\.sh|sweb-dep" +
+    "loy\\.sh|roll" +
+    "back\\.sh)|\\.hta" +
+    "ccess\\b",
+  "i",
+);
+const LEGACY_TRAVERSAL = /(?:\.\.[\/\\])+(?:[\w$.-]+[\/\\])*[\w$.-]*/g;
+
 export function normalizeCommand(text) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -589,6 +676,49 @@ export function validateSourceText(raw, fileName) {
     errors.push(...shellErrors);
   }
 
+  return errors;
+}
+
+export function legacyBoundaryScoped(fileName) {
+  return (
+    LEGACY_BOUNDARY_PREFIX.test(fileName) &&
+    !LEGACY_BOUNDARY_EXEMPT.has(fileName) &&
+    !LEGACY_BOUNDARY_BINARY.test(fileName)
+  );
+}
+
+// A new-core file violates the boundary when it (a) contains a ../ traversal
+// that resolves to a legacy root directory or file, (b) spells a repo-root
+// legacy path segment bare ("routes/...", never reached via ./ or ../), or
+// (c) names a legacy artifact outright. The segment and literal rules are
+// deliberately over-broad: nothing in the new core ever needs these spellings.
+export function validateLegacyBoundary(text, fileName) {
+  if (!legacyBoundaryScoped(fileName)) return [];
+  const errors = [];
+  const directory = path.posix.dirname(fileName);
+  const flag = (index, detail) =>
+    errors.push(
+      `${fileName}:${lineAt(text, index)}: the legacy application tree must not be referenced from the new core (${detail})`,
+    );
+
+  for (const match of text.matchAll(LEGACY_TRAVERSAL)) {
+    const resolved = path.posix.normalize(
+      path.posix.join(directory, match[0].replaceAll("\\", "/")),
+    );
+    const [root] = resolved.split("/");
+    if (LEGACY_ROOT_DIRS.has(root) || LEGACY_ROOT_FILES.has(resolved)) {
+      flag(match.index, `${JSON.stringify(match[0])} resolves to ${resolved}`);
+    }
+  }
+  const segment = fileName.startsWith("miniapp/")
+    ? LEGACY_SEGMENT_NO_APP
+    : LEGACY_SEGMENT;
+  for (const match of text.matchAll(new RegExp(segment.source, "g"))) {
+    flag(match.index, `bare legacy path segment ${match[0]}`);
+  }
+  for (const match of text.matchAll(new RegExp(LEGACY_LITERAL.source, "gi"))) {
+    flag(match.index, `legacy artifact name ${match[0]}`);
+  }
   return errors;
 }
 
@@ -1281,12 +1411,20 @@ async function main() {
   for await (const file of walk(process.cwd(), nonRegular)) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
     repoFiles.push(relative);
-    if (!CODE_FILE.test(relative) && !SHELL_FILE.test(relative)) {
+    if (
+      !CODE_FILE.test(relative) &&
+      !SHELL_FILE.test(relative) &&
+      !legacyBoundaryScoped(relative)
+    ) {
       continue;
     }
-    errors.push(
-      ...validateSourceText(await readFile(file, "utf8"), relative),
-    );
+    const text = await readFile(file, "utf8");
+    if (CODE_FILE.test(relative) || SHELL_FILE.test(relative)) {
+      errors.push(...validateSourceText(text, relative));
+    }
+    if (legacyBoundaryScoped(relative)) {
+      errors.push(...validateLegacyBoundary(text, relative));
+    }
   }
   errors.push(...validateRepoCompleteness(repoFiles, baseline));
   errors.push(...trackedSkippedFiles());
