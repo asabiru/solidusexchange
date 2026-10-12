@@ -29,7 +29,7 @@ test("generates every synthetic file with restrictive modes for private material
     });
     assert.deepEqual((await readdir(directory)).sort(), Object.values(FILES).sort());
     assert.match(await read(directory, FILES.customerApiTokenKey), /^[0-9a-f]{64}$/);
-    for (const file of [FILES.auditSuperuserPassword, FILES.serverPrivateKey]) {
+    for (const file of [FILES.auditSuperuserPassword, FILES.auditRuntimePassword, FILES.serverPrivateKey]) {
       assert.equal((await stat(path.join(directory, file))).mode & 0o777, 0o400, file);
     }
     for (const file of [FILES.customerApiTokenKey, FILES.auditDatabaseUrl, FILES.caCertificate]) {

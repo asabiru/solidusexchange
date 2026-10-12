@@ -31,7 +31,7 @@ jobs:
         run: node .github/scripts/check-dev-stack.mjs
 
       - name: Test local dev-stack helper scripts
-        run: node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs
+        run: node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs infra/local/tests/with-dev-material.test.mjs
 
       - name: Validate compose file
         run: docker compose -f infra/local/compose.yaml config --quiet
