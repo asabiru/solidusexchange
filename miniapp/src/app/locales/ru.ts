@@ -457,7 +457,29 @@ export const ru = {
   "checks.statusAwaitingKyc": "Ждёт KYC получателя",
   "checks.statusClaimed": "Получен",
   "checks.statusCancelled": "Отменён",
-  "checks.statusExpired": "Истёк"
+  "checks.statusExpired": "Истёк",
+  "trades.title": "Сделки",
+  "trades.entryDetail": "История сделок SOLID · только чтение, тест",
+  "trades.listTitle": "История сделок",
+  "trades.listLabel": "Список сделок",
+  "trades.empty": "Сделок пока нет.",
+  "trades.gated": "История сделок доступна после идентификации.",
+  "trades.loadFailed": "Не удалось загрузить сделки.",
+  "trades.note": "Тестовый режим: история сделок синтетическая — ордера не исполняются, деньги не двигаются.",
+  "trades.detailTitle": "Сделка",
+  "trades.back": "К сделкам",
+  "trades.buy": "Покупка",
+  "trades.sell": "Продажа",
+  "trades.side": "Сторона",
+  "trades.price": "Цена",
+  "trades.quantity": "Количество",
+  "trades.quoteAmount": "Сумма сделки",
+  "trades.total": "Итого",
+  "trades.liquidity": "Ликвидность",
+  "trades.maker": "Мейкер",
+  "trades.taker": "Тейкер",
+  "trades.orderId": "Ордер",
+  "trades.executedAt": "Исполнена"
 };
 
 export type MessageKey = keyof typeof ru;

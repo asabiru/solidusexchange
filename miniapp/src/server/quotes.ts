@@ -132,7 +132,6 @@ export function simulateQuote(input: QuoteInput, context: QuoteContext): QuotePr
 }
 
 export const quoteIdPattern = /^qte_[0-9a-f]{24}$/;
-export const quotePriceScale = 8;
 export const quoteMaxBps = 1_000;
 export const quoteMaxTtlSeconds = 300;
 export const quoteSides: readonly QuoteSide[] = Object.freeze(["buy", "sell"]);
@@ -141,28 +140,16 @@ export function isQuoteSide(value: unknown): value is QuoteSide {
   return value === "buy" || value === "sell";
 }
 
-/**
- * The customer-api quotes contract pair set with each leg's declared decimal
- * scale (mirrors the upstream QUOTE_PAIRS, which in turn mirror the provider
- * simulator's SYNTHETIC_MID_PRICES and ASSET_SCALES).
- */
-export interface ContractQuotePair {
-  pair: QuotePair;
-  base: AssetCode;
-  quote: AssetCode;
-  baseScale: number;
-  quoteScale: number;
-}
-
-export const contractQuotePairs: readonly ContractQuotePair[] = Object.freeze([
-  Object.freeze({ pair: "USDT/RUB", base: "USDT", quote: "RUB", baseScale: 6, quoteScale: 2 }),
-  Object.freeze({ pair: "TON/RUB", base: "TON", quote: "RUB", baseScale: 9, quoteScale: 2 }),
-  Object.freeze({ pair: "TON/USDT", base: "TON", quote: "USDT", baseScale: 9, quoteScale: 6 })
-]);
-
-export function contractQuotePair(pair: unknown): ContractQuotePair | undefined {
-  return typeof pair === "string" ? contractQuotePairs.find((entry) => entry.pair === pair) : undefined;
-}
+// The contract pair table lives in ../shared/quote.js so the app renders trade
+// and quote legs with the same declared scales the BFF validates against.
+import {
+  type ContractQuotePair,
+  contractQuotePair,
+  contractQuotePairs,
+  quotePriceScale
+} from "../shared/quote.js";
+export { contractQuotePair, contractQuotePairs, quotePriceScale };
+export type { ContractQuotePair };
 
 export function quoteRoundingFor(side: QuoteSide): QuoteRounding {
   return side === "buy" ? "up" : "down";

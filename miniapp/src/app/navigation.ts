@@ -19,4 +19,5 @@ export type SheetRequest =
   | { kind: "address-screening" }
   | { kind: "checks" }
   | { kind: "check"; reference: string }
-  | { kind: "markets" };
+  | { kind: "markets" }
+  | { kind: "trades" };
