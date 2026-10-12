@@ -97,9 +97,12 @@ describe("callback inbox", () => {
     const inbox = createCallbackInbox({ subjectField: "subject", initialStatus: "open", transitions });
     inbox.openSubject("sim-s", { deadline: 100 });
     assert.equal(inbox.accept(event(2, "open"), { receivedAt: 1 }).action, "buffered");
-    assert.equal(inbox.accept(event(2, "middle", { suffix: "b" }), { receivedAt: 1 }).action, "stale");
+    // A second event claiming the same sequence with a different status is a
+    // conflicting claim, held for review like the invalid successor below —
+    // it is not a benign stale resend.
+    assert.equal(inbox.accept(event(2, "middle", { suffix: "b" }), { receivedAt: 1 }).action, "invalid_transition");
     assert.deepEqual(inbox.accept(event(1, "middle"), { receivedAt: 1 }).appliedStatuses, ["middle"]);
-    assert.equal(inbox.get("sim-s").reviewEvents, 1);
+    assert.equal(inbox.get("sim-s").reviewEvents, 2);
     assert.deepEqual(inbox.expire(101), ["sim-s"]);
     assert.equal(inbox.accept(event(3, "done"), { receivedAt: 50 }).action, "late");
     assert.throws(() => inbox.openSubject("sim-t", { deadline: 1.5 }), TypeError);

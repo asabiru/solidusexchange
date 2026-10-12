@@ -295,12 +295,17 @@ export function createBankSimulator(options) {
         const firstTransaction = `SIMBANK${random.hex("bank-transaction", 8).toUpperCase()}`;
         let previousAt = now;
         const events = plan.events.map((status, index) => {
+          // An in-window observation is only honest inside the intent's
+          // validity: late arrival past expires_at is modelled exclusively by
+          // the late/expired scenarios, so ordinary events are clamped to the
+          // last valid second instead of reporting a payment the bank could
+          // no longer accept.
           const occurredAt =
             status === "expired_no_payment"
               ? expiresAt + 1
               : plan.delivery === "late" && index === 0
                 ? expiresAt + random.int("bank-late-delay", 60, 600)
-                : previousAt + random.int("bank-event-delay", 20, 240);
+                : Math.min(previousAt + random.int("bank-event-delay", 20, 240), expiresAt - 1);
           previousAt = occurredAt;
           const paid =
             status === "expired_no_payment"
@@ -325,6 +330,21 @@ export function createBankSimulator(options) {
             related: status === "duplicate_payment" || status === "payment_reversed" ? firstTransaction : null,
           };
         });
+        // received_total is the sum of every non-reversal leg the plan emits;
+        // it must stay inside the canonical decimal wall or the status read
+        // cannot represent what the scenario observed.
+        const observedTotal = events.reduce(
+          (sum, event) => (event.status === "payment_reversed" ? sum : sum + event.paid),
+          0n,
+        );
+        try {
+          formatAmount("RUB", observedTotal);
+        } catch {
+          throw new ProviderError(
+            "invalid_request",
+            "amount is too large to report for this scenario",
+          );
+        }
         intents.set(intentId, { intent, events });
         scheduleTimeline(
           queue,

@@ -1216,11 +1216,11 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 793,
-      "minCases": 26
+      "minLines": 998,
+      "minCases": 28
     },
     "packages/e2e-dev/tests/load.test.mjs": {
-      "minLines": 546,
+      "minLines": 651,
       "minCases": 5
     },
     "packages/e2e-dev/tests/oidc.test.mjs": {
@@ -1658,6 +1658,10 @@
     "miniapp/src/app/format.test.ts": {
       "minLines": 30,
       "minCases": 3
+    },
+    "packages/provider-simulators/tests/bank-checks-audit-wave73.test.mjs": {
+      "minLines": 287,
+      "minCases": 11
     }
   }
 }

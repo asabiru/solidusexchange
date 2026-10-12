@@ -131,7 +131,8 @@ import {
  * @property {string} created_at
  * @property {string} expires_at
  * @property {string | null} resolved_at
- * @property {number} sequence Emitted callback count for this check.
+ * @property {number} sequence State-transition count for this check; each
+ *   transition also emits a callback unless the scenario suppresses delivery.
  * @property {number} failed_claim_attempts
  * @property {"none"} posting No ledger effect is produced by this adapter.
  */
@@ -232,6 +233,11 @@ export function validateChecksCallback(payload) {
     || !isIsoSeconds(payload.expires_at)
   ) {
     return "invalid sequence or timestamps";
+  }
+  // Both timestamps passed isIsoSeconds above, so they are canonical strings
+  // and lexicographic comparison is exact.
+  if (/** @type {string} */ (payload.occurred_at) > /** @type {string} */ (payload.expires_at)) {
+    return "an event cannot occur after the check's expiry";
   }
   let amount;
   let fee;
@@ -411,12 +417,33 @@ export function createChecksSimulator(options) {
       check.status === "awaiting_confirmation"
       || check.status === "created"
       || check.status === "awaiting_recipient_kyc";
-    if (!open || clock.now() <= check.expiresAt) {
+    // expires_at is the first instant the check is no longer valid: at the
+    // boundary itself the check is already expired, so a claim/cancel can
+    // never resolve exactly at expiry and collide with the expired state.
+    if (!open || clock.now() < check.expiresAt) {
       return;
     }
     check.status = "expired";
     check.resolvedAt = check.expiresAt;
     emit(check, check.expiresAt);
+  }
+
+  /**
+   * A check parked on the recipient's KYC un-parks once the member directory
+   * shows the recipient verified. Like expiry, the refresh is lazy and the
+   * transition is emitted the first time any operation observes it.
+   *
+   * @param {CheckRecord} check
+   */
+  function promoteIfCleared(check) {
+    if (check.status !== "awaiting_recipient_kyc") {
+      return;
+    }
+    if (members.get(check.recipient_ref)?.kyc_verified !== true) {
+      return;
+    }
+    check.status = "created";
+    emit(check, clock.now());
   }
 
   /** @param {string} ref */
@@ -437,7 +464,7 @@ export function createChecksSimulator(options) {
     return check;
   }
 
-  /** @type {ChecksProviderAdapter & { scenarioFor: (ref: string) => ChecksScenario, drainCallbacks: () => import("./simulator-core.mjs").ScheduledDelivery[], pendingCallbacks: () => number }} */
+  /** @type {ChecksProviderAdapter & { scenarioFor: (ref: string) => ChecksScenario, setMemberKyc: (ref: string, verified: boolean) => void, drainCallbacks: () => import("./simulator-core.mjs").ScheduledDelivery[], pendingCallbacks: () => number }} */
   const simulator = {
     providerId: "simulator",
 
@@ -454,8 +481,17 @@ export function createChecksSimulator(options) {
       oneOf(input.check_type, ["personal"], "check_type");
       const senderRef = syntheticReference(input.sender_ref, "sender_ref");
       const recipientRef = syntheticReference(input.recipient_ref, "recipient_ref");
-      memberFor(senderRef);
+      const sender = memberFor(senderRef);
       memberFor(recipientRef);
+      // A preview quotes terms for a check that createCheck could mint: the
+      // same sender gates apply or the preview would promise an impossible
+      // check.
+      if (!sender.kyc_verified) {
+        throw new ProviderError("invalid_request", "sender is not KYC verified");
+      }
+      if (senderRef === recipientRef) {
+        throw new ProviderError("invalid_request", "sender and recipient must differ");
+      }
       const asset = oneOf(input.asset, CHECK_ASSETS, "asset");
       checkComment(input.comment);
       const units = positiveUnits(asset, input.amount);
@@ -536,6 +572,7 @@ export function createChecksSimulator(options) {
       return issueRegistry.run(key, input, () => {
         const check = checkFor(checkId);
         expireIfDue(check);
+        promoteIfCleared(check);
         if (memberRef !== check.sender_ref) {
           throw new ProviderError("invalid_request", "only the sender can confirm this check");
         }
@@ -559,6 +596,7 @@ export function createChecksSimulator(options) {
       return claimRegistry.run(key, input, () => {
         const check = checkFor(checkId);
         expireIfDue(check);
+        promoteIfCleared(check);
         if (memberRef !== check.recipient_ref) {
           throw new ProviderError("invalid_request", "only the named recipient can claim this check");
         }
@@ -596,6 +634,7 @@ export function createChecksSimulator(options) {
       return cancelRegistry.run(key, input, () => {
         const check = checkFor(checkId);
         expireIfDue(check);
+        promoteIfCleared(check);
         if (memberRef !== check.sender_ref) {
           throw new ProviderError("invalid_request", "only the sender can cancel this check");
         }
@@ -616,7 +655,24 @@ export function createChecksSimulator(options) {
     async getCheckStatus(checkId) {
       const check = checkFor(checkIdentifier(checkId));
       expireIfDue(check);
+      promoteIfCleared(check);
       return viewOf(check);
+    },
+
+    /**
+     * Test hook: flips a member's KYC flag so a check parked in
+     * `awaiting_recipient_kyc` can complete its lifecycle, mirroring a
+     * recipient who clears verification after the check was issued.
+     *
+     * @param {string} ref
+     * @param {boolean} verified
+     */
+    setMemberKyc(ref, verified) {
+      const member = memberFor(syntheticReference(ref, "member_ref"));
+      if (typeof verified !== "boolean") {
+        throw new TypeError("verified must be a boolean");
+      }
+      member.kyc_verified = verified;
     },
 
     drainCallbacks() {

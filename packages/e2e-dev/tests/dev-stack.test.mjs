@@ -3,6 +3,7 @@ import { createHash, randomBytes, randomInt } from "node:crypto";
 import { after, before, describe, it } from "node:test";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { mintSyntheticCustomerToken } from "@solidchange/customer-api/synthetic-token";
+import { demoRepository } from "../../../backoffice/.server-dist/data/demo.js";
 import { createSyntheticAuthSessionDirectory } from "../../customer-api/src/auth-sessions.mjs";
 import { createSyntheticActivityDirectory, validActivityView } from "../../customer-api/src/activity.mjs";
 import { createSyntheticCheckDirectory, validChecksView } from "../../customer-api/src/checks.mjs";
@@ -17,6 +18,7 @@ import { signInitData } from "../../../miniapp/.server-dist/server/init-data.js"
 import { createMiniappServer } from "../../../miniapp/.server-dist/server/server.js";
 import {
   backofficeEntry,
+  closeServer,
   customerApiEntry,
   startServiceOnFreePort,
   readJson,
@@ -82,6 +84,71 @@ const moneyRoutes = [
   "/bff/kyt/callbacks",
   "/bff/address-screening/callbacks"
 ];
+// The session view the dev-login POST and GET /bff/session both answer.
+const sessionKeys = [
+  "authenticated",
+  "customerRef",
+  "displayName",
+  "expiresAt",
+  "kyc",
+  "source"
+];
+// The exact gated wallet the local synthetic surface serves — a drifted
+// zero-balance row or a dropped section must fail the deepEqual.
+const gatedWallet = {
+  kyc: "kyc-gated",
+  totalRub: "0.00",
+  availableRub: "0.00",
+  holdRub: "0.00",
+  assets: [
+    { code: "RUB", available: "0.00", hold: "0.00", valueRub: "0.00" },
+    { code: "USDT", available: "0.000000", hold: "0.000000", valueRub: "0.00" },
+    { code: "TON", available: "0.000000000", hold: "0.000000000", valueRub: "0.00" }
+  ],
+  depositAddresses: []
+};
+// Every deterministic preview field is pinned literally; the mid price is
+// jittered ±25bps around the 90 RUB/USDT synthetic reference per call, so
+// rate.value is bounded to the mid+jitter band and amountOut is recomputed
+// from the returned price — a mutated mid/spread/fee breaks the band or the
+// formula (wave-72 finding: numeric ranges alone stayed green).
+function assertPreview(quote, expected) {
+  assert.match(quote.id, /^quote_[0-9a-f]{32}$/);
+  // The provider-simulator quote id timestamps to whole seconds while the
+  // serverTime echo carries the raw clock reading.
+  assert.equal(quote.issuedAt, Math.floor(now / 1_000) * 1_000);
+  assert.equal(quote.serverTime, now);
+  assert.equal(quote.ttlSeconds, 30);
+  assert.equal(quote.expiresAt - quote.issuedAt, 30_000);
+  assert.equal(quote.executable, false);
+  assert.equal(quote.executionUnavailableReason, "dev_test_version");
+  const rate = Number(quote.rate.value);
+  assert.ok(rate > 89 && rate < 91, `rate ${rate} outside the jittered 90 RUB/USDT band`);
+  const netIn = Number(quote.netIn);
+  const expectedOut =
+    quote.from === "RUB" ? netIn / rate : netIn * rate - Number(quote.fee);
+  assert.ok(
+    Math.abs(Number(quote.amountOut) - expectedOut) < 0.01,
+    `amountOut ${quote.amountOut} vs pricing formula ${expectedOut}`
+  );
+  const { id, issuedAt, expiresAt, ttlSeconds, serverTime, executable, executionUnavailableReason, rate: _rate, amountOut, ...rest } = quote;
+  if (quote.from !== "RUB") {
+    // Sell fee is feeBps of the RUB the base amount converts to, so it moves
+    // with the jittered rate: re-derive it instead of pinning a literal.
+    // The buy-side RUB fee is rate-independent and stays pinned in `fields`.
+    assert.ok(
+      Math.abs(Number(rest.fee) - (netIn * rate * quote.feeBps) / 10_000) < 0.05,
+      `sell fee ${rest.fee} vs feeBps-derived ${(netIn * rate * quote.feeBps) / 10_000}`
+    );
+    delete rest.fee;
+  }
+  assert.equal(quote.rate.base, expected.rateBase);
+  assert.equal(quote.rate.quote, expected.rateQuote);
+  assert.match(quote.rate.value, /^\d+\.\d{8}$/);
+  // Decimal places follow the `to` asset's scale (RUB 2, USDT 6, TON 9).
+  assert.match(amountOut, /^\d+\.\d{2,9}$/);
+  assert.deepEqual(rest, expected.fields);
+}
 
 let now = Date.now();
 let customerApi;
@@ -139,7 +206,10 @@ async function operatorSession(role) {
   const cookie = cookieOf(response);
   const envelope = await readJson(response);
   assert.equal(envelope.resource, "auth/dev-session");
+  assert.deepEqual(Object.keys(envelope.payload).sort(), ["authenticated", "expiresAt"]);
   assert.equal(envelope.payload.authenticated, true);
+  assert.equal(Number.isSafeInteger(envelope.payload.expiresAt), true);
+  assert.ok(envelope.payload.expiresAt > Date.now());
   assert.equal(await verified(envelope), true);
   return cookie;
 }
@@ -172,13 +242,70 @@ async function deniedGet(path, cookie) {
   assert.deepEqual(await readJson(response), { error: "capability_denied" });
 }
 
-function assertProviderEvidence(evidence) {
+// The deterministic evidence cases the seeded provider simulators replay —
+// [id, linkedCaseId, scenario, providerStatus, projectedStatus, tone,
+//  verification summary]. Wave-72 finding: only Array.isArray+length was
+// pinned, so a mutated status or dropped rejection stayed green.
+const kycEvidenceCases = [
+  ["PEV-KYC-01", "KYC-220184", "approve", "approved", "approved", "success",
+    { result: "rejections-present", delivered: 3, verified: 2, rejected: 1, applied: 2, heldForReview: 0 }],
+  ["PEV-KYC-02", null, "reject", "rejected", "rejected", "danger",
+    { result: "rejections-present", delivered: 3, verified: 2, rejected: 1, applied: 2, heldForReview: 0 }],
+  ["PEV-KYC-03", "KYC-220177", "needs_more_data", "needs_more_data", "needs_more_data", "warning",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYC-04", "KYB-220165", "pending_timeout", "in_review", "in_review", "warning",
+    { result: "all-verified", delivered: 1, verified: 1, rejected: 0, applied: 1, heldForReview: 0 }],
+  ["PEV-KYC-05", null, "provider_outage", "unavailable", "not-submitted", "warning",
+    { result: "no-callbacks", delivered: 0, verified: 0, rejected: 0, applied: 0, heldForReview: 0 }],
+  ["PEV-KYC-06", null, "duplicate_callback", "approved", "approved", "success",
+    { result: "all-verified", delivered: 3, verified: 3, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYC-07", null, "out_of_order_callback", "approved", "approved", "success",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYC-08", null, "late_callback", "approved", "in_review", "warning",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 1, heldForReview: 1 }]
+];
+const kytEvidenceCases = [
+  ["PEV-KYT-01", "AML-78041", "high", "completed", "completed", "danger",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYT-02", "AML-78031", "sanctions_hit", "completed", "completed", "danger",
+    { result: "rejections-present", delivered: 3, verified: 2, rejected: 1, applied: 2, heldForReview: 0 }],
+  ["PEV-KYT-03", "AML-78038", "low", "completed", "completed", "success",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYT-04", null, "provider_outage", "unavailable", "not-screened", "warning",
+    { result: "no-callbacks", delivered: 0, verified: 0, rejected: 0, applied: 0, heldForReview: 0 }],
+  ["PEV-KYT-05", null, "duplicate_callback", "completed", "completed", "info",
+    { result: "all-verified", delivered: 3, verified: 3, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYT-06", null, "out_of_order_callback", "completed", "completed", "info",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 2, heldForReview: 0 }],
+  ["PEV-KYT-07", null, "late_callback", "completed", "pending", "warning",
+    { result: "all-verified", delivered: 2, verified: 2, rejected: 0, applied: 1, heldForReview: 1 }]
+];
+
+function assertProviderEvidence(evidence, cases) {
   assert.equal(evidence.source, "provider-simulator");
   assert.equal(evidence.evidence_only, true);
   assert.equal(evidence.environment, "dev-simulator");
   assert.equal(evidence.decisionAuthority, "none");
   assert.equal(evidence.decisionPath, "maker-checker-approval");
-  assert.ok(Array.isArray(evidence.cases) && evidence.cases.length > 0);
+  assert.deepEqual(
+    evidence.cases.map((entry) => [
+      entry.id,
+      entry.linkedCaseId,
+      entry.scenario,
+      entry.providerStatus,
+      entry.projectedStatus,
+      entry.tone,
+      entry.verification
+    ]),
+    cases
+  );
+  for (const entry of evidence.cases) {
+    assert.deepEqual(entry.operatorReview, {
+      required: true,
+      decision: null,
+      decisionPath: "maker-checker-approval"
+    });
+  }
 }
 
 before(async () => {
@@ -223,7 +350,7 @@ before(async () => {
 });
 
 after(async () => {
-  if (miniapp) await new Promise((resolve) => miniapp.close(() => resolve()));
+  if (miniapp) await closeServer(miniapp);
   await Promise.all([stopService(customerApi), stopService(backoffice)]);
 });
 
@@ -236,16 +363,36 @@ describe("customer journey through the Mini App BFF", () => {
     assert.equal(login.status, 201);
     cookie = cookieOf(login);
     const session = await readJson(login);
+    assert.deepEqual(Object.keys(session).sort(), sessionKeys);
+    assert.equal(session.authenticated, true);
     assert.equal(session.source, "dev-synthetic");
     assert.equal(session.kyc, "kyc-gated");
+    assert.equal(session.displayName, "Тестовый клиент");
+    assert.equal(session.customerRef, "SC-DEV-F1EDE");
+    // Session expiry is minted 30 minutes out on the injected clock.
+    assert.equal(session.expiresAt, now + 1_800_000);
 
     const wallet = await getMiniapp("/bff/wallet", cookie);
-    assert.equal(wallet.kyc, "kyc-gated");
+    assert.deepEqual(wallet, gatedWallet);
     const quote = await getMiniapp("/bff/quotes/preview?from=RUB&to=USDT&amount=5000", cookie);
     assert.deepEqual(Object.keys(quote).sort(), quoteKeys);
-    assert.equal(quote.kycRequired, true);
-    assert.equal(quote.executable, false);
-    assert.equal(quote.executionUnavailableReason, "dev_test_version");
+    assertPreview(quote, {
+      rateBase: "USDT",
+      rateQuote: "RUB",
+      fields: {
+        from: "RUB",
+        to: "USDT",
+        amountIn: "5000.00",
+        fee: "14.96",
+        feeAsset: "RUB",
+        feeBps: 30,
+        spreadBps: 50,
+        netIn: "4985.04",
+        total: "5000.00",
+        insufficientBalance: true,
+        kycRequired: true
+      }
+    });
     const screening = await postMiniapp("/bff/address-screening", screeningBody, { cookie });
     assert.equal(screening.status, 403);
     assert.deepEqual(await readJson(screening), { error: "kyc_required" });
@@ -301,58 +448,41 @@ describe("customer journey through the Mini App BFF", () => {
     // directory marks every subject unverified, so customer.wallets.read is
     // refused upstream and the wallet surface degrades to its gated form.
     const wallet = await getMiniapp("/bff/wallet", cookie);
-    assert.equal(wallet.kyc, "kyc-gated");
-    assert.equal(wallet.availableRub, "0.00");
-    assert.equal(wallet.holdRub, "0.00");
+    assert.deepEqual(wallet, gatedWallet);
     // customer.deposits.read is KYC-gated upstream like customer.wallets.read:
     // refused for every subject, so /bff/deposits degrades in place to the
-    // same emptied view a gated session sees.
+    // same emptied view a gated session sees. The whole payload is the
+    // contract — an added or renamed field must fail the deepEqual.
     const deposits = await getMiniapp("/bff/deposits", cookie);
-    assert.equal(deposits.mode, "test");
-    assert.equal(deposits.kyc, "kyc-gated");
-    assert.equal(deposits.deposits.length, 0);
+    assert.deepEqual(deposits, { mode: "test", kyc: "kyc-gated", deposits: [] });
     // customer.withdrawals.read carries the same upstream KYC gate, so
     // /bff/withdrawals degrades in place to the emptied gated list too.
     const withdrawals = await getMiniapp("/bff/withdrawals", cookie);
-    assert.equal(withdrawals.mode, "test");
-    assert.equal(withdrawals.kyc, "kyc-gated");
-    assert.equal(withdrawals.withdrawals.length, 0);
+    assert.deepEqual(withdrawals, { mode: "test", kyc: "kyc-gated", withdrawals: [] });
     // customer.quotes.read carries the same upstream KYC gate, so /bff/quotes
     // degrades in place to the emptied gated list too.
     const quotes = await getMiniapp("/bff/quotes", cookie);
-    assert.equal(quotes.mode, "test");
-    assert.equal(quotes.kyc, "kyc-gated");
-    assert.equal(quotes.quotes.length, 0);
+    assert.deepEqual(quotes, { mode: "test", kyc: "kyc-gated", quotes: [] });
     // customer.exchange-orders.read carries the same upstream KYC gate, so
     // /bff/exchange-orders degrades in place to the emptied gated list too.
     const orders = await getMiniapp("/bff/exchange-orders", cookie);
-    assert.equal(orders.mode, "test");
-    assert.equal(orders.kyc, "kyc-gated");
-    assert.equal(orders.orders.length, 0);
+    assert.deepEqual(orders, { mode: "test", kyc: "kyc-gated", orders: [] });
     // customer.trades.read carries the same upstream KYC gate, so
     // /bff/trades degrades in place to the emptied gated list too.
     const trades = await getMiniapp("/bff/trades", cookie);
-    assert.equal(trades.mode, "test");
-    assert.equal(trades.kyc, "kyc-gated");
-    assert.equal(trades.trades.length, 0);
+    assert.deepEqual(trades, { mode: "test", kyc: "kyc-gated", trades: [] });
     // customer.markets.read carries the same upstream KYC gate, so
     // /bff/markets degrades in place to the emptied gated list too.
     const markets = await getMiniapp("/bff/markets", cookie);
-    assert.equal(markets.mode, "test");
-    assert.equal(markets.kyc, "kyc-gated");
-    assert.equal(markets.markets.length, 0);
+    assert.deepEqual(markets, { mode: "test", kyc: "kyc-gated", markets: [] });
     // customer.payments.read carries the same upstream KYC gate, so
     // /bff/payments degrades in place to the emptied gated list too.
     const payments = await getMiniapp("/bff/payments", cookie);
-    assert.equal(payments.mode, "test");
-    assert.equal(payments.kyc, "kyc-gated");
-    assert.equal(payments.payments.length, 0);
+    assert.deepEqual(payments, { mode: "test", kyc: "kyc-gated", payments: [] });
     // customer.cards.read carries the same upstream KYC gate, so /bff/cards
     // degrades in place to the emptied gated list too.
     const cards = await getMiniapp("/bff/cards", cookie);
-    assert.equal(cards.mode, "test");
-    assert.equal(cards.kyc, "kyc-gated");
-    assert.equal(cards.cards.length, 0);
+    assert.deepEqual(cards, { mode: "test", kyc: "kyc-gated", cards: [] });
     // customer.checks.read carries the same upstream KYC gate, so
     // /bff/checks degrades in place to the local check book's gated list —
     // the fixture entries with the KYC-adjusted statuses, never upstream
@@ -360,11 +490,39 @@ describe("customer journey through the Mini App BFF", () => {
     const checks = await getMiniapp("/bff/checks", cookie);
     assert.equal(checks.mode, "test");
     assert.deepEqual(Object.keys(checks).sort(), ["checks", "mode"]);
-    assert.equal(checks.checks.length, 5);
-    for (const check of checks.checks) {
-      assert.match(check.reference, /^chk_[0-9a-f]{24}$/);
+    // The five frozen fixtures, gated: the second row is the one the KYC
+    // adjustment rewrites (received + created -> awaiting_recipient_kyc),
+    // and every money/status field is pinned literally — wave-72 finding:
+    // reference/mode/claimRule alone let a mutated amount or direction pass.
+    const checkTtlMs = 72 * 3_600_000;
+    const expectedChecks = [
+      ["chk_7f3a9c1e5d2b4f8a0e6c1d3b", "sent", "created", "USDT", "25.000000", "0.075000", "25.075000", "Возврат долга", 3 * 3_600_000, undefined],
+      ["chk_2b8d4f6a0c1e3b5d7f9a2c4e", "received", "awaiting_recipient_kyc", "USDT", "10.000000", "0.030000", "10.030000", undefined, 5 * 3_600_000, undefined],
+      ["chk_5e7a9c2e4d6b8f0a1c3e5d7b", "received", "claimed", "TON", "4.000000000", "0.012000000", "4.012000000", undefined, 30 * 3_600_000, 5 * 3_600_000],
+      ["chk_9d1b3f5a7c9e1d3f5a7b9c1e", "sent", "cancelled", "USDT", "15.000000", "0.045000", "15.045000", undefined, 50 * 3_600_000, 10 * 3_600_000],
+      ["chk_4c6e8a0d2f4b6d8f0a2c4e6a", "sent", "expired", "USDT", "7.500000", "0.022500", "7.522500", undefined, 90 * 3_600_000, checkTtlMs]
+    ];
+    assert.equal(checks.checks.length, expectedChecks.length);
+    for (const [index, check] of checks.checks.entries()) {
+      const [reference, direction, status, asset, amount, fee, total, comment, createdAgoMs, statusAfterMs] = expectedChecks[index];
+      assert.equal(check.reference, reference);
       assert.equal(check.mode, "test");
+      assert.equal(check.direction, direction);
+      assert.equal(check.status, status);
+      assert.equal(check.asset, asset);
+      assert.equal(check.amount, amount);
+      assert.equal(check.fee, fee);
+      assert.equal(check.total, total);
       assert.equal(check.claimRule, "personal");
+      assert.equal(check.comment, comment);
+      assert.equal(check.createdAt, now - createdAgoMs);
+      assert.equal(check.expiresAt - check.createdAt, checkTtlMs);
+      assert.deepEqual(
+        check.timeline.map((entry) => entry.status),
+        statusAfterMs === undefined ? ["created"] : ["created", status]
+      );
+      assert.equal(check.timeline[0].at, check.createdAt);
+      if (statusAfterMs !== undefined) assert.equal(check.timeline[1].at, check.createdAt + statusAfterMs);
       assert.equal(check.executable, false);
       assert.equal(check.executionUnavailableReason, "dev_test_version");
     }
@@ -567,6 +725,7 @@ describe("customer journey through the Mini App BFF", () => {
     assert.deepEqual(list, { operations: [] });
     const detail = await fetch(`${miniappBase}/bff/operations/${upstreamView.operations[0].operation_id}`, { headers: { cookie } });
     assert.equal(detail.status, 404);
+    assert.deepEqual(await detail.json(), { error: "not_found" });
   });
 
   it("screens a testnet address through signed KYT simulator callbacks as advisory only", async () => {
@@ -598,6 +757,7 @@ describe("customer journey through the Mini App BFF", () => {
       headers: { cookie, "x-device-id": "synthetic-device" }
     });
     assert.equal(device.status, 400);
+    assert.deepEqual(await device.json(), { error: "invalid_request" });
   });
 
   it("degrades the served screening and deposit-address reads in place upstream", async () => {
@@ -625,19 +785,47 @@ describe("customer journey through the Mini App BFF", () => {
 
   it("previews buy and sell quotes that are never executable", async () => {
     // RUB -> USDT is routed to the simulator's buy side with quote_amount as the budget.
+    // The verified session's upstream wallet read is refused, so availability
+    // degrades to the gated zero — insufficientBalance stays true — while the
+    // deterministic simulator math answers the pinned literals.
     const buy = await getMiniapp("/bff/quotes/preview?from=RUB&to=USDT&amount=5000", cookie);
     const sell = await getMiniapp("/bff/quotes/preview?from=USDT&to=RUB&amount=50", cookie);
     for (const quote of [buy, sell]) {
       assert.deepEqual(Object.keys(quote).sort(), quoteKeys);
-      assert.equal(quote.kycRequired, false);
-      assert.equal(quote.executable, false);
-      assert.equal(quote.executionUnavailableReason, "dev_test_version");
     }
-    assert.deepEqual([buy.from, buy.to], ["RUB", "USDT"]);
-    assert.ok(Number(buy.amountIn) > 0 && Number(buy.amountIn) <= 5000, buy.amountIn);
-    assert.ok(Number(buy.amountOut) > 0, buy.amountOut);
-    assert.deepEqual([sell.from, sell.to, sell.amountIn], ["USDT", "RUB", "50.000000"]);
-    assert.ok(Number(sell.amountOut) > 0, sell.amountOut);
+    assertPreview(buy, {
+      rateBase: "USDT",
+      rateQuote: "RUB",
+      fields: {
+        from: "RUB",
+        to: "USDT",
+        amountIn: "5000.00",
+        fee: "14.96",
+        feeAsset: "RUB",
+        feeBps: 30,
+        spreadBps: 50,
+        netIn: "4985.04",
+        total: "5000.00",
+        insufficientBalance: true,
+        kycRequired: false
+      }
+    });
+    assertPreview(sell, {
+      rateBase: "USDT",
+      rateQuote: "RUB",
+      fields: {
+        from: "USDT",
+        to: "RUB",
+        amountIn: "50.000000",
+        feeAsset: "RUB",
+        feeBps: 30,
+        spreadBps: 50,
+        netIn: "50.000000",
+        total: "50.000000",
+        insufficientBalance: true,
+        kycRequired: false
+      }
+    });
   });
 
   it("lists login and KYC drafts and marks them read for the owner only", async () => {
@@ -671,7 +859,10 @@ describe("customer journey through the Mini App BFF", () => {
     const foreignScreening = await fetch(`${miniappBase}/bff/address-screening/scr_${"0".repeat(32)}`, {
       headers: { cookie: foreign }
     });
+    // The foreign session is kyc-gated, so the screening detail gate answers
+    // the same pinned kyc_required refusal the body must carry.
     assert.equal(foreignScreening.status, 403);
+    assert.deepEqual(await foreignScreening.json(), { error: "kyc_required" });
     const foreignView = await getMiniapp("/bff/notifications", foreign);
     assert.deepEqual(
       foreignView.notifications.map((entry) => entry.template),
@@ -698,6 +889,7 @@ describe("customer journey through the Mini App BFF", () => {
     for (const path of moneyRoutes) {
       const response = await postMiniapp(path, {}, { cookie });
       assert.equal(response.status, 404, path);
+      assert.deepEqual(await readJson(response), { error: "not_found" }, path);
     }
   });
 });
@@ -753,6 +945,29 @@ describe("customer negative paths", () => {
       assert.equal((await readJson(response)).error, "invalid_request", path);
     }
     assert.equal((await getMiniapp("/bff/session", cookie)).kyc, "verified");
+  });
+
+  it("denies unauthenticated and unsupported requests on both BFFs", async () => {
+    // Customer BFF: every session-gated GET answers the pinned 401 shape —
+    // the absence of a cookie is never silently promoted to a session.
+    for (const path of ["/bff/session", "/bff/wallet", "/bff/profile"]) {
+      const response = await fetch(`${miniappBase}${path}`);
+      assert.equal(response.status, 401, path);
+      assert.deepEqual(await readJson(response), { error: "unauthenticated" }, path);
+    }
+    // Backoffice BFF: the same absence answers operator_session_required —
+    // wave-72 finding: no request in this arm ever arrived unauthenticated,
+    // so a swapped 401 branch stayed green.
+    for (const path of ["/bff/api/reports", "/bff/api/kyc", "/bff/api/operator/audit"]) {
+      const response = await fetch(`${backofficeBase}${path}`);
+      assert.equal(response.status, 401, path);
+      assert.deepEqual(await readJson(response), { error: "operator_session_required" }, path);
+    }
+    // An operator role the profiles table does not carry is refused with
+    // the pinned unsupported_role shape (the arm never sent a bogus role).
+    const bogusRole = await postBackoffice("/bff/auth/dev-session", { role: "supervisor" });
+    assert.equal(bogusRole.status, 400);
+    assert.deepEqual(await readJson(bogusRole), { error: "unsupported_role" });
   });
 
   it("rejects X-Device-Id on customer routes", async () => {
@@ -830,12 +1045,20 @@ describe("operator journey through the backoffice BFF", () => {
   });
 
   it("serves KYC and AML cases with evidence-only provider evidence", async () => {
+    // The BFF serves the repository's case rows verbatim — the deepEqual
+    // against the repository pins every field, and the literal spot-pins
+    // hold the leading row's identity/status (wave-72 finding:
+    // Array.isArray+length alone let a mutated case row stay green).
     const kyc = await signedGet("/bff/api/kyc", lead, "kyc-cases");
-    assert.ok(Array.isArray(kyc.cases) && kyc.cases.length > 0);
-    assertProviderEvidence(kyc.providerEvidence);
+    assert.deepEqual(kyc.cases, demoRepository.kycCases());
+    assert.equal(kyc.cases[0].id, "KYC-220184");
+    assert.equal(kyc.cases[0].status, "verified");
+    assertProviderEvidence(kyc.providerEvidence, kycEvidenceCases);
     const aml = await signedGet("/bff/api/aml", lead, "aml-cases");
-    assert.ok(Array.isArray(aml.cases) && aml.cases.length > 0);
-    assertProviderEvidence(aml.providerEvidence);
+    assert.deepEqual(aml.cases, demoRepository.amlCases());
+    assert.equal(aml.cases[0].id, "AML-78041");
+    assert.equal(aml.cases[0].severity, "High");
+    assertProviderEvidence(aml.providerEvidence, kytEvidenceCases);
   });
 
   it("rejects a signed envelope whose payload was altered", async () => {
@@ -916,7 +1139,23 @@ describe("operator journey through the backoffice BFF", () => {
     // token is beyond the end, and every tampered query fails closed.
     const feed = await signedGet("/bff/api/operator/audit", lead, "operator-audit:first");
     assert.equal(feed.mode, "test");
-    assert.ok(Array.isArray(feed.audit.entries));
+    assert.equal(feed.audit.asOf, new Date(0).toISOString());
+    // The local feed adapts the demo event ledger verbatim into the audit
+    // entry shape — every field is pinned, re-derived from the same fixture
+    // source the BFF reads (wave-72 finding: entries were never inspected).
+    assert.deepEqual(
+      feed.audit.entries,
+      demoRepository.auditSource().slice(0, 32).map((event) => ({
+        auditId: null,
+        actorSubjectId: null,
+        actorRole: null,
+        action: event.action,
+        targetKind: null,
+        targetId: event.resource,
+        at: event.occurredAt,
+        detailHash: event.evidenceDigest
+      }))
+    );
     assert.equal(feed.audit.nextCursor, null);
     for (const [suffix, status, error] of [
       ["?cursor=bogus", 400, "operator_audit_cursor_invalid"],
@@ -953,6 +1192,7 @@ describe("operator journey through the backoffice BFF", () => {
       if (readOnlyMoneyPaths.has(path)) {
         assert.equal(response.status, 405, path);
         assert.equal(response.headers.get("allow"), "GET", path);
+        assert.deepEqual(await readJson(response), { error: "method_not_allowed" }, path);
       } else {
         assert.equal(response.status, 404, path);
         assert.deepEqual(await readJson(response), { error: "not_found" });
@@ -961,5 +1201,19 @@ describe("operator journey through the backoffice BFF", () => {
     const reportPost = await postBackoffice("/bff/api/reports", {}, lead);
     assert.equal(reportPost.status, 405);
     assert.equal(reportPost.headers.get("allow"), "GET");
+    assert.deepEqual(await readJson(reportPost), { error: "method_not_allowed" });
+  });
+
+  it("denies capability gaps to the other operator roles", async () => {
+    // fraud-investigator holds none of kyc/aml/reports/audit reads;
+    // aml-investigator holds the case reads but not reports:read/audit:read.
+    const fraud = await operatorSession("fraud-investigator");
+    await deniedGet("/bff/api/kyc", fraud);
+    await deniedGet("/bff/api/aml", fraud);
+    await deniedGet("/bff/api/reports", fraud);
+    await deniedGet("/bff/api/operator/audit", fraud);
+    const aml = await operatorSession("aml-investigator");
+    await deniedGet("/bff/api/reports", aml);
+    await deniedGet("/bff/api/operator/audit", aml);
   });
 });
