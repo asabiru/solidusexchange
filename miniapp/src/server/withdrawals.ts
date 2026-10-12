@@ -131,9 +131,9 @@ const syntheticWithdrawals: readonly WithdrawalView[] = Object.freeze([
       Object.freeze({ id: "wdl_d1e2f3a4b5c6d7e8f9a0b1c2", asset: "TON", amount: "2.000000000", direction: "out" }),
       Object.freeze({ id: "wdl_e1f2a3b4c5d6e7f8a9b0c1d2", asset: "TON", amount: "0.010000000", direction: "out" })
     ]),
-    createdAt: Date.parse("2026-10-07T10:40:00.000Z"),
-    updatedAt: Date.parse("2026-10-07T10:44:00.000Z"),
-    expiresAt: Date.parse("2026-10-07T10:45:00.000Z"),
+    createdAt: Date.parse("2026-10-08T09:20:00.000Z"),
+    updatedAt: Date.parse("2026-10-08T09:24:00.000Z"),
+    expiresAt: Date.parse("2026-10-08T09:25:00.000Z"),
     posting: "none"
   })
 ]);

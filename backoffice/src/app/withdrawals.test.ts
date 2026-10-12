@@ -8,12 +8,15 @@ import { navigation } from "./navigation.js";
 
 const docStatuses = [
   "draft",
-  "pending-approval",
   "screened",
+  "pending_maker_approval",
+  "pending_checker_approval",
+  "unsigned_intent_ready",
   "broadcast",
   "confirmed",
   "rejected",
-  "cancelled"
+  "cancelled",
+  "expired"
 ] as const satisfies readonly WithdrawalIntentStatus[];
 
 describe("withdrawal intents wiring", () => {

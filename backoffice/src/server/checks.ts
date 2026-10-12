@@ -6,7 +6,7 @@ import type { AuditSourceEvent, ChatCheck, CheckStatus } from "../data/demo.js";
 
 export const checkStatuses: readonly CheckStatus[] = Object.freeze([
   "created",
-  "waiting-recipient-kyc",
+  "awaiting_recipient_kyc",
   "claimed",
   "cancelled",
   "expired"

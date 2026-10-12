@@ -154,7 +154,7 @@ describe("checks BFF", () => {
     };
     assert.equal(envelope.resource, "check:CHK-771298");
     assert.equal(envelope.payload.id, "CHK-771298");
-    assert.equal(envelope.payload.status, "waiting-recipient-kyc");
+    assert.equal(envelope.payload.status, "awaiting_recipient_kyc");
     assert.equal(envelope.payload.amount, "120.000000");
     assert.ok(envelope.payload.timeline.length >= 2);
     assert.ok(envelope.payload.monitoring.length > 0);

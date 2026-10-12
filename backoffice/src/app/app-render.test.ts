@@ -315,7 +315,7 @@ describe("enum and label fabrication", () => {
       id: "W-2",
       intentId: "wi-2",
       tone: "info",
-      status: "pending-approval",
+      status: "pending_checker_approval",
       customer: "c",
       customerId: "c1",
       subject: "s",

@@ -8,7 +8,7 @@ import { navigation } from "./navigation.js";
 
 const docStatuses = [
   "created",
-  "waiting-recipient-kyc",
+  "awaiting_recipient_kyc",
   "claimed",
   "cancelled",
   "expired"

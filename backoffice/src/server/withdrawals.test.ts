@@ -121,11 +121,11 @@ describe("withdrawal intents BFF", () => {
 
   it("filters the queue by intent status", async () => {
     const cookie = await devSession("compliance-lead");
-    const pending = await fetch(`${baseUrl}/bff/api/withdrawals?status=pending-approval`, { headers: { cookie } });
+    const pending = await fetch(`${baseUrl}/bff/api/withdrawals?status=pending_checker_approval`, { headers: { cookie } });
     assert.equal(pending.status, 200);
     const pendingPayload = (await pending.json() as { payload: { intents: readonly { status: string }[] } }).payload;
     assert.ok(pendingPayload.intents.length > 0);
-    for (const intent of pendingPayload.intents) assert.equal(intent.status, "pending-approval");
+    for (const intent of pendingPayload.intents) assert.equal(intent.status, "pending_checker_approval");
 
     const multi = await fetch(`${baseUrl}/bff/api/withdrawals?status=draft&status=cancelled`, { headers: { cookie } });
     assert.equal(multi.status, 200);
@@ -170,7 +170,7 @@ describe("withdrawal intents BFF", () => {
     };
     assert.equal(envelope.resource, "withdrawal:WDR-991804");
     assert.equal(envelope.payload.id, "WDR-991804");
-    assert.equal(envelope.payload.status, "pending-approval");
+    assert.equal(envelope.payload.status, "pending_checker_approval");
     assert.equal(envelope.payload.amount, "2450.000000");
     assert.equal(envelope.payload.linkedApprovalId, "APV-843921");
     assert.ok(envelope.payload.timeline.length >= 2);
