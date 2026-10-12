@@ -27,7 +27,7 @@ import {
   SessionStoreError,
   SessionStoreUnavailableError
 } from "./session-store.js";
-import type { Pool, QueryResult, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
 // PostgreSQL backend for the Mini App session-store seam
 // (`MINIAPP_SESSION_STORE=postgresql`, DSN via `MINIAPP_SESSION_STORE_DSN`).
@@ -42,9 +42,12 @@ import type { Pool, QueryResult, QueryResultRow } from "pg";
 // so the package stays importable without the dependency installed, while a
 // postgres-mode startup without a working driver still fails fast.
 //
-// Every lifecycle op is one CTE statement so a store call stays atomic
-// without a client-managed transaction; `tail` serializes the writes so the
-// in-process ordering is identical to the memory backend's single thread.
+// Every lifecycle op is one CTE statement, run inside an explicit
+// transaction so same-subject writers on different store instances
+// serialize: the bound-enforcing ops (issue, revoke) take a per-subject
+// advisory transaction lock before their statement runs, while `tail`
+// serializes the writes inside this instance so the in-process ordering is
+// identical to the memory backend's single thread.
 // Each statement reproduces the memory model exactly:
 //   - `issue`: a same-snapshot conflict check (session id or bearer digest
 //     held by any stored record is a deterministic SessionStoreError), the
@@ -332,6 +335,27 @@ SELECT count(*) AS live
    AND expires_at_ms > $1;
 `;
 
+// The subject-bound invariants (active cap on issue, tombstone cap on
+// revoke) are evaluated against a statement snapshot, so a second
+// backend writing the same subject concurrently would ghost records
+// past the cap: each statement sees the other still uncommitted. The
+// write queue serializes only this store instance; a per-subject advisory
+// transaction lock serializes the same-subject writes of every store
+// instance sharing the database. One lock per statement — taken before
+// the op and released at commit — cannot deadlock with the row locks
+// the CTEs take afterwards, because a lock waiter never holds a row
+// lock of its own.
+const LOCK_SUBJECT_SQL = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0));";
+
+// A revoke resolves the subject after the lock order starts: the subject is
+// read inside the transaction so the lock targets the same row the CTE is
+// about to transition.
+const SESSION_SUBJECT_SQL = `
+SELECT subject
+  FROM miniapp_control.customer_sessions
+ WHERE session_id = $1;
+`;
+
 // Parameters for the startup surface probe: one valid issue, touch and get
 // run inside a transaction that is always rolled back, so the probe
 // exercises the write path, the mutation trigger, the conflict and evict
@@ -444,6 +468,7 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
   const connectionDsn = dsn;
   let pool: Pool | null = null;
   let opening: Promise<void> | null = null;
+  let closing: Promise<void> | null = null;
   let closed = false;
   /** Queued writes, in issue order; resolves after every prior write settles. */
   let tail = Promise.resolve();
@@ -520,16 +545,64 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       await ending?.end().catch(() => undefined);
       throw unavailable(error);
     }
-    // close() raced with this initialize: drain the pool it just opened.
+    // close() raced with this initialize: drain the pool it just opened
+    // and fail the initialize instead of resolving on a dead store.
     if (closed) {
       const orphan = pool;
       pool = null;
       await orphan?.end().catch(() => undefined);
+      throw new SessionStoreUnavailableError(
+        "miniapp session store was closed during initialization"
+      );
     }
   }
 
-  function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
-    const write = tail.then(operation);
+  async function closeOnce(): Promise<void> {
+    try {
+      await tail;
+      const ending = pool;
+      pool = null;
+      await ending?.end();
+      if (failure !== null) {
+        throw failure;
+      }
+    } finally {
+      closing = null;
+    }
+  }
+
+  async function lockSubject(client: PoolClient, subject: string): Promise<void> {
+    await client.query(LOCK_SUBJECT_SQL, [subject]);
+  }
+
+  function enqueueWrite<T>(
+    operation: (client: PoolClient) => Promise<T>,
+    subjectKey: string | ((client: PoolClient) => Promise<string | null>) | null = null
+  ): Promise<T> {
+    const write = tail.then(async () => {
+      if (pool === null) {
+        throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        try {
+          const subject =
+            typeof subjectKey === "function" ? await subjectKey(client) : subjectKey;
+          if (subject !== null && subject !== undefined) {
+            await lockSubject(client, subject);
+          }
+          const result = await operation(client);
+          await client.query("COMMIT");
+          return result;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          throw error;
+        }
+      } finally {
+        client.release();
+      }
+    });
     tail = write.then(
       () => undefined,
       () => undefined
@@ -609,6 +682,13 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
   return Object.freeze({
     kind: "postgresql" as const,
     async initialize() {
+      // A close may be in flight while the pool is still usable: wait it
+      // out instead of racing the pool teardown. Once the close lands the
+      // store is ready again and a fresh pool is provisioned.
+      const teardown = closing;
+      if (teardown !== null) {
+        await teardown;
+      }
       closed = false;
       failure = null;
       tail = Promise.resolve();
@@ -624,13 +704,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(ISSUE_SQL, [
+          result = await client.query<SessionRow>(ISSUE_SQL, [
             command.session_id,
             command.subject,
             command.source,
@@ -654,7 +731,7 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
           throw new SessionStoreError("customer session conflicts with a stored record");
         }
         return record;
-      });
+      }, command.subject);
     },
     async getSession(command: SessionGetCommand) {
       assertSessionGetCommand(command);
@@ -669,13 +746,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(TOUCH_SQL, [
+          result = await client.query<SessionRow>(TOUCH_SQL, [
             command.session_id,
             command.now
           ]);
@@ -694,13 +768,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(VERIFY_KYC_SQL, [
+          result = await client.query<SessionRow>(VERIFY_KYC_SQL, [
             command.session_id,
             command.now
           ]);
@@ -719,13 +790,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(REVOKE_SQL, [
+          result = await client.query<SessionRow>(REVOKE_SQL, [
             command.session_id,
             command.now,
             command.maxRevokedPerSubject
@@ -738,6 +806,11 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
           throw error;
         }
         return sessionRecord(result.rows[0] ?? { session_id: null });
+      }, async (client) => {
+        const resolved = await client.query<{ subject?: string }>(SESSION_SUBJECT_SQL, [
+          command.session_id
+        ]);
+        return resolved.rows[0]?.subject ?? null;
       });
     },
     async deleteSessionByTokenDigest(command: SessionDeleteByTokenCommand) {
@@ -745,13 +818,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(DELETE_BY_TOKEN_SQL, [command.token_digest]);
+          result = await client.query<SessionRow>(DELETE_BY_TOKEN_SQL, [command.token_digest]);
         } catch (error) {
           const rejected = storageRejected(error, "customer session command was rejected by storage");
           if (rejected !== null) {
@@ -767,11 +837,8 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
-        const result = await pool.query(SWEEP_SQL, [command.now]);
+      return enqueueWrite(async (client) => {
+        const result = await client.query(SWEEP_SQL, [command.now]);
         return { swept: result.rows.length };
       });
     },
@@ -800,14 +867,19 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       }
     },
     async close() {
-      await tail;
-      const ending = pool;
-      pool = null;
-      await ending?.end();
-      closed = true;
-      if (failure !== null) {
-        throw failure;
+      const inFlight = closing;
+      if (inFlight !== null) {
+        // A second close joins the teardown instead of racing it.
+        return inFlight;
       }
+      // Mark the store closed synchronously: an initialize() already
+      // probing sees the flag inside openOnce and gives up, while an
+      // initialize() invoked from here on waits on `closing` before
+      // provisioning a new pool.
+      closed = true;
+      const teardown = closeOnce();
+      closing = teardown;
+      return teardown;
     }
   });
 }

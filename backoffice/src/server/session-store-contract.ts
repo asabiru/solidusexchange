@@ -660,4 +660,267 @@ export function registerSessionStoreContract({
       await assert.rejects(operation, SessionStoreCommandError, label);
     }
   });
+
+  // Wave-62 audit pins: each case asserts a behavior the memory and
+  // PostgreSQL backends must share bit-for-bit. A case that diverges on
+  // either backend fails the shared contract on exactly that backend.
+
+  test(`${name}: a failed revoke leaves the subject's revoked history untouched`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const subject = freshSubject();
+    const issued: OperatorSessionRecord[] = [];
+    for (let index = 0; index < 5; index += 1) {
+      issued.push(await issueFor(store, {
+        subject,
+        issued_at_ms: 1_000 + index * 100,
+        last_used_at_ms: 1_000 + index * 100,
+        maxPerSubject: 8
+      }));
+    }
+    // Revoke five sessions with a generous bound so all five tombstones
+    // stay; then re-revoke the newest one with a tighter bound. The second
+    // revoke is a no-op: on the memory backend it changes nothing, so the
+    // postgres backend must not trim revoked history either.
+    for (const [index, record] of issued.entries()) {
+      await store.revokeSession({
+        session_id: record.session_id,
+        now: 5_000 + index,
+        maxRevokedPerSubject: 4
+      });
+    }
+    const repeat = await store.revokeSession({
+      session_id: issued[4].session_id,
+      now: 6_000,
+      maxRevokedPerSubject: 2
+    });
+    assert.equal(repeat, null);
+    for (const [index, record] of issued.entries()) {
+      assert.deepEqual(
+        await store.getSession({ session_id: record.session_id, now: 9_000 }),
+        { ...record, revoked: true, revoked_at_ms: 5_000 + index },
+        `revoked record ${index + 1} must survive the failed revoke`
+      );
+    }
+  });
+
+  test(`${name}: a failed revoke on an expired record touches nothing`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const subject = freshSubject();
+    const first = await issueFor(store, { subject, issued_at_ms: 1_000, last_used_at_ms: 1_000 });
+    const second = await issueFor(store, { subject, issued_at_ms: 2_000, last_used_at_ms: 2_000 });
+    const third = await issueFor(store, { subject, issued_at_ms: 3_000, last_used_at_ms: 3_000 });
+    const dead = await issueFor(store, { subject, expires_at_ms: 2_500 });
+    await store.revokeSession({ session_id: first.session_id, now: 4_000, maxRevokedPerSubject: 2 });
+    await store.revokeSession({ session_id: second.session_id, now: 5_000, maxRevokedPerSubject: 2 });
+    await store.revokeSession({ session_id: third.session_id, now: 6_000, maxRevokedPerSubject: 2 });
+    // Revoking the expired record must answer null and evict only that
+    // record — never a revoked one.
+    assert.equal(
+      await store.revokeSession({ session_id: dead.session_id, now: 7_000, maxRevokedPerSubject: 2 }),
+      null
+    );
+    assert.equal(await store.getSession({ session_id: dead.session_id, now: 7_000 }), null);
+    for (const record of [first, second, third]) {
+      assert.equal(
+        (await store.getSession({ session_id: record.session_id, now: 7_000 }))?.revoked,
+        true,
+        "a revoked record must survive the failed revoke"
+      );
+    }
+  });
+
+  test(`${name}: eviction ordering ties break on the session id`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const subject = freshSubject();
+    // Live bound: identical issued_at_ms — the lexicographically largest
+    // session id is the evicted record on every backend.
+    const alpha = await issueFor(store, {
+      subject, session_id: "sess_a00000000000000000000001", issued_at_ms: 1_000, last_used_at_ms: 1_000, maxPerSubject: 2
+    });
+    const beta = await issueFor(store, {
+      subject, session_id: "sess_b00000000000000000000002", issued_at_ms: 1_000, last_used_at_ms: 1_000, maxPerSubject: 2
+    });
+    const gamma = await issueFor(store, {
+      subject, session_id: "sess_c00000000000000000000003", issued_at_ms: 1_000, last_used_at_ms: 1_000, maxPerSubject: 2
+    });
+    assert.equal(await store.getSession({ session_id: beta.session_id, now: 2_000 }), null);
+    for (const record of [alpha, gamma]) {
+      assert.equal(
+        (await store.getSession({ session_id: record.session_id, now: 2_000 }))?.session_id,
+        record.session_id
+      );
+    }
+    // Revoked bound: identical revoked_at_ms — the same tie-break picks
+    // the evicted tombstone deterministically.
+    const subject2 = freshSubject();
+    const stones: OperatorSessionRecord[] = [];
+    for (const suffix of ["d", "e", "f"]) {
+      stones.push(await issueFor(store, { subject: subject2, session_id: `sess_${suffix}00000000000000000000004` }));
+    }
+    for (const record of stones) {
+      await store.revokeSession({ session_id: record.session_id, now: 5_000, maxRevokedPerSubject: 2 });
+    }
+    const last = await issueFor(store, { subject: subject2, session_id: "sess_100000000000000000000005" });
+    await store.revokeSession({ session_id: last.session_id, now: 5_000, maxRevokedPerSubject: 2 });
+    // Pre-update snapshot: the doomed tombstone is the largest id among the
+    // three tied revoked records (sess_f...), keeping the two smallest.
+    assert.equal(await store.getSession({ session_id: stones[2].session_id, now: 9_000 }), null);
+    for (const record of [stones[0], stones[1], last]) {
+      assert.equal(
+        (await store.getSession({ session_id: record.session_id, now: 9_000 }))?.session_id,
+        record.session_id
+      );
+    }
+  });
+
+  test(`${name}: a bound of one keeps only the newest record`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const subject = freshSubject();
+    const first = await issueFor(store, { subject, maxPerSubject: 1 });
+    const second = await issueFor(store, { subject, maxPerSubject: 1 });
+    assert.equal(await store.getSession({ session_id: first.session_id, now: 2_000 }), null);
+    assert.equal(
+      (await store.getSession({ session_id: second.session_id, now: 2_000 }))?.session_id,
+      second.session_id
+    );
+    // The revoked bound keeps the bound plus the record being revoked:
+    // with maxRevokedPerSubject=1 the third revoke evicts the oldest
+    // tombstone, not an arbitrary one.
+    const subject2 = freshSubject();
+    const stones: OperatorSessionRecord[] = [];
+    for (let index = 0; index < 3; index += 1) {
+      stones.push(await issueFor(store, { subject: subject2 }));
+    }
+    for (const [index, record] of stones.entries()) {
+      await store.revokeSession({
+        session_id: record.session_id,
+        now: 3_000 + index,
+        maxRevokedPerSubject: 1
+      });
+    }
+    assert.equal(await store.getSession({ session_id: stones[0].session_id, now: 9_000 }), null);
+    for (const record of stones.slice(1)) {
+      assert.equal(
+        (await store.getSession({ session_id: record.session_id, now: 9_000 }))?.revoked,
+        true
+      );
+    }
+  });
+
+  test(`${name}: a digest freed by rotation is reclaimable, a live one is not`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const issued = await issueFor(store);
+    const rotatedDigest = freshDigest();
+    await store.refreshSession({
+      session_id: issued.session_id,
+      token_digest: rotatedDigest,
+      now: 2_000,
+      expires_at_ms: 62_000
+    });
+    // The rotated-away digest no longer names a record: another session
+    // may claim it.
+    const reclaimed = await issueFor(store, { token_digest: issued.token_digest });
+    assert.equal(reclaimed.token_digest, issued.token_digest);
+    // The live digest is still a conflict.
+    await assert.rejects(
+      async () => store.issueSession(issueCommand({ token_digest: rotatedDigest })),
+      SessionStoreError
+    );
+    // A refresh may also present the session's own current digest: the row
+    // is its own holder, so no other record conflicts.
+    const self = await store.refreshSession({
+      session_id: issued.session_id,
+      token_digest: rotatedDigest,
+      now: 3_000,
+      expires_at_ms: 63_000
+    });
+    assert.equal(self?.token_digest, rotatedDigest);
+  });
+
+  test(`${name}: concurrent rotations on one session serialize`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    const issued = await issueFor(store);
+    const first = freshDigest();
+    const second = freshDigest();
+    const [rotatedA, rotatedB] = await Promise.all([
+      store.refreshSession({
+        session_id: issued.session_id,
+        token_digest: first,
+        now: 2_000,
+        expires_at_ms: 62_000
+      }),
+      store.refreshSession({
+        session_id: issued.session_id,
+        token_digest: second,
+        now: 3_000,
+        expires_at_ms: 70_000
+      })
+    ]);
+    // Both rotations succeed in call order: the second sees the first's
+    // committed row, so last_used and expiry only move forward.
+    assert.equal(rotatedA?.token_digest, first);
+    assert.equal(rotatedB?.token_digest, second);
+    assert.equal(rotatedB?.last_used_at_ms, 3_000);
+    assert.equal(rotatedB?.expires_at_ms, 70_000);
+    assert.equal(
+      await store.getSessionByTokenDigest({ token_digest: first, now: 4_000 }),
+      null,
+      "the superseded digest is dead"
+    );
+    assert.equal(
+      (await store.getSessionByTokenDigest({ token_digest: second, now: 4_000 }))?.session_id,
+      issued.session_id
+    );
+  });
+
+  test(`${name}: boundary expiry values hold on every backend`, async (t) => {
+    const store = await makeStore();
+    t.after(() => store.close());
+    // expires = issued + 1: live for exactly one millisecond.
+    const edge = await issueFor(store, { issued_at_ms: 1_000, last_used_at_ms: 1_000, expires_at_ms: 1_001 });
+    assert.equal(
+      (await store.getSession({ session_id: edge.session_id, now: 1_000 }))?.session_id,
+      edge.session_id
+    );
+    assert.equal(await store.getSession({ session_id: edge.session_id, now: 1_001 }), null);
+    // expires at the exact read instant counts as dead.
+    const exact = await issueFor(store, { issued_at_ms: 2_000, last_used_at_ms: 2_000, expires_at_ms: 5_000 });
+    assert.equal(await store.getSession({ session_id: exact.session_id, now: 5_000 }), null);
+    // The largest representable timestamp stores and reads back intact.
+    const far = await issueFor(store, { expires_at_ms: Number.MAX_SAFE_INTEGER });
+    assert.equal(
+      (await store.getSession({ session_id: far.session_id, now: Number.MAX_SAFE_INTEGER - 1 }))?.session_id,
+      far.session_id
+    );
+    // last_used past expiry does not kill a record: only the expiry
+    // instant matters, identically on both backends.
+    const forwardUsed = await issueFor(store, {
+      issued_at_ms: 1_000,
+      last_used_at_ms: 9_000,
+      expires_at_ms: 2_000
+    });
+    assert.equal(
+      (await store.getSession({ session_id: forwardUsed.session_id, now: 1_500 }))?.session_id,
+      forwardUsed.session_id
+    );
+    assert.equal(await store.getSession({ session_id: forwardUsed.session_id, now: 2_000 }), null);
+    // Revoked records never expire out of reads: tombstones stay readable
+    // past any expiry instant.
+    const revoked = await issueFor(store, { expires_at_ms: 2_000 });
+    await store.revokeSession({
+      session_id: revoked.session_id,
+      now: 1_500,
+      maxRevokedPerSubject: 4
+    });
+    assert.deepEqual(
+      await store.getSession({ session_id: revoked.session_id, now: Number.MAX_SAFE_INTEGER }),
+      { ...revoked, revoked: true, revoked_at_ms: 1_500 }
+    );
+  });
 }

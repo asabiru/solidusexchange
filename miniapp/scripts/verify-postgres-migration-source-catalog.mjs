@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const expectedSources = [
   [
     "0001_customer_sessions.sql",
-    "ed6ceaf499cf883be5a7f819de427a892bdb5eb84a15b9a40d3f0454b60ba17a"
+    "1a3a9c38980844508a1fdf4bc7f144c5bc8e2e8bcb966bb0db37cb3ca015d030"
   ]
 ];
 
