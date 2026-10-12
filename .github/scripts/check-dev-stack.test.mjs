@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +11,7 @@ import {
   checkDockerfile,
   checkE2ePackage,
   checkNodeEnv,
+  checkPgHba,
   checkSecrets,
 } from "./check-dev-stack.mjs";
 
@@ -24,6 +26,25 @@ USER node
 CMD ["node", "server.js"]
 `;
 
+const HARDENING = `    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+`;
+
+const DOCKERIGNORE = `*
+!src/**
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/.git
+**/.git/**
+`;
+
 function compose(service = "") {
   return `name: example
 services:
@@ -31,13 +52,13 @@ services:
     build:
       context: ../..
     user: "1000:1000"
-    ports:
+${HARDENING}    ports:
       - "127.0.0.1:4183:8183"
   db:
     image: postgres:16.10-alpine3.22@${DIGEST}
     user: "70:70"
-    network_mode: service:edge
-${service}
+${HARDENING}    network_mode: service:edge
+${service.replace(/^ {4}user:[^\n]*\n/gm, (line) => `${line}${HARDENING}`)}
 networks:
   private:
 `;
@@ -271,6 +292,7 @@ test("checks a whole stack directory and skips the local .env", async () => {
     {
       "compose.yaml": compose(),
       "app.Dockerfile": DOCKERFILE,
+      "app.Dockerfile.dockerignore": DOCKERIGNORE,
       ".env.example": "DB_PASSWORD=\n",
       ".env": "DB_PASSWORD=local-only\n",
       "scripts/start.sh": "echo ok\n",
@@ -286,6 +308,7 @@ test("reports every violation found in a stack directory", async () => {
     {
       "compose.yaml": compose('  web:\n    image: web:latest\n    user: root\n    ports:\n      - "8080:80"\n'),
       "app.Dockerfile": "FROM node:24\n",
+      "app.Dockerfile.dockerignore": DOCKERIGNORE,
       ".env.example": "API_TOKEN=abc\n",
       "scripts/start.sh": "NODE_ENV=production node server.js\n",
     },
@@ -309,6 +332,7 @@ test("rejects override, extends and include YAML files next to compose.yaml", as
       "compose.override.yaml": 'services:\n  edge:\n    privileged: true\n    user: "0"\n',
       "base.yml": "services:\n  base:\n    privileged: true\n",
       "app.Dockerfile": DOCKERFILE,
+      "app.Dockerfile.dockerignore": DOCKERIGNORE,
     },
     async (root) => {
       const errors = (await checkDevStack(root)).join("\n");
@@ -323,7 +347,9 @@ test("checks Dockerfiles that compose builds from outside the stack directory", 
     {
       "stack/compose.yaml": compose('  web:\n    build:\n      context: ..\n      dockerfile: elsewhere/app.Dockerfile\n    user: "1000"\n'),
       "stack/app.Dockerfile": DOCKERFILE,
+      "stack/app.Dockerfile.dockerignore": DOCKERIGNORE,
       "elsewhere/app.Dockerfile": "FROM node:24\nUSER node\n",
+      "elsewhere/app.Dockerfile.dockerignore": DOCKERIGNORE,
     },
     async (root) => {
       const errors = (await checkDevStack(path.join(root, "stack"))).join("\n");
@@ -337,6 +363,7 @@ test("rejects unexpected file types and non-regular entries in the stack directo
     {
       "compose.yaml": compose(),
       "app.Dockerfile": DOCKERFILE,
+      "app.Dockerfile.dockerignore": DOCKERIGNORE,
       "tools/setup.py": "print(1)\n",
       "data/payload.bin": "x\n",
     },
@@ -392,6 +419,147 @@ test("fails when the stack has no compose file or Dockerfile", async () => {
     const errors = await checkDevStack(root);
     assert.equal(errors.length, 2);
   });
+});
+
+test("requires fail-closed postgres auth in pg_hba.conf", () => {
+  const clean = [
+    "local all all peer",
+    "hostssl solidchange_audit backoffice_runtime 127.0.0.1/32 scram-sha-256",
+    "host all all 0.0.0.0/0 reject",
+    "host all all ::/0 reject",
+  ].join("\n");
+  assert.deepEqual(checkPgHba(clean, "postgres/pg_hba.conf"), []);
+  const cases = [
+    [/peer/, "local all all trust"],
+    [/specific database and role/, "hostssl all all 127.0.0.1/32 scram-sha-256"],
+    [/specific database and role/, "hostssl solidchange_audit all 127.0.0.1/32 scram-sha-256"],
+    [/loopback-only/, "hostssl solidchange_audit backoffice_runtime 0.0.0.0/0 scram-sha-256"],
+    [/loopback-only/, "hostssl solidchange_audit backoffice_runtime samehost scram-sha-256"],
+    [/scram-sha-256/, "hostssl solidchange_audit backoffice_runtime 127.0.0.1/32 md5"],
+    [/scram-sha-256/, "hostssl solidchange_audit backoffice_runtime 127.0.0.1/32 trust"],
+    [/only reject/, "host solidchange_audit backoffice_runtime 127.0.0.1/32 scram-sha-256"],
+    [/not allowed/, "hostnossl all all 0.0.0.0/0 reject"],
+    [/with no options/, "hostssl solidchange_audit backoffice_runtime 127.0.0.1/32 scram-sha-256 clientcert=verify-ca"],
+    [/not allowed/, "@/etc/postgresql/other.conf"],
+    [/not allowed/, "include /etc/postgresql/other.conf"],
+  ];
+  for (const [pattern, line] of cases) {
+    const errors = checkPgHba(`${clean}\n${line}\n`, "postgres/pg_hba.conf");
+    assert.equal(errors.length, 1, line);
+    assert.match(errors[0], pattern, line);
+  }
+});
+
+test("requires dev-stack hardening on every compose service", () => {
+  for (const key of ["cap_add", "configs", "devices", "dns", "extra_hosts", "group_add", "ipc", "logging", "pid", "secrets", "sysctls", "userns_mode", "volumes_from"]) {
+    const text = compose(`  web:\n    build: .\n    user: "1000"\n    ${key}:\n      - x\n`);
+    assert.match(checkCompose(text, "compose.yaml").join("\n"), new RegExp(`must not use ${key}`), key);
+  }
+  const raw = (service) => `name: example\nservices:\n${service}\nnetworks:\n  private:\n`;
+  const mutations = [
+    [/read_only/, '  web:\n    build: .\n    user: "1000"\n    cap_drop:\n      - ALL\n    security_opt:\n      - no-new-privileges:true\n'],
+    [/cap_drop/, '  web:\n    build: .\n    user: "1000"\n    read_only: true\n    security_opt:\n      - no-new-privileges:true\n'],
+    [/cap_drop/, '  web:\n    build: .\n    user: "1000"\n    read_only: true\n    cap_drop:\n      - NET_ADMIN\n    security_opt:\n      - no-new-privileges:true\n'],
+    [/no-new-privileges/, '  web:\n    build: .\n    user: "1000"\n    read_only: true\n    cap_drop:\n      - ALL\n    security_opt:\n      - seccomp=unconfined\n'],
+    [/no-new-privileges/, '  web:\n    build: .\n    user: "1000"\n    read_only: true\n    cap_drop:\n      - ALL\n'],
+  ];
+  for (const [pattern, service] of mutations) {
+    const errors = checkCompose(raw(service), "compose.yaml");
+    assert.match(errors[0], pattern, service);
+  }
+});
+
+test("binds EDGE_ROUTES to the published loopback ports", () => {
+  const service = (routes) =>
+    `  edge2:\n    build: .\n    user: "1000"\n    environment:\n      EDGE_ROUTES: "${routes}"\n    ports:\n      - "127.0.0.1:4183:8183"\n`;
+  const errors = (routes) => checkCompose(compose(service(routes)), "compose.yaml").join("\n");
+  assert.match(errors("8185:4183"), /8185:4183 must pair a published "127\.0\.0\.1:4183:8185"/);
+  assert.match(errors("8183:4183,8185:4185"), /8185:4185 must pair a published "127\.0\.0\.1:4185:8185"/);
+  assert.match(errors("8183:5432"), /8183:5432 must not target a datastore port/);
+  assert.match(errors("8183:4183,8184:6379"), /8184:6379 must not target a datastore port/);
+  assert.match(errors("8183"), /must be listenPort:targetPort pairs/);
+  assert.match(errors("8183:4183:extra"), /must be listenPort:targetPort pairs/);
+  const clean = compose(service("8183:4183"));
+  assert.doesNotMatch(checkCompose(clean, "compose.yaml").join("\n"), /EDGE_ROUTES|published/);
+  const noPorts = compose(`  edge2:\n    build: .\n    user: "1000"\n    environment:\n      EDGE_ROUTES: "8183:4183"\n`);
+  assert.match(checkCompose(noPorts, "compose.yaml").join("\n"), /must pair a published/);
+});
+
+test("only allows literal named volumes or read-only repo bind mounts", () => {
+  const service = (volume) =>
+    `  web:\n    build: .\n    user: "1000"\n    volumes:\n      - "${volume}"\n`;
+  const composeFile = "infra/local/compose.yaml";
+  const errors = (volume) => checkCompose(compose(service(volume)), composeFile).join("\n");
+  assert.match(errors("/etc/passwd:/etc/passwd:ro"), /paths relative to the repository/);
+  assert.match(errors("~/data:/data"), /paths relative to the repository/);
+  assert.match(errors("../../../outside/repo:/repo:ro"), /inside the repository/);
+  assert.match(errors("./postgres/pg_hba.conf:/etc/pg_hba.conf"), /read-only/);
+  assert.match(errors("./postgres/pg_hba.conf:/etc/pg_hba.conf:rw"), /read-only/);
+  assert.match(errors("${HOME}/.ssh:/root/.ssh:ro"), /literal/);
+  assert.match(errors("named:/data:ro:extra"), /<src>:\/abs\/container-path/);
+  assert.match(errors("named:/data/../etc"), /container-path/);
+  assert.deepEqual(checkCompose(compose(service("named:/data")), composeFile), []);
+  assert.deepEqual(checkCompose(compose(service("./postgres/pg_hba.conf:/etc/pg_hba.conf:ro")), composeFile), []);
+});
+
+test("rejects unvouched build keys and inline environment maps", () => {
+  const args = compose(`  web:\n    build:\n      context: .\n      args:\n        TOKEN: abc\n    user: "1000"\n`);
+  assert.match(checkCompose(args, "compose.yaml").join("\n"), /must not use build\.args/);
+  const ssh = compose(`  web:\n    build:\n      context: .\n      ssh: default\n    user: "1000"\n`);
+  assert.match(checkCompose(ssh, "compose.yaml").join("\n"), /must not use build\.ssh/);
+  const env = compose(`  web:\n    build: .\n    user: "1000"\n    environment: {EDGE_ROUTES: "8183:5432"}\n`);
+  assert.match(checkCompose(env, "compose.yaml").join("\n"), /environment must be a block mapping or list/);
+});
+
+test("flags committed .env variants and literal secrets in shell and config files", async () => {
+  assert.match(
+    checkSecrets("POSTGRES_PASSWORD=letmein\n", "postgres/10-backoffice-runtime.sh")[0],
+    /POSTGRES_PASSWORD must not have a committed literal/,
+  );
+  assert.match(checkSecrets("ENV API_TOKEN=abc123\n", "app.Dockerfile")[0], /API_TOKEN must not have a committed literal/);
+  assert.deepEqual(checkSecrets("password=$(cat /run/x)\n", "s.sh"), []);
+  assert.deepEqual(checkSecrets("value=${API_KEY}\n", "s.sh"), []);
+  assert.deepEqual(checkSecrets("ENV API_KEY=$BUILD_KEY\n", "app.Dockerfile"), []);
+  assert.deepEqual(checkSecrets("run \"$SCENARIO_TIMEOUT\"\n", "s.sh"), []);
+  await withStack(
+    {
+      "compose.yaml": compose(),
+      "app.Dockerfile": DOCKERFILE,
+      "app.Dockerfile.dockerignore": DOCKERIGNORE,
+      ".env.local": "DB_PASSWORD=local-only\n",
+      ".env.production": "DB_PASSWORD=local-only\n",
+    },
+    async (root) => {
+      execFileSync("git", ["-C", root, "init", "-q"]);
+      execFileSync("git", ["-C", root, "add", ".env.local"]);
+      const errors = (await checkDevStack(root)).join("\n");
+      assert.match(errors, /\.env\.local: committed \.env files are not allowed/);
+      assert.doesNotMatch(errors, /\.env\.production/);
+    },
+  );
+});
+
+test("requires a deny-all .dockerignore beside every Dockerfile", async () => {
+  const ignores = {
+    "compose.yaml": compose(),
+    "app.Dockerfile": DOCKERFILE,
+  };
+  await withStack(ignores, async (root) => {
+    const errors = (await checkDevStack(root)).join("\n");
+    assert.match(errors, /app\.Dockerfile\.dockerignore: missing/);
+  });
+  await withStack({ ...ignores, "app.Dockerfile.dockerignore": "node_modules\n" }, async (root) => {
+    const errors = (await checkDevStack(root)).join("\n");
+    assert.match(errors, /first pattern must be \*/);
+    assert.match(errors, /missing a \*\*\/\.env deny pattern/);
+  });
+  await withStack(
+    { ...ignores, "app.Dockerfile.dockerignore": `*\n!src/**\n**/.env\n**/.env.*\n**/*.key\n**/*.pem\n**/*.p12\n**/*.pfx\n**/.git\n**/.git/**\n!later/**\n` },
+    async (root) => {
+      const errors = (await checkDevStack(root)).join("\n");
+      assert.match(errors, /must come after every ! re-include/);
+    },
+  );
 });
 
 test("the committed infra/local stack passes", async () => {

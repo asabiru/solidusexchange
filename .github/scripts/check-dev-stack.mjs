@@ -12,6 +12,46 @@ const INTERPOLATION = /\$/;
 const COMPOSE_TOP_LEVEL = new Set(["name", "services", "networks", "volumes"]);
 const UNSUPPORTED_SERVICE_KEYS = ["extends", "env_file"];
 const NETWORK_MODE = /^(?:none|service:[A-Za-z0-9._-]+)$/;
+const DANGEROUS_SERVICE_KEYS = [
+  "cap_add",
+  "cgroup_parent",
+  "configs",
+  "device_cgroup_rules",
+  "devices",
+  "dns",
+  "dns_opt",
+  "dns_search",
+  "domainname",
+  "extra_hosts",
+  "group_add",
+  "ipc",
+  "logging",
+  "pid",
+  "secrets",
+  "sysctls",
+  "userns_mode",
+  "uts",
+  "volumes_from",
+];
+const COMPOSE_ALLOWED_BUILD_KEYS = new Set(["context", "dockerfile", "dockerfile_inline"]);
+const EDGE_ROUTE_PAIR = /^([1-9][0-9]{0,4}):([1-9][0-9]{0,4})$/;
+const LOOPBACK_PUBLISH = /^127\.0\.0\.1:([1-9][0-9]{0,4}):([1-9][0-9]{0,4})(?:\/tcp)?$/;
+const NAMED_VOLUME = /^[a-z0-9][a-z0-9_.-]*$/i;
+const DATASTORE_PORTS = new Set([1433, 1521, 3306, 5432, 6379, 9042, 26257, 27017]);
+const NO_NEW_PRIVILEGES = /^no-new-privileges(?::true)?$/;
+const PG_HBA_HOSTSSL_ADDRESS = new Set(["127.0.0.1/32", "::1/128"]);
+const ASSIGNMENT_FILE = /\.env\.example$|compose\.ya?ml$|\.sh$|\.conf$|Dockerfile$/;
+const LOOKUP_REFERENCE = /^\$[A-Za-z_][A-Za-z0-9_]*$|^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
+const REQUIRED_DOCKERIGNORE_DENIES = [
+  "**/.env",
+  "**/.env.*",
+  "**/*.key",
+  "**/*.pem",
+  "**/*.p12",
+  "**/*.pfx",
+  "**/.git",
+  "**/.git/**",
+];
 const REMOTE_CONTEXT = /^[a-z][a-z0-9+.-]*:\/\/|^git@|\.git(?:#.*)?$/i;
 const YAML_ANCHOR_OR_ALIAS = /(?:^\s*(?:-\s+)*|:\s+|[[{,]\s*)[&*][^\s,\]}]/;
 const YAML_MERGE_KEY = /^\s*(?:-\s+)*<<\s*:/;
@@ -77,6 +117,7 @@ function checkAssignment(name, rawValue, location, errors) {
   if (!SECRET_NAME.test(name) || SECRET_REFERENCE_NAME.test(name)) return;
   const value = unquote(rawValue);
   if (value === "" || EMPTY_REFERENCE.test(value) || MATERIAL_FILE_REFERENCE.test(value)) return;
+  if (value.startsWith("$(") || LOOKUP_REFERENCE.test(value)) return;
   errors.push(`${location}: ${name} must not have a committed literal value; generate it at start-up or set it in the gitignored .env`);
 }
 
@@ -101,8 +142,14 @@ export function checkSecrets(text, file) {
       }
     }
     const assignment = line.match(/^\s*(?:-\s*)?(?:export\s+)?["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*(?:=|:\s)\s*(.*)$/);
-    if (assignment && /\.env\.example$|compose\.ya?ml$/.test(file)) {
+    if (assignment && ASSIGNMENT_FILE.test(file)) {
       checkAssignment(assignment[1], stripComment(assignment[2]), location, errors);
+    }
+    const dockerAssignment =
+      /Dockerfile$/.test(file) &&
+      line.match(/^\s*(?:ENV|ARG)\s+["']?([A-Za-z_][A-Za-z0-9_]*)["']?\s*=\s*(.*)$/);
+    if (dockerAssignment) {
+      checkAssignment(dockerAssignment[1], stripComment(dockerAssignment[2]), location, errors);
     }
   });
   return errors;
@@ -207,6 +254,48 @@ function blockList(source, start, parentIndent) {
   return items;
 }
 
+export function checkPgHba(text, file) {
+  const errors = [];
+  lines(text).forEach((raw, index) => {
+    const location = `${file}:${index + 1}`;
+    const line = stripComment(raw).trim();
+    if (line === "") return;
+    const fields = line.split(/\s+/);
+    const [type] = fields;
+    if (type === "local") {
+      if (fields.length !== 4 || fields[3] !== "peer") {
+        errors.push(`${location}: local lines must be "local <db> <user> peer" with no options`);
+      }
+      return;
+    }
+    if (type !== "host" && type !== "hostssl") {
+      errors.push(`${location}: pg_hba entry type ${type} is not allowed; only local, host (reject) and hostssl (scram) are`);
+      return;
+    }
+    if (fields.length !== 5) {
+      errors.push(`${location}: ${type} lines must be "${type} <db> <user> <address> <method>" with no options`);
+      return;
+    }
+    const [, database, role, address, method] = fields;
+    if (type === "host") {
+      if (method !== "reject") {
+        errors.push(`${location}: host lines may only reject; authenticated connections come through hostssl`);
+      }
+      return;
+    }
+    if (database === "all" || database === "replication" || role === "all") {
+      errors.push(`${location}: hostssl lines must name a specific database and role`);
+    }
+    if (!PG_HBA_HOSTSSL_ADDRESS.has(address)) {
+      errors.push(`${location}: hostssl address must be loopback-only (127.0.0.1/32 or ::1/128)`);
+    }
+    if (method !== "scram-sha-256") {
+      errors.push(`${location}: hostssl lines must use scram-sha-256`);
+    }
+  });
+  return errors;
+}
+
 function composeNodeEnvValue(line) {
   let body = line.trim();
   if (body.startsWith("-")) body = unquote(body.slice(1));
@@ -290,8 +379,10 @@ export function composeBuilds(text) {
   return builds;
 }
 
-export function checkCompose(text, file) {
+export function checkCompose(text, file, repoRoot) {
   const { errors, services, source } = parseCompose(text, file);
+  const composeDir = path.dirname(path.resolve(file));
+  const repositoryRoot = repoRoot ?? path.resolve(composeDir, "../..");
 
   if (services.size === 0) {
     errors.push(`${file}: compose file must declare services`);
@@ -313,6 +404,43 @@ export function checkCompose(text, file) {
     } else if (ROOT_USER.test(unquote(user.value))) {
       errors.push(`${where(user)}: service ${service.name} must not run as root`);
     }
+    for (const key of DANGEROUS_SERVICE_KEYS) {
+      const entry = service.keys.get(key);
+      if (entry) {
+        errors.push(`${where(entry)}: service ${service.name} must not use ${key}; the dev stack fixes capability, namespace and egress isolation`);
+      }
+    }
+    const readOnly = service.keys.get("read_only");
+    if (!readOnly || unquote(readOnly.value) !== "true") {
+      errors.push(`${where(readOnly)}: service ${service.name} must set read_only: true`);
+    }
+    const capDrop = service.keys.get("cap_drop");
+    const capDropItems = capDrop && capDrop.value.trim() === "" ? blockList(source, capDrop.line, 4) : [];
+    if (!capDrop || !capDropItems.some((item) => unquote(item.value ?? "") === "ALL")) {
+      errors.push(`${where(capDrop)}: service ${service.name} must drop all capabilities (cap_drop with ALL)`);
+    }
+    const securityOpt = service.keys.get("security_opt");
+    const securityOptItems = securityOpt && securityOpt.value.trim() === "" ? blockList(source, securityOpt.line, 4) : [];
+    if (
+      !securityOpt ||
+      securityOptItems.length === 0 ||
+      securityOptItems.some((item) => !NO_NEW_PRIVILEGES.test(unquote(item.value ?? "")))
+    ) {
+      errors.push(`${where(securityOpt)}: service ${service.name} must set security_opt to no-new-privileges entries only`);
+    }
+    const environment = service.keys.get("environment");
+    if (environment && environment.value.trim() !== "") {
+      errors.push(`${where(environment)}: service ${service.name} environment must be a block mapping or list`);
+    }
+    const edgeRoutes = [];
+    if (environment && environment.value.trim() === "") {
+      const child = environment.children.get("EDGE_ROUTES");
+      if (child) edgeRoutes.push({ value: unquote(child.value), line: child.line });
+      for (const item of blockList(source, environment.line, 4)) {
+        const match = unquote(item.value ?? "").match(/^EDGE_ROUTES=(.*)$/);
+        if (match) edgeRoutes.push({ value: match[1], line: item.line });
+      }
+    }
     const privileged = service.keys.get("privileged");
     if (privileged && unquote(privileged.value) !== "false") {
       errors.push(`${where(privileged)}: service ${service.name} must not be privileged`);
@@ -330,6 +458,11 @@ export function checkCompose(text, file) {
       errors.push(`${where(service)}: service ${service.name} must declare a pinned image or a build`);
     }
     if (build) {
+      for (const [key, child] of build.children) {
+        if (!COMPOSE_ALLOWED_BUILD_KEYS.has(key)) {
+          errors.push(`${where(child)}: service ${service.name} must not use build.${key}; the checker only vouches for context and dockerfile`);
+        }
+      }
       const inline = build.children.get("dockerfile_inline");
       if (inline) {
         errors.push(`${where(inline)}: service ${service.name} must not use dockerfile_inline`);
@@ -352,6 +485,78 @@ export function checkCompose(text, file) {
           const value = item.value === undefined ? undefined : unquote(item.value);
           if (value === undefined || !LOOPBACK_PORT.test(value)) {
             errors.push(`${file}:${item.line}: service ${service.name} must publish ports only on 127.0.0.1 ("127.0.0.1:host:container")`);
+          }
+        }
+      }
+    }
+    const published = new Map();
+    for (const item of ports ? blockList(source, ports.line, 4) : []) {
+      const match = unquote(item.value ?? "").match(LOOPBACK_PUBLISH);
+      if (match) published.set(Number(match[2]), Number(match[1]));
+    }
+    const routed = new Map();
+    for (const { value, line } of edgeRoutes) {
+      for (const entry of value.split(",").map((part) => part.trim()).filter(Boolean)) {
+        const match = entry.match(EDGE_ROUTE_PAIR);
+        if (!match) {
+          errors.push(`${file}:${line}: service ${service.name} EDGE_ROUTES entries must be listenPort:targetPort pairs`);
+          continue;
+        }
+        const [listen, target] = [Number(match[1]), Number(match[2])];
+        if (DATASTORE_PORTS.has(target)) {
+          errors.push(`${file}:${line}: service ${service.name} EDGE_ROUTES ${listen}:${target} must not target a datastore port`);
+          continue;
+        }
+        routed.set(listen, target);
+      }
+    }
+    for (const [listen, target] of routed) {
+      if (published.get(listen) !== target) {
+        errors.push(`${file}:${service.line}: service ${service.name} EDGE_ROUTES ${listen}:${target} must pair a published "127.0.0.1:${target}:${listen}" port`);
+      }
+    }
+    if (routed.size > 0) {
+      for (const [container, host] of published) {
+        if (routed.get(container) !== host) {
+          errors.push(`${file}:${service.line}: service ${service.name} published "127.0.0.1:${host}:${container}" must have a matching EDGE_ROUTES "${container}:${host}" entry`);
+        }
+      }
+    }
+    const volumes = service.keys.get("volumes");
+    if (volumes) {
+      if (volumes.value.trim() !== "") {
+        errors.push(`${where(volumes)}: service ${service.name} volumes must be a block list of NAME:path[:mode] or ./repo-path:path:ro entries`);
+      } else {
+        for (const item of blockList(source, volumes.line, 4)) {
+          const value = item.value === undefined ? undefined : unquote(item.value);
+          const location = `${file}:${item.line}`;
+          if (value === undefined || INTERPOLATION.test(value)) {
+            errors.push(`${location}: service ${service.name} volumes must use literal NAME:path[:mode] or ./repo-path:path:ro entries`);
+            continue;
+          }
+          const [volumeSource, target, ...modes] = value.split(":");
+          if (
+            !volumeSource ||
+            !target?.startsWith("/") ||
+            target.split("/").includes("..") ||
+            modes.length > 1 ||
+            modes.some((mode) => !/^(?:ro|rw|z|Z|nocopy)$/.test(mode))
+          ) {
+            errors.push(`${location}: service ${service.name} volumes must use <src>:/abs/container-path[:ro|:rw] entries`);
+            continue;
+          }
+          if (NAMED_VOLUME.test(volumeSource)) continue;
+          if (!volumeSource.startsWith(".")) {
+            errors.push(`${location}: service ${service.name} may only bind-mount paths relative to the repository`);
+            continue;
+          }
+          const resolved = path.resolve(composeDir, volumeSource);
+          if (resolved !== repositoryRoot && !resolved.startsWith(`${repositoryRoot}${path.sep}`)) {
+            errors.push(`${location}: service ${service.name} may only bind-mount paths inside the repository`);
+            continue;
+          }
+          if (modes.length !== 1 || modes[0] !== "ro") {
+            errors.push(`${location}: service ${service.name} repository bind mounts must be read-only (:ro)`);
           }
         }
       }
@@ -466,6 +671,34 @@ async function isFile(absolute) {
   }
 }
 
+async function checkDockerignore(dockerfilePath, label) {
+  const errors = [];
+  let text;
+  try {
+    text = await readFile(`${dockerfilePath}.dockerignore`, "utf8");
+  } catch {
+    return [
+      `${label}.dockerignore: missing; every dev-stack Dockerfile needs a deny-all build-context ignore file`,
+    ];
+  }
+  const patterns = lines(text)
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+  if (patterns[0] !== "*") {
+    errors.push(`${label}.dockerignore: the first pattern must be * (deny-all context, then re-include)`);
+  }
+  const lastInclude = patterns.reduce((max, pattern, index) => (pattern.startsWith("!") ? index : max), -1);
+  for (const deny of REQUIRED_DOCKERIGNORE_DENIES) {
+    const index = patterns.indexOf(deny);
+    if (index < 0) {
+      errors.push(`${label}.dockerignore: missing a ${deny} deny pattern after the ! re-includes`);
+    } else if (index <= lastInclude) {
+      errors.push(`${label}.dockerignore: ${deny} must come after every ! re-include to take effect`);
+    }
+  }
+  return errors;
+}
+
 async function checkExternalDockerfiles(text, composePath, root, checked) {
   const errors = [];
   const resolvedRoot = path.resolve(root);
@@ -476,6 +709,7 @@ async function checkExternalDockerfiles(text, composePath, root, checked) {
     if (inside || checked.has(absolute) || !(await isFile(absolute))) continue;
     checked.add(absolute);
     errors.push(...checkDockerfile(await readFile(absolute, "utf8"), relativeFile(absolute)));
+    errors.push(...(await checkDockerignore(absolute, relativeFile(absolute))));
   }
   return errors;
 }
@@ -485,12 +719,14 @@ export async function checkDevStack(root = DEFAULT_ROOT) {
   const externalDockerfiles = new Set();
   const nonRegular = [];
   const envFiles = [];
+  const dockerfilePaths = [];
+  const repositoryRoot = path.resolve(root, "../..");
   let composeFiles = 0;
   let dockerfiles = 0;
   for await (const absolute of walk(root, nonRegular)) {
     const file = relativeFile(absolute);
     const base = path.basename(file);
-    if (base === ".env") {
+    if (base === ".env" || (base.startsWith(".env.") && base !== ".env.example")) {
       envFiles.push(absolute);
       continue;
     }
@@ -501,7 +737,7 @@ export async function checkDevStack(root = DEFAULT_ROOT) {
     const isText = TEXT_FILE.test(base) || base.startsWith(".env");
     if (isCompose) {
       composeFiles += 1;
-      errors.push(...checkCompose(text, file));
+      errors.push(...checkCompose(text, file, repositoryRoot));
       errors.push(...(await checkExternalDockerfiles(text, absolute, root, externalDockerfiles)));
     } else if (isYaml) {
       errors.push(`${file}: unexpected YAML file; the dev stack is a single compose file (no override, extends or include files)`);
@@ -509,6 +745,10 @@ export async function checkDevStack(root = DEFAULT_ROOT) {
     if (isDockerfile) {
       dockerfiles += 1;
       errors.push(...checkDockerfile(text, file));
+      dockerfilePaths.push({ absolute, file });
+    }
+    if (base === "pg_hba.conf") {
+      errors.push(...checkPgHba(text, file));
     }
     if (isText) {
       errors.push(...checkNodeEnv(text, file), ...checkSecrets(text, file));
@@ -516,6 +756,9 @@ export async function checkDevStack(root = DEFAULT_ROOT) {
     if (!isCompose && !isYaml && !isDockerfile && !isText) {
       errors.push(`${file}: unexpected file under the dev stack root`);
     }
+  }
+  for (const { absolute, file } of dockerfilePaths) {
+    errors.push(...(await checkDockerignore(absolute, file)));
   }
   for (const absolute of nonRegular) {
     errors.push(
