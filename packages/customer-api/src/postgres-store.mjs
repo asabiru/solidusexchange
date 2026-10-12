@@ -463,6 +463,11 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
       max: 4,
       connectionTimeoutMillis: 5_000,
       idleTimeoutMillis: 30_000,
+      // A statement that only waits on another session's lock (a peer's
+      // upsert on the same bucket row) must fail in bounded time too —
+      // well inside the client-side query timeout — instead of stalling
+      // the request path behind a wedged lock holder.
+      lock_timeout: 5_000,
       // A query stuck on a dead or wedged connection must bound like a
       // request, not hang the consume forever.
       query_timeout: 15_000
@@ -518,11 +523,15 @@ export function createPostgresStore({ dsn, namespace = "rate-limit" }) {
       await ending?.end().catch(() => undefined);
       throw unavailable(error);
     }
-    // close() raced with this initialize: drain the pool it just opened.
+    // close() raced with this initialize: drain the pool it just opened
+    // and fail the initialize instead of resolving on a dead store —
+    // silently "succeeding" here would let startup pass while every
+    // later consume can only fail.
     if (closed) {
       const orphan = pool;
       pool = null;
       await orphan?.end().catch(() => undefined);
+      throw new StoreUnavailableError("customer-api store was closed during initialization");
     }
   }
 
@@ -656,6 +665,11 @@ export function createPostgresAuthSessionStore({ dsn }) {
       // Tags this store's clients so operational probes can distinguish
       // them from the rate-limit store's pool on the same database.
       application_name: "customer-api-auth-session-store",
+      // Every write is tail-serialized behind the subject's advisory
+      // lock: a statement waiting on a peer's lock must fail in bounded
+      // time — well inside the client-side query timeout — instead of
+      // stalling the whole serialized tail behind a wedged lock holder.
+      lock_timeout: 5_000,
       // A query stuck on a dead or wedged connection must bound like a
       // request, not hang the lifecycle op forever.
       query_timeout: 15_000

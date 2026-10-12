@@ -473,8 +473,8 @@ for (const pairDef of ORDER_PAIRS) {
  * @property {string | null} terminalQuantity Remaining quantity the
  *   terminal event removed or refused, when the event carries one.
  * @property {{
- *   fillId: string | null,
- *   liquidity: "maker" | "taker" | null,
+ *   fillId: string,
+ *   liquidity: "maker" | "taker",
  *   at: string,
  *   quantityUnits: bigint,
  *   priceUnits: bigint
@@ -964,20 +964,31 @@ function orderTrails(engine) {
     if (event.type === "accepted") {
       trail.acceptedAt = event.at;
     } else if (event.type === "partially_filled" || event.type === "filled") {
-      if (typeof fields.price === "string" && typeof fields.quantity === "string") {
-        trail.fills.push({
-          fillId: typeof fields.fill_id === "string" ? fields.fill_id : null,
-          liquidity:
-            event.order_id === fields.maker_order_id
-              ? "maker"
-              : event.order_id === fields.taker_order_id
-                ? "taker"
-                : null,
-          at: event.at,
-          quantityUnits: parseUnits(fields.quantity),
-          priceUnits: parseUnits(fields.price)
-        });
+      const liquidity =
+        event.order_id === fields.maker_order_id
+          ? "maker"
+          : event.order_id === fields.taker_order_id
+            ? "taker"
+            : null;
+      if (
+        typeof fields.fill_id !== "string" ||
+        typeof fields.price !== "string" ||
+        typeof fields.quantity !== "string" ||
+        liquidity === null
+      ) {
+        // A fill event always carries the fill id, both leg ids, the
+        // maker price and the executed quantity on this engine; anything
+        // else is journal drift the projections must refuse rather than
+        // silently under-report the order's executions.
+        throw new TypeError(`fill event missing required fields: ${String(event.type)}`);
       }
+      trail.fills.push({
+        fillId: fields.fill_id,
+        liquidity,
+        at: event.at,
+        quantityUnits: parseUnits(fields.quantity),
+        priceUnits: parseUnits(fields.price)
+      });
     } else if (event.type === "cancelled" || event.type === "rejected") {
       // `updated_at` follows the last terminal-type event about the order
       // (a redundant cancel or duplicate id emits a terminal echo too),
@@ -1159,11 +1170,6 @@ export function projectExchangeOrderDetail(engine, intents, orderId) {
   /** @type {ExchangeOrderFillView[]} */
   const fills = [];
   for (const leg of trail.fills) {
-    if (leg.fillId === null || leg.liquidity === null) {
-      // Fill events always carry both leg ids on this engine; a leg
-      // without them is scenario drift the member read must not serve.
-      continue;
-    }
     fills.push(
       Object.freeze({
         // The trd_* digest recipe the trades read applies to the same
@@ -1265,9 +1271,10 @@ export function projectExchangeTrades(engine, intents) {
       typeof fields.quantity !== "string"
     ) {
       // Fill events always carry both leg ids, the maker price and the
-      // executed quantity on this engine; anything else is a scenario
-      // drift the view must not re-render as a trade.
-      continue;
+      // executed quantity on this engine; anything else is scenario or
+      // journal drift the read must refuse rather than silently drop
+      // one of the subject's trades.
+      throw new TypeError(`fill event missing required fields: ${String(event.type)}`);
     }
     const priceUnits = parseUnits(fields.price);
     const quantityUnits = parseUnits(fields.quantity);
@@ -1397,8 +1404,9 @@ function lastFillsByInstrument(engine) {
     ) {
       // A fill event on this engine always carries its instrument, the
       // maker price and the executed quantity; anything else is journal
-      // drift the view must not silently re-render as a last trade.
-      continue;
+      // drift the read must refuse rather than silently re-render as a
+      // missing or wrong last trade.
+      throw new TypeError(`fill event missing required fields: ${String(event.type)}`);
     }
     // Both legs of one fill share fill_id, price, quantity and `at`, so
     // overwriting keeps the latest fill per instrument either way.
@@ -1956,6 +1964,12 @@ export function validExchangeOrderDetailView(detail) {
     candidate.execution !== "not_supported" ||
     candidate.posting !== "none"
   ) {
+    return false;
+  }
+  if (candidate.order_type === "market" && candidate.status !== "rejected" && candidate.status !== "filled") {
+    // A market order never rests and is never cancelled or expired: its
+    // only servable states are the terminal outcomes the engine reports
+    // — the same pin the list read applies, plus "filled".
     return false;
   }
   if (
