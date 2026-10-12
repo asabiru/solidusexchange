@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   validateBaselineShape,
-  validateLegacyBoundary,
+  validateLegacyRemoval,
   validatePackageScripts,
   validateRepoCompleteness,
   validateRunSteps,
@@ -699,123 +699,76 @@ test("rejects shell exit aliases built from glued expansions", () => {
   );
 });
 
-test("rejects new-core references to the legacy application tree", () => {
-  const up = "..";
-  const appDir = "app" + "/";
-  const routesDir = "routes" + "/";
-  const artisan = "arti" + "san";
-  const installSql = "insta" + "ll.sql";
-  const indexPhp = "ind" + "ex.php";
-  const composerJson = "compo" + "ser.json";
-  const laravelStart = "LAR" + "AVEL_START";
-  const vendorAutoload = "ven" + "dor/auto" + "load.php";
-
-  // ../ traversals that resolve to a legacy root entry
-  assert.notDeepEqual(
-    validateLegacyBoundary(
-      `import x from "${up}/${up}/${appDir}Http/x.php";`,
-      "packages/x/y.mjs",
-    ),
-    [],
-  );
-  assert.notDeepEqual(
-    validateLegacyBoundary(
-      `import x from "${up}/${up}/${up}/${appDir}Http/x.php";`,
-      "packages/x/src/y.mjs",
-    ),
-    [],
-  );
-  assert.notDeepEqual(
-    validateLegacyBoundary(`loadEnv("${up}/.env")`, "miniapp/env.mjs"),
-    [],
-  );
-  assert.notDeepEqual(
-    validateLegacyBoundary(
-      `cp ${up}/${up}/${up}/tests/legacy.php /tmp/`,
-      "packages/x/tests/t.mjs",
-    ),
-    [],
-  );
-
-  // bare repo-root legacy segments
-  for (const variant of [
-    `fetch("/${routesDir}api.php")`,
-    `import cfg from "${up}/${up}/config/app.php";`,
-    `copy("database/migrations/001.sql")`,
-    `const seed = "SQL/data.sql";`,
-    `sh("deployment/deploy.sh")`,
-    `copy("assets/admin/a.js")`,
-    `copy("bootstrap/app.php")`,
-    `copy("storage/logs/x.log")`,
-    `require("vendor/autoload.php")`,
+test("rejects reappearing legacy application paths", () => {
+  // every removed root directory trips the tripwire on its first file
+  for (const dir of [
+    "app",
+    "assets",
+    "bootstrap",
+    "config",
+    "database",
+    "deployment",
+    "resources",
+    "routes",
+    "SQL",
+    "storage",
+    "tests",
+    "vendor",
   ]) {
-    assert.notDeepEqual(
-      validateLegacyBoundary(variant, "packages/x/y.mjs"),
-      [],
-      variant,
-    );
+    const file = `${dir}/x.php`;
+    assert.notDeepEqual(validateLegacyRemoval([file]), [], file);
   }
 
-  // legacy artifact names
-  for (const variant of [
-    `run("php ${artisan} optimize:clear")`,
-    `seed("${installSql}")`,
-    `serve("${indexPhp}")`,
-    `manifest("${composerJson}")`,
-    `const t0 = ${laravelStart};`,
-    `include "${vendorAutoload}";`,
-    `// see .htac` + `cess rules`,
+  // every removed root file trips the tripwire on its own name
+  for (const file of [
+    ".env.example",
+    ".editorconfig",
+    ".gitattributes",
+    ".github/workflows/deploy.yml",
+    ".htaccess",
+    "artisan",
+    "composer.json",
+    "composer.lock",
+    "firebase-messaging-sw.js",
+    "index.php",
+    "package-lock.json",
+    "php.local.ini",
+    "phpunit.xml",
+    "vite.config.js",
+    "Documentation/bybit-exchange-engine.md",
+    "Documentation/cryptocloud-setup.md",
+    "Documentation/exchange-treasury-foundation.md",
+    "Documentation/index.html",
+    "Documentation/safe-deploy.md",
+    "Documentation/sumsub-local-setup.md",
   ]) {
-    assert.notDeepEqual(
-      validateLegacyBoundary(variant, "backoffice/src/x.ts"),
-      [],
-      variant,
-    );
+    assert.notDeepEqual(validateLegacyRemoval([file]), [], file);
   }
 
-  // app/ is a banned segment outside miniapp, legal inside it
-  assert.notDeepEqual(
-    validateLegacyBoundary(`import "${appDir}Http/x.php";`, "packages/x/y.mjs"),
-    [],
-  );
+  // a bare dir name at the root is a removed legacy entry too
+  assert.notDeepEqual(validateLegacyRemoval(["app"]), []);
+
+  // the same names nested inside the new core are legitimate
   assert.deepEqual(
-    validateLegacyBoundary(
-      `const src = read("${appDir}App.tsx");`,
-      "miniapp/src/app/a11y.test.ts",
-    ),
+    validateLegacyRemoval([
+      "packages/x/tests/probe.mjs",
+      "packages/x/config/index.ts",
+      "packages/x/package-lock.json",
+      "miniapp/src/app/App.tsx",
+      "backoffice/tests/postgres-store.sh",
+      "Documentation/regulated-core/safe-deploy.md",
+      "packages/vendor/x/package.json",
+    ]),
     [],
   );
 
-  // scope: out-of-prefix files and explicit exemptions are untouched
-  assert.deepEqual(
-    validateLegacyBoundary(`sh "${artisan}" "${indexPhp}"`, "Documentation/x.md"),
-    [],
+  // one error per reappearing entry, not per file
+  assert.equal(
+    validateLegacyRemoval([
+      "app/Http/Kernel.php",
+      "app/Services/x.php",
+      "routes/api.php",
+    ]).length,
+    2,
   );
-  assert.deepEqual(
-    validateLegacyBoundary(
-      `cp "deployment/deploy.sh" "${appDir}x" "${artisan}"`,
-      ".github/workflows/deploy.yml",
-    ),
-    [],
-  );
-  assert.deepEqual(
-    validateLegacyBoundary(`"${appDir}x" "${routesDir}y"`, "packages/x.png"),
-    [],
-  );
-
-  // ordinary relative and same-repo paths are fine
-  for (const variant of [
-    `import x from "${up}/${up}/miniapp/server/x.mjs";`,
-    `import y from "./${appDir}x.mjs";`,
-    `import z from "src/${appDir}x.ts";`,
-    `import c from "./config/${indexPhp.replace(".php", "")}.ts";`,
-    `const w = "legacy app boundary";`,
-    `// the Laravel app is not imported`,
-  ]) {
-    assert.deepEqual(
-      validateLegacyBoundary(variant, "packages/x/y.mjs"),
-      [],
-      variant,
-    );
-  }
 });

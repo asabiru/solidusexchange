@@ -15,7 +15,7 @@
 | Документ | Назначение |
 |---|---|
 | [Decision register](decision-register.md) | Владельцы, evidence и безопасное поведение для D-001…D-019 |
-| [Legacy inventory](legacy-inventory.md) | Routes, data, providers, jobs, credentials surfaces и migration risks |
+| [Legacy removal record](legacy-inventory.md) | Запись об удалении legacy Laravel-приложения и ссылки на исторические аудиты |
 | [Migration boundary](migration-boundary.md) | Что переносится, как сверяется и что нельзя переносить напрямую |
 | [ADR-0001](adr/0001-isolate-regulated-core-from-legacy.md) | Изоляция нового regulated core от legacy Laravel |
 | [ADR-0002](adr/0002-ledger-is-financial-source-of-truth.md) | Append-only double-entry ledger как единственный financial truth |
