@@ -82,7 +82,21 @@ function subjectDetailView(id: string): Record<string, unknown> {
           summary: "completed",
           money: { amount: "42.00", asset: "RUB" }
         }
-      ]
+      ],
+      kyc: {
+        status: "approved",
+        level: "enhanced",
+        session_id: `kys_${"8".repeat(24)}`,
+        history: [
+          {
+            session_id: `kys_${"8".repeat(24)}`,
+            state: "approved",
+            submitted_at: "2026-09-15T10:00:00.000Z",
+            decided_at: "2026-09-20T10:00:00.000Z",
+            rejection_reason: null
+          }
+        ]
+      }
     }
   };
 }
@@ -596,7 +610,21 @@ describe("upstream adapter layer — strict view adapters", () => {
           summary: "approved",
           money: null
         }
-      ]
+      ],
+      kyc: {
+        status: "approved",
+        level: "basic",
+        sessionId: `kys_${"9".repeat(24)}`,
+        history: [
+          {
+            sessionId: `kys_${"9".repeat(24)}`,
+            state: "approved",
+            submittedAt: "2026-09-15T10:00:00.000Z",
+            decidedAt: "2026-09-20T10:00:00.000Z",
+            rejectionReason: null
+          }
+        ]
+      }
     }
   };
 

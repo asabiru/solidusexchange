@@ -132,7 +132,28 @@ function contractView(): CustomerApiOperatorSubject {
             summary: "payment_received",
             money: { amount: "1250.00", asset: "RUB" }
           }
-        ]
+        ],
+        kyc: {
+          status: "approved",
+          level: "enhanced",
+          session_id: `kys_${"a".repeat(24)}`,
+          history: [
+            {
+              session_id: `kys_${"a".repeat(24)}`,
+              state: "approved",
+              submitted_at: "2026-09-15T10:00:00.000Z",
+              decided_at: "2026-09-20T10:00:00.000Z",
+              rejection_reason: null
+            },
+            {
+              session_id: `kys_${"b".repeat(24)}`,
+              state: "rejected",
+              submitted_at: "2026-09-10T08:00:00.000Z",
+              decided_at: "2026-09-12T09:00:00.000Z",
+              rejection_reason: "SIM_DATA_MISMATCH"
+            }
+          ]
+        }
       }
     }
   };
@@ -176,6 +197,7 @@ describe("operator subject detail BFF surface", () => {
     assert.deepEqual(subject.devices, []);
     assert.equal(subject.limits, null);
     assert.deepEqual(subject.recentActivity, []);
+    assert.equal(subject.kyc, null);
   });
 
   it("answers any non-local id with the uniform not-found when unconfigured", async () => {
@@ -236,7 +258,28 @@ describe("operator subject detail BFF surface", () => {
             summary: "payment_received",
             money: { amount: "1250.00", asset: "RUB" }
           }
-        ]
+        ],
+        kyc: {
+          status: "approved",
+          level: "enhanced",
+          sessionId: `kys_${"a".repeat(24)}`,
+          history: [
+            {
+              sessionId: `kys_${"a".repeat(24)}`,
+              state: "approved",
+              submittedAt: "2026-09-15T10:00:00.000Z",
+              decidedAt: "2026-09-20T10:00:00.000Z",
+              rejectionReason: null
+            },
+            {
+              sessionId: `kys_${"b".repeat(24)}`,
+              state: "rejected",
+              submittedAt: "2026-09-10T08:00:00.000Z",
+              decidedAt: "2026-09-12T09:00:00.000Z",
+              rejectionReason: "SIM_DATA_MISMATCH"
+            }
+          ]
+        }
       }
     });
     // The session's bound workstation device and the requested id propagate.

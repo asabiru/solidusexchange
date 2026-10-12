@@ -761,7 +761,21 @@ export function createBackofficeServer(
                 occurredAt: item.occurred_at,
                 summary: item.summary,
                 money: item.money === null ? null : { amount: item.money.amount, asset: item.money.asset }
-              }))
+              })),
+              kyc: upstream.view.subject.kyc === null
+                ? null
+                : {
+                    status: upstream.view.subject.kyc.status,
+                    level: upstream.view.subject.kyc.level,
+                    sessionId: upstream.view.subject.kyc.session_id,
+                    history: upstream.view.subject.kyc.history.map((attempt) => ({
+                      sessionId: attempt.session_id,
+                      state: attempt.state,
+                      submittedAt: attempt.submitted_at,
+                      decidedAt: attempt.decided_at,
+                      rejectionReason: attempt.rejection_reason
+                    }))
+                  }
             }
           });
           return;
@@ -790,7 +804,8 @@ export function createBackofficeServer(
             sessions: null,
             devices: [],
             limits: null,
-            recentActivity: []
+            recentActivity: [],
+            kyc: null
           }
         });
         return;

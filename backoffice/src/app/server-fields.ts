@@ -6,6 +6,9 @@ import type {
   OperatorKycStatus,
   OperatorQueuePriority,
   OperatorQueueState,
+  OperatorSubjectKycLevel,
+  OperatorSubjectKycReason,
+  OperatorSubjectKycStatus,
   OperatorTicketCategory,
   OperatorTicketQueueState
 } from "../data/operator.js";
@@ -372,6 +375,40 @@ const operatorActivitySummaries: Readonly<Record<string, MessageKey>> = {
 
 export function operatorActivitySummaryKeyOf(value: unknown): MessageKey | undefined {
   return member(operatorActivitySummaries, textOf(value, ""));
+}
+
+// The dossier's current application state reuses the activity summary
+// labels for the KYC application vocabulary — the same localized copy
+// the kyc_transition events render with.
+const operatorSubjectKycStatuses: Readonly<Record<OperatorSubjectKycStatus, MessageKey>> = {
+  submitted: "activity.summary.submitted",
+  in_review: "activity.summary.inReview",
+  approved: "activity.summary.approved",
+  rejected: "activity.summary.rejected",
+  needs_more_data: "activity.summary.needsMoreData",
+  timed_out: "activity.summary.timedOut"
+};
+
+export function operatorSubjectKycStatusKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorSubjectKycStatuses, textOf(value, ""));
+}
+
+const operatorSubjectKycLevels: Readonly<Record<OperatorSubjectKycLevel, MessageKey>> = {
+  basic: "kyc.level.basic",
+  enhanced: "kyc.level.enhanced"
+};
+
+export function operatorSubjectKycLevelKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorSubjectKycLevels, textOf(value, ""));
+}
+
+const operatorSubjectKycReasons: Readonly<Record<OperatorSubjectKycReason, MessageKey>> = {
+  SIM_DOCUMENT_UNREADABLE: "kyc.reason.simDocumentUnreadable",
+  SIM_DATA_MISMATCH: "kyc.reason.simDataMismatch"
+};
+
+export function operatorSubjectKycReasonKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorSubjectKycReasons, textOf(value, ""));
 }
 
 const operatorTicketQueueStates: Readonly<Record<OperatorTicketQueueState, MessageKey>> = {

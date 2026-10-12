@@ -117,6 +117,9 @@ import {
   operatorQueueStateKeyOf,
   operatorRoleKeyOf,
   operatorRoleOf,
+  operatorSubjectKycLevelKeyOf,
+  operatorSubjectKycReasonKeyOf,
+  operatorSubjectKycStatusKeyOf,
   operatorTicketCategoryKeyOf,
   operatorTicketQueueStateKeyOf,
   recordOf,
@@ -531,6 +534,46 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
           <div><dt>{t("customers.limits")}</dt><dd>{count(detail.limits.maxSessions)} / {count(detail.limits.maxDevices)}</dd></div>
           <div><dt>{t("customers.colLastActive")}</dt><dd>{date(detail.lastActiveAt)}</dd></div>
         </dl>
+        <div className="subject-activity">
+          <h3>{t("customers.kycDossier")}</h3>
+          {detail.kyc === null ? (
+            <div className="empty"><p>{t("customers.kycEmpty")}</p></div>
+          ) : (
+            <>
+              <p>
+                <Status tone={detail.kyc.status === "approved" ? "success" : detail.kyc.status === "rejected" ? "danger" : "info"}>
+                  {enumText(t, operatorSubjectKycStatusKeyOf(detail.kyc.status), detail.kyc.status)}
+                </Status>{" "}
+                {enumText(t, operatorSubjectKycLevelKeyOf(detail.kyc.level), detail.kyc.level)}{" "}
+                <code>{detail.kyc.sessionId}</code>
+              </p>
+              <div className="timeline-list">
+                {detail.kyc.history.map((attempt, index) => (
+                  <div key={`${attempt.sessionId}:${index}`}>
+                    <span />
+                    <div>
+                      <strong>
+                        <Status tone={attempt.state === "approved" ? "success" : attempt.state === "rejected" ? "danger" : "info"}>
+                          {enumText(t, operatorSubjectKycStatusKeyOf(attempt.state), attempt.state)}
+                        </Status>{" "}
+                        <code>{attempt.sessionId}</code>
+                      </strong>
+                      <small>
+                        {t("kyc.submitted")} {date(attempt.submittedAt)} · {time(attempt.submittedAt)}
+                        {attempt.decidedAt === null ? "" : ` · ${t("customers.kycDecided")} ${date(attempt.decidedAt)} · ${time(attempt.decidedAt)}`}
+                      </small>
+                      <p>
+                        {attempt.rejectionReason === null
+                          ? ""
+                          : `${t("customers.kycReason")}: ${enumText(t, operatorSubjectKycReasonKeyOf(attempt.rejectionReason), attempt.rejectionReason)}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
         <div className="subject-activity">
           <h3>{t("customers.recentActivity")}</h3>
           <div className="timeline-list">

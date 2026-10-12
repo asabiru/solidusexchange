@@ -17,6 +17,7 @@ import {
   validOperatorQueueView,
   validOperatorSessionView,
   validOperatorSubjectDetailView,
+  validOperatorSubjectKyc,
   validOperatorSubjectsView
 } from "../src/operator.mjs";
 import { syntheticSupportTickets, TICKET_CATEGORIES } from "../src/support.mjs";
@@ -575,6 +576,128 @@ test("the recent_activity projection cross-checks the roster recipe", async () =
       }
     }
   }
+});
+
+test("the kyc dossier stays coherent with the roster recipe across the all-states matrix", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const view = await directory.subjectsFor();
+  // The dossier is detail-only: list rows never carry the kyc key.
+  for (const row of view.subjects) {
+    assert.ok(!Object.hasOwn(row, "kyc"), row.subject_id);
+  }
+  const details = await Promise.all(view.subjects.map((row) => directory.subjectFor(row.subject_id)));
+  const inReview = new Set(["submitted", "in_review"]);
+  const endings = new Set(["rejected", "needs_more_data", "timed_out"]);
+  const seen = new Set();
+  for (const detail of details) {
+    const subject = detail.subject;
+    assert.equal(validOperatorSubjectDetailView(detail), true, subject.subject_id);
+    const kyc = subject.kyc;
+    seen.add(kyc === null ? "null" : kyc.status);
+    if (kyc === null) {
+      // A no-application draw is the only null: the roster stays unverified.
+      assert.equal(subject.kyc_status, "unverified", subject.subject_id);
+      continue;
+    }
+    assert.ok(Object.isFrozen(kyc));
+    assert.ok(Object.isFrozen(kyc.history));
+    assert.equal(validOperatorSubjectKyc(kyc), true, subject.subject_id);
+    // The header echoes the newest attempt.
+    assert.equal(kyc.session_id, kyc.history[0].session_id);
+    assert.equal(kyc.status, kyc.history[0].state);
+    assert.match(kyc.session_id, /^kys_[0-9a-f]{24}$/u);
+    // The roster kyc_status bounds the current state.
+    if (subject.kyc_status === "verified") assert.equal(kyc.status, "approved");
+    else if (subject.kyc_status === "pending") assert.ok(inReview.has(kyc.status), subject.subject_id);
+    else assert.ok(endings.has(kyc.status), subject.subject_id);
+    // Attempts: newest-first, unique sessions, decision/reason coherence.
+    let previousSubmittedAt = "";
+    const ids = new Set();
+    for (const [index, attempt] of kyc.history.entries()) {
+      assert.ok(Object.isFrozen(attempt));
+      assert.ok(!ids.has(attempt.session_id));
+      ids.add(attempt.session_id);
+      if (index > 0) {
+        assert.ok(attempt.submitted_at <= previousSubmittedAt);
+        assert.ok(endings.has(attempt.state), `${subject.subject_id} attempt ${index}`);
+        assert.ok(attempt.decided_at !== null && attempt.decided_at <= kyc.history[index - 1].submitted_at);
+      }
+      previousSubmittedAt = attempt.submitted_at;
+      if (inReview.has(attempt.state)) assert.equal(attempt.decided_at, null);
+      else assert.ok(attempt.decided_at !== null && attempt.decided_at >= attempt.submitted_at);
+      if (attempt.rejection_reason !== null) assert.equal(attempt.state, "rejected");
+    }
+    // The newest submission shares the instant the recent_activity
+    // kyc_transition projects — whenever it survives the page bound.
+    const submitted = subject.recent_activity.find(
+      (item) => item.kind === "kyc_transition" && item.summary === "submitted"
+    );
+    if (submitted !== undefined) {
+      assert.equal(kyc.history[0].submitted_at, submitted.occurred_at, subject.subject_id);
+    }
+    if (kyc.status === "approved") {
+      const approved = subject.recent_activity.find(
+        (item) => item.kind === "kyc_transition" && item.summary === "approved"
+      );
+      if (approved !== undefined) {
+        assert.equal(kyc.history[0].decided_at, approved.occurred_at, subject.subject_id);
+      }
+    }
+  }
+  // The 24-member universe draws the whole matrix: absent, pending and
+  // every terminal state.
+  for (const state of ["null", "approved", "rejected", "needs_more_data", "timed_out"]) {
+    assert.ok(seen.has(state), `matrix state ${state}`);
+  }
+  assert.ok(seen.has("submitted") || seen.has("in_review"), "in-review states");
+});
+
+test("a malformed kyc dossier fails the detail validator closed", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const view = await directory.subjectsFor();
+  const details = await Promise.all(view.subjects.map((row) => directory.subjectFor(row.subject_id)));
+  const real = details.find((detail) => detail.subject.kyc !== null && detail.subject.kyc.history.length >= 2);
+  assert.ok(real !== undefined);
+  const subject = real.subject;
+  const kyc = subject.kyc;
+  const other = details.find((detail) => detail.subject.kyc !== null && detail.subject.subject_id !== subject.subject_id);
+  assert.ok(other !== undefined);
+  const drifted = (subjectOverrides = {}) => ({ mode: "test", subject: { ...subject, ...subjectOverrides } });
+  const attempt0 = kyc.history[0];
+  const badKyc = [
+    "dossier",
+    [],
+    {},
+    { ...kyc, level: "premium" },
+    { ...kyc, status: "unavailable" },
+    { ...kyc, session_id: "kys_nothex" },
+    { ...kyc, session_id: `kys_${"0".repeat(24)}` },
+    { ...kyc, history: [] },
+    { ...kyc, history: [...kyc.history].reverse() },
+    { ...kyc, history: kyc.history.map((attempt) => ({ ...attempt, session_id: `kys_${"0".repeat(24)}` })) },
+    { ...kyc, history: [attempt0, { ...kyc.history[1], decided_at: null }] },
+    { ...kyc, history: [attempt0, { ...kyc.history[1], decided_at: "not-a-date" }] },
+    { ...kyc, status: "approved", history: [{ ...attempt0, state: "approved", rejection_reason: "SIM_DATA_MISMATCH" }, ...kyc.history.slice(1)] },
+    { ...kyc, history: [attempt0, { ...kyc.history[1], state: "in_review" }] },
+    { ...kyc, history: [attempt0, { ...kyc.history[1], decided_at: "2027-01-01T00:00:00.000Z" }] },
+    other.subject.kyc
+  ];
+  for (const value of badKyc) {
+    assert.equal(validOperatorSubjectDetailView(drifted({ kyc: value })), false, JSON.stringify(value).slice(0, 96));
+  }
+  assert.equal(validOperatorSubjectKyc(kyc), true);
+  assert.equal(validOperatorSubjectKyc(null), false);
+  assert.equal(validOperatorSubjectKyc(other.subject.kyc), true);
+  // Roster coherence: a verified roster row cannot carry an in-review dossier.
+  const verified = details.find((detail) => detail.subject.kyc_status === "verified");
+  assert.ok(verified !== undefined);
+  const swapped = {
+    ...verified.subject.kyc,
+    status: "in_review",
+    history: [{ ...verified.subject.kyc.history[0], state: "in_review", decided_at: null }]
+  };
+  assert.equal(validOperatorSubjectKyc(swapped), true);
+  assert.equal(validOperatorSubjectDetailView({ mode: "test", subject: { ...verified.subject, kyc: swapped } }), false);
 });
 
 test("unknown or malformed subject ids fail closed with the uniform 404", async () => {
