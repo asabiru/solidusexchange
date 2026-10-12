@@ -226,6 +226,11 @@ CREATE TRIGGER customer_sessions_reject_truncate
   FOR EACH STATEMENT
   EXECUTE FUNCTION miniapp_control.reject_session_mutation();
 
+ALTER TABLE miniapp_control.customer_sessions
+  ENABLE ALWAYS TRIGGER customer_sessions_append_forward;
+ALTER TABLE miniapp_control.customer_sessions
+  ENABLE ALWAYS TRIGGER customer_sessions_reject_truncate;
+
 INSERT INTO miniapp_control.schema_migrations (version, migration_name)
 VALUES (1, '0001_customer_sessions');
 

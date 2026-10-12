@@ -238,6 +238,58 @@ assert_change_rejected \
   "miniapp_control.customer_sessions is append-only" \
   "TRUNCATE miniapp_control.customer_sessions;"
 
+# The same session-table guards must hold under session_replication_role =
+# replica: ENABLE ALWAYS TRIGGER pins them, so a replica-mode writer cannot
+# mutate identity columns, lift a tombstone or truncate the table.
+assert_change_rejected \
+  "customer session identity fields are immutable" \
+  "SET session_replication_role = replica;
+   UPDATE miniapp_control.customer_sessions
+      SET subject = 'tg-0000000000000000'
+    WHERE session_id = 'sess_a1b2c3d4e5f6a7b8c9d0e1f2';"
+
+assert_change_rejected \
+  "customer session revocation is terminal" \
+  "SET session_replication_role = replica;
+   UPDATE miniapp_control.customer_sessions
+      SET revoked = false, revoked_at_ms = NULL
+    WHERE session_id = 'sess_a1b2c3d4e5f6a7b8c9d0e1f2';"
+
+assert_change_rejected \
+  "miniapp_control.customer_sessions is append-only" \
+  "SET session_replication_role = replica;
+   TRUNCATE miniapp_control.customer_sessions;"
+
+# A tombstone without the boolean flag is the other half of the terminal
+# invariant — the CHECK is symmetric.
+assert_change_rejected \
+  'violates check constraint "customer_sessions_revoked_terminal"' \
+  "INSERT INTO miniapp_control.customer_sessions
+        (session_id, subject, source, kyc, token_digest, device_digest,
+         issued_at_ms, expires_at_ms, last_used_at_ms, revoked, revoked_at_ms)
+      VALUES ('sess_f1b2c3d4e5f6a7b8c9d0e1f2', 'dev-0000000000000000',
+              'telegram', 'kyc-gated',
+              'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+              NULL, 1000, 2000, 1000, true, NULL);"
+
+# DELETE is intentionally allowed on the session table: the store's own
+# evictions, lazy expiry and logout drop delete rows. The append-forward
+# model is enforced by grants (REVOKE ALL FROM PUBLIC), not the trigger.
+run_psql -v ON_ERROR_STOP=1 \
+  -c "INSERT INTO miniapp_control.customer_sessions
+        (session_id, subject, source, kyc, token_digest, device_digest,
+         issued_at_ms, expires_at_ms, last_used_at_ms)
+      VALUES ('sess_d1b2c3d4e5f6a7b8c9d0e1f2', 'dev-0000000000000000',
+              'telegram', 'kyc-gated',
+              '9999999999999999999999999999999999999999999999999999999999999999',
+              NULL, 1000, 2000, 1000);" >/dev/null
+
+run_psql -v ON_ERROR_STOP=1 -Atq \
+  -c "DELETE FROM miniapp_control.customer_sessions
+       WHERE session_id = 'sess_d1b2c3d4e5f6a7b8c9d0e1f2'
+      RETURNING session_id;" \
+  | grep -Fx 'sess_d1b2c3d4e5f6a7b8c9d0e1f2' >/dev/null
+
 # Replaying an already-applied migration must fail loudly and leave the
 # catalog untouched.
 set +e
