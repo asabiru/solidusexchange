@@ -336,6 +336,34 @@ describe("Mini App BFF with a failing customer-api", () => {
         ...extra
       };
     }
+    if (request.url.includes("/markets/")) {
+      // The member read's depth view: percent-encoded instrument in one path
+      // segment, bids descending / asks ascending, never crossed. The served
+      // book is a live-upstream-only value — it is what recovery proves.
+      const segment = request.url.slice(request.url.indexOf("/markets/") + "/markets/".length);
+      let instrument;
+      try {
+        instrument = decodeURIComponent(segment);
+      } catch {
+        instrument = undefined;
+      }
+      if (instrument !== "USDT/RUB") {
+        return undefined;
+      }
+      return {
+        mode: "test",
+        instrument: "USDT/RUB",
+        base_asset: "USDT",
+        quote_asset: "RUB",
+        bids: [{ price: "89.99000000", quantity: "25.000000", order_count: 1 }],
+        asks: [{ price: "90.01000000", quantity: "18.000000", order_count: 1 }],
+        last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:05:00.000Z" },
+        depth_levels: 1,
+        as_of: "2026-10-02T14:10:00.000Z",
+        posting: "none",
+        ...extra
+      };
+    }
     if (request.url.endsWith("/markets")) {
       // The served contract emits every declared instrument exactly once
       // in canonical ORDER_PAIRS order; the adapter pins that sequence, so
@@ -764,6 +792,47 @@ describe("Mini App BFF with a failing customer-api", () => {
       send(response, 200, "application/json", JSON.stringify({ ...validBody(request), commands_enabled: true })),
     capability_denied: (_, response) =>
       send(response, 403, "application/json", JSON.stringify({ code: "CAPABILITY_DENIED", detail: marker })),
+    // An upstream 404: legitimate "missing" on member paths (the member routes'
+    // documented fallback), contract drift on collection reads (a collection
+    // endpoint the BFF addresses by contract never legitimately 404s).
+    not_found: (_, response) =>
+      send(response, 404, "application/json", JSON.stringify({ code: "NOT_FOUND", detail: marker })),
+    // A real reachable status class: the upstream's own limiter emits 429 —
+    // it must fail closed like every other non-ok outcome, never map to the
+    // denied/in-place-degrade arm.
+    rate_limited: (_, response) =>
+      send(response, 429, "application/json", JSON.stringify({ code: "RATE_LIMITED", detail: marker })),
+    // 400 = the client sent something the contract does not accept — still
+    // fail closed, not "missing" and not "denied".
+    validation_failed: (_, response) =>
+      send(response, 400, "application/json", JSON.stringify({ code: "VALIDATION_FAILED", detail: marker })),
+    // Per-path degrade: only the deposit-addresses read is refused — the
+    // wallet route must degrade that section in place (live balances +
+    // emptied addresses), not fail the whole route.
+    deposit_addresses_denied: (request, response) => {
+      if (request.url.endsWith("/deposit-addresses")) {
+        send(response, 403, "application/json", JSON.stringify({ code: "CAPABILITY_DENIED", detail: marker }));
+        return;
+      }
+      modes.valid(request, response);
+    },
+    // Per-path degrade: every collection read answers 200 with a valid but
+    // emptied list — "empty but live" must stay distinguishable from a
+    // degrade: verified sessions get 200-with-empty (never the gated
+    // fixture, never 503); the markets collection still 503s because the
+    // contract requires every declared instrument.
+    empty_lists: (request, response) => {
+      const body = validBody(request);
+      if (body === undefined) {
+        send(response, 404, "application/json", JSON.stringify({ code: "NOT_FOUND", detail: marker }));
+        return;
+      }
+      for (const member of ["wallets", "deposits", "withdrawals", "quotes", "orders", "trades", "markets", "payments", "cards", "checks", "deposit_addresses", "screenings", "activity", "operations", "notifications", "tickets", "sessions"]) {
+        if (member in body) body[member] = [];
+      }
+      if ("unread" in body) body.unread = 0;
+      send(response, 200, "application/json", JSON.stringify(body));
+    },
     connection_reset: (request) => request.socket.destroy(),
     slow_headers: (request, response) => {
       const timer = setTimeout(() => modes.valid(request, response), 3_000);
@@ -778,11 +847,12 @@ describe("Mini App BFF with a failing customer-api", () => {
   };
 
   async function upstreamReleased(label) {
-    const last = upstream.at(-1);
-    for (let attempt = 0; attempt < 100 && !last.closed; attempt += 1) {
+    // Every recorded request must be closed — checking only the last entry
+    // would let a client that leaks earlier stalled sockets stay green.
+    for (let attempt = 0; attempt < 100 && !upstream.every((entry) => entry.closed); attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
-    assert.equal(last.closed, true, `${label}: upstream response still open`);
+    assert.equal(upstream.every((entry) => entry.closed), true, `${label}: upstream response still open`);
   }
 
   async function walletFailsClosed(label) {
@@ -795,8 +865,9 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes(marker), false, label);
     assert.equal(text.includes(key), false, label);
     assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("dpa_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "wallet_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -813,7 +884,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("dep_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "deposits_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -831,7 +902,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("wdr_"), false, label);
     assert.equal(text.includes("wdl_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "withdrawals_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -848,7 +919,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("qte_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "quotes_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -865,7 +936,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("ord_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "exchange_orders_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -882,7 +953,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("trd_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "trades_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -898,7 +969,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes(key), false, label);
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "markets_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -916,7 +987,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("pay_"), false, label);
     assert.equal(text.includes("SIMBANK"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "payments_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -934,7 +1005,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("crd_"), false, label);
     assert.equal(text.includes("tok_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "cards_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -952,7 +1023,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_peer_"), false, label);
     assert.equal(text.includes("chk_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "checks_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     // A gated session never consults upstream: its local checks view stays
     // intact (and leak-free) while the verified session fails closed.
@@ -981,7 +1052,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("scr_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "screening_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     // A gated session never consults upstream: the surface's own KYC gate
     // answers kyc_required (leak-free) while the verified session fails
@@ -1004,18 +1075,16 @@ describe("Mini App BFF with a failing customer-api", () => {
     const response = await call(app.base, `/bff/address-screening/scr_${"0".repeat(32)}`, { cookie: verifiedCookie });
     const text = await response.text();
     const elapsed = Date.now() - startedAt;
-    if (response.status === 404) {
-      // An upstream 404 means "missing": the BFF falls back to the local store
-      // (POST stays local) and this id was never submitted — clean not_found.
-      assert.deepEqual(JSON.parse(text), { error: "not_found" }, label);
-    } else {
-      assert.equal(response.status, 503, label);
-      assert.deepEqual(JSON.parse(text), { error: "screening_unavailable" }, label);
-    }
+    // Every mode this helper runs under fails the member read upstream — the
+    // exact contract is 503. The upstream-404 → local-fallback arm is pinned
+    // separately by the dedicated not_found mode test, where it is the only
+    // branch that can legitimately answer not_found.
+    assert.equal(response.status, 503, label);
+    assert.deepEqual(JSON.parse(text), { error: "screening_unavailable" }, label);
     assert.equal(text.includes(marker), false, label);
     assert.equal(text.includes(key), false, label);
     assert.equal(text.includes("syn_cust_"), false, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1032,7 +1101,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("act_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "activity_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     // A gated session never consults upstream: its local activity log view
     // stays intact (and leak-free) while the verified session fails closed.
@@ -1048,21 +1117,154 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function marketsMemberFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/markets/USDT%2FRUB", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("89.99000000"), false, label);
+    assert.equal(text.includes("depth_levels"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "markets_unavailable" }, label);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session never consults upstream for depth: the member read
+    // answers the local not-found, leak-free.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/markets/USDT%2FRUB", { cookie });
+    assert.equal(gatedResponse.status, 404, label);
+    assert.deepEqual(await readJson(gatedResponse), { error: "not_found" }, label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function checkDetailFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    const response = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie: verifiedCookie });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("chk_"), false, label);
+    assert.equal(text.includes("SYNCHK"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "checks_unavailable" }, label);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    // A gated session resolves the reference against the local fixture only —
+    // the upstream reference is absent there, and upstream is never consulted.
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie });
+    assert.equal(gatedResponse.status, 404, label);
+    assert.deepEqual(await readJson(gatedResponse), { error: "not_found" }, label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function notificationsReadFailsClosed(label) {
+    const hits = upstream.length;
+    const startedAt = Date.now();
+    // The marks stay local either way, but the verified session's unread
+    // count is reported from the contract feed — an upstream failure fails
+    // the read closed rather than serving a count that contradicts the list.
+    const response = await call(app.base, "/bff/notifications/read", { method: "POST", cookie: verifiedCookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(response.status, 503, label);
+    const text = await response.text();
+    const elapsed = Date.now() - startedAt;
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    assert.equal(text.includes("ntf_"), false, label);
+    assert.deepEqual(JSON.parse(text), { error: "notifications_unavailable" }, label);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    const gatedHits = upstream.length;
+    const gatedResponse = await call(app.base, "/bff/notifications/read", { method: "POST", cookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(gatedResponse.status, 200, label);
+    const gatedBody = await readJson(gatedResponse);
+    assert.equal(gatedBody.marked, 0, label);
+    assert.equal(typeof gatedBody.unread, "number", label);
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function previewsFailClosed(label) {
+    const hits = upstream.length;
+    let elapsed = 0;
+    // Verified previews judge affordability against the served upstream
+    // balances — an upstream failure fails the preview closed instead of
+    // answering against fixture money.
+    for (const [path, errorBody] of [
+      [quotePath, { error: "quote_unavailable" }],
+      ["/bff/checks/preview?asset=USDT&amount=10", { error: "checks_unavailable" }]
+    ]) {
+      const callStartedAt = Date.now();
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, `${label} ${path}`);
+      const text = await response.text();
+      const callElapsed = Date.now() - callStartedAt;
+      elapsed += callElapsed;
+      assert.equal(text.includes(marker), false, label);
+      assert.equal(text.includes(key), false, label);
+      assert.equal(text.includes("syn_cust_"), false, label);
+      assert.deepEqual(JSON.parse(text), errorBody, label);
+      assert.ok(callElapsed < 3_500, `${label} ${path} took ${callElapsed} ms`);
+    }
+    assert.ok(upstream.length > hits, `${label}: upstream was never called`);
+    const gatedHits = upstream.length;
+    for (const path of [quotePath, "/bff/checks/preview?asset=USDT&amount=10"]) {
+      const gatedResponse = await call(app.base, path, { cookie });
+      assert.equal(gatedResponse.status, 200, `${label} ${path}`);
+      assert.equal((await readJson(gatedResponse)).kycRequired, true, `${label} ${path}`);
+    }
+    assert.equal(upstream.length, gatedHits, `${label}: gated session reached upstream`);
+    return elapsed;
+  }
+
+  async function localSurfacesStayLocal(label) {
+    // Surfaces that never consult upstream must keep their exact local
+    // contract during any degrade. Read-only pins only: this runs once per
+    // failure mode, so any stateful write would accumulate side effects —
+    // the write pins live in the dedicated local-writes test instead.
+    const hits = upstream.length;
+    const health = await call(app.base, "/bff/health");
+    assert.equal(health.status, 200, label);
+    assert.equal((await readJson(health)).mode, "dev-synthetic", label);
+    assert.equal((await getJson(app, "/bff/session", cookie)).kyc, "kyc-gated", label);
+    assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified", label);
+    const notificationsRead = await call(app.base, "/bff/notifications/read", { method: "POST", cookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(notificationsRead.status, 200, label);
+    const fixtureCheck = await call(app.base, "/bff/checks/chk_7f3a9c1e5d2b4f8a0e6c1d3b", { cookie });
+    assert.equal(fixtureCheck.status, 200, label);
+    // revoke-others is intentionally absent here: the two sessions share one
+    // subject, so it would evict the gated cookie the rest of the arm needs.
+    assert.equal(upstream.length, hits, `${label}: a local-only surface consulted upstream`);
+  }
+
   async function operationsFailsClosed(label) {
     const hits = upstream.length;
     const startedAt = Date.now();
     for (const path of ["/bff/operations", "/bff/operations/ope_0123456789abcdef01234567"]) {
+      const callStartedAt = Date.now();
       const response = await call(app.base, path, { cookie: verifiedCookie });
       assert.equal(response.status, 503, label);
       const text = await response.text();
+      const callElapsed = Date.now() - callStartedAt;
       assert.equal(text.includes(marker), false, label);
       assert.equal(text.includes(key), false, label);
       assert.equal(text.includes("syn_cust_"), false, label);
       assert.equal(text.includes("ope_"), false, label);
       assert.deepEqual(JSON.parse(text), { error: "operations_unavailable" }, label);
+      assert.ok(callElapsed < 3_500, `${label} ${path} took ${callElapsed} ms`);
     }
     const elapsed = Date.now() - startedAt;
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 7_000, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     // A gated session never consults upstream: its local operations view
     // (empty for a gated subject) stays intact and leak-free.
@@ -1091,7 +1293,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(text.includes("ntf_"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "notifications_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1108,7 +1310,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("syn_cust_"), false, label);
     assert.equal(/kyc_[0-9a-f]{24}/.test(text), false, label);
     assert.deepEqual(JSON.parse(text), { error: "kyc_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1126,7 +1328,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("SC-DEV"), false, label);
     assert.equal(text.includes("display_name"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "profile_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1144,7 +1346,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("tck_"), false, label);
     assert.equal(text.includes("ticket_id"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "support_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1162,7 +1364,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(/sess_[0-9a-f]/.test(text), false, label);
     assert.equal(text.includes("session_id"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "sessions_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
@@ -1181,14 +1383,14 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(text.includes("user_id"), false, label);
     assert.equal(text.includes("subject"), false, label);
     assert.deepEqual(JSON.parse(text), { error: "account_unavailable" }, label);
-    assert.ok(elapsed < 5_000, `${label} took ${elapsed} ms`);
+    assert.ok(elapsed < 3_500, `${label} took ${elapsed} ms`);
     assert.ok(upstream.length > hits, `${label}: upstream was never called`);
     return elapsed;
   }
 
   before(async () => {
     stub = createServer((request, response) => {
-      const entry = { mode, closed: false };
+      const entry = { mode, closed: false, method: request.method ?? "", url: request.url ?? "", headers: request.headers };
       response.once("close", () => {
         entry.closed = true;
       });
@@ -1254,6 +1456,21 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(wallet.availableRub, "85124.00");
     assert.equal(wallet.holdRub, "0.00");
     assert.equal(wallet.totalRub, "85124.00");
+    // The depositAddresses section is upstream-served only: the local wallet
+    // view has no address data of its own, so the verified view must carry
+    // the served contract records — adapted, never the raw snake_case body.
+    assert.deepEqual(Object.keys(wallet).sort(), ["assets", "availableRub", "depositAddresses", "holdRub", "kyc", "totalRub"]);
+    assert.deepEqual(wallet.depositAddresses, [
+      {
+        id: "dpa_0123456789abcdef01234567",
+        asset: "USDT",
+        network: "TON_TESTNET",
+        address: `kQ${"A".repeat(46)}`,
+        status: "active",
+        createdAt: Date.parse("2026-09-02T00:00:00.000Z"),
+        posting: "none"
+      }
+    ]);
     const feed = await getJson(app, "/bff/notifications", verifiedCookie);
     assert.equal(feed.mode, "test");
     assert.equal(feed.delivery, "disabled");
@@ -1723,6 +1940,67 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(account.createdAt, Date.parse("2026-09-01T12:00:00.000Z"));
     assert.equal(account.updatedAt, Date.parse("2026-10-01T12:00:00.000Z"));
     assert.deepEqual(await getJson(app, "/bff/account", verifiedCookie), account);
+    // The member reads: the verified session consults upstream per id and
+    // receives the adapted view; an id the upstream does not own reports the
+    // documented not_found, never a fabricated fixture row.
+    const depth = await getJson(app, "/bff/markets/USDT%2FRUB", verifiedCookie);
+    assert.deepEqual(depth, {
+      mode: "test",
+      instrument: "USDT/RUB",
+      base: "USDT",
+      quote: "RUB",
+      bids: [{ price: "89.99000000", quantity: "25.000000", orderCount: 1 }],
+      asks: [{ price: "90.01000000", quantity: "18.000000", orderCount: 1 }],
+      lastTrade: { price: "90.00000000", quantity: "10.000000", executedAt: Date.parse("2026-10-02T14:05:00.000Z") },
+      depthLevels: 1,
+      baseScale: 6,
+      quoteScale: 2,
+      priceScale: 8,
+      asOf: Date.parse("2026-10-02T14:10:00.000Z"),
+      posting: "none"
+    });
+    const operation = await getJson(app, "/bff/operations/ope_0123456789abcdef01234567", verifiedCookie);
+    assert.equal(operation.id, "ope_0123456789abcdef01234567");
+    const check = await getJson(app, "/bff/checks/chk_0123456789abcdef01234567", verifiedCookie);
+    assert.equal(check.reference, "chk_0123456789abcdef01234567");
+    // Member ids the upstream does not own: the served list/lookup owns the
+    // reference space, so a fixture-only or unknown reference is not_found.
+    for (const path of [
+      "/bff/checks/chk_7f3a9c1e5d2b4f8a0e6c1d3b",
+      "/bff/operations/ope_deadbeef01234567890123",
+      "/bff/markets/TON%2FRUB"
+    ]) {
+      const missing = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(missing.status, 404, path);
+      assert.deepEqual(await readJson(missing), { error: "not_found" }, path);
+    }
+    // The gated member reads stay local: the fixture check resolves, depth
+    // and unknown ids 404 — upstream is never consulted for any of it.
+    const gatedHits = upstream.length;
+    const gatedCheck = await call(app.base, "/bff/checks/chk_7f3a9c1e5d2b4f8a0e6c1d3b", { cookie });
+    assert.equal(gatedCheck.status, 200);
+    assert.equal((await readJson(gatedCheck)).reference, "chk_7f3a9c1e5d2b4f8a0e6c1d3b");
+    for (const path of ["/bff/markets/USDT%2FRUB", "/bff/operations/ope_deadbeef01234567890123"]) {
+      const missing = await call(app.base, path, { cookie });
+      assert.equal(missing.status, 404, path);
+      assert.deepEqual(await readJson(missing), { error: "not_found" }, path);
+    }
+    assert.equal(upstream.length, gatedHits, "a gated member read consulted upstream");
+    // Every upstream request carries the contracted header set: the minted
+    // synthetic bearer for the session subject, a v7 request id, the BFF's
+    // client version and platform — and never a device id.
+    assert.ok(upstream.length > 0, "the connected run never reached upstream");
+    for (const entry of upstream) {
+      // The two recorded requests that are not BFF-driven: the arm's own
+      // unauthenticated probes of an unmatched path and a non-GET method.
+      if (entry.url.endsWith("/no-such-operation") || entry.method !== "GET") continue;
+      assert.match(entry.headers.authorization ?? "", /^Bearer scdev1\.syn_cust_[a-z0-9]{8,32}\.\d{10}\.[0-9a-f]{64}$/, entry.url);
+      assert.match(entry.headers["x-request-id"] ?? "", /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/, entry.url);
+      assert.equal(entry.headers["x-client-version"], "solidchange-miniapp-bff/0.1.0", entry.url);
+      assert.equal(entry.headers["x-platform"], "telegram-mini-app", entry.url);
+      assert.equal(entry.headers["x-device-id"], undefined, entry.url);
+      assert.equal(entry.method, "GET", entry.url);
+    }
   });
 
   it("degrades verified sessions' wallet and notifications on an upstream capability denial", async () => {
@@ -1868,7 +2146,239 @@ describe("Mini App BFF with a failing customer-api", () => {
       assert.equal(accountResponse.status, 503);
       assert.deepEqual(await readJson(accountResponse), { error: "account_unavailable" });
     }
+    // A refused quotes read degrades the same way: the verified session
+    // falls back to the emptied list a gated session sees.
+    const quotesDenied = await getJson(app, "/bff/quotes", verifiedCookie);
+    assert.equal(quotesDenied.kyc, "kyc-gated");
+    assert.equal(quotesDenied.quotes.length, 0);
+    // A refused activity read degrades in place to the same local feed the
+    // gated session sees (local outbox items only, no contract items).
+    assert.deepEqual(await getJson(app, "/bff/activity", verifiedCookie), await getJson(app, "/bff/activity", cookie));
+    // Refused operations list and member reads degrade in place: the list
+    // empties and the member id is absent locally — never *_unavailable.
+    assert.deepEqual(await getJson(app, "/bff/operations", verifiedCookie), { operations: [] });
+    const opDenied = await call(app.base, "/bff/operations/ope_0123456789abcdef01234567", { cookie: verifiedCookie });
+    assert.equal(opDenied.status, 404);
+    assert.deepEqual(await readJson(opDenied), { error: "not_found" });
+    // A refused screenings list read degrades in place to the local store
+    // read (empty for this subject); the member read resolves through the
+    // same local store.
+    assert.deepEqual(await getJson(app, "/bff/address-screening", verifiedCookie), { mode: "test", screenings: [] });
+    const scrDenied = await call(app.base, `/bff/address-screening/scr_${"0".repeat(32)}`, { cookie: verifiedCookie });
+    assert.equal(scrDenied.status, 404);
+    assert.deepEqual(await readJson(scrDenied), { error: "not_found" });
+    // A refused markets member read degrades to the same 404 a gated session
+    // sees — depth is never fabricated locally.
+    const depthDenied = await call(app.base, "/bff/markets/USDT%2FRUB", { cookie: verifiedCookie });
+    assert.equal(depthDenied.status, 404);
+    assert.deepEqual(await readJson(depthDenied), { error: "not_found" });
+    // A refused checks member read resolves through the local fixture: the
+    // fixture reference renders, the upstream reference is absent.
+    const fixtureDenied = await call(app.base, "/bff/checks/chk_7f3a9c1e5d2b4f8a0e6c1d3b", { cookie: verifiedCookie });
+    assert.equal(fixtureDenied.status, 200);
+    assert.equal((await readJson(fixtureDenied)).reference, "chk_7f3a9c1e5d2b4f8a0e6c1d3b");
+    const unknownDenied = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie: verifiedCookie });
+    assert.equal(unknownDenied.status, 404);
+    assert.deepEqual(await readJson(unknownDenied), { error: "not_found" });
+    // A refused notifications/read POST degrades to the local unread count.
+    const ntfDenied = await call(app.base, "/bff/notifications/read", { method: "POST", cookie: verifiedCookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(ntfDenied.status, 200);
+    const ntfDeniedBody = await readJson(ntfDenied);
+    assert.equal(ntfDeniedBody.marked, 0);
+    assert.equal(typeof ntfDeniedBody.unread, "number");
+    // A refused affordability read keeps the previews honest: the verified
+    // session previews against the zeroed gated answer (insufficient), never
+    // fixture money.
+    const quoteDenied = await getJson(app, quotePath, verifiedCookie);
+    assert.equal(quoteDenied.kycRequired, false);
+    assert.equal(quoteDenied.executable, false);
+    assert.equal(quoteDenied.insufficientBalance, true);
+    const checkPreviewDenied = await getJson(app, "/bff/checks/preview?asset=USDT&amount=10", verifiedCookie);
+    assert.equal(checkPreviewDenied.kycRequired, false);
+    assert.equal(checkPreviewDenied.insufficientBalance, true);
     assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified");
+  });
+
+  it("degrades only the wallet deposit-addresses section on a scoped refusal", async () => {
+    mode = "deposit_addresses_denied";
+    // A refusal scoped to the deposit-addresses read degrades that section in
+    // place: the balances stay LIVE (served values, not fixture money) while
+    // the section empties — a whole-route 503 or a fixture address both fail.
+    const wallet = await getJson(app, "/bff/wallet", verifiedCookie);
+    assert.equal(wallet.kyc, "verified");
+    assert.deepEqual(wallet.depositAddresses, []);
+    assert.equal(wallet.availableRub, "85124.00");
+    assert.deepEqual(wallet.assets[0], { code: "RUB", available: "84200.00", hold: "0.00", valueRub: "84200.00" });
+    // The refusal stays scoped: sibling reads keep serving live data.
+    assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
+  });
+
+  it("keeps every member read's documented not-found semantics on an upstream 404", async () => {
+    mode = "not_found";
+    // An upstream 404 on a collection read is contract drift — the BFF
+    // addresses collections by contract — so list surfaces fail closed.
+    for (const [path, error] of [
+      ["/bff/wallet", "wallet_unavailable"],
+      ["/bff/deposits", "deposits_unavailable"],
+      ["/bff/withdrawals", "withdrawals_unavailable"],
+      ["/bff/quotes", "quotes_unavailable"],
+      ["/bff/exchange-orders", "exchange_orders_unavailable"],
+      ["/bff/trades", "trades_unavailable"],
+      ["/bff/markets", "markets_unavailable"],
+      ["/bff/payments", "payments_unavailable"],
+      ["/bff/cards", "cards_unavailable"],
+      ["/bff/checks", "checks_unavailable"],
+      ["/bff/address-screening", "screening_unavailable"],
+      ["/bff/activity", "activity_unavailable"],
+      ["/bff/operations", "operations_unavailable"],
+      ["/bff/notifications", "notifications_unavailable"],
+      ["/bff/kyc/status", "kyc_unavailable"],
+      ["/bff/profile", "profile_unavailable"],
+      ["/bff/support/requests", "support_unavailable"],
+      ["/bff/sessions", "sessions_unavailable"],
+      ["/bff/account", "account_unavailable"]
+    ]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, path);
+      assert.deepEqual(await readJson(response), { error }, path);
+    }
+    // On member paths the same upstream 404 is the documented "missing": each
+    // route's own fallback — never a fabricated fixture row, never *_unavailable.
+    for (const path of [
+      "/bff/operations/ope_0123456789abcdef01234567",
+      "/bff/markets/USDT%2FRUB"
+    ]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 404, path);
+      assert.deepEqual(await readJson(response), { error: "not_found" }, path);
+    }
+    // The checks member resolves through the collection read, so an upstream
+    // 404 there is the same collection drift: checks_unavailable, not a local
+    // fixture detail.
+    const checkResponse = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie: verifiedCookie });
+    assert.equal(checkResponse.status, 503);
+    assert.deepEqual(await readJson(checkResponse), { error: "checks_unavailable" });
+    // The screening member falls back to the local store: a never-submitted
+    // id is not_found…
+    const absent = await call(app.base, `/bff/address-screening/scr_${"0".repeat(32)}`, { cookie: verifiedCookie });
+    assert.equal(absent.status, 404);
+    assert.deepEqual(await readJson(absent), { error: "not_found" });
+    // …and a locally POST-submitted screening still renders from that store —
+    // the POST stays local by contract, so its record survives the outage.
+    const posted = await call(app.base, "/bff/address-screening", { method: "POST", cookie: verifiedCookie, body: screeningBody });
+    assert.ok([200, 202].includes(posted.status));
+    const postedView = await readJson(posted);
+    const member = await call(app.base, `/bff/address-screening/${postedView.id}`, { cookie: verifiedCookie });
+    assert.equal(member.status, 200);
+    assert.equal((await readJson(member)).id, postedView.id);
+    // Upstream-coupled POSTs and verified previews fail closed on the same
+    // upstream 404; purely local surfaces stay local.
+    const ntf = await call(app.base, "/bff/notifications/read", { method: "POST", cookie: verifiedCookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(ntf.status, 503);
+    assert.deepEqual(await readJson(ntf), { error: "notifications_unavailable" });
+    const quotePreview = await call(app.base, quotePath, { cookie: verifiedCookie });
+    assert.equal(quotePreview.status, 503);
+    assert.deepEqual(await readJson(quotePreview), { error: "quote_unavailable" });
+    await localSurfacesStayLocal("not_found");
+  });
+
+  it("serves an emptied upstream collection as the live view, never a degrade", async () => {
+    mode = "empty_lists";
+    // Verified sessions get 200-with-empty on the upstream-owned collections —
+    // distinguishable from both the gated fixture (5 local checks entries) and
+    // a 503: "empty but live" is not a degrade.
+    const wallet = await getJson(app, "/bff/wallet", verifiedCookie);
+    assert.equal(wallet.kyc, "verified");
+    assert.deepEqual(wallet.assets, []);
+    assert.deepEqual(wallet.depositAddresses, []);
+    for (const [path, member] of [
+      ["/bff/deposits", "deposits"],
+      ["/bff/withdrawals", "withdrawals"],
+      ["/bff/quotes", "quotes"],
+      ["/bff/exchange-orders", "orders"],
+      ["/bff/trades", "trades"],
+      ["/bff/payments", "payments"],
+      ["/bff/cards", "cards"],
+      ["/bff/operations", "operations"],
+      ["/bff/notifications", "notifications"],
+      ["/bff/support/requests", "requests"]
+    ]) {
+      const body = await getJson(app, path, verifiedCookie);
+      assert.deepEqual(body[member], [], path);
+    }
+    // The sessions collection shares the markets rule: the contract requires
+    // exactly one current session — the caller's own — so an empty directory
+    // is drift, not "empty but live": sessions_unavailable.
+    const sessions = await call(app.base, "/bff/sessions", { cookie: verifiedCookie });
+    assert.equal(sessions.status, 503);
+    assert.deepEqual(await readJson(sessions), { error: "sessions_unavailable" });
+    assert.deepEqual((await getJson(app, "/bff/activity", verifiedCookie)).items, []);
+    assert.deepEqual((await getJson(app, "/bff/checks", verifiedCookie)).checks, []);
+    assert.deepEqual((await getJson(app, "/bff/address-screening", verifiedCookie)).screenings, []);
+    // The checks member read resolves through the (now empty) live list: the
+    // upstream reference is absent — not_found, never the local fixture.
+    const check = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie: verifiedCookie });
+    assert.equal(check.status, 404);
+    assert.deepEqual(await readJson(check), { error: "not_found" });
+    // Member reads with their own upstream endpoints still answer live.
+    assert.equal((await getJson(app, "/bff/operations/ope_0123456789abcdef01234567", verifiedCookie)).id, "ope_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/markets/USDT%2FRUB", verifiedCookie)).instrument, "USDT/RUB");
+    // The markets collection is the exception: the contract requires every
+    // declared instrument, so an empty list is drift — markets_unavailable.
+    const markets = await call(app.base, "/bff/markets", { cookie: verifiedCookie });
+    assert.equal(markets.status, 503);
+    assert.deepEqual(await readJson(markets), { error: "markets_unavailable" });
+    // Non-collection reads stay live too.
+    assert.equal((await getJson(app, "/bff/profile", verifiedCookie)).apiAccess.status, "connected");
+    assert.equal((await getJson(app, "/bff/kyc/status", verifiedCookie)).state, "rejected");
+    assert.equal((await getJson(app, "/bff/account", verifiedCookie)).id, "usr_0123456789abcdef01234567");
+  });
+
+  it("wipes in-memory session state on restart and recovers into live data", async () => {
+    mode = "valid";
+    // The dev BFF's session store is memory — a documented volatile surface:
+    // a restarted process must not resurrect the old cookie (a persisted
+    // session would fail this pin), and a fresh login must serve live
+    // upstream data, not a replayed degrade.
+    const restarted = await startMiniapp({
+      MINIAPP_CUSTOMER_API_URL: stubBase,
+      MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
+    });
+    try {
+      const stale = await call(restarted.base, "/bff/session", { cookie });
+      assert.equal(stale.status, 401);
+      assert.deepEqual(await readJson(stale), { error: "unauthenticated" });
+      const fresh = await devLogin(restarted, "verified");
+      const hits = upstream.length;
+      const wallet = await getJson(restarted, "/bff/wallet", fresh);
+      assert.equal(wallet.kyc, "verified");
+      assert.equal(wallet.depositAddresses[0].id, "dpa_0123456789abcdef01234567");
+      assert.ok(upstream.length > hits, "restarted BFF served data without consulting upstream");
+    } finally {
+      await closeServer(restarted.server);
+    }
+  });
+
+  it("keeps local writes local during a degrade", async () => {
+    mode = "server_error";
+    // Degraded-write pins: a POST that touches only local state must apply
+    // immediately (never silently queue for upstream), and each write's own
+    // local read-back must render — while upstream is still failing.
+    const hits = upstream.length;
+    const support = await call(app.base, "/bff/support/requests", {
+      method: "POST",
+      cookie,
+      body: { category: "question", topic: "synthetic resilience probe", message: "synthetic" }
+    });
+    assert.equal(support.status, 201);
+    const ticket = await readJson(support);
+    const member = await call(app.base, `/bff/support/requests/${ticket.id}`, { cookie });
+    assert.equal(member.status, 200);
+    const kycPost = await call(app.base, "/bff/kyc/applications", { method: "POST", cookie, body: {} });
+    assert.ok([200, 202].includes(kycPost.status));
+    const screening = await call(app.base, "/bff/address-screening", { method: "POST", cookie: verifiedCookie, body: screeningBody });
+    assert.ok([200, 202].includes(screening.status));
+    assert.equal(upstream.length, hits, "a local write consulted upstream");
   });
 
   it("fails closed on error statuses, redirects and malformed bodies without leaking them", async () => {
@@ -1886,7 +2396,9 @@ describe("Mini App BFF with a failing customer-api", () => {
       "subject_mismatch",
       "commands_enabled",
       "connection_reset",
-      "invalid_utf8"
+      "invalid_utf8",
+      "rate_limited",
+      "validation_failed"
     ];
     for (const name of malformed) {
       mode = name;
@@ -1901,14 +2413,19 @@ describe("Mini App BFF with a failing customer-api", () => {
       await exchangeOrdersFailsClosed(name);
       await tradesFailsClosed(name);
       await marketsFailsClosed(name);
+      await marketsMemberFailsClosed(name);
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await checkDetailFailsClosed(name);
       await screeningsFailsClosed(name);
       await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
       await operationsFailsClosed(name);
       await notificationsFailClosed(name);
+      await notificationsReadFailsClosed(name);
+      await previewsFailClosed(name);
+      await localSurfacesStayLocal(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
       await sessionsFailsClosed(`${name} verified`, verifiedCookie);
@@ -1935,11 +2452,15 @@ describe("Mini App BFF with a failing customer-api", () => {
       await paymentsFailsClosed(name);
       await cardsFailsClosed(name);
       await checksFailsClosed(name);
+      await checkDetailFailsClosed(name);
+      await marketsMemberFailsClosed(name);
       await screeningsFailsClosed(name);
       await screeningDetailFailsClosed(name);
       await activityFailsClosed(name);
       await operationsFailsClosed(name);
       await notificationsFailClosed(name);
+      await notificationsReadFailsClosed(name);
+      await previewsFailClosed(name);
       await kycFailsClosed(`${name} verified`, verifiedCookie);
       await kycFailsClosed(`${name} gated`, cookie);
       await sessionsFailsClosed(`${name} verified`, verifiedCookie);
@@ -1953,10 +2474,16 @@ describe("Mini App BFF with a failing customer-api", () => {
 
   it("recovers once upstream answers correctly again", async () => {
     mode = "valid";
+    // "Live again" means upstream-served values and fresh upstream hits —
+    // a BFF that recovers into permanently cached degraded data goes red on
+    // both pins, not just on "200 again".
+    const hits = upstream.length;
     const profile = await getJson(app, "/bff/profile", cookie);
     assert.equal(profile.apiAccess.status, "connected");
     assert.equal(profile.displayName, "Customer ab12cd34");
-    assert.equal((await getJson(app, "/bff/wallet", verifiedCookie)).kyc, "verified");
+    const recoveredWallet = await getJson(app, "/bff/wallet", verifiedCookie);
+    assert.equal(recoveredWallet.kyc, "verified");
+    assert.equal(recoveredWallet.depositAddresses[0].id, "dpa_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/withdrawals", verifiedCookie)).withdrawals[0].id, "wdr_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/quotes", verifiedCookie)).quotes[0].id, "qte_0123456789abcdef01234567");
@@ -1970,32 +2497,138 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/sessions", cookie)).sessions[0].handle, "sess_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/account", cookie)).id, "usr_0123456789abcdef01234567");
+    // Member reads are live again too — an id only the real upstream serves.
+    assert.equal((await getJson(app, "/bff/operations/ope_0123456789abcdef01234567", verifiedCookie)).id, "ope_0123456789abcdef01234567");
+    assert.equal((await getJson(app, "/bff/markets/USDT%2FRUB", verifiedCookie)).instrument, "USDT/RUB");
+    assert.equal((await getJson(app, "/bff/checks/chk_0123456789abcdef01234567", verifiedCookie)).reference, "chk_0123456789abcdef01234567");
+    assert.ok(upstream.length > hits, "recovery served cached data — upstream was never called");
+  });
+
+  it("evicts every other session of the subject on revoke-others", async () => {
+    // State-divergence pin: dev sessions share one subject across kyc levels,
+    // so revoke-others must evict every sibling — including the shared gated
+    // and verified cookies. Runs last: nothing else in the suite may depend
+    // on those cookies afterwards.
+    const evictor = await devLogin(app, "verified");
+    const victim = await devLogin(app, "kyc-gated");
+    const response = await call(app.base, "/bff/sessions/revoke-others", { method: "POST", cookie: evictor, body: {} });
+    assert.equal(response.status, 200);
+    for (const stale of [victim, cookie, verifiedCookie]) {
+      const session = await call(app.base, "/bff/session", { cookie: stale });
+      assert.equal(session.status, 401);
+      assert.deepEqual(await readJson(session), { error: "unauthenticated" });
+    }
+    // The evictor itself stays live — the current session is never revoked.
+    assert.equal((await getJson(app, "/bff/session", evictor)).kyc, "verified");
   });
 });
 
 describe("Mini App BFF with an unreachable customer-api", () => {
   const key = randomBytes(32).toString("hex");
 
-  async function assertUnavailable(app, cookie, label) {
-    // The profile and support surfaces consult upstream for gated sessions
-    // too, so an unreachable customer-api fails them closed outright.
-    const response = await call(app.base, "/bff/profile", { cookie });
-    assert.equal(response.status, 503, label);
-    assert.deepEqual(await readJson(response), { error: "profile_unavailable" }, label);
-    const support = await call(app.base, "/bff/support/requests", { cookie });
-    assert.equal(support.status, 503, label);
-    assert.deepEqual(await readJson(support), { error: "support_unavailable" }, label);
-    // The sessions surface is also never gated upstream, so an unreachable
-    // customer-api fails it closed outright for either session level.
-    const sessions = await call(app.base, "/bff/sessions", { cookie });
-    assert.equal(sessions.status, 503, label);
-    assert.deepEqual(await readJson(sessions), { error: "sessions_unavailable" }, label);
-    // The account surface is also never gated upstream, so an unreachable
-    // customer-api fails it closed outright for either session level.
-    const account = await call(app.base, "/bff/account", { cookie });
-    assert.equal(account.status, 503, label);
-    assert.deepEqual(await readJson(account), { error: "account_unavailable" }, label);
-    await assertGated(app, cookie, label);
+  async function assertUnavailable(app, label) {
+    const gatedCookie = await devLogin(app, "kyc-gated");
+    const verifiedCookie = await devLogin(app, "verified");
+    // The never-denied surfaces consult upstream for either session level —
+    // an unreachable customer-api fails them closed outright for both.
+    for (const sessionCookie of [gatedCookie, verifiedCookie]) {
+      for (const [path, error] of [
+        ["/bff/profile", "profile_unavailable"],
+        ["/bff/support/requests", "support_unavailable"],
+        ["/bff/sessions", "sessions_unavailable"],
+        ["/bff/account", "account_unavailable"],
+        ["/bff/kyc/status", "kyc_unavailable"]
+      ]) {
+        const response = await call(app.base, path, { cookie: sessionCookie });
+        assert.equal(response.status, 503, `${label} ${path}`);
+        assert.deepEqual(await readJson(response), { error }, `${label} ${path}`);
+      }
+    }
+    // The verified session's KYC-gated surfaces fail closed too — a BFF that
+    // treats "connection refused" as "denied" would answer these in place
+    // with the gated fixture, and "not configured" with the local view.
+    for (const [path, error] of [
+      ["/bff/wallet", "wallet_unavailable"],
+      ["/bff/deposits", "deposits_unavailable"],
+      ["/bff/withdrawals", "withdrawals_unavailable"],
+      ["/bff/quotes", "quotes_unavailable"],
+      ["/bff/exchange-orders", "exchange_orders_unavailable"],
+      ["/bff/trades", "trades_unavailable"],
+      ["/bff/markets", "markets_unavailable"],
+      ["/bff/payments", "payments_unavailable"],
+      ["/bff/cards", "cards_unavailable"],
+      ["/bff/checks", "checks_unavailable"],
+      ["/bff/address-screening", "screening_unavailable"],
+      ["/bff/activity", "activity_unavailable"],
+      ["/bff/operations", "operations_unavailable"],
+      ["/bff/notifications", "notifications_unavailable"]
+    ]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, `${label} verified ${path}`);
+      assert.deepEqual(await readJson(response), { error }, `${label} verified ${path}`);
+    }
+    // The verified member reads fail closed with the sibling shape — never a
+    // fabricated fixture row and never the local not-found.
+    for (const [path, error] of [
+      ["/bff/operations/ope_0123456789abcdef01234567", "operations_unavailable"],
+      ["/bff/markets/USDT%2FRUB", "markets_unavailable"],
+      ["/bff/checks/chk_0123456789abcdef01234567", "checks_unavailable"],
+      [`/bff/address-screening/scr_${"0".repeat(32)}`, "screening_unavailable"]
+    ]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, `${label} verified ${path}`);
+      assert.deepEqual(await readJson(response), { error }, `${label} verified ${path}`);
+    }
+    // Upstream-coupled POSTs and verified previews fail closed too: the
+    // unread count is reported from the contract feed and affordability from
+    // the served balances — an outage must not answer either locally.
+    const ntf = await call(app.base, "/bff/notifications/read", { method: "POST", cookie: verifiedCookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(ntf.status, 503, label);
+    assert.deepEqual(await readJson(ntf), { error: "notifications_unavailable" }, label);
+    const quotePreview = await call(app.base, quotePath, { cookie: verifiedCookie });
+    assert.equal(quotePreview.status, 503, label);
+    assert.deepEqual(await readJson(quotePreview), { error: "quote_unavailable" }, label);
+    const checkPreview = await call(app.base, "/bff/checks/preview?asset=USDT&amount=10", { cookie: verifiedCookie });
+    assert.equal(checkPreview.status, 503, label);
+    assert.deepEqual(await readJson(checkPreview), { error: "checks_unavailable" }, label);
+    // Local surfaces keep their exact contract during the outage: the dev
+    // login and the session store run inside the BFF, the provider
+    // simulators run inside the BFF, and the local-only POSTs must not
+    // silently queue or fail on upstream state. assertGated covers the
+    // gated local reads.
+    const health = await call(app.base, "/bff/health");
+    assert.equal(health.status, 200, label);
+    assert.equal((await readJson(health)).mode, "dev-synthetic", label);
+    assert.equal((await getJson(app, "/bff/session", gatedCookie)).kyc, "kyc-gated", label);
+    assert.equal((await getJson(app, "/bff/session", verifiedCookie)).kyc, "verified", label);
+    const supportPost = await call(app.base, "/bff/support/requests", {
+      method: "POST",
+      cookie: gatedCookie,
+      body: { category: "question", topic: "synthetic resilience probe", message: "synthetic" }
+    });
+    assert.equal(supportPost.status, 201, label);
+    const kycPost = await call(app.base, "/bff/kyc/applications", { method: "POST", cookie: gatedCookie, body: {} });
+    assert.ok([200, 202].includes(kycPost.status), label);
+    const screeningPost = await call(app.base, "/bff/address-screening", { method: "POST", cookie: verifiedCookie, body: screeningBody });
+    assert.ok([200, 202].includes(screeningPost.status), label);
+    const screeningView = await readJson(screeningPost);
+    // The member read still fails closed: "unavailable" never falls back to
+    // the local store (only denied/missing do) — even a record the local
+    // submit just created is not served on its local id alone.
+    const screeningMember = await call(app.base, `/bff/address-screening/${screeningView.id}`, { cookie: verifiedCookie });
+    assert.equal(screeningMember.status, 503, label);
+    assert.deepEqual(await readJson(screeningMember), { error: "screening_unavailable" }, label);
+    const ntfLocal = await call(app.base, "/bff/notifications/read", { method: "POST", cookie: gatedCookie, body: { ids: "ntf_0123456789abcdef01234567" } });
+    assert.equal(ntfLocal.status, 200, label);
+    const gatedQuote = await call(app.base, quotePath, { cookie: gatedCookie });
+    assert.equal(gatedQuote.status, 200, label);
+    const gatedCheckPreview = await call(app.base, "/bff/checks/preview?asset=USDT&amount=10", { cookie: gatedCookie });
+    assert.equal(gatedCheckPreview.status, 200, label);
+    await assertGated(app, gatedCookie, label);
+    // Sessions share one subject across kyc levels, so this evicts the gated
+    // session too — it runs last, after every gated pin above.
+    const revoke = await call(app.base, "/bff/sessions/revoke-others", { method: "POST", cookie: verifiedCookie, body: {} });
+    assert.equal(revoke.status, 200, label);
   }
 
   it("fails closed when customer-api was never started", async () => {
@@ -2005,7 +2638,7 @@ describe("Mini App BFF with an unreachable customer-api", () => {
       MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
     });
     try {
-      await assertUnavailable(app, await devLogin(app, "kyc-gated"), "never started");
+      await assertUnavailable(app, "never started");
     } finally {
       await closeServer(app.server);
     }
@@ -2019,9 +2652,11 @@ describe("Mini App BFF with an unreachable customer-api", () => {
       MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: key
     });
     try {
-      await assertUnavailable(app, await devLogin(app, "kyc-gated"), "refusing");
+      await assertUnavailable(app, "refusing");
     } finally {
       await closeServer(app.server);
+      // closeAllConnections only covers tracked sockets; the refusing
+      // server's destroyed sockets need the explicit close.
       await new Promise((resolve) => refusing.close(resolve));
     }
   });
@@ -2047,8 +2682,11 @@ describe("Mini App BFF with an unreachable customer-api", () => {
       const exited = once(customerApi.child, "exit");
       customerApi.child.kill("SIGKILL");
       assert.deepEqual(await exited, [null, "SIGKILL"]);
-      await assertUnavailable(app, cookie, "killed");
+      await assertUnavailable(app, "killed");
     } finally {
+      // The kill is idempotent: a failing pin before the SIGKILL must still
+      // reap the child — a leaked listener hangs the whole runner.
+      customerApi.child.kill("SIGKILL");
       await closeServer(app.server);
     }
   });
@@ -2265,9 +2903,34 @@ describe("backoffice BFF with an unreachable PostgreSQL audit store", () => {
         "/bff/api/audit",
         "/bff/api/audit/export",
         "/bff/api/reports/kyc-queue-daily",
-        "/bff/api/reports/kyc-queue-daily/export"
+        "/bff/api/reports/kyc-queue-daily/export",
+        // Every read route that appends an audit event fails closed too —
+        // the check/support/withdrawal detail reads and the subject timeline
+        // append their own *.viewed events before signing.
+        "/bff/api/checks/CHK-771312",
+        "/bff/api/support/SUP-384120",
+        "/bff/api/withdrawals/WDR-991804",
+        "/bff/api/subjects/sim-alina-mironova/timeline"
       ]) {
         await assertAuditUnavailable(base, path, cookie);
+      }
+      // The outage closes only the audited routes: collection reads that
+      // never touch the audit store keep serving — the degrade is scoped,
+      // not a whole-BFF shutdown.
+      for (const path of [
+        "/bff/api/checks",
+        "/bff/api/support",
+        "/bff/api/withdrawals",
+        "/bff/api/reports",
+        "/bff/api/kyc",
+        "/bff/api/aml",
+        "/bff/api/investigations",
+        "/bff/api/fraud-alerts",
+        "/bff/api/approvals"
+      ]) {
+        const listing = await call(base, path, { cookie });
+        assert.equal(listing.status, 200, path);
+        await listing.body?.cancel();
       }
     } finally {
       await closeServer(server);
@@ -2295,6 +2958,30 @@ describe("backoffice BFF with an unreachable PostgreSQL audit store", () => {
       for (const report of reports) {
         await assertAuditUnavailable(base, `/bff/api/reports/${report.id}`, cookie);
         await assertAuditUnavailable(base, `/bff/api/reports/${report.id}/export`, cookie);
+      }
+      // Every other read route that appends an audit event fails closed too:
+      // a silent append would serve the signed view without the record.
+      for (const path of [
+        "/bff/api/checks/CHK-771312",
+        "/bff/api/support/SUP-384120",
+        "/bff/api/withdrawals/WDR-991804",
+        "/bff/api/subjects/sim-alina-mironova/timeline"
+      ]) {
+        await assertAuditUnavailable(base, path, cookie);
+      }
+      // Append failure closes only appending routes: snapshot-only reads —
+      // the collection lists and the audit views themselves — stay live.
+      for (const path of [
+        "/bff/api/checks",
+        "/bff/api/support",
+        "/bff/api/withdrawals",
+        "/bff/api/audit",
+        "/bff/api/audit/export",
+        "/bff/api/kyc"
+      ]) {
+        const live = await call(base, path, { cookie });
+        assert.equal(live.status, 200, path);
+        await live.body?.cancel();
       }
       assert.equal((await store.snapshot()).status.length, before);
     } finally {

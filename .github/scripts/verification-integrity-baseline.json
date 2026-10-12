@@ -1240,8 +1240,8 @@
       "minCases": 0
     },
     "packages/e2e-dev/tests/resilience.test.mjs": {
-      "minLines": 2063,
-      "minCases": 21
+      "minLines": 2628,
+      "minCases": 24
     },
     "packages/e2e-dev/tests/stack.mjs": {
       "minLines": 144,
