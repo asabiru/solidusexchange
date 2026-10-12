@@ -260,7 +260,7 @@ business-service recovery.
 Production remains prohibited until:
 
 - every role has a named primary and backup;
-- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017 and D-018 dependencies applicable to the scope are approved;
+- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017, D-018 and D-019 dependencies applicable to the scope are approved;
 - notification jurisdictions, contacts and decision authority are documented by Legal/MLRO;
 - provider, bank, cloud, identity, signer and data-processor escalation paths are verified;
 - evidence storage, access audit, legal hold and retention are approved;

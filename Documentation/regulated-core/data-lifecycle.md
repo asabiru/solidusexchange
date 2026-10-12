@@ -300,7 +300,7 @@ Production collection, migration and automated disposal remain prohibited until:
 - backup, restore, replica, index, cache, queue, export and processor behavior is defined;
 - segregation of duties, step-up, break-glass and immutable lifecycle evidence are implemented;
 - disposal methods and independent verification are tested with representative synthetic data;
-- D-001 through D-018 dependencies applicable to the scope are approved;
+- D-001 through D-019 dependencies applicable to the scope are approved;
 - critical/high privacy, security, financial, custody and recovery findings are resolved.
 
 Approval of this baseline confirms only the proposed lifecycle control model. It does not authorize production data processing, select retention periods, approve processors or locations, migrate legacy/customer data, erase regulated evidence or launch the platform.

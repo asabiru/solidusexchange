@@ -419,7 +419,7 @@ customer data into tickets, logs or analytics.
 
 Production customer journeys remain blocked until:
 
-- D-001, D-002 and every affected D-004…D-014 scope decision is approved;
+- D-001, D-002, D-019 and every affected D-004…D-014 scope decision is approved;
 - customer types, jurisdictions, assets, rails, limits and exclusions are approved;
 - disclosures, consent, fees, quotes, status semantics and receipts are approved;
 - restriction, notice, review and appeal policy is approved;

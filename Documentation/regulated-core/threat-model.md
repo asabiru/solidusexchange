@@ -156,7 +156,7 @@ Alerts are evidence, not authorization. Automated response must not move money, 
 
 Production execution remains prohibited while any of the following is missing:
 
-- written decisions and evidence for D-001 through the applicable D-018 dependencies;
+- written decisions and evidence for D-001 through the applicable D-019 dependencies;
 - approved legal scope, product/risk matrix and data-processing locations;
 - Finance/CTO/Security approval of the financial model and ledger pack;
 - approved production identity, MFA, staff lifecycle and network-access design;

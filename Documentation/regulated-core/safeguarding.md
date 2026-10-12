@@ -409,7 +409,7 @@ PII or unrestricted provider payloads.
 
 Production safeguarding remains blocked until:
 
-- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017 and D-018 are approved where applicable;
+- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017, D-018 and D-019 are approved where applicable;
 - legal model, customer entitlement, insolvency and disclosure treatment are approved;
 - bank/payment/card/provider/custody contracts and evidence exports are approved;
 - chart of accounts, posting rules, opening balances and reconciliation policy are Finance-approved;

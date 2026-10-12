@@ -6,7 +6,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 
 | Evidence | Owner | Required content | Current state |
 |---|---|---|---|
-| Decision register | CTO / Legal / MLRO | D-001…D-018 decisions or safe assumptions | Drafted; approvals pending |
+| Decision register | CTO / Legal / MLRO | D-001…D-019 decisions or safe assumptions | Drafted; approvals pending |
 | Architecture ADR | CTO / Security | Context map, trust zones, prohibited paths | Proposed |
 | Legacy inventory | Architecture / Finance / Security | Routes, data, providers, jobs, secrets surfaces | Static repository inventory complete |
 | Migration boundary | Financial Core / Finance / Compliance | Mapping, opening journals, reconciliation, rollback | Proposed |
@@ -19,7 +19,7 @@ Phase 0 is complete only when Legal, MLRO and CTO approve the executable V1 scop
 | Audit evidence baseline | Security / Compliance / SRE | Event semantics, actor/policy binding, append-only integrity, access/export and retention | Proposed; identity, retention and key-custody approvals pending |
 | Data lifecycle baseline | Legal / Privacy / MLRO / Finance / Security | Retention triggers, holds, correction, disposal, processors, copies and recovery behavior | Proposed; schedule, location, processor and legal-basis approvals pending |
 | Access-control baseline | Security / CTO / domain owners | Identity lifecycle, authentication, authorization, segregation of duties, privileged access and review | Proposed; D-016, production IdP/MFA, JML and privileged-access approvals pending |
-| Third-party risk baseline | Procurement / Security / Legal / domain owners | Criticality, diligence, contracts, onboarding, monitoring, incidents, concentration and exit | Proposed; provider selections, contracts and applicable D-001…D-018 approvals pending |
+| Third-party risk baseline | Procurement / Security / Legal / domain owners | Criticality, diligence, contracts, onboarding, monitoring, incidents, concentration and exit | Proposed; provider selections, contracts and applicable D-001…D-019 approvals pending |
 | Operational-resilience baseline | SRE / Security / business-service owners | Impact tolerances, degraded modes, capacity, dependency continuity, RPO/RTO, recovery and exercises | Proposed; D-008/D-015/D-017/D-018, service objectives and exercise approvals pending |
 | AI-governance baseline | MLRO / Security / Legal / domain owners | Capability inventory, human control, data/tool scope, evaluation, release, monitoring and withdrawal | Proposed; D-012 capability tests, provider/data and domain approvals pending |
 | Customer-protection baseline | Product / Legal / Compliance / Customer Operations | Disclosures, quotes, statuses, restrictions, support, complaints, remediation and customer-harm monitoring | Proposed; product scope, customer terms, complaint/remediation policy and domain approvals pending |
