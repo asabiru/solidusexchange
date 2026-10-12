@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { build, createServer as createViteServer, preview, resolveConfig } from "vite";
 import type { CustomerApiAccess } from "../shared/api.js";
 import { loadServerConfig, type ServerConfig } from "./config.js";
+import type { CustomerApiClient } from "./customer-api-client.js";
 import { signInitData } from "./init-data.js";
 import {
   apiCspDirectives,
@@ -232,11 +233,11 @@ describe("Mini App BFF security headers on every route", () => {
   let unconfigured: Running;
   let customerApiFails = false;
 
-  async function start(serverConfig: ServerConfig): Promise<Running> {
+  async function start(serverConfig: ServerConfig, customerApi?: CustomerApiClient): Promise<Running> {
     const access: CustomerApiAccess = { status: "not-configured" };
     const server = createMiniappServer(serverConfig, {
       clock: () => now,
-      customerApi: {
+      customerApi: customerApi ?? {
         configured: false,
         access: async () => {
           if (customerApiFails) throw new Error("synthetic customer-api failure");
@@ -249,6 +250,7 @@ describe("Mini App BFF security headers on every route", () => {
     exchangeOrders: async () => ({ status: "not-configured" }),
     trades: async () => ({ status: "not-configured" }),
     markets: async () => ({ status: "not-configured" }),
+    marketDepth: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),
@@ -270,6 +272,52 @@ describe("Mini App BFF security headers on every route", () => {
     return {
       port: (server.address() as AddressInfo).port,
       close: () => new Promise<void>((resolve) => server.close(() => resolve()))
+    };
+  }
+
+  function depthOnlyClient(): CustomerApiClient {
+    return {
+      configured: true,
+      access: async () => ({ status: "unavailable" }),
+      wallets: async () => ({ status: "unavailable" }),
+      deposits: async () => ({ status: "not-configured" }),
+      withdrawals: async () => ({ status: "not-configured" }),
+      quotes: async () => ({ status: "not-configured" }),
+      exchangeOrders: async () => ({ status: "not-configured" }),
+      trades: async () => ({ status: "not-configured" }),
+      markets: async () => ({ status: "not-configured" }),
+      marketDepth: async () => ({
+        status: "ok",
+        depth: {
+          instrument: "USDT/RUB",
+          base_asset: "USDT",
+          quote_asset: "RUB",
+          bids: [{ price: "89.99000000", quantity: "25.000000", order_count: 1 }],
+          asks: [{ price: "90.01000000", quantity: "18.000000", order_count: 1 }],
+          last_trade: null,
+          depth_levels: 1,
+          base_scale: 6,
+          quote_scale: 2,
+          price_scale: 8,
+          as_of: "2026-10-02T14:10:00.000Z",
+          posting: "none"
+        }
+      }),
+      payments: async () => ({ status: "not-configured" }),
+      cards: async () => ({ status: "not-configured" }),
+      checks: async () => ({ status: "not-configured" }),
+      depositAddresses: async () => ({ status: "not-configured" }),
+      addressScreenings: async () => ({ status: "not-configured" }),
+      addressScreening: async () => ({ status: "not-configured" }),
+      notifications: async () => ({ status: "not-configured" }),
+      kyc: async () => ({ status: "not-configured" }),
+      profile: async () => ({ status: "not-configured" }),
+      support: async () => ({ status: "not-configured" }),
+      authSessions: async () => ({ status: "not-configured" }),
+      activity: async () => ({ status: "not-configured" }),
+      operations: async () => ({ status: "not-configured" }),
+      operation: async () => ({ status: "not-configured" }),
+      users: async () => ({ status: "not-configured" })
     };
   }
 
@@ -318,6 +366,18 @@ describe("Mini App BFF security headers on every route", () => {
       "GET /bff/exchange-orders": () => get("/bff/exchange-orders"),
       "GET /bff/trades": () => get("/bff/trades"),
       "GET /bff/markets": () => get("/bff/markets"),
+      "GET /bff/markets/:instrument": async () => {
+        // Depth is never fabricated locally: the 200 path only exists
+        // behind a configured customer-api, so the success case runs on
+        // its own stubbed BFF.
+        const upstream = await start(loadServerConfig({ MINIAPP_ALLOW_DEV_LOGIN: "true" }), depthOnlyClient());
+        try {
+          const login = await postJson(upstream.port, "/bff/auth/dev-session", { kyc: "verified" });
+          return await send(upstream.port, "GET", "/bff/markets/USDT%2FRUB", { headers: { cookie: cookieOf(login) } });
+        } finally {
+          await upstream.close();
+        }
+      },
       "GET /bff/payments": () => get("/bff/payments"),
       "GET /bff/cards": () => get("/bff/cards"),
       "GET /bff/operations": () => get("/bff/operations"),

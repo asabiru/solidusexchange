@@ -2153,6 +2153,181 @@ describe("customer API client", () => {
     assert.deepEqual(await unconfigured.users("tg-0123456789abcdef", Date.now()), { status: "not-configured" });
   });
 
+  it("reads market depth through the percent-encoded member path with the canonical headers", async () => {
+    const key = randomBytes(32).toString("hex");
+    const subject = customerApiSubject("tg-0123456789abcdef");
+    const view = {
+      mode: "test",
+      instrument: "USDT/RUB",
+      base_asset: "USDT",
+      quote_asset: "RUB",
+      bids: [
+        { price: "89.99000000", quantity: "25.000000", order_count: 2 },
+        { price: "89.97000000", quantity: "40.000000", order_count: 1 }
+      ],
+      asks: [{ price: "90.01000000", quantity: "18.000000", order_count: 1 }],
+      last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:05:00.000Z" },
+      depth_levels: 2,
+      as_of: "2026-10-02T14:10:00.000Z",
+      posting: "none"
+    };
+    let requestedPath = "";
+    await withFakeApi(
+      (path) => {
+        requestedPath = path;
+        return view;
+      },
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.marketDepth("tg-0123456789abcdef", "USDT/RUB", Date.now());
+        assert.equal(result.status, "ok");
+        if (result.status !== "ok") return;
+        assert.equal(requestedPath, "/api/v1/customer/markets/USDT%2FRUB");
+        assert.deepEqual(result.depth, {
+          ...view,
+          base_scale: 6,
+          quote_scale: 2,
+          price_scale: 8
+        });
+        assert.equal(seen.length, 1);
+        const headers = seen[0];
+        assert.equal(headers["x-device-id"], undefined);
+        assert.equal(headers["x-platform"], customerApiPlatform);
+        assert.match(String(headers.authorization), new RegExp(`^Bearer scdev1\\.${subject}\\.[0-9]{10}\\.[0-9a-f]{64}$`));
+      }
+    );
+  });
+
+  it("reports a malformed instrument as not-found without an upstream call", async () => {
+    const key = randomBytes(32).toString("hex");
+    let requests = 0;
+    await withFakeApi(
+      () => {
+        requests += 1;
+        return {};
+      },
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const instrument of ["usdt/rub", "USDT", "BTC/EUR/EXTRA", "", "USDT/RUBX1234567890", "USDT%2FRUB"]) {
+          assert.deepEqual(
+            await client.marketDepth("tg-0123456789abcdef", instrument, Date.now()),
+            { status: "not-found" },
+            instrument
+          );
+        }
+        assert.equal(requests, 0);
+      }
+    );
+  });
+
+  it("maps upstream market-depth 404 to not-found, 403 to denied and other failures to unavailable", async () => {
+    const key = randomBytes(32).toString("hex");
+    const statuses: [number, "not-found" | "denied" | "unavailable"][] = [
+      [404, "not-found"],
+      [403, "denied"],
+      [401, "unavailable"],
+      [429, "unavailable"],
+      [500, "unavailable"]
+    ];
+    for (const [status, expected] of statuses) {
+      const server = createServer((_request, response) => {
+        response.setHeader("content-type", "application/json");
+        response.statusCode = status;
+        response.end(JSON.stringify({ code: "SYNTHETIC_UPSTREAM_MARKER" }));
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const client = createCustomerApiClient({
+          baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
+          devTokenKey: key
+        });
+        assert.deepEqual(
+          await client.marketDepth("tg-0123456789abcdef", "USDT/RUB", Date.now()),
+          { status: expected },
+          String(status)
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+  });
+
+  it("fails closed on drifted market-depth bodies without leaking upstream fields", async () => {
+    const key = randomBytes(32).toString("hex");
+    const level = { price: "89.99000000", quantity: "25.000000", order_count: 1 };
+    const base = {
+      mode: "test",
+      instrument: "USDT/RUB",
+      base_asset: "USDT",
+      quote_asset: "RUB",
+      bids: [level],
+      asks: [{ price: "90.01000000", quantity: "18.000000", order_count: 1 }],
+      last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:05:00.000Z" },
+      depth_levels: 1,
+      as_of: "2026-10-02T14:10:00.000Z",
+      posting: "none"
+    };
+    const sixteen = Array.from({ length: 16 }, (_unused, index) => ({
+      price: `${(89 + index / 100).toFixed(8)}`,
+      quantity: "10.000000",
+      order_count: 1
+    }));
+    const seventeen = [...sixteen, { price: "88.99000000", quantity: "10.000000", order_count: 1 }];
+    for (const body of [
+      { ...base, extra: true },
+      { ...base, mode: "live" },
+      { ...base, posting: "commit" },
+      { ...base, instrument: "BTC/EUR" },
+      { ...base, instrument: "TON/USDT" },
+      { ...base, base_asset: "TON" },
+      { ...base, bids: [{ ...level, price: "91.00000000" }] },
+      { ...base, bids: [{ ...level, price: "90.01000000" }] },
+      { ...base, bids: [{ ...level, quantity: "25.0000000" }] },
+      { ...base, bids: [{ ...level, order_count: 0 }] },
+      { ...base, bids: [null] },
+      { ...base, bids: seventeen, depth_levels: 17 },
+      {
+        ...base,
+        bids: [
+          { price: "89.99000000", quantity: "25.000000", order_count: 1 },
+          { price: "89.99000000", quantity: "10.000000", order_count: 1 }
+        ],
+        depth_levels: 2
+      },
+      {
+        ...base,
+        bids: [
+          { price: "89.98000000", quantity: "25.000000", order_count: 1 },
+          { price: "89.99000000", quantity: "10.000000", order_count: 1 }
+        ],
+        depth_levels: 2
+      },
+      { ...base, depth_levels: 0 },
+      { ...base, depth_levels: 2 },
+      { ...base, depth_levels: "1" },
+      {
+        ...base,
+        last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-03T00:00:00.000Z" }
+      },
+      { ...base, last_trade: { price: "90.00000000", quantity: "10.000000" } },
+      { ...base, last_trade: { ...base.last_trade, quantity: "10.0000000" } },
+      { ...base, as_of: "not-a-date" },
+      { ...base, instrument: "TON/RUB", base_asset: "USDT" }
+    ]) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.marketDepth("tg-0123456789abcdef", "USDT/RUB", Date.now()),
+            { status: "unavailable" },
+            JSON.stringify(body)
+          );
+        }
+      );
+    }
+  });
+
   it("is not configured by default and only accepts a loopback origin with a dev key", async () => {
     const client = createCustomerApiClient({});
     assert.equal(client.configured, false);

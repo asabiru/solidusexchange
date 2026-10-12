@@ -17,6 +17,7 @@ import type { ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { ChecksSheet } from "./ChecksSheet";
+import { MarketsSheet } from "./MarketsSheet";
 import { assetNameKey, assetNetworkKey } from "./format";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
@@ -82,6 +83,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <ChecksSheet close={close} />;
     case "check":
       return <ChecksSheet close={close} initial={sheet.reference} />;
+    case "markets":
+      return <MarketsSheet close={close} />;
     case "notifications":
       return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":

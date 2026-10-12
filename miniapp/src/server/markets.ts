@@ -1,5 +1,6 @@
 import type {
   KycStatus,
+  MarketDepthView,
   MarketView,
   MarketsView,
   QuotePair
@@ -77,6 +78,56 @@ export function contractMarketsView(
       asOf: Date.parse(market.as_of),
       posting: "none"
     }))
+  };
+}
+
+/** The customer-api market-depth contract entry shape (snake_case). */
+export interface ContractMarketDepth {
+  instrument: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  bids: readonly ContractMarketLevel[];
+  asks: readonly ContractMarketLevel[];
+  last_trade: ContractMarketLastTrade | null;
+  depth_levels: number;
+  base_scale: number;
+  quote_scale: number;
+  price_scale: number;
+  as_of: string;
+  posting: "none";
+}
+
+function adaptDepthLevel(level: ContractMarketLevel): MarketDepthView["bids"][number] {
+  return { price: level.price, quantity: level.quantity, orderCount: level.order_count };
+}
+
+/**
+ * Adapts a validated customer-api market-depth view into the app's depth
+ * view: the asset fields become camelCase and the ISO timestamps parse to
+ * milliseconds, exactly like contractMarketsView does for the collection.
+ */
+export function contractMarketDepthView(depth: ContractMarketDepth): MarketDepthView {
+  return {
+    mode: "test",
+    instrument: depth.instrument,
+    base: depth.base_asset,
+    quote: depth.quote_asset,
+    bids: depth.bids.map(adaptDepthLevel),
+    asks: depth.asks.map(adaptDepthLevel),
+    lastTrade:
+      depth.last_trade === null
+        ? null
+        : {
+            price: depth.last_trade.price,
+            quantity: depth.last_trade.quantity,
+            executedAt: Date.parse(depth.last_trade.executed_at)
+          },
+    depthLevels: depth.depth_levels,
+    baseScale: depth.base_scale,
+    quoteScale: depth.quote_scale,
+    priceScale: depth.price_scale,
+    asOf: Date.parse(depth.as_of),
+    posting: "none"
   };
 }
 

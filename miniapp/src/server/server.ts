@@ -22,7 +22,12 @@ import { type ActivityLog, contractActivityView, createActivityLog, maxActivityP
 import { type CheckBook, CheckError, contractChecksView, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
 import { signInitData, verifyInitData } from "./init-data.js";
-import { type CustomerApiClient, createCustomerApiClient, customerApiSubject } from "./customer-api-client.js";
+import {
+  type CustomerApiClient,
+  createCustomerApiClient,
+  customerApiSubject,
+  marketInstrumentPathPattern
+} from "./customer-api-client.js";
 import { type QuoteProvider, createLocalQuoteProvider, createSimulatorQuoteProvider } from "./provider-quotes.js";
 import {
   type AddressScreeningService,
@@ -77,7 +82,7 @@ import {
 import { contractCardsView, cardsView } from "./cards.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
-import { contractMarketsView, marketsView } from "./markets.js";
+import { contractMarketDepthView, contractMarketsView, marketsView } from "./markets.js";
 import { contractTradesView, tradesView } from "./trades.js";
 import { contractOperationDetail, contractOperationsView } from "./operations.js";
 import { contractPaymentsView, paymentsView } from "./payments.js";
@@ -126,6 +131,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/exchange-orders" },
   { method: "GET", path: "/bff/trades" },
   { method: "GET", path: "/bff/markets" },
+  { method: "GET", path: "/bff/markets/:instrument" },
   { method: "GET", path: "/bff/payments" },
   { method: "GET", path: "/bff/cards" },
   { method: "GET", path: "/bff/checks" },
@@ -775,10 +781,12 @@ export function createMiniappServer(
       return;
     }
 
-    const knownGet = routeTable.some((route) => route.method === "GET" && (
-      route.path === path
-      || (route.path.endsWith("/:id") && path.startsWith(route.path.slice(0, -3)))
-    ));
+    const knownGet = routeTable.some((route) => {
+      if (route.method !== "GET" || route.path === path) return route.path === path;
+      const paramAt = route.path.indexOf("/:");
+      return paramAt >= 0 && route.path.slice(paramAt + 2).indexOf("/") === -1
+        && path.startsWith(route.path.slice(0, paramAt + 1));
+    });
     if (!knownGet) {
       json(response, 404, { error: "not_found" });
       return;
@@ -1275,6 +1283,47 @@ export function createMiniappServer(
       }
       if (upstream.status === "denied") {
         json(response, 200, marketsView("kyc-gated"));
+        return;
+      }
+      json(response, 503, { error: "markets_unavailable" });
+      return;
+    }
+    if (path.startsWith("/bff/markets/")) {
+      // The instrument travels percent-encoded inside one path segment
+      // ("USDT%2FRUB"), like the upstream contract. A bare slash splits
+      // extra segments and an undecodable sequence can never name a book —
+      // both report the member read's local not-found, matching how
+      // /bff/operations/:id maps an upstream 404. Depth is never
+      // fabricated locally: a gated session or the standalone
+      // (unconfigured) dev BFF answers the same 404 without consulting
+      // upstream, a refused read degrades to it in place, and only a
+      // verified session with a configured customer-api sees the ladder.
+      const segment = path.slice("/bff/markets/".length);
+      const missing = () => json(response, 404, { error: "not_found" });
+      let instrument: string | undefined;
+      if (!segment.includes("/")) {
+        try {
+          instrument = decodeURIComponent(segment);
+        } catch {
+          instrument = undefined;
+        }
+      }
+      if (
+        instrument === undefined
+        || !marketInstrumentPathPattern.test(instrument)
+        || session.kyc !== "verified"
+        || !customerApi.configured
+      ) {
+        missing();
+        return;
+      }
+      const upstream = await customerApi.marketDepth(session.subject, instrument, clock());
+      if (upstream.status === "ok") {
+        json(response, 200, contractMarketDepthView(upstream.depth));
+        return;
+      }
+      if (upstream.status === "denied" || upstream.status === "not-found") {
+        missing();
         return;
       }
       json(response, 503, { error: "markets_unavailable" });
