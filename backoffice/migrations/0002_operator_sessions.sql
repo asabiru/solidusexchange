@@ -236,6 +236,13 @@ CREATE TRIGGER reject_session_mutation_truncate
   FOR EACH STATEMENT
   EXECUTE FUNCTION backoffice_control.reject_session_mutation();
 
+-- ALWAYS mode keeps the guards firing for replica-apply connections
+-- (session_replication_role = 'replica'), matching the ledger tables.
+ALTER TABLE backoffice_control.operator_sessions
+  ENABLE ALWAYS TRIGGER reject_session_mutation;
+ALTER TABLE backoffice_control.operator_sessions
+  ENABLE ALWAYS TRIGGER reject_session_mutation_truncate;
+
 -- The canonical history row: version, then the file name, exactly once.
 INSERT INTO backoffice_control.schema_migrations (version, migration_name)
 VALUES (2, '0002_operator_sessions');

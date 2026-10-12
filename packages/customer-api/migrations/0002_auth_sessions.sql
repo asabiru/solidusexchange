@@ -59,6 +59,7 @@ CREATE INDEX auth_sessions_subject_idx
 CREATE OR REPLACE FUNCTION customer_api.reject_auth_session_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = pg_catalog
 AS $function$
 BEGIN
   IF TG_OP = 'TRUNCATE' THEN
@@ -101,6 +102,13 @@ CREATE TRIGGER reject_auth_session_mutation_truncate
   BEFORE TRUNCATE ON customer_api.auth_sessions
   FOR EACH STATEMENT
   EXECUTE FUNCTION customer_api.reject_auth_session_mutation();
+
+-- ALWAYS mode keeps the guards firing for replica-apply connections
+-- (session_replication_role = 'replica'), matching the ledger tables.
+ALTER TABLE customer_api.auth_sessions
+  ENABLE ALWAYS TRIGGER reject_auth_session_mutation;
+ALTER TABLE customer_api.auth_sessions
+  ENABLE ALWAYS TRIGGER reject_auth_session_mutation_truncate;
 
 -- The canonical history row: version, then the file name, exactly once.
 INSERT INTO customer_api.schema_migrations (version, migration_name)

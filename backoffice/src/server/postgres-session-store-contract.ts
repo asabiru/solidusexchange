@@ -297,3 +297,160 @@ test("initialize rejects when a session column drifted away", async (t) => {
     await admin.end();
   }
 });
+
+// Wave-62 additions: cross-instance and lifecycle-race probes. The shared
+// contract only exercises one store instance; these pin what two backends
+// sharing the table, or a close racing an initialize, must do.
+
+test("concurrent issues from separate store instances hold the subject bound", async (t) => {
+  requireDsn();
+  const stores = await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      const store = createPostgresSessionStore({ dsn });
+      await store.initialize();
+      return store;
+    })
+  );
+  t.after(() => {
+    void Promise.all(stores.map((store) => store.close().catch(() => undefined)));
+  });
+  const subject = freshSubject();
+  // Identical issued_at_ms on every record maximizes snapshot-tie
+  // pressure: every issue's keeper window looks the same.
+  await Promise.all(
+    Array.from({ length: 30 }, (_, index) =>
+      stores[index % stores.length].issueSession(
+        issueCommand({
+          subject,
+          issued_at_ms: 1_000,
+          last_used_at_ms: 1_000,
+          maxPerSubject: 2
+        })
+      )
+    )
+  );
+  const admin = await connectAdmin();
+  try {
+    const { rows } = await admin.query<{ live: number }>(
+      "SELECT count(*)::int AS live FROM backoffice_control.operator_sessions" +
+        " WHERE subject = $1 AND revoked_at_ms IS NULL",
+      [subject]
+    );
+    // Two instances racing on one subject used to ghost past the bound:
+    // each statement's snapshot saw the other's rows uncommitted. The
+    // per-subject advisory lock must cap the survivors at the bound.
+    assert.equal(rows[0].live, 2);
+  } finally {
+    await admin.end();
+  }
+});
+
+test("concurrent revokes from separate store instances hold the tombstone bound", async (t) => {
+  requireDsn();
+  const writer = createPostgresSessionStore({ dsn });
+  await writer.initialize();
+  const subject = freshSubject();
+  const issued = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      writer.issueSession(issueCommand({ subject, maxPerSubject: 8 }))
+    )
+  );
+  await writer.close();
+  const stores = await Promise.all(
+    Array.from({ length: 3 }, async () => {
+      const store = createPostgresSessionStore({ dsn });
+      await store.initialize();
+      return store;
+    })
+  );
+  t.after(() => {
+    void Promise.all(stores.map((store) => store.close().catch(() => undefined)));
+  });
+  await Promise.all(
+    issued.map((record, index) =>
+      stores[index % stores.length].revokeSession({
+        session_id: record.session_id,
+        now: 5_000 + index,
+        maxRevokedPerSubject: 2
+      })
+    )
+  );
+  const admin = await connectAdmin();
+  try {
+    const { rows } = await admin.query<{ tombstones: number }>(
+      "SELECT count(*)::int AS tombstones FROM backoffice_control.operator_sessions" +
+        " WHERE subject = $1 AND revoked_at_ms IS NOT NULL",
+      [subject]
+    );
+    // The bound keeps maxRevokedPerSubject + the record being revoked:
+    // at most 3 tombstones on a bound of 2.
+    assert.ok(
+      rows[0].tombstones <= 3,
+      `expected at most 3 tombstones, saw ${rows[0].tombstones}`
+    );
+  } finally {
+    await admin.end();
+  }
+});
+
+test("an initialize racing a close never resolves on a dead store", async (t) => {
+  requireDsn();
+  const store = createPostgresSessionStore({ dsn });
+  await store.initialize();
+  t.after(() => {
+    void store.close().catch(() => undefined);
+  });
+  // The race is deterministic: close() marks the store synchronously, so
+  // an initialize called alongside it either waits the teardown out and
+  // reopens, or fails while probing — never resolves with a dead pool.
+  const [initialized, closed] = await Promise.allSettled([
+    store.initialize(),
+    store.close()
+  ]);
+  assert.equal(closed.status, "fulfilled");
+  if (initialized.status === "rejected") {
+    assert.ok(initialized.reason instanceof SessionStoreUnavailableError);
+    await assert.rejects(
+      () => store.issueSession(issueCommand()),
+      SessionStoreUnavailableError
+    );
+    // A later sequential initialize reopens cleanly.
+    await store.initialize();
+  }
+  const record = await store.issueSession(issueCommand());
+  assert.equal(record.session_id.length, 29);
+});
+
+test("a close racing in-flight writes drains them before the pool ends", async (t) => {
+  requireDsn();
+  const store = createPostgresSessionStore({ dsn });
+  await store.initialize();
+  t.after(() => {
+    void store.close().catch(() => undefined);
+  });
+  const subject = freshSubject();
+  const issued = await store.issueSession(issueCommand({ subject }));
+  // Queue a burst, close alongside: every write the queue already
+  // accepted must settle before the pool ends; none may leak past it.
+  const pending = Array.from({ length: 6 }, () =>
+    store.issueSession(issueCommand({ subject })).then(
+      (record) => record.session_id,
+      (error: unknown) => error
+    )
+  );
+  await store.close();
+  const outcomes = await Promise.all(pending);
+  for (const outcome of outcomes) {
+    if (outcome instanceof Error) {
+      // A write enqueued but not yet started loses to the close — an
+      // unavailable rejection, never a torn record.
+      assert.ok(outcome instanceof SessionStoreUnavailableError);
+    }
+  }
+  await assert.rejects(
+    () => store.getSession({ session_id: issued.session_id, now: 1_000 }),
+    SessionStoreUnavailableError
+  );
+  // A second close joins the finished teardown instead of racing it.
+  await store.close();
+});

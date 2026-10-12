@@ -198,6 +198,55 @@ assert_change_rejected \
   "auth_sessions history is append-forward; truncation is blocked" \
   "TRUNCATE customer_api.auth_sessions;"
 
+# The same guards must hold for replica-apply connections: ENABLE ALWAYS
+# keeps the triggers firing when session_replication_role = replica.
+assert_change_rejected \
+  "auth_sessions session_id, subject and issued_at_ms are immutable" \
+  "SET session_replication_role = replica;
+   UPDATE customer_api.auth_sessions
+      SET subject = 'syn_cust_replmut'
+    WHERE session_id = 'sess_a1b2c3d4e5f6a7b8c9d0e1f2';"
+
+assert_change_rejected \
+  "auth_sessions revocation is terminal" \
+  "SET session_replication_role = replica;
+   UPDATE customer_api.auth_sessions
+      SET expires_at_ms = 2500
+    WHERE session_id = 'sess_a1b2c3d4e5f6a7b8c9d0e1f2';"
+
+assert_change_rejected \
+  "auth_sessions history is append-forward; truncation is blocked" \
+  "SET session_replication_role = replica;
+   TRUNCATE customer_api.auth_sessions;"
+
+# A tombstone without the boolean flag is the other half of the terminal
+# invariant — the CHECK is symmetric.
+assert_change_rejected \
+  'violates check constraint "auth_sessions_check2"' \
+  "INSERT INTO customer_api.auth_sessions
+        (session_id, subject, token_digest, device_digest,
+         issued_at_ms, expires_at_ms, last_used_at_ms, revoked, revoked_at_ms)
+      VALUES ('sess_f1b2c3d4e5f6a7b8c9d0e1f2', 'syn_cust_liveassert',
+              'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+              NULL, 1000, 2000, 1000, true, NULL);"
+
+# DELETE is intentionally allowed on the session table: the store's own
+# evictions and the expiry sweep delete rows. The append-forward model is
+# enforced by grants (REVOKE ALL FROM PUBLIC), not by the trigger.
+run_psql -v ON_ERROR_STOP=1 \
+  -c "INSERT INTO customer_api.auth_sessions
+        (session_id, subject, token_digest, device_digest,
+         issued_at_ms, expires_at_ms, last_used_at_ms)
+      VALUES ('sess_e1b2c3d4e5f6a7b8c9d0e1f2', 'syn_cust_liveassert',
+              'eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee',
+              NULL, 1000, 2000, 1000);" >/dev/null
+
+run_psql -v ON_ERROR_STOP=1 -Atq \
+  -c "DELETE FROM customer_api.auth_sessions
+       WHERE session_id = 'sess_e1b2c3d4e5f6a7b8c9d0e1f2'
+      RETURNING session_id;" \
+  | grep -Fx 'sess_e1b2c3d4e5f6a7b8c9d0e1f2' >/dev/null
+
 # Replaying an already-applied migration must fail loudly and leave the
 # catalog untouched.
 set +e

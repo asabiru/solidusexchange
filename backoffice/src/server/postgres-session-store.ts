@@ -24,7 +24,7 @@ import {
   SessionStoreUnavailableError
 } from "./session-store.js";
 import type { OperatorRole } from "../auth/access.js";
-import type { Pool, QueryResult, QueryResultRow } from "pg";
+import type { Pool, PoolClient, QueryResult, QueryResultRow } from "pg";
 
 // PostgreSQL backend for the backoffice session-store seam
 // (`BACKOFFICE_SESSION_STORE=postgresql`, DSN via
@@ -39,9 +39,12 @@ import type { Pool, QueryResult, QueryResultRow } from "pg";
 // so the package stays importable without the dependency installed, while a
 // postgres-mode startup without a working driver still fails fast.
 //
-// Every lifecycle op is one CTE statement so a store call stays atomic
-// without a client-managed transaction; `tail` serializes the writes so the
-// in-process ordering is identical to the memory backend's single thread.
+// Every lifecycle op is one CTE statement inside a short explicit
+// transaction; `tail` serializes the writes so the in-process ordering is
+// identical to the memory backend's single thread, and a per-subject
+// advisory transaction lock (issue and revoke only — the ops that enforce
+// a per-subject bound) extends that serialization to every other store
+// instance sharing the database.
 // Each statement reproduces the memory model exactly:
 //   - `issue`: a same-snapshot conflict check (session id or bearer digest
 //     held by any stored record is a deterministic SessionStoreError), the
@@ -247,6 +250,14 @@ evicted AS (
       ) AS overflow
   ) AS doomed
   WHERE doomed_session.session_id = doomed.session_id
+    -- Revoking an expired or already-revoked record is a no-op: the
+    -- eviction must fire only when the target will actually transition,
+    -- exactly like the memory backend's early return. The order in
+    -- which sibling CTEs evaluate target and stale is unspecified,
+    -- so the gate repeats the liveness predicates instead of relying on
+    -- target being empty once stale has fired.
+    AND EXISTS (SELECT 1 FROM target WHERE target.revoked_at_ms IS NULL)
+    AND NOT EXISTS (SELECT 1 FROM stale)
   RETURNING doomed_session.session_id
 ),
 updated AS (
@@ -362,6 +373,21 @@ const PROBE_PARAMETERS = [
 const PROBE_ROTATE_DIGEST =
   "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
 
+// The subject lock serializing cross-instance writes on one subject's
+// bound: a transaction-scoped advisory lock on the subject's hash, taken
+// before the lifecycle statement runs so its snapshot already includes
+// every earlier writer's commit.
+const LOCK_SUBJECT_SQL = "SELECT pg_advisory_xact_lock(hashtextextended($1, 0));";
+
+// Resolves a session's subject inside the write transaction so the
+// tombstone-bound ops can take the same per-subject advisory lock issue
+// takes.
+const SESSION_SUBJECT_SQL = `
+SELECT subject
+  FROM backoffice_control.operator_sessions
+ WHERE session_id = $1;
+`;
+
 interface SessionRow extends QueryResultRow {
   session_id: string | null;
   subject?: string;
@@ -455,6 +481,7 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
   const connectionDsn = dsn;
   let pool: Pool | null = null;
   let opening: Promise<void> | null = null;
+  let closing: Promise<void> | null = null;
   let closed = false;
   /** Queued writes, in issue order; resolves after every prior write settles. */
   let tail = Promise.resolve();
@@ -536,16 +563,76 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       await ending?.end().catch(() => undefined);
       throw unavailable(error);
     }
-    // close() raced with this initialize: drain the pool it just opened.
+    // close() raced with this initialize: drain the pool it just opened
+    // and fail the initialize instead of resolving on a dead store.
     if (closed) {
       const orphan = pool;
       pool = null;
       await orphan?.end().catch(() => undefined);
+      throw new SessionStoreUnavailableError(
+        "backoffice session store was closed during initialization"
+      );
     }
   }
 
-  function enqueueWrite<T>(operation: () => Promise<T>): Promise<T> {
-    const write = tail.then(operation);
+  async function closeOnce(): Promise<void> {
+    try {
+      await tail;
+      const ending = pool;
+      pool = null;
+      await ending?.end();
+      if (failure !== null) {
+        throw failure;
+      }
+    } finally {
+      closing = null;
+    }
+  }
+
+  /**
+   * The subject-bound invariants (active cap on issue, tombstone cap on
+   * revoke) are evaluated against a statement snapshot, so a second
+   * backend writing the same subject concurrently would ghost records
+   * past the cap: each statement sees the other still uncommitted. The
+   * write queue serializes only this store instance; a per-subject advisory
+   * transaction lock serializes the same-subject writes of every store
+   * instance sharing the database. One lock per statement — taken before
+   * the op and released at commit — cannot deadlock with the row locks
+   * the CTEs take afterwards, because a lock waiter never holds a row
+   * lock yet.
+   */
+  async function lockSubject(client: PoolClient, subject: string): Promise<void> {
+    await client.query(LOCK_SUBJECT_SQL, [subject]);
+  }
+
+  function enqueueWrite<T>(
+    operation: (client: PoolClient) => Promise<T>,
+    subjectKey: string | ((client: PoolClient) => Promise<string | null>) | null = null
+  ): Promise<T> {
+    const write = tail.then(async () => {
+      if (pool === null) {
+        throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
+      }
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        try {
+          const subject =
+            typeof subjectKey === "function" ? await subjectKey(client) : subjectKey;
+          if (subject !== null && subject !== undefined) {
+            await lockSubject(client, subject);
+          }
+          const result = await operation(client);
+          await client.query("COMMIT");
+          return result;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          throw error;
+        }
+      } finally {
+        client.release();
+      }
+    });
     tail = write.then(
       () => undefined,
       () => undefined
@@ -604,6 +691,13 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
   return Object.freeze({
     kind: "postgresql" as const,
     async initialize() {
+      // A close may be in flight while the pool is still usable: wait it
+      // out instead of racing the pool teardown. Once the close lands the
+      // store is ready again and a fresh pool is provisioned.
+      const teardown = closing;
+      if (teardown !== null) {
+        await teardown;
+      }
       closed = false;
       failure = null;
       tail = Promise.resolve();
@@ -619,13 +713,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(ISSUE_SQL, [
+          result = await client.query<SessionRow>(ISSUE_SQL, [
             command.session_id,
             command.subject,
             command.email,
@@ -650,7 +741,7 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
           throw new SessionStoreError("operator session conflicts with a stored record");
         }
         return record;
-      });
+      }, command.subject);
     },
     async getSession(command: SessionGetCommand) {
       assertSessionGetCommand(command);
@@ -665,13 +756,10 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(REFRESH_SQL, [
+          result = await client.query<SessionRow>(REFRESH_SQL, [
             command.session_id,
             command.token_digest,
             command.now,
@@ -696,39 +784,44 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
-        let result: QueryResult<SessionRow>;
-        try {
-          result = await pool.query<SessionRow>(REVOKE_SQL, [
-            command.session_id,
-            command.now,
-            command.maxRevokedPerSubject
-          ]);
-        } catch (error) {
-          const rejected = storageRejected(error, "operator session command was rejected by storage");
-          if (rejected !== null) {
-            throw rejected;
+      return enqueueWrite(
+        async (client) => {
+          let result: QueryResult<SessionRow>;
+          try {
+            result = await client.query<SessionRow>(REVOKE_SQL, [
+              command.session_id,
+              command.now,
+              command.maxRevokedPerSubject
+            ]);
+          } catch (error) {
+            const rejected = storageRejected(error, "operator session command was rejected by storage");
+            if (rejected !== null) {
+              throw rejected;
+            }
+            throw error;
           }
-          throw error;
+          return sessionRecord(result.rows[0] ?? { session_id: null });
+        },
+        // The tombstone bound is per subject: resolve the row's subject
+        // inside the transaction, then serialize on it like issue does.
+        async (client) => {
+          const resolved = await client.query<SessionRow>(SESSION_SUBJECT_SQL, [
+            command.session_id
+          ]);
+          const subject = resolved.rows[0]?.subject;
+          return typeof subject === "string" ? subject : null;
         }
-        return sessionRecord(result.rows[0] ?? { session_id: null });
-      });
+      );
     },
     async bindDevice(command: SessionBindDeviceCommand) {
       assertSessionBindDeviceCommand(command);
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
+      return enqueueWrite(async (client) => {
         let result: QueryResult<SessionRow>;
         try {
-          result = await pool.query<SessionRow>(BIND_DEVICE_SQL, [
+          result = await client.query<SessionRow>(BIND_DEVICE_SQL, [
             command.session_id,
             command.device_digest,
             command.now
@@ -748,11 +841,8 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       if (failure !== null) {
         throw failure;
       }
-      return enqueueWrite(async () => {
-        if (pool === null) {
-          throw new SessionStoreUnavailableError(NOT_INITIALIZED_PG);
-        }
-        const result = await pool.query(SWEEP_SQL, [command.now]);
+      return enqueueWrite(async (client) => {
+        const result = await client.query(SWEEP_SQL, [command.now]);
         return { swept: result.rows.length };
       });
     },
@@ -795,14 +885,19 @@ export function createPostgresSessionStore(options: { dsn: unknown }): SessionSt
       }
     },
     async close() {
-      await tail;
-      const ending = pool;
-      pool = null;
-      await ending?.end();
-      closed = true;
-      if (failure !== null) {
-        throw failure;
+      const inFlight = closing;
+      if (inFlight !== null) {
+        // A second close joins the teardown instead of racing it.
+        return inFlight;
       }
+      // Mark the store closed synchronously: an initialize() already
+      // probing sees the flag inside openOnce and gives up, while an
+      // initialize() invoked from here on waits on `closing` before
+      // provisioning a new pool.
+      closed = true;
+      const teardown = closeOnce();
+      closing = teardown;
+      return teardown;
     }
   });
 }

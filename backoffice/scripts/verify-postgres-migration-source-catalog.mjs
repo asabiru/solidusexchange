@@ -11,7 +11,7 @@ const expectedSources = [
   ],
   [
     "0002_operator_sessions.sql",
-    "5901f5cebde22d0789f9fd9583daed861af1266a8db6f7c924850724596fcd86"
+    "34e50e999d0a0b50f36edc6ba0acd2864846856933318fed1b9fa95b3f6e869a"
   ]
 ];
 
