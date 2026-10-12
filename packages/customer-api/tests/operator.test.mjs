@@ -476,7 +476,7 @@ test("a malformed operator subjects view fails closed", async () => {
   for (const view of malformed) {
     assert.equal(validOperatorSubjectsView(view), false, JSON.stringify(view));
     await withServer(
-      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; }, async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); }, async queueItemFor() { return null; } } },
+      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; }, async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); }, async queueItemFor() { return null; }, async auditFor() { return null; } } },
       async (port) => {
         const response = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
         assert.equal(response.status, 500, JSON.stringify(view));
@@ -792,7 +792,8 @@ test("a malformed operator subject detail fails closed", async () => {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
           async subjectFor() { return view; },
           async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); },
-          async queueItemFor() { return null; }
+          async queueItemFor() { return null; },
+          async auditFor() { return null; }
         }
       },
       async (port) => {
@@ -1120,7 +1121,8 @@ test("a malformed operator queue view fails closed", async () => {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
           async subjectFor() { return null; },
           async queueFor() { return view; },
-          async queueItemFor() { return null; }
+          async queueItemFor() { return null; },
+          async auditFor() { return null; }
         }
       },
       async (port) => {
@@ -1388,7 +1390,8 @@ test("a malformed operator queue item detail fails closed", async () => {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
           async subjectFor() { return null; },
           async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); },
-          async queueItemFor() { return candidate; }
+          async queueItemFor() { return candidate; },
+          async auditFor() { return null; }
         }
       },
       async (port) => {

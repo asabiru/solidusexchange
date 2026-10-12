@@ -514,7 +514,8 @@ export function createCustomerApiHandler({
     typeof operatorSubjectsDirectory?.subjectsFor !== "function" ||
     typeof operatorSubjectsDirectory?.subjectFor !== "function" ||
     typeof operatorSubjectsDirectory?.queueFor !== "function" ||
-    typeof operatorSubjectsDirectory?.queueItemFor !== "function"
+    typeof operatorSubjectsDirectory?.queueItemFor !== "function" ||
+    typeof operatorSubjectsDirectory?.auditFor !== "function"
   ) {
     throw new Error("An operator subjects directory is required");
   }
