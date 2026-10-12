@@ -209,6 +209,15 @@ const auditActions: ReadonlySet<string> = new Set([
   "flag.reviewed"
 ]);
 const auditTargetKinds: ReadonlySet<string> = new Set(["session", "queue_item", "subject", "flag"]);
+// The feed pairs each action with exactly one target kind — a mismatched
+// pair is drift the upstream never emits.
+const auditActionTargetKinds: ReadonlyMap<string, string> = new Map([
+  ["session.opened", "session"],
+  ["session.rotated", "session"],
+  ["queue.viewed", "queue_item"],
+  ["subject.viewed", "subject"],
+  ["flag.reviewed", "flag"]
+]);
 const auditMaxEntries = 32;
 // The upstream audit read is role-scoped: the pass-through presents a fixed
 // principal that deterministically draws an oversight role (auditor), since
@@ -1391,9 +1400,11 @@ class CustomerApiHttpError extends Error {
 /**
  * Fail-closed parser for the operator audit feed: exact key sets, the
  * `au_*`/`auc_*`/`adh_*` ref grammar, the fixed action and target-kind
- * vocabularies, ISO timestamps, a 32-entry page bound and unique audit ids.
- * Any drift fails closed to undefined so the caller degrades rather than
- * rendering unverifiable data.
+ * vocabularies (paired exactly as the feed derives them), ISO timestamps,
+ * a 32-entry page bound, unique audit ids and the feed's own
+ * newest-first order with the descending audit-id tie-break the upstream
+ * validator pins — no entry may postdate the feed's own as_of. Any drift fails closed to undefined
+ * so the caller degrades rather than rendering unverifiable data.
  */
 function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, auditViewKeys) || value.mode !== "test") {
@@ -1403,6 +1414,7 @@ function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | 
   if (!isRecord(audit) || !hasExactKeys(audit, auditFeedKeys) || !isIsoTimestamp(audit.as_of)) {
     return undefined;
   }
+  const asOfMs = Date.parse(audit.as_of);
   if (audit.next_cursor !== null && (typeof audit.next_cursor !== "string" || !auditCursorPattern.test(audit.next_cursor))) {
     return undefined;
   }
@@ -1411,6 +1423,8 @@ function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | 
   }
   const seen = new Set<string>();
   const entries: CustomerApiAuditEntry[] = [];
+  let previousMs = Number.POSITIVE_INFINITY;
+  let previousId = "";
   for (const entry of audit.entries) {
     if (
       !isRecord(entry)
@@ -1426,6 +1440,7 @@ function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | 
       || !auditActions.has(entry.action)
       || typeof entry.target_kind !== "string"
       || !auditTargetKinds.has(entry.target_kind)
+      || auditActionTargetKinds.get(entry.action) !== entry.target_kind
       || typeof entry.target_id !== "string"
       || !auditTargetIdPattern.test(entry.target_id)
       || !isIsoTimestamp(entry.at)
@@ -1434,7 +1449,17 @@ function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | 
     ) {
       return undefined;
     }
+    const occurredMs = Date.parse(entry.at);
+    if (
+      occurredMs > asOfMs
+      || occurredMs > previousMs
+      || (occurredMs === previousMs && entry.audit_id.localeCompare(previousId) >= 0)
+    ) {
+      return undefined;
+    }
     seen.add(entry.audit_id);
+    previousMs = occurredMs;
+    previousId = entry.audit_id;
     entries.push(
       Object.freeze({
         audit_id: entry.audit_id,

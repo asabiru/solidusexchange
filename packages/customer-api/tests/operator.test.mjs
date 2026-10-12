@@ -1476,6 +1476,64 @@ test("auditFor answers null for well-formed tokens the feed never minted", async
   // auditFor.
 });
 
+test("every audit entry's actor_role is the role draw the admin view reports for that actor", async () => {
+  // The feed's actors are syn_oper_* staff refs: the role an entry
+  // attributes to an actor must equal operatorRoleFor(actor) — the same
+  // draw the admin view echoes and the audit route's role gate uses. A
+  // feed whose entries disagree with the staff role model would show an
+  // auditor's actions under a support-l1 hat.
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  let cursor;
+  let entries = 0;
+  do {
+    const view = await directory.auditFor(cursor);
+    assert.ok(view !== null);
+    for (const entry of view.audit.entries) {
+      assert.equal(entry.actor_role, operatorRoleFor(entry.actor_subject_id), entry.audit_id);
+      entries += 1;
+    }
+    cursor = view.audit.next_cursor;
+  } while (cursor);
+  assert.ok(entries > 0);
+});
+
+test("audit targets never dangle outside the sibling operator reads", async () => {
+  // Every queue_item target must exist in the queue it names, every
+  // subject target in the roster and every flag target in the subject's
+  // open flag list; session refs are the one universe no read serves.
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const entries = [];
+  let cursor;
+  do {
+    const view = await directory.auditFor(cursor);
+    entries.push(...view.audit.entries);
+    cursor = view.audit.next_cursor;
+  } while (cursor);
+  const queueIds = new Set();
+  for (const kind of ["kyc", "aml", "tickets"]) {
+    for (const item of (await directory.queueFor(kind)).queue.items) {
+      queueIds.add(item.queue_id);
+    }
+  }
+  const subjectIds = new Set((await directory.subjectsFor()).subjects.map((row) => row.subject_id));
+  const flagIds = new Set();
+  for (const item of (await directory.queueFor("aml")).queue.items) {
+    const detail = await directory.queueItemFor("aml", item.queue_id);
+    for (const flag of detail.item.flags) {
+      flagIds.add(flag.flag_id);
+    }
+  }
+  for (const entry of entries) {
+    if (entry.target_kind === "queue_item") {
+      assert.ok(queueIds.has(entry.target_id), entry.target_id);
+    } else if (entry.target_kind === "subject") {
+      assert.ok(subjectIds.has(entry.target_id), entry.target_id);
+    } else if (entry.target_kind === "flag") {
+      assert.ok(flagIds.has(entry.target_id), entry.target_id);
+    }
+  }
+});
+
 test("a malformed operator audit view fails closed and never serves", async () => {
   const real = await createSyntheticOperatorSubjectsDirectory().auditFor();
   const entry = real.audit.entries[0];

@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 712,
-      "minCases": 23
+      "minLines": 728,
+      "minCases": 24
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -549,8 +549,8 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 990,
-      "minCases": 31
+      "minLines": 1160,
+      "minCases": 37
     },
     "backoffice/src/server/dev-server.test.ts": {
       "minLines": 49,
@@ -1120,8 +1120,8 @@
       "minCases": 6
     },
     "packages/customer-api/tests/operator.test.mjs": {
-      "minLines": 1360,
-      "minCases": 37
+      "minLines": 1408,
+      "minCases": 39
     },
     "packages/customer-api/tests/payments.test.mjs": {
       "minLines": 280,
@@ -1200,8 +1200,8 @@
       "minCases": 4
     },
     "packages/e2e-dev/tests/dev-stack.test.mjs": {
-      "minLines": 774,
-      "minCases": 25
+      "minLines": 793,
+      "minCases": 26
     },
     "packages/e2e-dev/tests/load.test.mjs": {
       "minLines": 546,
@@ -1600,8 +1600,8 @@
       "minCases": 10
     },
     "backoffice/src/server/operator-audit-upstream.test.ts": {
-      "minLines": 287,
-      "minCases": 8
+      "minLines": 316,
+      "minCases": 10
     }
   }
 }

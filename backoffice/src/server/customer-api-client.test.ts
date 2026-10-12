@@ -1035,3 +1035,188 @@ describe("operatorQueueItem", () => {
     );
   });
 });
+
+const auditContractView = (entries: Record<string, unknown>[]) => ({
+  mode: "test",
+  audit: {
+    as_of: "2027-01-29T00:00:00.000Z",
+    entries,
+    next_cursor: null
+  }
+});
+
+const auditEntry = (overrides: Record<string, unknown> = {}) => ({
+  audit_id: `au_${"0".repeat(24)}`,
+  actor_subject_id: `syn_oper_${"0".repeat(16)}`,
+  actor_role: "auditor",
+  action: "subject.viewed",
+  target_kind: "subject",
+  target_id: `syn_cust_${"0".repeat(24)}`,
+  at: "2027-01-28T10:00:00.000Z",
+  detail_hash: `adh_${"0".repeat(32)}`,
+  ...overrides
+});
+
+describe("operatorAudit", () => {
+  it("reads the audit feed from the dev customer API behind the fixed oversight reader", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withCustomerApi(key, async (baseUrl) => {
+      const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+      // The caller's own mapped subject draws a non-oversight role for
+      // "dev:support" — the read still succeeds because the pass-through
+      // always presents the fixed auditor principal and per-user authZ
+      // stays in the BFF route's audit:read gate.
+      const result = await client.operatorAudit("dev:support", testDeviceId, undefined, Date.now());
+      assert.equal(result.status, "ok");
+      if (result.status !== "ok") return;
+      assert.equal(result.view.mode, "test");
+      assert.ok(result.view.audit.entries.length >= 1 && result.view.audit.entries.length <= 32);
+      assert.ok(result.view.audit.next_cursor === null || /^auc_[0-9a-f]{16}$/.test(result.view.audit.next_cursor));
+      for (const entry of result.view.audit.entries) {
+        assert.match(entry.audit_id, /^au_[0-9a-f]{24}$/);
+        assert.match(entry.actor_subject_id, /^syn_oper_[a-z0-9]{8,32}$/);
+        assert.match(entry.detail_hash, /^adh_[0-9a-f]{32}$/);
+      }
+      // A served next_cursor round-trips to the following page.
+      let cursor = result.view.audit.next_cursor;
+      while (cursor !== null) {
+        const page = await client.operatorAudit("dev:support", testDeviceId, cursor, Date.now());
+        assert.equal(page.status, "ok");
+        if (page.status !== "ok") return;
+        cursor = page.view.audit.next_cursor;
+      }
+    });
+  });
+
+  it("always presents the fixed oversight principal, whatever the caller subject", async () => {
+    const key = randomBytes(32).toString("hex");
+    await withFakeApi(
+      () => auditContractView([auditEntry()]),
+      async (baseUrl, seen) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const now = Date.now();
+        for (const subject of ["dev:auditor", "dev:support", "dev:compliance-lead"]) {
+          const result = await client.operatorAudit(subject, testDeviceId, undefined, now);
+          assert.equal(result.status, "ok", subject);
+        }
+        assert.equal(seen.length, 3);
+        // Every upstream call mints the identical token: the feed cannot
+        // vary by reader, so the caller's own syn_oper_* mapping never
+        // reaches the wire.
+        const authorizations = seen.map((headers) => headers.authorization);
+        assert.ok(authorizations.every((value) => value === authorizations[0]));
+        assert.match(
+          String(authorizations[0]),
+          /^Bearer sodev1\.syn_oper_0000000000000002\.[0-9]{10}\.[0-9a-f]{64}$/
+        );
+      }
+    );
+  });
+
+  it("sends the cursor query upstream and maps a never-minted token to not-found", async () => {
+    const key = randomBytes(32).toString("hex");
+    const mintedCursor = "auc_0011223344556677";
+    const seenUrls: (string | undefined)[] = [];
+    await withFakeApi(
+      (path) => {
+        seenUrls.push(path);
+        return auditContractView([auditEntry()]);
+      },
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.operatorAudit("dev:auditor", testDeviceId, mintedCursor, Date.now());
+        assert.equal(result.status, "ok");
+        assert.equal(seenUrls[0], `/api/v1/operator/audit?cursor=${mintedCursor}`);
+      }
+    );
+  });
+
+  it("guards malformed cursors and device ids locally without an upstream call", async () => {
+    const key = randomBytes(32).toString("hex");
+    let calls = 0;
+    await withFakeApi(
+      () => {
+        calls += 1;
+        return auditContractView([auditEntry()]);
+      },
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        for (const cursor of ["bogus", "AUC_0011223344556677", "auc_00112233445566778", ""]) {
+          assert.deepEqual(
+            await client.operatorAudit("dev:auditor", testDeviceId, cursor, Date.now()),
+            { status: "not-found" },
+            cursor || "empty"
+          );
+        }
+        assert.deepEqual(
+          await client.operatorAudit("dev:auditor", "not-a-device", undefined, Date.now()),
+          { status: "unavailable" }
+        );
+        assert.equal(calls, 0);
+      }
+    );
+  });
+
+  it("maps upstream statuses and fails closed on contract drift and misordered pages", async () => {
+    const key = randomBytes(32).toString("hex");
+    for (const [status, expected] of [
+      [401, "unavailable"],
+      [403, "unavailable"],
+      [404, "not-found"],
+      [429, "unavailable"],
+      [500, "unavailable"]
+    ] as [number, string][]) {
+      const server = createServer((_request, response) => {
+        response.statusCode = status;
+        response.end();
+      });
+      await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+      try {
+        const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(
+          await client.operatorAudit("dev:auditor", testDeviceId, "auc_0011223344556677", Date.now()),
+          { status: expected },
+          String(status)
+        );
+      } finally {
+        await new Promise<void>((resolve) => server.close(() => resolve()));
+      }
+    }
+    const first = auditEntry();
+    const second = auditEntry({
+      audit_id: `au_${"f".repeat(24)}`,
+      at: "2027-01-28T09:00:00.000Z",
+      detail_hash: `adh_${"f".repeat(32)}`
+    });
+    for (const [name, view] of [
+      ["reversed newest-first", auditContractView([second, first])],
+      ["ascending id under equal instants", auditContractView([
+        { ...first, at: second.at },
+        second
+      ])],
+      ["instant beyond the as_of horizon", auditContractView([
+        { ...first, at: "2027-01-30T00:00:00.000Z" },
+        second
+      ])],
+      ["duplicated audit id", auditContractView([first, { ...second, audit_id: first.audit_id }])],
+      ["cross-record extra member", auditContractView([{ ...first, session_note: "x" }])],
+      ["action/target_kind mismatch allowed by grammar", auditContractView([
+        { ...first, action: "flag.reviewed", target_kind: "queue_item", target_id: "qml_00112233445566778899aabb" },
+        second
+      ])]
+    ] as [string, unknown][]) {
+      await withFakeApi(
+        () => view,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.operatorAudit("dev:auditor", testDeviceId, undefined, Date.now()),
+            { status: "unavailable" },
+            name
+          );
+        }
+      );
+    }
+  });
+});

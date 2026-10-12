@@ -910,6 +910,29 @@ describe("operator journey through the backoffice BFF", () => {
     await deniedGet("/bff/api/aml", support);
   });
 
+  it("serves the local operator audit feed to audit:read holders and fails closed on cursor tampering", async () => {
+    // Unconfigured backoffice: the route falls back to the local demo event
+    // ledger, a single page that mints no cursors — so any well-formed
+    // token is beyond the end, and every tampered query fails closed.
+    const feed = await signedGet("/bff/api/operator/audit", lead, "operator-audit:first");
+    assert.equal(feed.mode, "test");
+    assert.ok(Array.isArray(feed.audit.entries));
+    assert.equal(feed.audit.nextCursor, null);
+    for (const [suffix, status, error] of [
+      ["?cursor=bogus", 400, "operator_audit_cursor_invalid"],
+      ["?cursor=auc_0011223344556677", 404, "operator_audit_not_found"],
+      ["?cursor=auc_0011223344556677&cursor=auc_8899aabbccddeeff", 400, "operator_audit_query_invalid"],
+      ["?page=2", 400, "operator_audit_query_invalid"]
+    ]) {
+      const response = await fetch(`${backofficeBase}/bff/api/operator/audit${suffix}`, {
+        headers: { cookie: lead }
+      });
+      assert.equal(response.status, status, suffix);
+      assert.deepEqual(await readJson(response), { error }, suffix);
+    }
+    await deniedGet("/bff/api/operator/audit", support);
+  });
+
   it("rejects cross-site report fetches before authorization", async () => {
     for (const site of ["cross-site", "same-site"]) {
       const response = await fetch(`${backofficeBase}/bff/api/reports`, {
