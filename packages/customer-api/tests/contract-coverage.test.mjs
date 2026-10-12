@@ -12,6 +12,7 @@ import { createSyntheticAddressScreeningDirectory } from "../src/address-screeni
 import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import {
+  auditOperatorHeaders,
   assertConforms,
   checkedRequest,
   contract,
@@ -163,7 +164,9 @@ test("only served contract pairs answer; every other method on every declared pa
     targets.set(path, instantiate(path));
   }
   for (const [contractPath, target] of targets) {
-    const headers = contractPath.startsWith("/api/v1/operator/") ? operatorHeaders() : verifiedCustomerHeaders();
+    const headers = contractPath.startsWith("/api/v1/operator/")
+      ? contractPath === "/api/v1/operator/audit" ? auditOperatorHeaders() : operatorHeaders()
+      : verifiedCustomerHeaders();
     for (const method of METHODS) {
       const response = await checkedRequest(port, { method, path: target, headers });
       const pair = `${method} ${contractPath}`;

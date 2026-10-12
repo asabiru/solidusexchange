@@ -162,6 +162,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/operator/subjects/:id",
   "/bff/api/operator/queue",
   "/bff/api/operator/queue/:kind/:id",
+  "/bff/api/operator/audit",
   "/bff/api/dashboard",
   "/bff/api/customers",
   "/bff/api/checks",
@@ -1104,6 +1105,92 @@ export function createBackofficeServer(
         // member read is the uniform not-found rather than an invented
         // detail.
         json(response, 404, { error: "operator_queue_item_not_found" });
+        return;
+      }
+
+      if (request.method === "GET" && path === "/bff/api/operator/audit") {
+        // The operator action log is accountability data: the read stays
+        // behind audit:read (the oversight roles in the backoffice role
+        // matrix), mirroring the upstream role-scoped operator.audit.read
+        // grant.
+        const session = await authorized(request, response, "audit:read");
+        if (!session) return;
+        // `cursor` is the audit feed's only query parameter: absent means
+        // the first page, anything outside the auc_* grammar is invalid
+        // input and fails closed locally rather than propagating upstream.
+        for (const key of url.searchParams.keys()) {
+          if (key !== "cursor") {
+            json(response, 400, { error: "operator_audit_query_invalid" });
+            return;
+          }
+        }
+        const cursorParam = url.searchParams.get("cursor");
+        const cursor = cursorParam === null ? undefined : cursorParam;
+        if (cursor !== undefined && !/^auc_[0-9a-f]{16}$/u.test(cursor)) {
+          json(response, 400, { error: "operator_audit_cursor_invalid" });
+          return;
+        }
+        if (customerApi.configured) {
+          // Same device gate as the other operator reads: the upstream
+          // audience requires X-Device-Id, so the BFF rejects locally before
+          // any call when the session presents no device identity.
+          const deviceId = requestDeviceId(request);
+          if (!deviceId) {
+            json(response, 403, { error: "device_required" });
+            return;
+          }
+          const upstream = await customerApi.operatorAudit(session.subject, deviceId, cursor, Date.now());
+          if (upstream.status === "not-found") {
+            json(response, 404, { error: "operator_audit_not_found" });
+            return;
+          }
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "operator_audit_unavailable" });
+            return;
+          }
+          // The signed resource binds the page boundary exactly like
+          // `operator-queue` binds `kind`: a reply for one cursor never
+          // replays against another.
+          signed(response, `operator-audit:${cursor ?? "first"}`, {
+            mode: upstream.view.mode,
+            audit: {
+              asOf: upstream.view.audit.as_of,
+              entries: upstream.view.audit.entries.map((entry) => ({
+                auditId: entry.audit_id,
+                actorSubjectId: entry.actor_subject_id,
+                actorRole: entry.actor_role,
+                action: entry.action,
+                targetKind: entry.target_kind,
+                targetId: entry.target_id,
+                at: entry.at,
+                detailHash: entry.detail_hash
+              })),
+              nextCursor: upstream.view.audit.next_cursor
+            }
+          });
+          return;
+        }
+        // Unconfigured: the matching local audit source is the demo event
+        // ledger — the upstream-only fields (synthetic refs, staff role,
+        // detail digests) stay null rather than invented.
+        const localEvents = demoRepository.auditSource().slice(0, 32).map((event) => ({
+          auditId: null,
+          actorSubjectId: null,
+          actorRole: null,
+          action: event.action,
+          targetKind: null,
+          targetId: event.resource,
+          at: event.occurredAt,
+          detailHash: event.evidenceDigest
+        }));
+        signed(response, `operator-audit:${cursor ?? "first"}`, {
+          mode: "test",
+          audit: {
+            asOf: new Date(0).toISOString(),
+            entries: localEvents,
+            nextCursor: null
+          }
+        });
         return;
       }
 

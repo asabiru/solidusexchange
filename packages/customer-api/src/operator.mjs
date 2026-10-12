@@ -97,6 +97,17 @@ function buildOperatorAdminView(subject, grantedCapabilities) {
   });
 }
 
+/**
+ * The operator's staff role is the same deterministic draw the admin view
+ * echoes, so a route's role gate can never disagree with the role the
+ * operator's own overview reports.
+ * @param {string} subject
+ * @returns {string}
+ */
+export function operatorRoleFor(subject) {
+  return OPERATOR_ROLES[Number(units(subject, "role", BigInt(OPERATOR_ROLES.length)))];
+}
+
 /** @param {unknown} value */
 function isIsoTimestamp(value) {
   return (
@@ -663,6 +674,7 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  * @property {(subjectId: string) => Promise<OperatorSubjectDetailView | null>} subjectFor
  * @property {(kind?: string) => Promise<OperatorQueueView>} queueFor
  * @property {(kind: string, itemId: string) => Promise<OperatorQueueItemDetailView | null>} queueItemFor
+ * @property {(cursor?: string) => Promise<OperatorAuditView | null>} auditFor
  */
 
 /**
@@ -1428,6 +1440,32 @@ export function createSyntheticOperatorSubjectsDirectory() {
         kind,
         item: buildQueueItemDetail(kind, item, buildSubjectRow(index))
       });
+    },
+    // The audit feed is a read-only projection of the same roster: the
+    // cursor is an opaque `auc_*` page token minted per page boundary, so
+    // a well-formed token that was never served resolves the same null a
+    // member miss does — uniform, never revealing which tokens are live.
+    /** @param {string} [cursor] */
+    async auditFor(cursor) {
+      const entries = expectedAuditEntries();
+      let offset = 0;
+      if (cursor !== undefined) {
+        offset = -1;
+        for (
+          let candidate = OPERATOR_AUDIT_PAGE_SIZE;
+          candidate < entries.length;
+          candidate += OPERATOR_AUDIT_PAGE_SIZE
+        ) {
+          if (auditCursorToken(candidate) === cursor) {
+            offset = candidate;
+            break;
+          }
+        }
+        if (offset === -1) {
+          return null;
+        }
+      }
+      return buildOperatorAuditView(offset, entries);
     }
   });
 }
@@ -2217,4 +2255,310 @@ export function validOperatorQueueItemDetail(view) {
     JSON.stringify(detail) ===
     JSON.stringify(buildQueueItemDetail(candidate.kind, expected, buildSubjectRow(index)))
   );
+}
+
+// ---------------------------------------------------------------------
+// Operator audit feed: the deterministic action log of operator work over
+// the shared customer universe — session opens/rotations, queue item
+// views, subject-360 views and flag review actions, newest-first behind
+// the role-scoped `operator.audit.read` capability. Every entry is a pure
+// function of the roster: opaque `au_*` ids, `syn_oper_*` actor refs with
+// the same role draw the admin view uses, and opaque `adh_*` detail
+// digests — never raw contact data or PII, so nothing here authenticates
+// or authorizes anything.
+
+export const OPERATOR_AUDIT_PAGE_SIZE = 32;
+const OPERATOR_AUDIT_EVENTS_PER_SUBJECT = 3;
+const OPERATOR_AUDIT_ACTIONS = Object.freeze([
+  "session.opened",
+  "session.rotated",
+  "queue.viewed",
+  "subject.viewed",
+  "flag.reviewed"
+]);
+const OPERATOR_AUDIT_TARGET_KINDS = Object.freeze(["session", "queue_item", "subject", "flag"]);
+const AUDIT_VIEW_KEYS = Object.freeze(["mode", "audit"]);
+const AUDIT_KEYS = Object.freeze(["as_of", "entries", "next_cursor"]);
+const AUDIT_ENTRY_KEYS = Object.freeze([
+  "action",
+  "actor_role",
+  "actor_subject_id",
+  "at",
+  "audit_id",
+  "detail_hash",
+  "target_id",
+  "target_kind"
+]);
+const AUDIT_ID_PATTERN = /^au_[0-9a-f]{24}$/u;
+const AUDIT_CURSOR_PATTERN = /^auc_[0-9a-f]{16}$/u;
+const AUDIT_SESSION_TARGET_PATTERN = /^osn_[0-9a-f]{24}$/u;
+const AUDIT_QUEUE_TARGET_PATTERN = /^(qky|qml|qtick)_[0-9a-f]{24}$/u;
+const AUDIT_DETAIL_HASH_PATTERN = /^adh_[0-9a-f]{32}$/u;
+const AUDIT_AS_OF_ISO = new Date(QUEUE_SNAPSHOT_MS).toISOString();
+
+/**
+ * @typedef {object} OperatorAuditEntry
+ * @property {string} audit_id
+ * @property {string} actor_subject_id
+ * @property {string} actor_role
+ * @property {string} action
+ * @property {string} target_kind
+ * @property {string} target_id
+ * @property {string} at
+ * @property {string} detail_hash
+ */
+
+/**
+ * @typedef {object} OperatorAuditView
+ * @property {string} mode
+ * @property {{ as_of: string, entries: readonly OperatorAuditEntry[], next_cursor: string | null }} audit
+ */
+
+/** @param {unknown} value */
+export function isOperatorAuditCursor(value) {
+  return typeof value === "string" && AUDIT_CURSOR_PATTERN.test(value);
+}
+
+/**
+ * The opaque page token for one page boundary: minted from the offset so
+ * the feed can be replayed without ever exposing a position index.
+ * @param {number} offset
+ */
+function auditCursorToken(offset) {
+  return `auc_${subjectsDigest("operator-audit", `cursor-${offset}`).toString("hex").slice(0, 16)}`;
+}
+
+/**
+ * Resolve the drawn action's target on this subject. A queue view needs a
+ * queued item and a flag review needs an open flag; when the drawn action
+ * has no live target the entry degrades to the always-live subject-360
+ * view rather than minting a phantom target.
+ * @param {string} action
+ * @param {OperatorSubjectRow} row
+ * @param {number} slot
+ * @returns {{ kind: string, id: string } | null}
+ */
+function auditTargetFor(action, row, slot) {
+  const subjectId = row.subject_id;
+  if (action === "session.opened" || action === "session.rotated") {
+    return {
+      kind: "session",
+      id: `osn_${subjectsDigest(subjectId, `audit-session-${slot}`).toString("hex").slice(0, 24)}`
+    };
+  }
+  if (action === "subject.viewed") {
+    return { kind: "subject", id: subjectId };
+  }
+  if (action === "flag.reviewed") {
+    if (row.flags < 1) {
+      return null;
+    }
+    const flags = queueItemFlags(row);
+    return { kind: "flag", id: flags[slot % flags.length].flag_id };
+  }
+  // queue.viewed: the queues the subject currently occupies, in the fixed
+  // kind order; the pick between them is another deterministic draw.
+  const occupied = [];
+  if (row.kyc_status !== "verified") {
+    occupied.push(`qky_${subjectsDigest(subjectId, "queue").toString("hex").slice(0, 24)}`);
+  }
+  if (row.flags >= 1) {
+    occupied.push(`qml_${subjectsDigest(subjectId, "aml-queue").toString("hex").slice(0, 24)}`);
+  }
+  if (syntheticSupportTickets(subjectId).length >= TICKET_QUEUE_MIN_TICKETS) {
+    occupied.push(`qtick_${subjectsDigest(subjectId, "ticket-queue").toString("hex").slice(0, 24)}`);
+  }
+  if (occupied.length === 0) {
+    return null;
+  }
+  return {
+    kind: "queue_item",
+    id: occupied[Number(subjectsUnits(subjectId, "audit-queue-pick", BigInt(occupied.length)))]
+  };
+}
+
+/**
+ * The full deterministic feed, newest first: three drawn events per roster
+ * row, every instant inside the subject's own registration→snapshot
+ * window, ties broken on the id so the order is total.
+ * @returns {readonly OperatorAuditEntry[]}
+ */
+function expectedAuditEntries() {
+  /** @type {OperatorAuditEntry[]} */
+  const entries = [];
+  for (let index = 0; index < SUBJECTS_COUNT; index += 1) {
+    const row = buildSubjectRow(index);
+    const subjectId = row.subject_id;
+    const registeredMs = Date.parse(row.registered_at);
+    for (let slot = 0; slot < OPERATOR_AUDIT_EVENTS_PER_SUBJECT; slot += 1) {
+      let action =
+        OPERATOR_AUDIT_ACTIONS[
+          Number(subjectsUnits(subjectId, `audit-action-${slot}`, BigInt(OPERATOR_AUDIT_ACTIONS.length)))
+        ];
+      const actor = `syn_oper_${subjectsDigest(subjectId, `audit-actor-${slot}`).toString("hex").slice(0, 16)}`;
+      const occurredMs =
+        registeredMs +
+        Number(subjectsUnits(subjectId, `audit-at-${slot}`, BigInt(QUEUE_SNAPSHOT_MS - registeredMs)));
+      const target = auditTargetFor(action, row, slot);
+      let targetKind;
+      let targetId;
+      if (target === null) {
+        action = "subject.viewed";
+        targetKind = "subject";
+        targetId = subjectId;
+      } else {
+        targetKind = target.kind;
+        targetId = target.id;
+      }
+      entries.push(
+        Object.freeze({
+          audit_id: `au_${subjectsDigest(subjectId, `audit-id-${slot}`).toString("hex").slice(0, 24)}`,
+          actor_subject_id: actor,
+          actor_role:
+            OPERATOR_ROLES[Number(subjectsUnits(actor, "role", BigInt(OPERATOR_ROLES.length)))],
+          action,
+          target_kind: targetKind,
+          target_id: targetId,
+          at: new Date(occurredMs).toISOString(),
+          detail_hash: `adh_${subjectsDigest(subjectId, `audit-detail-${slot}`).toString("hex").slice(0, 32)}`
+        })
+      );
+    }
+  }
+  entries.sort((left, right) =>
+    left.at === right.at
+      ? right.audit_id.localeCompare(left.audit_id)
+      : right.at.localeCompare(left.at)
+  );
+  return entries;
+}
+
+/**
+ * One page of the feed: `as_of` is the roster's pinned snapshot instant
+ * (the queue's own "now"), the page holds at most OPERATOR_AUDIT_PAGE_SIZE
+ * entries and `next_cursor` mints the next boundary only while entries
+ * remain.
+ * @param {number} offset
+ * @param {readonly OperatorAuditEntry[]} entries
+ * @returns {OperatorAuditView}
+ */
+function buildOperatorAuditView(offset, entries) {
+  const page = entries.slice(offset, offset + OPERATOR_AUDIT_PAGE_SIZE);
+  const nextOffset = offset + OPERATOR_AUDIT_PAGE_SIZE;
+  return Object.freeze({
+    mode: "test",
+    audit: Object.freeze({
+      as_of: AUDIT_AS_OF_ISO,
+      entries: Object.freeze(page),
+      next_cursor: nextOffset < entries.length ? auditCursorToken(nextOffset) : null
+    })
+  });
+}
+
+/**
+ * Shape check for one audit entry: exact keys, the id/hash grammars, the
+ * action and target-kind vocabularies, the target grammar matching the
+ * declared kind, and an instant inside the roster's window.
+ * @param {unknown} entry
+ */
+function validOperatorAuditEntry(entry) {
+  if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorAuditEntry} */ (entry);
+  if (JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify([...AUDIT_ENTRY_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !AUDIT_ID_PATTERN.test(candidate.audit_id) ||
+    !SUBJECT_PATTERN.test(candidate.actor_subject_id) ||
+    !OPERATOR_ROLES.includes(candidate.actor_role) ||
+    !OPERATOR_AUDIT_ACTIONS.includes(candidate.action) ||
+    !OPERATOR_AUDIT_TARGET_KINDS.includes(candidate.target_kind) ||
+    !AUDIT_DETAIL_HASH_PATTERN.test(candidate.detail_hash)
+  ) {
+    return false;
+  }
+  const targetOk =
+    candidate.target_kind === "session"
+      ? AUDIT_SESSION_TARGET_PATTERN.test(candidate.target_id)
+      : candidate.target_kind === "queue_item"
+        ? AUDIT_QUEUE_TARGET_PATTERN.test(candidate.target_id)
+        : candidate.target_kind === "subject"
+          ? CUSTOMER_SUBJECT_PATTERN.test(candidate.target_id)
+          : FLAG_ID_PATTERN.test(candidate.target_id);
+  if (!targetOk) {
+    return false;
+  }
+  return isIsoTimestamp(candidate.at) && Date.parse(candidate.at) <= QUEUE_SNAPSHOT_MS;
+}
+
+/**
+ * Collection check for `GET /api/v1/operator/audit`: the top-level view
+ * keys, the pinned `as_of` instant, a bounded newest-first page whose
+ * entries are the verbatim recompute of the deterministic feed — so the
+ * page can never disagree with the roster or reference a subject outside
+ * `subjectsFor()` — and a `next_cursor` that is exactly the minted token
+ * for the following boundary.
+ * @param {unknown} view
+ */
+export function validOperatorAuditView(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorAuditView} */ (view);
+  if (
+    JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...AUDIT_VIEW_KEYS].sort()) ||
+    candidate.mode !== "test"
+  ) {
+    return false;
+  }
+  const audit = /** @type {unknown} */ (candidate.audit);
+  if (audit === null || typeof audit !== "object" || Array.isArray(audit)) {
+    return false;
+  }
+  const feed = /** @type {OperatorAuditView["audit"]} */ (audit);
+  if (JSON.stringify(Object.keys(audit).sort()) !== JSON.stringify([...AUDIT_KEYS].sort())) {
+    return false;
+  }
+  if (
+    feed.as_of !== AUDIT_AS_OF_ISO ||
+    !Array.isArray(feed.entries) ||
+    feed.entries.length < 1 ||
+    feed.entries.length > OPERATOR_AUDIT_PAGE_SIZE ||
+    !(feed.next_cursor === null || AUDIT_CURSOR_PATTERN.test(feed.next_cursor))
+  ) {
+    return false;
+  }
+  const ids = new Set();
+  let previousMs = Number.POSITIVE_INFINITY;
+  let previousId = "";
+  for (const entry of feed.entries) {
+    if (!validOperatorAuditEntry(entry) || ids.has(entry.audit_id)) {
+      return false;
+    }
+    ids.add(entry.audit_id);
+    const atMs = Date.parse(entry.at);
+    if (atMs > previousMs || (atMs === previousMs && entry.audit_id.localeCompare(previousId) >= 0)) {
+      return false;
+    }
+    previousMs = atMs;
+    previousId = entry.audit_id;
+  }
+  // The page is a pure function of the shared roster: it must equal one
+  // page-sized slice of the deterministic feed verbatim — membership,
+  // order and every derived field — and next_cursor must equal the minted
+  // token for the next boundary, or null when the feed is exhausted.
+  // Anything else is a fabricated read and fails closed.
+  const expected = expectedAuditEntries();
+  for (let offset = 0; offset < expected.length; offset += OPERATOR_AUDIT_PAGE_SIZE) {
+    const slice = expected.slice(offset, offset + OPERATOR_AUDIT_PAGE_SIZE);
+    if (JSON.stringify(slice) !== JSON.stringify(feed.entries)) {
+      continue;
+    }
+    const expectedCursor =
+      offset + slice.length < expected.length ? auditCursorToken(offset + slice.length) : null;
+    return feed.next_cursor === expectedCursor;
+  }
+  return false;
 }

@@ -8,6 +8,7 @@ import { API_METADATA, CONTRACT_GAP_STATUSES, OPERATIONS, PLATFORMS } from "../s
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { CONTRACT_GAP_STATUSES as VALIDATOR_GAP_STATUSES } from "./contract-validator.mjs";
 import {
+  auditOperatorHeaders,
   checkedRequest,
   contract,
   customerHeaders,
@@ -18,6 +19,7 @@ import {
   operationIdFor,
   operationPathFor,
   operatorHeaders,
+  operatorToken,
   orderIdFor,
   REQUEST_ID,
   SUBJECT,
@@ -71,7 +73,8 @@ const KNOWN_QUEUE_ITEM_ID = (
 const OPERATOR_SUBJECT_DETAIL = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
 const OPERATOR_QUEUE = "/api/v1/operator/queue";
 const OPERATOR_QUEUE_ITEM = `${OPERATOR_QUEUE}/{kind}/{itemId}`;
-const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM];
+const OPERATOR_AUDIT = "/api/v1/operator/audit";
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM, OPERATOR_AUDIT];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -249,10 +252,11 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
     assert.equal(JSON.parse(limitedScreening.body).code, "RATE_LIMITED");
     for (const path of OPERATOR_PATHS) {
       const target = path.replace("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID).replace("{kind}", "kyc").replace("{itemId}", KNOWN_QUEUE_ITEM_ID);
+      const headers = path === OPERATOR_AUDIT ? auditOperatorHeaders : operatorHeaders;
       now += 61_000;
-      assert.equal((await observe(port, { path: target, headers: operatorHeaders() })).status, 200);
-      assert.equal((await observe(port, { path: target, headers: operatorHeaders({ Authorization: null }) })).status, 401);
-      const limited = await observe(port, { path: target, headers: operatorHeaders() });
+      assert.equal((await observe(port, { path: target, headers: headers() })).status, 200);
+      assert.equal((await observe(port, { path: target, headers: headers({ Authorization: null }) })).status, 401);
+      const limited = await observe(port, { path: target, headers: headers() });
       assert.equal(limited.status, 429);
       assert.equal(JSON.parse(limited.body).code, "RATE_LIMITED");
       assert.equal(header(limited, "retry-after"), "60");
@@ -449,7 +453,8 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
       async subjectsFor() { throw new Error("subject store exploded: secret=abc"); },
       async subjectFor() { throw new Error("subject store exploded: secret=abc"); },
       async queueFor() { throw new Error("queue store exploded: secret=abc"); },
-      async queueItemFor() { throw new Error("queue store exploded: secret=abc"); }
+      async queueItemFor() { throw new Error("queue store exploded: secret=abc"); },
+      async auditFor() { throw new Error("audit store exploded: secret=abc"); }
     }
   }, async (port) => {
     for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM]) {
@@ -458,6 +463,10 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
       assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
       assert.doesNotMatch(response.body, /secret|exploded/u);
     }
+    const response = await observe(port, { path: OPERATOR_AUDIT, headers: auditOperatorHeaders() });
+    assert.equal(response.status, 500);
+    assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    assert.doesNotMatch(response.body, /secret|exploded/u);
   });
   // An operator principal outside the token grammar (here a subject that
   // never matches syn_oper_*) fails the session view's fail-closed
@@ -713,6 +722,67 @@ test("GET /api/v1/operator/subjects/{subjectId} serves the roster detail to the 
     assert.equal(customer.status, 401);
     assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
     assert.equal(header(customer, "www-authenticate"), "Bearer");
+  });
+});
+
+test("GET /api/v1/operator/audit serves the role-gated synthetic feed with cursor pagination", async () => {
+  await withServer({}, async (port) => {
+    // The default operator subject draws support-l1: the audit read is the
+    // one operator surface restricted to oversight roles.
+    const denied = await observe(port, { path: OPERATOR_AUDIT, headers: operatorHeaders() });
+    assert.equal(denied.status, 403);
+    assert.equal(JSON.parse(denied.body).code, "CAPABILITY_DENIED");
+
+    for (const headers of [
+      auditOperatorHeaders,
+      () => operatorHeaders({ Authorization: `Bearer ${operatorToken({ subject: "syn_oper_0000000000000000" })}` })
+    ]) {
+      const first = await observe(port, { path: OPERATOR_AUDIT, headers: headers() });
+      assert.equal(first.status, 200);
+      const page = JSON.parse(first.body);
+      assert.equal(page.mode, "test");
+      assert.equal(page.audit.as_of, "2027-01-29T00:00:00.000Z");
+      assert.ok(page.audit.entries.length > 0 && page.audit.entries.length <= 32);
+      assert.ok(page.audit.next_cursor === null || /^auc_[0-9a-f]{16}$/u.test(page.audit.next_cursor));
+      const seen = new Set();
+      for (const entry of page.audit.entries) {
+        assert.match(entry.audit_id, /^au_[0-9a-f]{24}$/u);
+        assert.match(entry.actor_subject_id, /^syn_oper_[a-z0-9]{8,32}$/u);
+        assert.match(entry.detail_hash, /^adh_[0-9a-f]{32}$/u);
+        assert.ok(!seen.has(entry.audit_id));
+        seen.add(entry.audit_id);
+      }
+      // Cursor round-trip: a served page token answers the next page, and a
+      // well-formed token that was never minted answers the uniform 404.
+      if (page.audit.next_cursor !== null) {
+        const next = await observe(port, {
+          path: `${OPERATOR_AUDIT}?cursor=${page.audit.next_cursor}`,
+          headers: headers()
+        });
+        assert.equal(next.status, 200);
+        const tail = JSON.parse(next.body);
+        assert.ok(tail.audit.entries.every((entry) => !seen.has(entry.audit_id)), "no page overlap");
+      }
+      // A well-formed token that was never minted answers the uniform 404:
+      // probe deterministic candidates until one resolves unserved.
+      const directory = await createSyntheticOperatorSubjectsDirectory();
+      let probe = "0".repeat(16);
+      while ((await directory.auditFor(`auc_${probe}`)) !== null) {
+        probe = (BigInt(`0x${probe}`) + 1n).toString(16).padStart(16, "0").slice(-16);
+      }
+      const unminted = await observe(port, {
+        path: `${OPERATOR_AUDIT}?cursor=auc_${probe}`,
+        headers: headers()
+      });
+      assert.equal(unminted.status, 404);
+      assert.equal(JSON.parse(unminted.body).code, "CAPABILITY_DENIED");
+      const malformed = await observe(port, {
+        path: `${OPERATOR_AUDIT}?cursor=bogus`,
+        headers: headers()
+      });
+      assert.equal(malformed.status, 400);
+      assert.equal(JSON.parse(malformed.body).code, "VALIDATION_FAILED");
+    }
   });
 });
 

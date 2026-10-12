@@ -316,7 +316,7 @@ test("reason codes are stable identifiers", () => {
 test("operator capabilities are read-tier grants over the operator audience only", () => {
   assert.deepEqual(
     OPERATOR_CAPABILITY_POLICY.map((item) => item.capability),
-    ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read", "operator.queue.read"]
+    ["operator.session.read", "operator.capabilities.read", "operator.admin.read", "operator.subjects.read", "operator.queue.read", "operator.audit.read"]
   );
   assert.ok(
     OPERATOR_CAPABILITY_POLICY.every(
@@ -340,10 +340,28 @@ test("operator capabilities are read-tier grants over the operator audience only
     "operator.capabilities.read",
     "operator.admin.read",
     "operator.subjects.read",
-    "operator.queue.read"
+    "operator.queue.read",
+    "operator.audit.read"
   ]);
   assert.deepEqual(evaluation.denied, []);
   assert.equal(evaluation.commandsEnabled, false);
+  // The audit read is the one role-scoped grant: the oversight roles keep
+  // it, every other operator role loses exactly that read with the
+  // OPERATOR_ROLE_RESTRICTED reason.
+  for (const role of ["auditor", "compliance-lead"]) {
+    const scoped = evaluateOperatorCapabilities({ role });
+    assert.ok(scoped.granted.includes("operator.audit.read"), role);
+    assert.deepEqual(scoped.denied, [], role);
+  }
+  for (const role of ["support-l1", "aml-investigator", "fraud-investigator"]) {
+    const scoped = evaluateOperatorCapabilities({ role });
+    assert.ok(!scoped.granted.includes("operator.audit.read"), role);
+    assert.deepEqual(
+      scoped.denied.map((item) => [item.capability, [...item.reasons]]),
+      [["operator.audit.read", ["OPERATOR_ROLE_RESTRICTED"]]],
+      role
+    );
+  }
 });
 
 test("policy entries are unique, frozen and within the contract item limits", () => {

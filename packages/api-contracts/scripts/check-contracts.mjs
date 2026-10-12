@@ -570,6 +570,64 @@ const pinnedResponseSchemas = {
       age_ms: { type: "integer", minimum: 0 }
     }
   },
+  OperatorAuditView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "audit"],
+    properties: {
+      mode: { const: "test" },
+      audit: { $ref: "#/components/schemas/OperatorAuditFeed" }
+    }
+  },
+  OperatorAuditFeed: {
+    type: "object",
+    additionalProperties: false,
+    required: ["as_of", "entries", "next_cursor"],
+    properties: {
+      as_of: { type: "string", format: "date-time" },
+      entries: {
+        type: "array",
+        minItems: 1,
+        maxItems: 32,
+        uniqueItems: true,
+        items: { $ref: "#/components/schemas/OperatorAuditEntry" }
+      },
+      next_cursor: { type: ["string", "null"], pattern: "^auc_[0-9a-f]{16}$" }
+    }
+  },
+  // One operator action-log row: the opaque au_* handle, the staff actor
+  // ref and role, the fixed action vocabulary, the typed target ref, the
+  // instant and an opaque detail digest — never raw contact data or PII.
+  OperatorAuditEntry: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "audit_id",
+      "actor_subject_id",
+      "actor_role",
+      "action",
+      "target_kind",
+      "target_id",
+      "at",
+      "detail_hash"
+    ],
+    properties: {
+      audit_id: { type: "string", pattern: "^au_[0-9a-f]{24}$" },
+      actor_subject_id: { type: "string", pattern: "^syn_oper_[a-z0-9]{8,32}$" },
+      actor_role: {
+        type: "string",
+        enum: ["compliance-lead", "support-l1", "aml-investigator", "fraud-investigator", "auditor"]
+      },
+      action: {
+        type: "string",
+        enum: ["session.opened", "session.rotated", "queue.viewed", "subject.viewed", "flag.reviewed"]
+      },
+      target_kind: { type: "string", enum: ["session", "queue_item", "subject", "flag"] },
+      target_id: { type: "string", pattern: "^(osn|qky|qml|qtick|flg)_[0-9a-f]{24}$|^syn_cust_[a-z0-9]{8,32}$" },
+      at: { type: "string", format: "date-time" },
+      detail_hash: { type: "string", pattern: "^adh_[0-9a-f]{32}$" }
+    }
+  },
   OperatorQueueItemDetailView: {
     type: "object",
     additionalProperties: false,
@@ -2112,6 +2170,7 @@ function checkOpenApi() {
     ["getOperatorSubject", "/api/v1/operator/subjects/{subjectId}"],
     ["getOperatorQueue", "/api/v1/operator/queue"],
     ["getOperatorQueueItem", "/api/v1/operator/queue/{kind}/{itemId}"],
+    ["getOperatorAudit", "/api/v1/operator/audit"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
     ["getCustomerOperations", "/api/v1/customer/operations"],
@@ -2175,6 +2234,7 @@ function checkOpenApi() {
     ["getOperatorSubject", ["200", "401", "404", "429", "500"]],
     ["getOperatorQueue", readStatuses],
     ["getOperatorQueueItem", ["200", "401", "404", "429", "500"]],
+    ["getOperatorAudit", ["200", "401", "403", "404", "429", "500"]],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
     ["getCustomerOperations", gatedReadStatuses],
@@ -2215,6 +2275,7 @@ function checkOpenApi() {
     ["getOperatorSubject", "#/components/schemas/OperatorSubjectDetailView"],
     ["getOperatorQueue", "#/components/schemas/OperatorQueueView"],
     ["getOperatorQueueItem", "#/components/schemas/OperatorQueueItemDetailView"],
+    ["getOperatorAudit", "#/components/schemas/OperatorAuditView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["getCustomerOperations", "#/components/schemas/OperationsView"],

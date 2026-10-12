@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  parseOperatorAuditView,
   parseOperatorQueueItemDetailView,
   parseOperatorQueueView,
   parseOperatorSubjectsView,
@@ -695,5 +696,81 @@ describe("operator queue item detail adapter", () => {
     assert.equal(parsed?.kind, "kyc");
     if (parsed?.kind !== "kyc") return;
     assert.equal(parsed.item.kyc, null);
+  });
+});
+
+const auditPayload = {
+  mode: "test",
+  audit: {
+    asOf: "2027-01-29T00:00:00.000Z",
+    entries: [
+      {
+        auditId: "au_00112233445566778899aabb",
+        actorSubjectId: "syn_oper_0011223344556677",
+        actorRole: "auditor",
+        action: "subject.viewed",
+        targetKind: "subject",
+        targetId: "syn_cust_00112233445566778899aabb",
+        at: "2027-01-28T10:00:00.000Z",
+        detailHash: "adh_00112233445566778899aabbccddeeff"
+      },
+      {
+        auditId: "au_bbccddee0011223344556677",
+        actorSubjectId: "syn_oper_66554433221100aa",
+        actorRole: "compliance-lead",
+        action: "flag.reviewed",
+        targetKind: "flag",
+        targetId: "flg_00112233445566778899aabb",
+        at: "2027-01-28T09:00:00.000Z",
+        detailHash: "adh_ffeeddccbbaa99887766554433221100"
+      }
+    ],
+    nextCursor: "auc_0011223344556677"
+  }
+};
+
+describe("operator audit adapter", () => {
+  it("parses the signed feed verbatim", () => {
+    const parsed = parseOperatorAuditView(auditPayload);
+    assert.equal(parsed?.mode, "test");
+    assert.equal(parsed?.audit.asOf, "2027-01-29T00:00:00.000Z");
+    assert.equal(parsed?.audit.nextCursor, "auc_0011223344556677");
+    assert.equal(parsed?.audit.entries.length, 2);
+    const first = parsed?.audit.entries[0];
+    assert.equal(first?.auditId, "au_00112233445566778899aabb");
+    assert.equal(first?.actorRole, "auditor");
+    assert.equal(first?.action, "subject.viewed");
+    assert.equal(first?.targetKind, "subject");
+    assert.ok(Object.isFrozen(parsed));
+    assert.ok(Object.isFrozen(parsed?.audit.entries));
+  });
+
+  it("fails closed on drift, hostile shapes and PII-like extras", () => {
+    const entry = auditPayload.audit.entries[0];
+    const feed = (overrides: Record<string, unknown>) => ({ mode: "test", audit: { ...auditPayload.audit, ...overrides } });
+    const drifts: unknown[] = [
+      null,
+      "audit",
+      { ...auditPayload, mode: "live" },
+      { ...auditPayload, extra: true },
+      feed({ asOf: "2027-01-29" }),
+      feed({ entries: [] }),
+      feed({ entries: Array.from({ length: 33 }, () => entry) }),
+      feed({ nextCursor: "auc_zzz" }),
+      feed({ nextCursor: 42 }),
+      feed({ entries: [entry, entry] }),
+      feed({ entries: [{ ...entry, auditId: "au_zzz" }] }),
+      feed({ entries: [{ ...entry, actorSubjectId: "operator:aml-08" }] }),
+      feed({ entries: [{ ...entry, actorRole: "superuser" }] }),
+      feed({ entries: [{ ...entry, action: "money.moved" }] }),
+      feed({ entries: [{ ...entry, targetKind: "ledger" }] }),
+      feed({ entries: [{ ...entry, targetId: "WDR-991804" }] }),
+      feed({ entries: [{ ...entry, at: "soon" }] }),
+      feed({ entries: [{ ...entry, detailHash: "sha256:abc" }] }),
+      feed({ entries: [{ ...entry, email: "a@b.c" }] })
+    ];
+    for (const payload of drifts) {
+      assert.equal(parseOperatorAuditView(payload), undefined, JSON.stringify(payload)?.slice(0, 96));
+    }
   });
 });

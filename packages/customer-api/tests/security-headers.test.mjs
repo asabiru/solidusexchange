@@ -7,7 +7,7 @@ import { METRICS_CONTENT_TYPE, METRICS_PATH } from "../src/observability.mjs";
 import { createFixedWindowRateLimiter } from "../src/rate-limit.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
-import { customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, orderIdFor, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
+import { auditOperatorHeaders, customerHeaders, header, NOW_MS, operationIdFor, operatorHeaders, orderIdFor, rawExchange, REQUEST_ID, request, startTestServer, stopServer, VERIFIED_SUBJECT, verifiedCustomerHeaders } from "./http-client.mjs";
 
 // A concrete operation id minted for the verified test subject: the
 // templated member read needs a real id to reach its 200 path.
@@ -47,6 +47,11 @@ function operationHeaders(operation, overrides = {}) {
       "X-Platform": null,
       ...overrides
     });
+  }
+  if (operation.path === "/api/v1/operator/audit") {
+    // The audit read is role-gated: the default operator subject draws a
+    // non-oversight role, so the success path needs an oversight token.
+    return auditOperatorHeaders(overrides);
   }
   return operation.path.startsWith("/api/v1/operator/")
     ? operatorHeaders(overrides)

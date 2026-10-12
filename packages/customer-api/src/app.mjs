@@ -29,9 +29,12 @@ import {
 import { validNotificationsView } from "./notifications.mjs";
 import {
   OPERATOR_QUEUE_KINDS,
+  isOperatorAuditCursor,
   operatorCapabilitiesViewFor,
+  operatorRoleFor,
   operatorSessionViewFor,
   validOperatorAdminView,
+  validOperatorAuditView,
   validOperatorCapabilitiesView,
   validOperatorQueueItemDetail,
   validOperatorQueueView,
@@ -207,10 +210,10 @@ function matchOperation(method, url) {
 }
 
 /**
- * A query string is part of the declared surface only for the operation
- * that declares a query parameter (the operator queue's `kind`); anywhere
- * else it is undeclared input and the route fails to match, exactly as
- * before.
+ * A query string is part of the declared surface only for the operations
+ * that declare a query parameter (the operator queue's `kind`, the
+ * operator audit feed's `cursor`); anywhere else it is undeclared input
+ * and the route fails to match, exactly as before.
  * @param {Operation} operation
  * @param {ReadonlyMap<string, string>} parameters
  * @param {boolean} hasQuery
@@ -218,7 +221,11 @@ function matchOperation(method, url) {
  * @returns {{ operation: Operation, parameters: ReadonlyMap<string, string>, query: string } | null}
  */
 function queryOperation(operation, parameters, hasQuery, query) {
-  if (hasQuery && operation.operationId !== "getOperatorQueue") {
+  if (
+    hasQuery &&
+    operation.operationId !== "getOperatorQueue" &&
+    operation.operationId !== "getOperatorAudit"
+  ) {
     return null;
   }
   return { operation, parameters, query };
@@ -246,6 +253,33 @@ function operatorQueueKind(query) {
     kind = value;
   }
   return kind;
+}
+
+/**
+ * The audit feed's only query parameter. Strict allowlist semantics like
+ * the queue's `kind`: `cursor` may appear at most once and only as a
+ * served `auc_*` page token; any other key, a duplicate or a malformed
+ * token is invalid input and fails closed. An absent cursor serves the
+ * first page.
+ * @param {string} query
+ * @returns {string | undefined | null}
+ */
+function operatorAuditCursor(query) {
+  if (query === "") {
+    return undefined;
+  }
+  const parameters = new URLSearchParams(query);
+  /** @type {string | undefined} */
+  let cursor;
+  let seen = false;
+  for (const [name, value] of parameters) {
+    if (name !== "cursor" || seen || !isOperatorAuditCursor(value)) {
+      return null;
+    }
+    seen = true;
+    cursor = value;
+  }
+  return cursor;
 }
 
 const BASE_HEADERS = Object.freeze({
@@ -602,7 +636,7 @@ export function createCustomerApiHandler({
       // the operator token and device identifier are the gate, KYC never
       // applies to staff surfaces. The check stays so a served route can
       // never drift from the capabilities the service exposes.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.session.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -619,7 +653,7 @@ export function createCustomerApiHandler({
       // operator.capabilities.read is granted to the operator audience by
       // policy like the session and admin reads. The check stays so a served
       // route can never drift from the capabilities the service exposes.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.capabilities.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -637,7 +671,7 @@ export function createCustomerApiHandler({
       // the operator token and device identifier are the gate, KYC never
       // applies to staff surfaces. The check stays so a served route can
       // never drift from the capabilities the service exposes.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.admin.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -655,7 +689,7 @@ export function createCustomerApiHandler({
       // the operator token and device identifier are the gate, KYC never
       // applies to staff surfaces. The check stays so a served route can
       // never drift from the capabilities the service exposes.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.subjects.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -674,7 +708,7 @@ export function createCustomerApiHandler({
       // A well-formed id outside the shared universe fails closed as the
       // pinned 404 — uniform for every id shape the template admits, so the
       // response never reveals which ids exist.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.subjects.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -707,7 +741,7 @@ export function createCustomerApiHandler({
       // tier regardless of kind, so no kind gets a capability of its own.
       // The check stays so a served route can never drift from the
       // capabilities the service exposes.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.queue.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -726,7 +760,7 @@ export function createCustomerApiHandler({
       // An out-of-enum kind, an unknown item id or a well-formed id minted
       // for another kind all fail closed as the same pinned 404 — uniform,
       // so the response never reveals which ids or kinds exist.
-      const operatorEvaluation = evaluateOperatorCapabilities();
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
       if (!operatorEvaluation.granted.includes("operator.queue.read")) {
         fail(403, "CAPABILITY_DENIED");
         return;
@@ -740,6 +774,41 @@ export function createCustomerApiHandler({
       }
       if (!validOperatorQueueItemDetail(view)) {
         throw new Error("Operator subjects directory returned an invalid queue item detail");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorAudit") {
+      // `cursor` continues the feed across page boundaries: absent means
+      // the first page, anything outside the served `auc_*` token grammar
+      // is invalid input and answers the same VALIDATION_FAILED the
+      // malformed-kind rules use — an undeclared 400 contract gap.
+      const cursor = operatorAuditCursor(query);
+      if (cursor === null) {
+        fail(400, "VALIDATION_FAILED", "cursor must be a served audit page token.");
+        return;
+      }
+      // operator.audit.read is the one role-scoped operator grant: the
+      // action log is accountability data, so the audit-oversight roles
+      // (auditor + compliance-lead) receive it and every other staff role
+      // gets the uniform 403 — the same shape every capability denial
+      // uses, never revealing which roles hold the grant.
+      const operatorEvaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(principal.subject) });
+      if (!operatorEvaluation.granted.includes("operator.audit.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      // A well-formed cursor that was never minted fails closed as the
+      // pinned 404 — uniform like the member reads, never revealing which
+      // page tokens are live.
+      const view = await operatorSubjectsDirectory.auditFor(cursor);
+      if (view === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validOperatorAuditView(view)) {
+        throw new Error("Operator subjects directory returned an invalid audit view");
       }
       send(response, 200, { ...view }, requestId);
       return;

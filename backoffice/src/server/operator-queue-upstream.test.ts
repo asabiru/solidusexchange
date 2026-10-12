@@ -111,7 +111,8 @@ function stubClient(
       seenItems.push({ subject, deviceId, kind, itemId });
       if (itemResult === undefined) return { status: "not-found" };
       return typeof itemResult === "function" ? itemResult(kind, itemId) : itemResult;
-    }
+    },
+    operatorAudit: async () => ({ status: "not-configured" })
   };
   return { client, seen, seenItems };
 }

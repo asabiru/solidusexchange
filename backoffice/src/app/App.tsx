@@ -17,6 +17,7 @@ import {
   getHealth,
   getInvestigations,
   getKycCases,
+  getOperatorAudit,
   getOperatorQueue,
   getOperatorQueueItem,
   getOperatorSubject,
@@ -43,6 +44,7 @@ import {
   type HealthPayload,
   type InvestigationsPayload,
   type KycPayload,
+  type OperatorAuditPayload,
   type OperatorQueuePayload,
   type OperatorSubjectsPayload,
   type SessionPayload,
@@ -88,6 +90,7 @@ import type {
 } from "../data/provider-evidence.js";
 import {
   type OperatorQueueView,
+  parseOperatorAuditView,
   parseOperatorQueueItemDetailView,
   parseOperatorQueueView,
   parseOperatorSubjectView,
@@ -1759,8 +1762,9 @@ export function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) 
   );
 }
 
-export function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: boolean }) {
+export function AuditView({ data, mayExport, operatorAudit }: { data: AuditPayload; mayExport: boolean; operatorAudit?: unknown }) {
   const { t, count } = useI18n();
+  const upstream = useMemo(() => parseOperatorAuditView(operatorAudit), [operatorAudit]);
   const chain = recordOf(recordOf(data).chain);
   const events = rowsOf<AuditEvent>(recordOf(data).events);
   const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
@@ -1856,7 +1860,71 @@ export function AuditView({ data, mayExport }: { data: AuditPayload; mayExport: 
           </table>
         </TableShell>
       </article>
+      <OperatorAuditFeed upstream={upstream} events={events} />
     </>
+  );
+}
+
+/** Operator action feed: the signed upstream read, newest first, degrading to the local demo rows. */
+function OperatorAuditFeed({ upstream, events }: { upstream: ReturnType<typeof parseOperatorAuditView>; events: readonly AuditEvent[] }) {
+  const { t, date } = useI18n();
+  const feed = upstream?.audit;
+  const rows = useMemo(() => {
+    if (feed !== undefined) return feed.entries.slice(0, 12);
+    // Degrade: the local audit chain's newest events stand in, with the
+    // upstream-only fields (audit id, actor ref, role, target kind) left
+    // unreadable rather than invented — matching the sibling screens'
+    // demo-row degrade.
+    return events.slice(0, 12).map((event) => ({
+      auditId: textOf(event.eventId),
+      actorSubjectId: textOf(event.actor),
+      actorRole: "",
+      action: textOf(event.action),
+      targetKind: "",
+      targetId: textOf(event.resource),
+      at: textOf(event.occurredAt),
+      detailHash: textOf(event.evidenceDigest)
+    }));
+  }, [feed, events]);
+  return (
+    <article className="panel">
+      <header className="panel-heading">
+        <div>
+          <h2>{t("audit.operatorFeedTitle")}</h2>
+          <p>{feed === undefined ? t("audit.operatorFeedDemo") : t("audit.operatorFeedDescription", { asOf: date(feed.asOf) })}</p>
+        </div>
+        <Status tone={feed === undefined ? "warning" : "info"}>{t("common.readOnly")}</Status>
+      </header>
+      <TableShell label={t("audit.operatorFeedTitle")}>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{t("audit.sequence")}</th>
+              <th scope="col">{t("audit.event")}</th>
+              <th scope="col">{t("audit.actor")}</th>
+              <th scope="col">{t("audit.role")}</th>
+              <th scope="col">{t("audit.target")}</th>
+              <th scope="col">{t("audit.hash")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((entry, index) => (
+              <tr key={`${entry.auditId}:${index}`}>
+                <td className="numeric">{index + 1}</td>
+                <td>{entry.action}<small className="cell-note">{entry.at}</small></td>
+                <td><span className="mono">{entry.actorSubjectId}</span></td>
+                <td>{entry.actorRole}</td>
+                <td>{entry.targetKind === "" ? entry.targetId : `${entry.targetKind} · ${entry.targetId}`}</td>
+                <td className="hash-cell">{truncatedOf(entry.detailHash, 14)}</td>
+              </tr>
+            ))}
+            {!rows.length && (
+              <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
+            )}
+          </tbody>
+        </table>
+      </TableShell>
+    </article>
   );
 }
 
@@ -2895,6 +2963,7 @@ interface WorkspaceData {
   operatorQueue?: OperatorQueuePayload;
   operatorQueueAml?: OperatorQueuePayload;
   operatorQueueTickets?: OperatorQueuePayload;
+  operatorAudit?: OperatorAuditPayload;
   aml?: AmlPayload;
   investigations?: InvestigationsPayload;
   fraud?: FraudPayload;
@@ -3046,7 +3115,7 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
@@ -3060,6 +3129,7 @@ export function App() {
         hasCapability(session, "kyc:read") ? getOperatorQueue().catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getOperatorQueue("aml").catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "support:read") ? getOperatorQueue("tickets").catch(() => undefined) : Promise.resolve(undefined),
+        hasCapability(session, "audit:read") ? getOperatorAudit().catch(() => undefined) : Promise.resolve(undefined),
         hasCapability(session, "aml:read") ? getAmlCases() : Promise.resolve(undefined),
         hasCapability(session, "investigations:read") ? getInvestigations() : Promise.resolve(undefined),
         hasCapability(session, "fraud:read") ? getFraudAlerts() : Promise.resolve(undefined),
@@ -3070,7 +3140,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -3379,6 +3449,7 @@ export function App() {
             <AuditView
               data={access.data.audit}
               mayExport={hasCapability(access.data.session, "audit:export")}
+              operatorAudit={access.data.operatorAudit}
             />
           )}
           {screen === "reports" && access.data.reports && <ReportsView data={access.data.reports} />}
