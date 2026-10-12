@@ -210,6 +210,17 @@ const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTe
 const maxReadIds = defaultMaxPerSubject;
 const activityQueryPattern = /^\?limit=([1-9][0-9]?)$/;
 
+// GET surfaces that take query input, mapped to the exact key sets they
+// declare: /bff/activity pins ?limit itself and the two previews read
+// fixed parameters. Every other GET route answers any non-empty query
+// like the member reads do — a silently ignored parameter reads as
+// applied input.
+const queryInputGetRoutes: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["/bff/activity", new Set(["limit"])],
+  ["/bff/quotes/preview", new Set(["from", "to", "amount"])],
+  ["/bff/checks/preview", new Set(["asset", "amount"])]
+]);
+
 function parseActivityLimit(search: string): number | undefined {
   if (search === "") return maxActivityPerSubject;
   const limit = Number(activityQueryPattern.exec(search)?.[1]);
@@ -918,6 +929,12 @@ export function createMiniappServer(
     }
 
     if (path === "/bff/health") {
+      // The health probe declares no query input either — it rejects
+      // before the session tier below because it answers unauthenticated.
+      if (url.search !== "") {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
       const health: HealthView = {
         mode: "dev-synthetic",
         devLogin: config.allowDevLogin,
@@ -928,8 +945,11 @@ export function createMiniappServer(
       return;
     }
 
+    // The gate names a GET route: a POST-only path answers 404 like a
+    // never-registered one rather than asking for a session it cannot use.
     const knownGet = routeTable.some((route) => {
-      if (route.method !== "GET" || route.path === path) return route.path === path;
+      if (route.method !== "GET") return false;
+      if (route.path === path) return true;
       const paramAt = route.path.indexOf("/:");
       return paramAt >= 0 && route.path.slice(paramAt + 2).indexOf("/") === -1
         && path.startsWith(route.path.slice(0, paramAt + 1));
@@ -943,6 +963,17 @@ export function createMiniappServer(
     if (!session) {
       json(response, 401, { error: "unauthenticated" });
       return;
+    }
+
+    // One query pin for every GET surface: routes outside
+    // queryInputGetRoutes declare no input, and inside them every key must
+    // be declared — the member reads' 400 contract applied uniformly.
+    if (url.search !== "") {
+      const declared = queryInputGetRoutes.get(path);
+      if (!declared || ![...url.searchParams.keys()].every((key) => declared.has(key))) {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
     }
 
     if (path === "/bff/session") {
@@ -1080,12 +1111,6 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/operations/")) {
-      // The member read declares no query input — the same pin the other
-      // upstream member reads carry.
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       const id = path.slice("/bff/operations/".length);
       const local = (kyc: KycStatus) => {
         const operation = syntheticData.operation(kyc, id);
@@ -1164,10 +1189,6 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/notifications") {
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       // The local KYC gate and the standalone (unconfigured) dev BFF keep the
       // synthetic outbox feed; only a verified session with customer-api access
       // reads the contract feed. An upstream refusal degrades the surface to the
@@ -1221,10 +1242,6 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/sessions") {
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       // Like /bff/profile, /bff/kyc/status and /bff/support/requests — and
       // unlike /bff/wallet and /bff/notifications — the sessions surface is
       // not KYC-gated upstream: customer.auth.read is granted at every
@@ -1248,10 +1265,6 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/support/requests" || path.startsWith("/bff/support/requests/")) {
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       if (path === "/bff/support/requests") {
         // Like /bff/profile and /bff/kyc/status — and unlike /bff/wallet and
         // /bff/notifications — the support request list is not KYC-gated
@@ -1283,10 +1296,6 @@ export function createMiniappServer(
       return;
     }
     if (path === "/bff/address-screening") {
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       if (session.kyc !== "verified") {
         json(response, 403, { error: "kyc_required" });
         return;
@@ -1313,10 +1322,6 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/address-screening/")) {
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       if (session.kyc !== "verified") {
         json(response, 403, { error: "kyc_required" });
         return;
@@ -1442,13 +1447,6 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/markets/")) {
-      // The member read declares no query input — matching the other
-      // upstream member reads and the upstream contract, which rejects a
-      // query on the depth operation outright.
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
-        return;
-      }
       // The instrument travels percent-encoded inside one path segment
       // ("USDT%2FRUB"), like the upstream contract. A bare slash splits
       // extra segments and an undecodable sequence can never name a book —
@@ -1570,10 +1568,6 @@ export function createMiniappServer(
 
     if (path === "/bff/checks" || path === "/bff/checks/preview" || path.startsWith("/bff/checks/")) {
       if (path === "/bff/checks") {
-        if (url.search !== "") {
-          json(response, 400, { error: "invalid_request" });
-          return;
-        }
         // Same gating as /bff/cards: the local KYC gate and the standalone
         // (unconfigured) dev BFF keep the synthetic checks list; only a
         // verified session with customer-api access reads the contract
@@ -1620,10 +1614,6 @@ export function createMiniappServer(
           }
           throw error;
         }
-        return;
-      }
-      if (url.search !== "") {
-        json(response, 400, { error: "invalid_request" });
         return;
       }
       const reference = path.slice("/bff/checks/".length);
