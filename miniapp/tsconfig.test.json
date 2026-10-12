@@ -26,6 +26,8 @@
     "src/app/trades-sheet.test.ts",
     "src/app/orders.ts",
     "src/app/orders-sheet.test.ts",
+    "src/app/quotes.ts",
+    "src/app/quotes-sheet.test.ts",
     "src/app/icon-data.ts",
     "src/app/notification-seen.ts",
     "src/app/notification-seen.test.ts",

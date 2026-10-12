@@ -21,4 +21,5 @@ export type SheetRequest =
   | { kind: "check"; reference: string }
   | { kind: "markets" }
   | { kind: "trades" }
-  | { kind: "orders" };
+  | { kind: "orders" }
+  | { kind: "quotes" };
