@@ -40,7 +40,11 @@ const TRIGGER_KEYS = new Set([
 ]);
 const EVENT_KEYS = new Set(["pull_request", "push", "workflow_dispatch"]);
 const BRANCH_KEYS = new Set(["branches", "branches-ignore"]);
-const MANUAL_WORKFLOWS = new Set([".github/workflows/deploy.yml"]);
+// Workflows approved to run only on workflow_dispatch rather than the
+// validation pair pull_request + push (the deleted legacy deploy.yml was
+// the only member). Empty while none exists — adding a path back here is
+// itself the approval gate.
+const MANUAL_WORKFLOWS = new Set();
 
 function indentation(line) {
   return line.match(/^\s*/)[0].length;
