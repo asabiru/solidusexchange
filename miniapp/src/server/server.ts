@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   createServer,
   type IncomingMessage,
@@ -52,11 +52,18 @@ import { RequestBodyError, readJsonBody } from "./request-body.js";
 import { apiSecurityHeaders, guardRawResponses, requestHostname } from "./security-headers.js";
 import {
   type CustomerSession,
-  ExpiringStore,
   createSessionHandles,
   lastSeenGranularityMs,
   sessionHandlePattern
 } from "./session.js";
+import {
+  type CustomerSessionRecord,
+  type SessionStore,
+  SessionStoreError,
+  SessionStoreUnavailableError,
+  createCustomerSessionDirectory,
+  createMemorySessionStore
+} from "./session-store.js";
 import { contractAuthSessionsView } from "./sessions.js";
 import { contractAccountView, localAccountView } from "./account.js";
 import {
@@ -82,6 +89,19 @@ const displayName = "Тестовый клиент";
 const devTelegramUserId = 900_000_001;
 const maxSessionsPerSubject = 5;
 const maxRevokedHandlesPerSubject = 20;
+
+// The default backend keeps the seam in-process so an unconfigured BFF is
+// byte-identical to the previous in-memory map; a configured postgres
+// backend must arrive already-initialized through MiniappServerOptions so
+// this synchronous factory can never open a pool.
+function defaultSessionStore(config: ServerConfig): SessionStore {
+  if (config.session && config.session.storage !== "memory") {
+    throw new SessionStoreUnavailableError("PostgreSQL session storage must be initialized before BFF");
+  }
+  const store = createMemorySessionStore();
+  void store.initialize();
+  return store;
+}
 
 export interface Route {
   method: "GET" | "POST";
@@ -143,6 +163,14 @@ export interface MiniappServerOptions {
   logSink?: (line: string) => void;
   /** Monotonic milliseconds for request durations. */
   timer?: () => number;
+  /**
+   * The customer-session backend behind the seam. index.ts builds and
+   * initializes it from `config.session` before the BFF listens; a test or
+   * embedder may inject any initialized store. When absent, the BFF falls
+   * back to a fresh in-memory store unless `config.session` asks for
+   * postgres — which refuses rather than opening an uninitialized backend.
+   */
+  sessionStore?: SessionStore;
 }
 
 const kycTemplates: Readonly<Partial<Record<KycVerificationState, NotificationTemplate>>> = Object.freeze({
@@ -258,9 +286,15 @@ export function createMiniappServer(
 ): Server {
   const clock = options.clock ?? Date.now;
   const devBotToken = options.devBotToken ?? `0:${randomBytes(32).toString("base64url")}`;
-  const sessions = new ExpiringStore<CustomerSession>(clock);
+  const sessionStore = options.sessionStore ?? defaultSessionStore(config);
+  const sessionDirectory = createCustomerSessionDirectory({
+    store: sessionStore,
+    clock,
+    ttlMs: config.sessionTtlSeconds * 1_000,
+    maxPerSubject: maxSessionsPerSubject,
+    maxRevokedPerSubject: maxRevokedHandlesPerSubject
+  });
   const handleOf = createSessionHandles();
-  const revokedHandles = new ExpiringStore<{ subject: string; expiresAt: number }>(clock);
   const quoteProvider = options.quoteProvider ?? (config.quoteSource === "provider-simulator"
     ? createSimulatorQuoteProvider({
       seed: config.quoteSeed,
@@ -307,7 +341,7 @@ export function createMiniappServer(
     wallClock: clock
   });
   const gauges: readonly Gauge[] = Object.freeze([
-    { name: "solidchange_miniapp_sessions_active", help: "Unexpired Mini App BFF sessions.", value: () => sessions.size() },
+    { name: "solidchange_miniapp_sessions_active", help: "Unexpired Mini App BFF sessions.", value: () => sessionDirectory.countLive() },
     { name: "solidchange_miniapp_notification_drafts", help: "Draft notifications held in the test-mode outbox.", value: () => outbox.size() },
     { name: "solidchange_miniapp_address_screenings", help: "Address screenings tracked in memory.", value: () => addressScreening.trackedCount() },
     { name: "solidchange_miniapp_support_requests", help: "Test-mode support request drafts held in memory.", value: () => support.size() }
@@ -368,56 +402,58 @@ export function createMiniappServer(
     return { status: "unavailable" };
   }
 
-  function currentSession(request: IncomingMessage): CustomerSession | undefined {
-    const id = parseCookies(request)[sessionCookie];
-    const session = id ? sessions.get(id) : undefined;
-    if (!session) return undefined;
-    if (session.kyc === "kyc-gated" && kycOnboarding.isVerified(session.subject)) session.kyc = "verified";
-    const now = clock();
-    if (now - session.lastSeenAt >= lastSeenGranularityMs) session.lastSeenAt = now;
-    return session;
+  function toCustomerSession(record: CustomerSessionRecord): CustomerSession {
+    return {
+      id: record.session_id,
+      subject: record.subject,
+      source: record.source,
+      kyc: record.kyc,
+      createdAt: record.issued_at_ms,
+      lastSeenAt: record.last_used_at_ms,
+      expiresAt: record.expires_at_ms
+    };
   }
 
-  function sessionsView(current: CustomerSession): DeviceSessionsView {
-    const own = sessions.entries((entry) => entry.subject === current.subject).map(([, entry]) => ({
-      handle: handleOf(entry.id),
+  async function currentSession(request: IncomingMessage): Promise<CustomerSession | undefined> {
+    const token = parseCookies(request)[sessionCookie];
+    const now = clock();
+    const resolved = token ? await sessionDirectory.resolve(token, now) : null;
+    if (!resolved) return undefined;
+    let live = resolved;
+    if (live.kyc === "kyc-gated" && kycOnboarding.isVerified(live.subject)) {
+      live = (await sessionDirectory.verifyKyc(live.session_id, now)) ?? { ...live, kyc: "verified" };
+    }
+    if (now - live.last_used_at_ms >= lastSeenGranularityMs) {
+      live = (await sessionDirectory.touch(live.session_id, now)) ?? live;
+    }
+    return toCustomerSession(live);
+  }
+
+  async function sessionsView(current: CustomerSession): Promise<DeviceSessionsView> {
+    const own = (await sessionDirectory.listFor(current.subject, clock())).map((entry) => ({
+      handle: handleOf(entry.session_id),
       client: entry.source === "telegram" ? "telegram" as const : "dev-login" as const,
-      createdAt: entry.createdAt,
-      lastSeenAt: entry.lastSeenAt,
-      current: entry.id === current.id
+      createdAt: entry.issued_at_ms,
+      lastSeenAt: entry.last_used_at_ms,
+      current: entry.session_id === current.id
     }));
     own.sort((a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt);
     return { mode: "test", sessions: own };
   }
 
-  function revoke(session: CustomerSession): void {
-    sessions.delete(session.id);
-    revokedHandles.set(handleOf(session.id), { subject: session.subject, expiresAt: session.expiresAt });
-    revokedHandles.retainNewest((entry) => entry.subject === session.subject, maxRevokedHandlesPerSubject);
-  }
-
-  function startSession(
+  async function startSession(
     request: IncomingMessage,
     response: ServerResponse,
     origin: string,
     session: Omit<CustomerSession, "id" | "createdAt" | "lastSeenAt" | "expiresAt">
-  ): void {
+  ): Promise<void> {
     const previous = parseCookies(request)[sessionCookie];
-    if (previous) sessions.delete(previous);
-    const now = clock();
-    const created: CustomerSession = {
-      ...session,
-      id: randomUUID(),
-      createdAt: now,
-      lastSeenAt: now,
-      expiresAt: now + config.sessionTtlSeconds * 1_000
-    };
-    sessions.set(created.id, created);
-    sessions.retainNewest((entry) => entry.subject === created.subject, maxSessionsPerSubject);
+    if (previous) await sessionDirectory.dropByToken(previous);
+    const { session: created, token } = await sessionDirectory.issue(session);
     outbox.record(created.subject, "session_login");
     activity.recordLogin(created.subject, created.source);
-    response.setHeader("set-cookie", sessionCookieValue(created.id, config.sessionTtlSeconds, origin));
-    json(response, 201, sessionView(created));
+    response.setHeader("set-cookie", sessionCookieValue(token, config.sessionTtlSeconds, origin));
+    json(response, 201, sessionView(toCustomerSession(created)));
   }
 
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -486,7 +522,7 @@ export function createMiniappServer(
         }
         const subject = pseudonymousSubject("dev-synthetic", verified.value.user.id);
         kycOnboarding.reset(subject);
-        startSession(request, response, origin, {
+        await startSession(request, response, origin, {
           subject,
           source: "dev-synthetic",
           kyc: kyc as KycStatus
@@ -512,7 +548,7 @@ export function createMiniappServer(
           json(response, 401, { error: "init_data_rejected", reason: verified.reason });
           return;
         }
-        startSession(request, response, origin, {
+        await startSession(request, response, origin, {
           subject: pseudonymousSubject("telegram", verified.value.user.id),
           source: "telegram",
           kyc: "kyc-gated"
@@ -525,8 +561,8 @@ export function createMiniappServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const id = parseCookies(request)[sessionCookie];
-        if (id) sessions.delete(id);
+        const token = parseCookies(request)[sessionCookie];
+        if (token) await sessionDirectory.dropByToken(token);
         response.setHeader("set-cookie", sessionCookieValue("", 0, origin));
         json(response, 200, { ok: true });
         return;
@@ -539,7 +575,7 @@ export function createMiniappServer(
         }
         const single = path === "/bff/sessions/revoke";
         const { handle } = await readJsonBody(request, single ? ["handle"] : []);
-        const session = currentSession(request);
+        const session = await currentSession(request);
         if (!session) {
           json(response, 401, { error: "unauthenticated" });
           return;
@@ -553,21 +589,26 @@ export function createMiniappServer(
             json(response, 409, { error: "current_session" });
             return;
           }
-          const target = sessions.entries((entry) => entry.subject === session.subject && entry.id !== session.id)
-            .find(([id]) => handleOf(id) === handle)?.[1];
+          const target = (await sessionDirectory.listFor(session.subject, clock()))
+            .filter((entry) => entry.session_id !== session.id)
+            .find((entry) => handleOf(entry.session_id) === handle);
           if (target) {
-            revoke(target);
+            await sessionDirectory.revoke(target.session_id, clock());
             activity.recordSessionsRevoked(session.subject, "single", 1);
-          } else if (revokedHandles.get(handle)?.subject !== session.subject) {
+          } else if (
+            !(await sessionDirectory.listRevoked(session.subject, clock()))
+              .some((entry) => handleOf(entry.session_id) === handle)
+          ) {
             json(response, 404, { error: "not_found" });
             return;
           }
         } else {
-          const others = sessions.entries((entry) => entry.subject === session.subject && entry.id !== session.id);
-          for (const [, other] of others) revoke(other);
+          const others = (await sessionDirectory.listFor(session.subject, clock()))
+            .filter((entry) => entry.session_id !== session.id);
+          for (const other of others) await sessionDirectory.revoke(other.session_id, clock());
           activity.recordSessionsRevoked(session.subject, "others", others.length);
         }
-        json(response, 200, sessionsView(session));
+        json(response, 200, await sessionsView(session));
         return;
       }
 
@@ -577,7 +618,7 @@ export function createMiniappServer(
           return;
         }
         await readJsonBody(request, []);
-        const session = currentSession(request);
+        const session = await currentSession(request);
         if (!session) {
           json(response, 401, { error: "unauthenticated" });
           return;
@@ -605,7 +646,7 @@ export function createMiniappServer(
           return;
         }
         const body = await readJsonBody(request, ["asset", "network", "address"]);
-        const session = currentSession(request);
+        const session = await currentSession(request);
         if (!session) {
           json(response, 401, { error: "unauthenticated" });
           return;
@@ -644,7 +685,7 @@ export function createMiniappServer(
           return;
         }
         const body = await readJsonBody(request, ["category", "topic", "message"], ["activityId"]);
-        const session = currentSession(request);
+        const session = await currentSession(request);
         if (!session) {
           json(response, 401, { error: "unauthenticated" });
           return;
@@ -680,7 +721,7 @@ export function createMiniappServer(
           return;
         }
         const body = await readJsonBody(request, ["ids"]);
-        const session = currentSession(request);
+        const session = await currentSession(request);
         if (!session) {
           json(response, 401, { error: "unauthenticated" });
           return;
@@ -743,7 +784,7 @@ export function createMiniappServer(
       return;
     }
 
-    const session = currentSession(request);
+    const session = await currentSession(request);
     if (!session) {
       json(response, 401, { error: "unauthenticated" });
       return;
@@ -1042,7 +1083,7 @@ export function createMiniappServer(
         json(response, 200, contractAuthSessionsView(upstream.view));
         return;
       }
-      json(response, 200, sessionsView(session));
+      json(response, 200, await sessionsView(session));
       return;
     }
     if (path === "/bff/support/requests" || path.startsWith("/bff/support/requests/")) {
@@ -1423,6 +1464,10 @@ export function createMiniappServer(
     handle(request, response).catch((error: unknown) => {
       if (error instanceof RequestBodyError) {
         json(response, error.status, { error: error.status === 415 ? "unsupported_media_type" : "invalid_request" });
+        return;
+      }
+      if (error instanceof SessionStoreError) {
+        json(response, 503, { error: "session_store_unavailable" });
         return;
       }
       json(response, 500, { error: "internal_error" });
