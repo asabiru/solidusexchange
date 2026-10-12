@@ -203,7 +203,14 @@ const auditEntryKeys = [
 const auditIdPattern = /^au_[0-9a-f]{24}$/;
 const auditCursorPattern = /^auc_[0-9a-f]{16}$/;
 const auditDetailHashPattern = /^adh_[0-9a-f]{32}$/;
-const auditTargetIdPattern = /^(osn|qky|qml|qtick|flg)_[0-9a-f]{24}$|^syn_cust_[a-z0-9]{8,32}$/;
+// Each audit target kind pins its own ref grammar upstream — a union
+// pattern alone would admit cross-kind refs the feed never mints.
+const auditTargetIdPatterns: Readonly<Record<string, RegExp>> = {
+  session: /^osn_[0-9a-f]{24}$/,
+  queue_item: /^(qky|qml|qtick)_[0-9a-f]{24}$/,
+  subject: /^syn_cust_[a-z0-9]{8,32}$/,
+  flag: /^flg_[0-9a-f]{24}$/
+};
 const auditActions: ReadonlySet<string> = new Set([
   "session.opened",
   "session.rotated",
@@ -222,6 +229,10 @@ const auditActionTargetKinds: ReadonlyMap<string, string> = new Map([
   ["flag.reviewed", "flag"]
 ]);
 const auditMaxEntries = 32;
+// The roster's pinned as-of instant — the same horizon upstream bounds
+// every derived timestamp against (operator.mjs's QUEUE_SNAPSHOT_MS).
+const queueSnapshotMs = Date.parse("2026-09-01T00:00:00.000Z") + 150 * 86_400_000;
+const auditAsOfIso = new Date(queueSnapshotMs).toISOString();
 // The upstream audit read is role-scoped: the pass-through presents a fixed
 // principal that deterministically draws an oversight role (auditor), since
 // the feed does not vary by reader.
@@ -790,7 +801,8 @@ function parseSubjectRecentActivity(
       return undefined;
     }
     const occurredMs = Date.parse(item.occurred_at);
-    if (occurredMs < registeredMs) {
+    // No instant precedes the account or exceeds the roster's pinned as-of.
+    if (occurredMs < registeredMs || occurredMs > queueSnapshotMs) {
       return undefined;
     }
     const operatorSide = item.activity_id.startsWith("opact_")
@@ -853,6 +865,11 @@ function parseSubjectKyc(value: unknown): CustomerApiSubjectKyc | undefined {
       return undefined;
     }
     sessionIds.add(raw.session_id);
+    const submittedMs = Date.parse(raw.submitted_at);
+    // Timestamps never exceed the roster's pinned as-of instant.
+    if (submittedMs > queueSnapshotMs) {
+      return undefined;
+    }
     const inReview = subjectKycPendingStatuses.has(raw.state);
     if (raw.decided_at === null) {
       // Only attempts still inside the review window lack a decision.
@@ -863,7 +880,8 @@ function parseSubjectKyc(value: unknown): CustomerApiSubjectKyc | undefined {
       typeof raw.decided_at !== "string"
       || !isIsoTimestamp(raw.decided_at)
       || inReview
-      || Date.parse(raw.decided_at) < Date.parse(raw.submitted_at)
+      || Date.parse(raw.decided_at) < submittedMs
+      || Date.parse(raw.decided_at) > queueSnapshotMs
     ) {
       return undefined;
     }
@@ -1159,9 +1177,12 @@ function parseQueueAssignee(item: Record<string, unknown>): { subject: string } 
  * the upstream `validOperatorQueueView` validator pins — exact key sets,
  * `qky_*`/`qml_*`/`qtick_*`/`evd_*`/`syn_cust_*`/`syn_oper_*` refs, enum
  * membership, coherent ISO timestamps (submitted never after the SLA
- * deadline), a non-negative integer age, and a summary that tallies the
- * item set exactly. The declared kind selects the item shape and the state
- * vocabulary; a view that answers a different kind than requested is drift.
+ * deadline), the kind's pinned item order (sla_due_at for kyc/aml,
+ * opened_at for tickets — the queue_id breaks equal instants), the age
+ * arithmetic the snapshot derives (kyc/tickets only: aml's raised instant
+ * is not on the wire), and a summary that tallies the item set exactly.
+ * The declared kind selects the item shape and the state vocabulary; a
+ * view that answers a different kind than requested is drift.
  */
 function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): CustomerApiOperatorQueueView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, queueViewKeys) || value.mode !== "test") {
@@ -1177,6 +1198,8 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
   const seen = new Set<string>();
   const tallied: Record<string, number> = {};
   const items: (CustomerApiQueueItem | CustomerApiAmlQueueItem | CustomerApiTicketQueueItem)[] = [];
+  let previousInstant = "";
+  let previousQueueId = "";
   for (const item of queue.items) {
     if (!isRecord(item)) {
       return undefined;
@@ -1214,6 +1237,8 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
         || typeof item.category !== "string"
         || !ticketCategories.has(item.category)
         || !isIsoTimestamp(item.opened_at)
+        // The snapshot derives the age verbatim from the open instant.
+        || item.age_ms !== queueSnapshotMs - Date.parse(item.opened_at as string)
       ) {
         return undefined;
       }
@@ -1237,6 +1262,8 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
         || !isIsoTimestamp(item.submitted_at)
         || !isIsoTimestamp(item.sla_due_at)
         || Date.parse(item.sla_due_at as string) <= Date.parse(item.submitted_at as string)
+        // The snapshot derives the age verbatim from the submission.
+        || item.age_ms !== queueSnapshotMs - Date.parse(item.submitted_at as string)
       ) {
         return undefined;
       }
@@ -1254,7 +1281,19 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
         })
       );
     }
+    // The page is pinned oldest-first on the kind's sort instant — the
+    // sla deadline for kyc/aml, the open instant for tickets — with the
+    // queue_id breaking equal instants so the order is total.
+    const sortInstant = kind === "tickets" ? (item.opened_at as string) : (item.sla_due_at as string);
+    if (
+      sortInstant < previousInstant
+      || (sortInstant === previousInstant && (item.queue_id as string).localeCompare(previousQueueId) <= 0)
+    ) {
+      return undefined;
+    }
     seen.add(item.queue_id as string);
+    previousInstant = sortInstant;
+    previousQueueId = item.queue_id as string;
     tallied[item.state as string] = (tallied[item.state as string] ?? 0) + 1;
   }
   const summary = queue.summary;
@@ -1309,16 +1348,19 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
 /**
  * Fail-closed parser for the operator queue item detail contract view — the
  * same axes `parseOperatorQueueView` pins for the row (exact key sets, ref
- * grammar, enums, coherent timestamps, a non-negative integer age), with the
+ * grammar, enums, coherent timestamps, the kind's age arithmetic), with the
  * kind's detail key list in place of the collection's row keys plus each
  * kind's extension: the nullable kyc dossier block, the bounded open flag
- * list with unique `flg_*` ids, or the ticket subject/last-message/open
- * tally. The declared kind selects the shape; a view that answers a
- * different kind than requested is drift.
+ * list pinned oldest-first with unique `flg_*` ids and instants inside the
+ * snapshot horizon, or the ticket subject/last-message/open tally. The
+ * member read binds the answered queue_id to the requested one; the
+ * declared kind selects the shape, and a view that answers a different
+ * kind than requested is drift.
  */
 function parseOperatorQueueItemDetailView(
   value: unknown,
-  kind: CustomerApiQueueKind
+  kind: CustomerApiQueueKind,
+  itemId: string
 ): CustomerApiOperatorQueueItemDetailView | undefined {
   if (
     !isRecord(value)
@@ -1329,7 +1371,7 @@ function parseOperatorQueueItemDetailView(
     return undefined;
   }
   const item = value.item;
-  if (!isRecord(item)) {
+  if (!isRecord(item) || item.queue_id !== itemId) {
     return undefined;
   }
   const seen = new Set<string>();
@@ -1355,10 +1397,24 @@ function parseOperatorQueueItemDetailView(
           && typeof flag.alert_type === "string"
           && amlAlertTypes.has(flag.alert_type)
           && isIsoTimestamp(flag.raised_at)
+          && Date.parse(flag.raised_at as string) <= queueSnapshotMs
       )
       || new Set((item.flags as { flag_id: string }[]).map((flag) => flag.flag_id)).size !== item.flags.length
     ) {
       return undefined;
+    }
+    // The flag list is pinned oldest-first; the flag_id breaks equal
+    // instants so the order is total.
+    let previousFlag: { flag_id: string; raised_at: string } | undefined;
+    for (const flag of item.flags as { flag_id: string; raised_at: string }[]) {
+      if (
+        previousFlag !== undefined
+        && (flag.raised_at < previousFlag.raised_at
+          || (flag.raised_at === previousFlag.raised_at && flag.flag_id.localeCompare(previousFlag.flag_id) <= 0))
+      ) {
+        return undefined;
+      }
+      previousFlag = flag;
     }
     const flags = Object.freeze(
       (item.flags as { flag_id: string; alert_type: string; raised_at: string }[]).map((flag) =>
@@ -1388,10 +1444,13 @@ function parseOperatorQueueItemDetailView(
       || typeof item.category !== "string"
       || !ticketCategories.has(item.category)
       || !isIsoTimestamp(item.opened_at)
+      // The snapshot derives the age verbatim from the open instant.
+      || item.age_ms !== queueSnapshotMs - Date.parse(item.opened_at as string)
       || typeof item.subject !== "string"
       || item.subject.length === 0
       || item.subject.length > ticketSubjectMaxLength
       || !isIsoTimestamp(item.last_message_at)
+      || Date.parse(item.last_message_at as string) > queueSnapshotMs
       || typeof item.other_open_tickets !== "number"
       || !Number.isInteger(item.other_open_tickets)
       || item.other_open_tickets < 0
@@ -1424,6 +1483,8 @@ function parseOperatorQueueItemDetailView(
     || !isIsoTimestamp(item.submitted_at)
     || !isIsoTimestamp(item.sla_due_at)
     || Date.parse(item.sla_due_at as string) <= Date.parse(item.submitted_at as string)
+    // The snapshot derives the age verbatim from the submission.
+    || item.age_ms !== queueSnapshotMs - Date.parse(item.submitted_at as string)
   ) {
     return undefined;
   }
@@ -1469,18 +1530,25 @@ class CustomerApiHttpError extends Error {
 /**
  * Fail-closed parser for the operator audit feed: exact key sets, the
  * `au_*`/`auc_*`/`adh_*` ref grammar, the fixed action and target-kind
- * vocabularies (paired exactly as the feed derives them), ISO timestamps,
- * a 32-entry page bound, unique audit ids and the feed's own
- * newest-first order with the descending audit-id tie-break the upstream
- * validator pins — no entry may postdate the feed's own as_of. Any drift fails closed to undefined
- * so the caller degrades rather than rendering unverifiable data.
+ * vocabularies (paired exactly as the feed derives them, with each target
+ * kind pinning its own ref pattern), ISO timestamps inside the roster's
+ * pinned as-of instant, a 32-entry page bound, unique audit ids and the
+ * feed's own newest-first order with the descending audit-id tie-break
+ * the upstream validator pins — no entry may postdate the feed's own
+ * as_of. Any drift fails closed to undefined so the caller degrades
+ * rather than rendering unverifiable data.
  */
 function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, auditViewKeys) || value.mode !== "test") {
     return undefined;
   }
   const audit = value.audit;
-  if (!isRecord(audit) || !hasExactKeys(audit, auditFeedKeys) || !isIsoTimestamp(audit.as_of)) {
+  if (
+    !isRecord(audit)
+    || !hasExactKeys(audit, auditFeedKeys)
+    || !isIsoTimestamp(audit.as_of)
+    || audit.as_of !== auditAsOfIso
+  ) {
     return undefined;
   }
   const asOfMs = Date.parse(audit.as_of);
@@ -1511,7 +1579,7 @@ function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | 
       || !auditTargetKinds.has(entry.target_kind)
       || auditActionTargetKinds.get(entry.action) !== entry.target_kind
       || typeof entry.target_id !== "string"
-      || !auditTargetIdPattern.test(entry.target_id)
+      || !auditTargetIdPatterns[entry.target_kind].test(entry.target_id)
       || !isIsoTimestamp(entry.at)
       || typeof entry.detail_hash !== "string"
       || !auditDetailHashPattern.test(entry.detail_hash)
@@ -1739,7 +1807,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
         deviceId,
         nowMs
       );
-      const view = parseOperatorQueueItemDetailView(body, kind);
+      const view = parseOperatorQueueItemDetailView(body, kind, itemId);
       return view === undefined ? { status: "unavailable" } : { status: "ok", view };
     } catch (error) {
       // The upstream member read answers unknown and wrong-kind ids with its
