@@ -202,7 +202,9 @@ export function cookieOf(response) {
 }
 
 export async function readJson(response) {
-  assert.match(response.headers.get("content-type") ?? "", /^application\/json/);
+  // Boundary-pinned: "application/json-evil" and friends satisfy a bare
+  // prefix match — only a parameter boundary or end-of-string is JSON.
+  assert.match(response.headers.get("content-type") ?? "", /^application\/json(?:;|$)/);
   return response.json();
 }
 

@@ -61,6 +61,9 @@ if (mode === "record") {
   assert.equal(stream.length, restored.journal().length);
   assert.ok(stream.length > before);
   assert.equal(stream.at(-1).seq, stream.length);
+  // Content parity, not just count+tail: a store that rewrote an earlier
+  // row's payload on this append still satisfies length and seq ordering.
+  assert.deepEqual(stream, restored.journal());
   await store.close();
   console.log(`journal-helper-verify-ok events=${stream.length}`);
 } else {
