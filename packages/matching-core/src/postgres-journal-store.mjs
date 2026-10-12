@@ -50,6 +50,17 @@ SELECT journal.payload
  ORDER BY journal.seq ASC;
 `;
 
+// The bounded tail read for a snapshot+tail restore: `(namespace, seq)` is
+// the primary key, so `seq > $2` serves `journal[N+1..M]` straight off the
+// index without touching the prefix.
+const LOAD_AFTER_SQL = `
+SELECT journal.payload
+  FROM matching_core.matching_journal AS journal
+ WHERE journal.namespace = $1
+   AND journal.seq > $2
+ ORDER BY journal.seq ASC;
+`;
+
 const SCHEMA_VERSION_SQL = `
 SELECT migration.version
   FROM matching_core.schema_migrations AS migration
@@ -109,6 +120,36 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
       throw new StoreUnavailableError("matching journal store is not initialized");
     }
     await pool.query(APPEND_SQL, [namespace, JSON.stringify(batch)]);
+  }
+
+  /**
+   * Waits out queued appends, then serves a read against the recorded
+   * stream — `load` and `loadAfter` share one durability boundary: every
+   * queued write settles first, the latched failure rethrows, and a closed
+   * or uninitialized store refuses.
+   *
+   * @param {string} sql
+   * @param {unknown[]} params
+   * @returns {Promise<readonly import("./events.mjs").MatchingEvent[]>}
+   */
+  async function readJournal(sql, params) {
+    await tail;
+    if (failure !== null) {
+      throw failure;
+    }
+    if (pool === null || !ready) {
+      throw new StoreUnavailableError("matching journal store is not initialized");
+    }
+    try {
+      const result = await pool.query(sql, params);
+      return Object.freeze(
+        result.rows.map((row) =>
+          Object.freeze(/** @type {import("./events.mjs").MatchingEvent} */ (row.payload))
+        )
+      );
+    } catch (error) {
+      throw unavailable(error);
+    }
   }
 
   async function initializeOnce() {
@@ -228,23 +269,21 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
      * @returns {Promise<readonly import("./events.mjs").MatchingEvent[]>}
      */
     async load() {
-      await tail;
-      if (failure !== null) {
-        throw failure;
+      return readJournal(LOAD_SQL, [namespace]);
+    },
+    /**
+     * Recorded events with `seq` strictly above the argument — the bounded
+     * tail `replayMatchingJournalStore` folds onto a snapshot. Same
+     * durability boundary as `load`: queued appends settle first.
+     *
+     * @param {number} seq
+     * @returns {Promise<readonly import("./events.mjs").MatchingEvent[]>}
+     */
+    async loadAfter(seq) {
+      if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 0) {
+        throw new StoreError("journal loadAfter requires a non-negative integer seq");
       }
-      if (pool === null || !ready) {
-        throw new StoreUnavailableError("matching journal store is not initialized");
-      }
-      try {
-        const result = await pool.query(LOAD_SQL, [namespace]);
-        return Object.freeze(
-          result.rows.map((row) =>
-            Object.freeze(/** @type {import("./events.mjs").MatchingEvent} */ (row.payload))
-          )
-        );
-      } catch (error) {
-        throw unavailable(error);
-      }
+      return readJournal(LOAD_AFTER_SQL, [namespace, seq]);
     },
     async close() {
       closed = true;

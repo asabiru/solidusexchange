@@ -530,6 +530,42 @@ test("identical redelivery after a lost response records nothing twice", async (
   assert.deepEqual(await store.load(), batch);
 });
 
+// Wave-77 seam: a snapshot plus the durable tail restores byte-identically
+// to the full replay — `loadAfter(seq)` serves `journal[N+1..M]` off the
+// primary key without reading the prefix.
+
+test("a snapshot plus the durable tail restores byte-identically to the full replay", async (t) => {
+  const namespace = "snapshot_tail";
+  const writer = await postgresStore(namespace);
+  t.after(() => writer.close());
+  const live = createMatchingEngine({ journalStore: writer });
+  live.submitOrder(order(1, { side: "sell", price: "90", quantity: "2", owner: "desk-a" }));
+  await writer.load();
+  // The durable tail reached next_seq - 1: this boundary snapshot is the
+  // base a restart restores from.
+  const mid = live.snapshot();
+  live.submitOrder(order(2, { side: "buy", price: "90", quantity: "1", owner: "desk-b" }));
+  live.cancelOrder("USDT/RUB", order(1).order_id);
+  await writer.load();
+
+  const reader = await postgresStore(namespace);
+  t.after(() => reader.close());
+  const continued = await replayMatchingJournalStore(reader, { base: mid });
+  assert.equal(
+    JSON.stringify(continued.snapshot()),
+    JSON.stringify(live.snapshot()),
+  );
+  assert.deepEqual(continued.journal(), live.journal().slice(mid.next_seq - 1));
+  assert.equal((await reader.loadAfter(0)).length, live.journal().length);
+  const reader2 = await postgresStore(namespace);
+  t.after(() => reader2.close());
+  const full = await replayMatchingJournalStore(reader2);
+  assert.equal(
+    JSON.stringify(full.snapshot()),
+    JSON.stringify(live.snapshot()),
+  );
+});
+
 test("an end-of-day timestamp spelling is rejected at insert, before it poisons the stream", async (t) => {
   const pool = new pg.Pool({ connectionString: dsn, max: 1 });
   t.after(() => pool.end());

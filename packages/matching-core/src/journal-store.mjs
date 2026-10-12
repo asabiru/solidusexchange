@@ -49,6 +49,13 @@
  * @property {() => Promise<readonly MatchingEvent[]>} load
  *   Every recorded event in `seq` order — the raw stream restore folds
  *   through `replayMatchingEngine` before it reaches an engine.
+ * @property {(seq: number) => Promise<readonly MatchingEvent[]>} [loadAfter]
+ *   The recorded events with `seq` strictly greater than the argument, in
+ *   `seq` order — the bounded tail read a snapshot+tail restore issues:
+ *   `loadAfter(N)` serves `journal[N+1..M]` without reading the prefix.
+ *   Optional like `initialize`: a backend that cannot slice omits it and
+ *   `replayMatchingJournalStore` falls back to a `load()` filtered to the
+ *   same tail — the fold re-validates either way.
  * @property {() => Promise<void>} close
  */
 
@@ -96,7 +103,9 @@ export function validJournalStore(candidate) {
     typeof (/** @type {MatchingJournalStore} */ (candidate).load) !== "function" ||
     typeof (/** @type {MatchingJournalStore} */ (candidate).close) !== "function" ||
     ((/** @type {MatchingJournalStore} */ (candidate).initialize) !== undefined &&
-      typeof (/** @type {MatchingJournalStore} */ (candidate).initialize) !== "function")
+      typeof (/** @type {MatchingJournalStore} */ (candidate).initialize) !== "function") ||
+    ((/** @type {MatchingJournalStore} */ (candidate).loadAfter) !== undefined &&
+      typeof (/** @type {MatchingJournalStore} */ (candidate).loadAfter) !== "function")
   ) {
     throw new TypeError("journal store must be an object with kind, append, load and close");
   }
@@ -178,6 +187,18 @@ export function createMemoryJournalStore() {
     },
     async load() {
       return Object.freeze(events.slice());
+    },
+    /**
+     * Recorded events with `seq` strictly above the argument — the tail a
+     * snapshot+tail restore folds onto the snapshot.
+     *
+     * @param {number} seq
+     */
+    async loadAfter(seq) {
+      if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 0) {
+        throw new StoreError("journal loadAfter requires a non-negative integer seq");
+      }
+      return Object.freeze(events.filter((event) => event.seq > seq));
     },
     async close() {},
   });

@@ -37,6 +37,18 @@ import {
  * matching the tracked remainder. Anything else throws `TypeError` with an
  * `invalid event stream:` reason.
  *
+ * The two recovery paths compose: `replayMatchingEngine` accepts a `base`
+ * — a canonical snapshot taken at a journal boundary — and folds the
+ * journal tail `snapshot.next_seq..M` onto it, so
+ * `snapshot(N)` + `replay(journal[N+1..M], base)` produces exactly the
+ * engine the full replay produces. The fold grammar is unchanged; the
+ * snapshot simply seeds the state the prefix would have built — the
+ * tracked-order trail, the books with intra-level FIFO intact, and the
+ * `seq`/`fill_id`/`at` counters the tail must continue without a gap or
+ * overlap. Because a snapshot can only land on an operation boundary, the
+ * base's in-flight state is always empty: the tail's first event must open
+ * a new operation, never continue one mid-flight.
+ *
  * @typedef {import("./book.mjs").RestingOrder} RestingOrder
  * @typedef {import("./deterministic.mjs").SimulatedClock} SimulatedClock
  * @typedef {import("./engine.mjs").TrackedOrder} TrackedOrder
@@ -128,16 +140,36 @@ function validClock(clock) {
  * folded events; submitting afterwards continues `seq`/`fill_id` numbering
  * where the stream ended.
  *
- * @param {{ instruments?: InstrumentDefinition[], events?: readonly MatchingEvent[], clock?: SimulatedClock, journalStore?: MatchingJournalStore }} [options]
+ * With `base` — a canonical snapshot produced by `engine.snapshot()` — the
+ * stream is the tail `base.next_seq..`: the fold resumes the tracked state,
+ * books and counters the snapshot recorded instead of starting empty. Every
+ * stream rule then applies across the seam: the tail's first seq must be
+ * `base.next_seq` (a gap or an overlap fails like a broken stream), its
+ * fills continue `fill_id` numbering from `base.next_fill`, its timestamps
+ * continue from `base.last_at`, and mid-invariants like "an order is in
+ * flight" or "a rejection must be earned" are decided against the snapshot's
+ * state. `base` and `instruments` are mutually exclusive — the snapshot
+ * already carries its registry.
+ *
+ * @param {{ instruments?: InstrumentDefinition[], events?: readonly MatchingEvent[], clock?: SimulatedClock, journalStore?: MatchingJournalStore, base?: EngineSnapshot }} [options]
  */
 export function replayMatchingEngine(options = {}) {
-  const candidate = plainOptions(options, ["instruments", "events", "clock", "journalStore"]);
+  const candidate = plainOptions(options, ["instruments", "events", "clock", "journalStore", "base"]);
   if (candidate.instruments !== undefined && !Array.isArray(candidate.instruments)) {
     throw new TypeError("instruments must be an array of instrument definitions");
   }
-  const index = instrumentIndex(
-    /** @type {InstrumentDefinition[] | undefined} */ (candidate.instruments) ?? INSTRUMENTS,
-  );
+  const base =
+    candidate.base === undefined ? undefined : parseEngineSnapshot(candidate.base);
+  if (base !== undefined && candidate.instruments !== undefined) {
+    throw new TypeError("a snapshot base carries its own instrument registry");
+  }
+  const baseState = base === undefined ? undefined : hydrateEngineState(base);
+  const index =
+    baseState === undefined
+      ? instrumentIndex(
+          /** @type {InstrumentDefinition[] | undefined} */ (candidate.instruments) ?? INSTRUMENTS,
+        )
+      : baseState.index;
   const clock = validClock(candidate.clock);
   const journalStore =
     candidate.journalStore === undefined ? undefined : validJournalStore(candidate.journalStore);
@@ -147,18 +179,18 @@ export function replayMatchingEngine(options = {}) {
   }
 
   /** @type {Map<string, TrackedOrder>} */
-  const tracked = new Map();
+  const tracked = baseState?.tracked ?? new Map();
   /** @type {Map<string, ReturnType<typeof createOrderBook>>} */
-  const books = new Map();
+  const books = baseState?.books ?? new Map();
   /** @type {Set<string>} */
-  const inBook = new Set();
+  const inBook = new Set(base === undefined ? [] : base.resting);
   /** @type {MatchingEvent[]} */
   const journal = [];
   /** @type {{ fill_id: string, maker_order_id: string, taker_order_id: string, quantity: unknown } | null} */
   let pendingMaker = null;
-  let expectedSeq = 1;
-  let lastAt = -1;
-  let lastFill = 0n;
+  let expectedSeq = base === undefined ? 1 : base.next_seq;
+  let lastAt = base === undefined ? -1 : base.last_at ?? -1;
+  let lastFill = base === undefined ? 0n : BigInt(base.next_fill) - 1n;
   // The order inside an unfinished operation — accepted or re-queued by an
   // amendment and not yet resolved by `resting`, a terminal `rejected`, or
   // the taker event of its final fill. `null` on an operation boundary.
@@ -352,7 +384,11 @@ export function replayMatchingEngine(options = {}) {
       invalid(`event seq ${String(event.seq)}: must not carry symbol keys`);
     }
     if (event.seq !== expectedSeq) {
-      invalid("seq must be contiguous from 1 with no gaps");
+      invalid(
+        base === undefined
+          ? "seq must be contiguous from 1 with no gaps"
+          : `seq must continue the snapshot at ${expectedSeq} with no gaps`,
+      );
     }
     expectedSeq += 1;
     let at;
@@ -663,10 +699,15 @@ export function replayMatchingEngine(options = {}) {
             }
           } else if (event.reason === "order_not_resting") {
             // The id that reached the resting check was already a valid
-            // pattern, and an in-book order would have cancelled instead.
+            // pattern. The rejection is earned exactly when the order is
+            // not resting in the echoed instrument's book: the live cancel
+            // looks the id up in the SUBMITTED instrument only, so an
+            // order resting on another instrument rejects for real.
             if (
               !isOrderId(event.order_id) ||
-              (echoed !== undefined && echoed.state === "resting")
+              (echoed !== undefined &&
+                echoed.state === "resting" &&
+                echoed.instrument === event.instrument)
             ) {
               invalid(`event seq ${event.seq}: order_not_resting rejection is not earned`);
             }
@@ -791,21 +832,38 @@ export function replayMatchingEngine(options = {}) {
  * keeps appending to the same store, so new submissions continue the
  * recorded `seq` contiguously.
  *
+ * With `base` — a canonical snapshot taken when the store's durable tail
+ * had reached `base.next_seq - 1` — only the tail is read: a store that
+ * can slice serves it through `loadAfter(base.next_seq - 1)`, one that
+ * cannot is loaded whole and filtered to the same seqs. Either way the
+ * fold re-validates the tail against the snapshot, so a snapshot that
+ * disagrees with the recorded stream — wrong boundary, stale, foreign —
+ * fails here rather than booting a divergent engine.
+ *
  * @param {MatchingJournalStore} store
- * @param {{ instruments?: InstrumentDefinition[], clock?: SimulatedClock }} [options]
+ * @param {{ instruments?: InstrumentDefinition[], clock?: SimulatedClock, base?: EngineSnapshot }} [options]
  */
 export async function replayMatchingJournalStore(store, options = {}) {
   validJournalStore(store);
-  const candidate = plainOptions(options, ["instruments", "clock"]);
+  const candidate = plainOptions(options, ["instruments", "clock", "base"]);
   if (candidate.instruments !== undefined && !Array.isArray(candidate.instruments)) {
     throw new TypeError("instruments must be an array of instrument definitions");
   }
-  const events = await store.load();
+  const base = candidate.base === undefined ? undefined : parseEngineSnapshot(candidate.base);
+  if (base !== undefined && candidate.instruments !== undefined) {
+    throw new TypeError("a snapshot base carries its own instrument registry");
+  }
+  const events =
+    base === undefined
+      ? await store.load()
+      : typeof store.loadAfter === "function"
+        ? await store.loadAfter(base.next_seq - 1)
+        : (await store.load()).filter((event) => event.seq >= base.next_seq);
   return replayMatchingEngine({
-    instruments: candidate.instruments,
     events,
     clock: validClock(candidate.clock),
     journalStore: store,
+    base,
   });
 }
 

@@ -818,9 +818,21 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
      * suitable for `restoreMatchingEngine`. Deep-frozen and JSON
      * round-trippable.
      *
+     * Snapshots only ever land on an operation boundary — the only moment a
+     * tail fold can resume from. Capture refuses while an operation is open:
+     * inside `finish` the books and tracked state are already mutated but
+     * `state.nextSeq`/`nextFill` still hold pre-operation values and the
+     * batch is not yet journaled, so that state matches no journal prefix
+     * and a snapshot of it could never be continued. The only call path that
+     * can reach inside an operation is a journal store's `append` calling
+     * back — the same re-entrancy `beginOperation` forbids.
+     *
      * @returns {EngineSnapshot}
      */
     snapshot() {
+      if (operationAt !== null) {
+        throw new RangeError("cannot snapshot inside a matching operation");
+      }
       return canonicalEngineSnapshot({
         index,
         tracked,
