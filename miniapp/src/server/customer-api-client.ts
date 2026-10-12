@@ -304,6 +304,33 @@ export type CustomerApiMarkets =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/**
+ * The customer-api market-depth view (one instrument's book ladder,
+ * snake_case field names). The wire shape carries no scale fields — the
+ * client resolves them from the pair catalog the response must match.
+ */
+export interface CustomerApiMarketDepthView {
+  instrument: QuotePair;
+  base_asset: AssetCode;
+  quote_asset: AssetCode;
+  bids: readonly CustomerApiMarketLevel[];
+  asks: readonly CustomerApiMarketLevel[];
+  last_trade: CustomerApiMarketLastTrade | null;
+  depth_levels: number;
+  base_scale: number;
+  quote_scale: number;
+  price_scale: number;
+  as_of: string;
+  posting: "none";
+}
+
+export type CustomerApiMarketDepth =
+  | { status: "ok"; depth: CustomerApiMarketDepthView }
+  | { status: "denied" }
+  | { status: "not-found" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiPayment {
   payment_id: string;
   asset: "RUB";
@@ -712,6 +739,7 @@ export interface CustomerApiClient {
   exchangeOrders(bffSubject: string, nowMs: number): Promise<CustomerApiExchangeOrders>;
   trades(bffSubject: string, nowMs: number): Promise<CustomerApiTrades>;
   markets(bffSubject: string, nowMs: number): Promise<CustomerApiMarkets>;
+  marketDepth(bffSubject: string, instrument: string, nowMs: number): Promise<CustomerApiMarketDepth>;
   payments(bffSubject: string, nowMs: number): Promise<CustomerApiPayments>;
   cards(bffSubject: string, nowMs: number): Promise<CustomerApiCards>;
   checks(bffSubject: string, nowMs: number): Promise<CustomerApiChecks>;
@@ -1434,6 +1462,135 @@ function parseMarketsView(value: unknown): readonly CustomerApiMarket[] | undefi
     }));
   }
   return Object.freeze(markets);
+}
+
+const marketDepthViewKeys = [
+  "mode",
+  "instrument",
+  "base_asset",
+  "quote_asset",
+  "bids",
+  "asks",
+  "last_trade",
+  "depth_levels",
+  "as_of",
+  "posting"
+] as const;
+
+const maxMarketDepthLevels = 16;
+/** Mirrors the upstream INSTRUMENT_PATH_PATTERN the member route applies. */
+export const marketInstrumentPathPattern = /^[A-Z0-9]{2,8}\/[A-Z0-9]{2,8}$/u;
+
+function parseMarketDepthSide(
+  levels: unknown,
+  pairDef: { baseScale: number },
+  descending: boolean
+): readonly CustomerApiMarketLevel[] | undefined {
+  if (!Array.isArray(levels) || levels.length > maxMarketDepthLevels) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const side: CustomerApiMarketLevel[] = [];
+  let previous: bigint | undefined;
+  for (const entry of levels) {
+    // A ladder level is never null: nullability is the collection read's
+    // empty-side convention, not the depth read's.
+    const level = entry === null ? undefined : parseMarketLevel(entry, pairDef);
+    if (level === undefined || level === null || seen.has(level.price)) {
+      return undefined;
+    }
+    const price = toUnits(level.price, exchangeOrderPriceScale);
+    if (previous !== undefined && (descending ? price >= previous : price <= previous)) {
+      return undefined;
+    }
+    seen.add(level.price);
+    previous = price;
+    side.push(level);
+  }
+  return Object.freeze(side);
+}
+
+/**
+ * Mirrors the upstream market-depth contract validator exactly: bids
+ * descend best-first, asks ascend best-first, the book never rests
+ * crossed, and depth_levels reports the deeper side's level count before
+ * the served cap applied — it can only exceed the served levels when a
+ * side actually hit the documented cap.
+ */
+function parseMarketDepthView(value: unknown): CustomerApiMarketDepthView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, marketDepthViewKeys)) {
+    return undefined;
+  }
+  const pairDef = contractQuotePair(value.instrument);
+  if (
+    value.mode !== "test"
+    || pairDef === undefined
+    || value.base_asset !== pairDef.base
+    || value.quote_asset !== pairDef.quote
+    || value.posting !== "none"
+    || !isIsoTimestamp(value.as_of)
+  ) {
+    return undefined;
+  }
+  const bids = parseMarketDepthSide(value.bids, pairDef, true);
+  const asks = parseMarketDepthSide(value.asks, pairDef, false);
+  if (bids === undefined || asks === undefined) {
+    return undefined;
+  }
+  const bestBid = bids[0];
+  const bestAsk = asks[0];
+  if (
+    bestBid !== undefined
+    && bestAsk !== undefined
+    && toUnits(bestBid.price, exchangeOrderPriceScale) >= toUnits(bestAsk.price, exchangeOrderPriceScale)
+  ) {
+    return undefined;
+  }
+  const servedLevels = Math.max(bids.length, asks.length);
+  if (
+    !Number.isSafeInteger(value.depth_levels)
+    || (value.depth_levels as number) < servedLevels
+    || (servedLevels < maxMarketDepthLevels && value.depth_levels !== servedLevels)
+  ) {
+    return undefined;
+  }
+  let lastTrade: CustomerApiMarketLastTrade | null = null;
+  if (value.last_trade !== null) {
+    if (
+      !isRecord(value.last_trade)
+      || !hasExactKeys(value.last_trade, marketLastTradeKeys)
+      || !isScaledDecimal(value.last_trade.price, exchangeOrderPriceScale)
+      || toUnits(value.last_trade.price, exchangeOrderPriceScale) <= 0n
+      || !isScaledDecimal(value.last_trade.quantity, pairDef.baseScale)
+      || toUnits(value.last_trade.quantity, pairDef.baseScale) <= 0n
+      || !isIsoTimestamp(value.last_trade.executed_at)
+      // A fill can only be recorded inside the replayed session: the last
+      // trade never post-dates the snapshot close.
+      || Date.parse(value.last_trade.executed_at) > Date.parse(value.as_of)
+    ) {
+      return undefined;
+    }
+    lastTrade = Object.freeze({
+      price: value.last_trade.price,
+      quantity: value.last_trade.quantity,
+      executed_at: value.last_trade.executed_at
+    });
+  }
+  return Object.freeze({
+    mode: "test",
+    instrument: pairDef.pair,
+    base_asset: pairDef.base,
+    quote_asset: pairDef.quote,
+    bids,
+    asks,
+    last_trade: lastTrade,
+    depth_levels: value.depth_levels as number,
+    base_scale: pairDef.baseScale,
+    quote_scale: pairDef.quoteScale,
+    price_scale: exchangeOrderPriceScale,
+    as_of: value.as_of,
+    posting: "none"
+  });
 }
 
 const paymentKeys = [
@@ -2721,6 +2878,7 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       exchangeOrders: async (): Promise<CustomerApiExchangeOrders> => ({ status: "not-configured" }),
       trades: async (): Promise<CustomerApiTrades> => ({ status: "not-configured" }),
       markets: async (): Promise<CustomerApiMarkets> => ({ status: "not-configured" }),
+      marketDepth: async (): Promise<CustomerApiMarketDepth> => ({ status: "not-configured" }),
       payments: async (): Promise<CustomerApiPayments> => ({ status: "not-configured" }),
       cards: async (): Promise<CustomerApiCards> => ({ status: "not-configured" }),
       checks: async (): Promise<CustomerApiChecks> => ({ status: "not-configured" }),
@@ -2933,6 +3091,43 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     } catch (error) {
       if (error instanceof CustomerApiHttpError && error.status === 403) {
         return { status: "denied" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  async function marketDepth(
+    bffSubject: string,
+    instrument: string,
+    nowMs: number
+  ): Promise<CustomerApiMarketDepth> {
+    // The instrument segment must decode to the upstream path shape before
+    // any request leaves — a malformed name reports the same not-found the
+    // upstream route answers for it, without spending a session call.
+    if (!marketInstrumentPathPattern.test(instrument)) {
+      return { status: "not-found" };
+    }
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticCustomerToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(`/api/v1/customer/markets/${encodeURIComponent(instrument)}`, token, nowMs);
+      const view = parseMarketDepthView(body);
+      // The served ladder must be bound to the requested instrument: an ok
+      // for another book is contract drift, not a depth response.
+      if (view === undefined || view.instrument !== instrument) {
+        return { status: "unavailable" };
+      }
+      return { status: "ok", depth: view };
+    } catch (error) {
+      if (error instanceof CustomerApiHttpError && error.status === 403) {
+        return { status: "denied" };
+      }
+      if (error instanceof CustomerApiHttpError && error.status === 404) {
+        return { status: "not-found" };
       }
       return { status: "unavailable" };
     }
@@ -3252,5 +3447,5 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, trades, markets, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
+  return Object.freeze({ configured: true, access, wallets, deposits, withdrawals, quotes, exchangeOrders, trades, markets, marketDepth, payments, cards, checks, depositAddresses, addressScreenings, addressScreening, activity, operations, operation, notifications, kyc, profile, support, authSessions, users });
 }

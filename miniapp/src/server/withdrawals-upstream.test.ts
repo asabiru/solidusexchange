@@ -43,6 +43,7 @@ function withdrawalsStub(result: CustomerApiWithdrawals | (() => Promise<Custome
     exchangeOrders: async () => ({ status: "not-configured" }),
     trades: async () => ({ status: "not-configured" }),
     markets: async () => ({ status: "not-configured" }),
+    marketDepth: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
     checks: async () => ({ status: "not-configured" }),
