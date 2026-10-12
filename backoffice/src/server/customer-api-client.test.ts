@@ -121,6 +121,11 @@ function subjectDetailView(overrides: Record<string, unknown> = {}): Record<stri
         }
       ]
     },
+    balances: [
+      { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00" },
+      { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+      { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+    ],
     ...overrides
   };
 }
@@ -707,7 +712,54 @@ describe("customer API operator client", () => {
         { activity_id: `opact_${"c".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-22T00:00:00.000Z", summary: "geo_mismatch", money: null }
       ] }),
       detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2026-09-04T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } }),
-      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2026-09-26T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } })
+      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2026-09-26T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } }),
+      detail({ balances: "not-an-array" }),
+      detail({ balances: [] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00" }
+      ] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00" },
+        { asset: "RUB", asset_scale: 2, available: "1.00", hold: "0.00" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "EUR", asset_scale: 2, available: "1200.50", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 6, available: "1200.50", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 2, available: "1200.5", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 2, available: "-1.00", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      detail({ balances: [
+        { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00", extra: 1 },
+        { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+        { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+      ] }),
+      // A closed account echoes no live positions: anything nonzero is drift.
+      detail({ account_status: "closed", sessions: 0 }),
+      detail({ account_status: "closed", sessions: 0, balances: [
+        { asset: "RUB", asset_scale: 2, available: "0.00", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "0.000000001", hold: "0.000000000" },
+        { asset: "USDT", asset_scale: 6, available: "0.000000", hold: "0.000000" }
+      ] })
     ];
     for (const body of drifts) {
       await withFakeApi(

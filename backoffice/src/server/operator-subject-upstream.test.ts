@@ -155,7 +155,12 @@ function contractView(): CustomerApiOperatorSubject {
               rejection_reason: "SIM_DATA_MISMATCH"
             }
           ]
-        }
+        },
+        balances: [
+          { asset: "RUB", asset_scale: 2, available: "1200.50", hold: "0.00" },
+          { asset: "TON", asset_scale: 9, available: "3.500000000", hold: "0.125000000" },
+          { asset: "USDT", asset_scale: 6, available: "87.000000", hold: "1.250000" }
+        ]
       }
     }
   };
@@ -200,6 +205,7 @@ describe("operator subject detail BFF surface", () => {
     assert.equal(subject.limits, null);
     assert.deepEqual(subject.recentActivity, []);
     assert.equal(subject.kyc, null);
+    assert.deepEqual(subject.balances, []);
   });
 
   it("answers any non-local id with the uniform not-found when unconfigured", async () => {
@@ -281,7 +287,12 @@ describe("operator subject detail BFF surface", () => {
               rejectionReason: "SIM_DATA_MISMATCH"
             }
           ]
-        }
+        },
+        balances: [
+          { asset: "RUB", assetScale: 2, available: "1200.50", hold: "0.00" },
+          { asset: "TON", assetScale: 9, available: "3.500000000", hold: "0.125000000" },
+          { asset: "USDT", assetScale: 6, available: "87.000000", hold: "1.250000" }
+        ]
       }
     });
     // The session's bound workstation device and the requested id propagate.

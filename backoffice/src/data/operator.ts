@@ -86,6 +86,14 @@ export interface OperatorSubjectKyc {
   history: readonly OperatorSubjectKycAttempt[];
 }
 
+/** One asset position inside the subject detail's balances block. */
+export interface OperatorSubjectBalance {
+  asset: string;
+  assetScale: number;
+  available: string;
+  hold: string;
+}
+
 export interface OperatorSubjectDetail extends OperatorSubjectRow {
   accountStatus: OperatorAccountStatus;
   contactHash: string;
@@ -94,6 +102,7 @@ export interface OperatorSubjectDetail extends OperatorSubjectRow {
   limits: { maxSessions: number; maxDevices: number };
   recentActivity: readonly OperatorActivityItem[];
   kyc: OperatorSubjectKyc | null;
+  balances: readonly OperatorSubjectBalance[];
 }
 
 export interface OperatorSubjectsView {
@@ -249,6 +258,7 @@ const subjectRowKeys = [
 const subjectDetailViewKeys = ["mode", "subject"] as const;
 const subjectDetailKeys = [
   "accountStatus",
+  "balances",
   "contactHash",
   "devices",
   "displayName",
@@ -280,6 +290,8 @@ const subjectKycReasonCodes: ReadonlySet<string> = new Set(["SIM_DOCUMENT_UNREAD
 const kycSessionPattern = /^kys_[0-9a-f]{24}$/;
 const kycHistoryBound = 4;
 const subjectLimitKeys = ["maxDevices", "maxSessions"] as const;
+const subjectBalanceKeys = ["asset", "assetScale", "available", "hold"] as const;
+const subjectBalanceAssets = ["RUB", "TON", "USDT"] as const;
 const activityItemKeys = ["activityId", "kind", "occurredAt", "summary", "money"] as const;
 const activityMoneyKeys = ["amount", "asset"] as const;
 const activityIdPattern = /^(act|opact)_[0-9a-f]{24}$/;
@@ -711,6 +723,51 @@ function parseSubjectKyc(value: unknown, rosterKycStatus?: string): OperatorSubj
 }
 
 /**
+ * The balances block: exactly one row per wallet asset — the same fixed
+ * table the activity money checks pin — exact keys, the asset's pinned
+ * scale and canonical decimal amounts at that scale (zero included: a
+ * closed account holds no positions, and an empty wallet is a legitimate
+ * draw). The account-state coherence lives with the caller.
+ */
+function parseSubjectBalances(value: unknown): readonly OperatorSubjectBalance[] | undefined {
+  if (!Array.isArray(value) || value.length !== activityAssetScales.size) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const entries: OperatorSubjectBalance[] = [];
+  for (const [index, raw] of value.entries()) {
+    if (
+      !isRecord(raw)
+      || !hasExactKeys(raw, subjectBalanceKeys)
+      || typeof raw.asset !== "string"
+      || raw.asset !== subjectBalanceAssets[index]
+    ) {
+      return undefined;
+    }
+    const scale = activityAssetScales.get(raw.asset);
+    if (
+      scale === undefined
+      || seen.has(raw.asset)
+      || raw.assetScale !== scale
+      || typeof raw.available !== "string"
+      || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(raw.available)
+      || typeof raw.hold !== "string"
+      || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(raw.hold)
+    ) {
+      return undefined;
+    }
+    seen.add(raw.asset);
+    entries.push(Object.freeze({
+      asset: raw.asset,
+      assetScale: raw.assetScale as number,
+      available: raw.available,
+      hold: raw.hold
+    }));
+  }
+  return Object.freeze(entries);
+}
+
+/**
  * The operator subject detail: the list row's axes plus the detail
  * extension — the account_status enum, the redacted `cth_*` contact digest,
  * a bounded integer session count, unique bounded `dev_*` device refs and a
@@ -794,6 +851,17 @@ export function parseOperatorSubjectView(
   if (kyc === undefined) {
     return undefined;
   }
+  // The balances block carries one row per wallet asset; a closed account
+  // holds no positions — every amount must be the canonical zero, the same
+  // account-state coherence the sessions clamp pins.
+  const balances = parseSubjectBalances(item.balances);
+  if (
+    balances === undefined
+    || (item.accountStatus === "closed"
+      && balances.some((entry) => BigInt(entry.available.replace(".", "")) !== 0n || BigInt(entry.hold.replace(".", "")) !== 0n))
+  ) {
+    return undefined;
+  }
   // Cross-block coherence: every dossier submission is subject-side work
   // inside the account window, and a surviving transition must project
   // the exact instant the dossier's newest attempt records.
@@ -834,7 +902,8 @@ export function parseOperatorSubjectView(
         maxDevices: item.limits.maxDevices as number
       }),
       recentActivity,
-      kyc
+      kyc,
+      balances
     })
   });
 }

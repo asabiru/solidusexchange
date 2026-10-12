@@ -96,7 +96,12 @@ function subjectDetailView(id: string): Record<string, unknown> {
             rejection_reason: null
           }
         ]
-      }
+      },
+      balances: [
+        { asset: "RUB", asset_scale: 2, available: "42.00", hold: "0.00" },
+        { asset: "TON", asset_scale: 9, available: "0.000000000", hold: "0.000000000" },
+        { asset: "USDT", asset_scale: 6, available: "7.500000", hold: "0.000000" }
+      ]
     }
   };
 }
@@ -624,7 +629,12 @@ describe("upstream adapter layer — strict view adapters", () => {
             rejectionReason: null
           }
         ]
-      }
+      },
+      balances: [
+        { asset: "RUB", assetScale: 2, available: "42.00", hold: "0.00" },
+        { asset: "TON", assetScale: 9, available: "0.000000000", hold: "0.000000000" },
+        { asset: "USDT", assetScale: 6, available: "7.500000", hold: "0.000000" }
+      ]
     }
   };
 

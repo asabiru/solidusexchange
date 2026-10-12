@@ -207,7 +207,13 @@ function subjectDetailOf(subject) {
       summary: item.summary,
       money: item.money === null ? null : { amount: item.money.amount, asset: item.money.asset }
     })),
-    kyc: kycOf(subject.kyc)
+    kyc: kycOf(subject.kyc),
+    balances: subject.balances.map((entry) => ({
+      asset: entry.asset,
+      assetScale: entry.asset_scale,
+      available: entry.available,
+      hold: entry.hold
+    }))
   };
 }
 

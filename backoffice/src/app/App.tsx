@@ -584,6 +584,27 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
           <div><dt>{t("customers.colLastActive")}</dt><dd>{date(detail.lastActiveAt)}</dd></div>
         </dl>
         <div className="subject-activity">
+          <h3>{t("customers.balances")}</h3>
+          {detail.balances.length === 0 ? (
+            <div className="empty"><p>{t("customers.balancesEmpty")}</p></div>
+          ) : (
+            <TableShell label={t("customers.balancesListLabel")}>
+              <table>
+                <thead><tr><th scope="col">{t("customers.balanceAsset")}</th><th scope="col" className="numeric">{t("customers.balanceAvailable")}</th><th scope="col" className="numeric">{t("customers.balanceHold")}</th></tr></thead>
+                <tbody>
+                  {detail.balances.map((entry) => (
+                    <tr key={entry.asset}>
+                      <td><strong>{entry.asset}</strong></td>
+                      <td className="numeric"><span className="mono">{entry.available}</span></td>
+                      <td className="numeric"><span className="mono">{entry.hold}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </TableShell>
+          )}
+        </div>
+        <div className="subject-activity">
           <h3>{t("customers.kycDossier")}</h3>
           {detail.kyc === null ? (
             <div className="empty"><p>{t("customers.kycEmpty")}</p></div>
