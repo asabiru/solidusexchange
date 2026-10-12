@@ -34,6 +34,10 @@ export interface SimulatorQuoteProviderOptions {
 
 const pairs: readonly QuotePair[] = ["USDT/RUB", "TON/RUB", "TON/USDT"];
 const nonceStoreEntries = 10_000;
+// Mirrors the simulator's canonical decimal wall (MAX_INTEGER_DIGITS in
+// packages/provider-simulators/src/decimal.mjs): the canonical grammar
+// represents at most this many integer digits in any asset.
+const maxCanonicalIntegerDigits = 18;
 /**
  * Every preview stores a quote and a signature nonce; rotating the simulator
  * before its replay cache fills keeps memory bounded and stops one subject
@@ -63,14 +67,20 @@ export function createLocalQuoteProvider(): QuoteProvider {
 
 function parseAmount(asset: AssetCode, value: string): bigint {
   try {
-    return toUnits(value, assets[asset].scale);
+    const units = toUnits(value, assets[asset].scale);
+    if (units >= 10n ** BigInt(maxCanonicalIntegerDigits + assets[asset].scale)) {
+      // The BFF grammar allows wider input than the canonical 18-integer-digit
+      // decimal wall; past the wall the request is malformed, not merely small.
+      throw new QuoteError("invalid_amount");
+    }
+    return units;
   } catch (error) {
     if (error instanceof DecimalError) throw new QuoteError("invalid_amount");
     throw error;
   }
 }
 
-function idempotencyKey(subject: string, request: Omit<QuoteRequest, "idempotency_key">, bucket: number): string {
+function idempotencyKey(subject: string, request: Omit<QuoteRequest, "idempotency_key">, bucket: number | string): string {
   const digest = createHash("sha256")
     .update(JSON.stringify([subject, request.pair, request.side, request.base_amount ?? null, request.quote_amount ?? null, bucket]))
     .digest("hex");
@@ -169,15 +179,50 @@ export function createSimulatorQuoteProvider(options: SimulatorQuoteProviderOpti
       : { pair: routed.pair, side: "sell", base_amount: amount };
     const now = nowSeconds();
     const { simulator, verify } = currentGeneration();
+    const bucket = Math.floor(now / options.ttlSeconds);
+    // The wall clock can tick forward between the bucket read above and the
+    // simulator's own issue read inside requestQuote; assessment and
+    // verification must use the post-issue instant or a quote minted at T+1
+    // is judged not_yet_valid at T.
+    const verifiedNow = (issuedAt: string) => Math.max(nowSeconds(), Math.floor(Date.parse(issuedAt) / 1_000));
 
-    let quoteId: string;
     try {
-      const requested = await simulator.requestQuote({
+      let requested = await simulator.requestQuote({
         ...request,
-        idempotency_key: idempotencyKey(context.subject, request, Math.floor(now / options.ttlSeconds))
+        idempotency_key: idempotencyKey(context.subject, request, bucket)
       });
-      quoteId = requested.quote_id;
+      let delivery = simulator.exportSignedQuote(requested.quote_id);
+      let verified = verify({ headers: delivery.headers, body: delivery.body, now: verifiedNow(requested.issued_at) });
+      if (!verified.ok && verified.reason === "stale_timestamp") {
+        // A replayed quote can age out of the signature freshness window
+        // (e.g. scenario offsets at long TTLs); re-issue under a salted key
+        // rather than lying about the signature time.
+        requested = await simulator.requestQuote({
+          ...request,
+          idempotency_key: idempotencyKey(context.subject, request, `${bucket}:reissue`)
+        });
+        delivery = simulator.exportSignedQuote(requested.quote_id);
+        verified = verify({ headers: delivery.headers, body: delivery.body, now: verifiedNow(requested.issued_at) });
+      }
+      if (!verified.ok) throw new QuoteError("quote_unavailable", "invalid_quote");
+      const quote = verified.payload as unknown as SimulatorQuote;
+      if (
+        quote.quote_id !== requested.quote_id
+        || quote.pair !== routed.pair
+        || quote.side !== routed.side
+        || quote.status !== "indicative"
+        || quote.execution !== "not_supported"
+      ) {
+        throw new QuoteError("quote_unavailable", "invalid_quote");
+      }
+      const assessment = assessQuote(verified.payload, { now: verifiedNow(quote.issued_at) });
+      if (assessment.reason === "stale_price") throw new QuoteError("quote_unavailable", "stale_price");
+      if (!assessment.displayable && assessment.reason !== "expired") {
+        throw new QuoteError("quote_unavailable", "invalid_quote");
+      }
+      return toPreview(quote, routed, from, to, context);
     } catch (error) {
+      if (error instanceof QuoteError) throw error;
       if (error instanceof ProviderError) {
         if (error.code === "provider_unavailable") throw new QuoteError("quote_unavailable", "provider_outage");
         if (error.code === "invalid_request") throw new QuoteError("amount_too_small");
@@ -185,26 +230,6 @@ export function createSimulatorQuoteProvider(options: SimulatorQuoteProviderOpti
       }
       throw error;
     }
-
-    const delivery = simulator.exportSignedQuote(quoteId);
-    const verified = verify({ headers: delivery.headers, body: delivery.body, now });
-    if (!verified.ok) throw new QuoteError("quote_unavailable", "invalid_quote");
-    const quote = verified.payload as unknown as SimulatorQuote;
-    if (
-      quote.quote_id !== quoteId
-      || quote.pair !== routed.pair
-      || quote.side !== routed.side
-      || quote.status !== "indicative"
-      || quote.execution !== "not_supported"
-    ) {
-      throw new QuoteError("quote_unavailable", "invalid_quote");
-    }
-    const assessment = assessQuote(verified.payload, { now });
-    if (assessment.reason === "stale_price") throw new QuoteError("quote_unavailable", "stale_price");
-    if (!assessment.displayable && assessment.reason !== "expired") {
-      throw new QuoteError("quote_unavailable", "invalid_quote");
-    }
-    return toPreview(quote, routed, from, to, context);
   }
 
   return Object.freeze({ source: "provider-simulator" as const, preview });

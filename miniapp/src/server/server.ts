@@ -17,7 +17,7 @@ import type {
   SupportRequestsView
 } from "../shared/api.js";
 import { assets, isAssetCode } from "../shared/assets.js";
-import { fromUnits } from "../shared/decimal.js";
+import { fromUnits, toUnits } from "../shared/decimal.js";
 import { type ActivityLog, contractActivityView, createActivityLog, maxActivityPerSubject } from "./activity.js";
 import { type CheckBook, CheckError, contractChecksView, createCheckBook } from "./checks.js";
 import { type ServerConfig, isLoopbackHostname } from "./config.js";
@@ -1539,6 +1539,25 @@ export function createMiniappServer(
       const from = url.searchParams.get("from") ?? "";
       const to = url.searchParams.get("to") ?? "";
       const amount = url.searchParams.get("amount") ?? "";
+      // Validate before the availability read: a malformed preview must never
+      // spend an upstream wallet call or degrade to *_unavailable — its
+      // contract is a 400 invalid_* answer. This is the provider-agnostic
+      // grammar both quote providers enforce (asset codes, distinct pair,
+      // positive canonical decimal); provider-specific bounds stay with the
+      // provider.
+      if (!isAssetCode(from) || !isAssetCode(to) || from === to) {
+        json(response, 400, { error: "invalid_pair" });
+        return;
+      }
+      try {
+        if (toUnits(amount, assets[from].scale) <= 0n) {
+          json(response, 400, { error: "invalid_amount" });
+          return;
+        }
+      } catch {
+        json(response, 400, { error: "invalid_amount" });
+        return;
+      }
       try {
         const availability = await previewAvailability(session, from);
         if (availability.status === "unavailable") {
