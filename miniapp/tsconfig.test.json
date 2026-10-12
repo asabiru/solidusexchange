@@ -28,6 +28,8 @@
     "src/app/orders-sheet.test.ts",
     "src/app/quotes.ts",
     "src/app/quotes-sheet.test.ts",
+    "src/app/money-flow.ts",
+    "src/app/money-flow-sheet.test.ts",
     "src/app/icon-data.ts",
     "src/app/notification-seen.ts",
     "src/app/notification-seen.test.ts",
