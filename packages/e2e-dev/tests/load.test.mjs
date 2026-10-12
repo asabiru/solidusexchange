@@ -45,6 +45,21 @@ const maxSessionsPerSubject = 5;
 const documentedStatuses = new Set([200, 201, 202, 429, 503]);
 const documented503 = new Set(["activity_unavailable", "audit_integrity_unavailable", "cards_unavailable", "checks_unavailable", "deposits_unavailable", "kyc_unavailable", "profile_unavailable", "exchange_orders_unavailable", "trades_unavailable", "markets_unavailable", "notifications_unavailable", "payments_unavailable", "quote_unavailable", "screening_unavailable", "sessions_unavailable", "support_unavailable", "account_unavailable", "operations_unavailable", "wallet_unavailable", "quotes_unavailable", "withdrawals_unavailable"]);
 const base58Alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+// The gated wallet view every degraded /bff/wallet 200 answers, byte for
+// byte (wave-72: a stray key or shifted scale sailed through unpinned).
+const gatedWalletView = {
+  kyc: "kyc-gated",
+  totalRub: "0.00",
+  availableRub: "0.00",
+  holdRub: "0.00",
+  assets: [
+    { code: "RUB", available: "0.00", hold: "0.00", valueRub: "0.00" },
+    { code: "USDT", available: "0.000000", hold: "0.000000", valueRub: "0.00" },
+    { code: "TON", available: "0.000000000", hold: "0.000000000", valueRub: "0.00" }
+  ],
+  depositAddresses: []
+};
+const kycStates = new Set(["not_started", "submitted", "in_review", "approved", "rejected", "needs_more_data", "timed_out", "unavailable"]);
 
 let startedAt;
 let rssBefore;
@@ -581,14 +596,114 @@ describe("bounded load on the dev stack", () => {
     assert.ok((submits[202] ?? 0) >= 25, `kyc submits must create: ${JSON.stringify(submits)}`);
 
     for (const result of results) {
-      if (result.kind === "quote" && result.status === 200) assert.equal(typeof result.body.kycRequired, "boolean");
+      if (result.kind === "quote" && result.status === 200) {
+        // Gated subjects always need KYC and hold nothing to spend.
+        assert.equal(result.body.kycRequired, true);
+        assert.equal(result.body.insufficientBalance, true);
+      }
+      if (result.kind === "verified-quote" && result.status === 200) {
+        // The verified dev session skips the KYC flag but upstream wallets
+        // are refused, so affordability always degrades to insufficient.
+        assert.equal(result.body.kycRequired, false);
+        assert.equal(result.body.insufficientBalance, true);
+      }
       if ((result.kind === "quote" || result.kind === "verified-quote") && result.status === 200) {
         assert.equal(result.body.executable, false);
+        assert.equal(result.body.executionUnavailableReason, "dev_test_version");
+      }
+      if (result.kind === "kyc-status" && result.status === 200) {
+        // Upstream-contract view (customer.kyc.read is granted to gated
+        // sessions): the adapter pins these fields — not the local view.
+        assert.equal(result.body.mode, "test");
+        assert.equal(result.body.provider, "simulator");
+        assert.equal(result.body.sessionKyc, "kyc-gated");
+        assert.ok(kycStates.has(result.body.state), `kyc state ${result.body.state}`);
+        assert.equal(typeof result.body.canSubmit, "boolean");
+      }
+      if (result.kind === "kyc-submit" && (result.status === 200 || result.status === 202)) {
+        assert.equal(result.body.mode, "test");
+        assert.equal(result.body.provider, "simulator");
+        assert.equal(result.body.state, "submitted");
+        assert.equal(result.body.sessionKyc, "kyc-gated");
+        assert.equal(result.body.canSubmit, false);
+      }
+      if (result.kind === "report" && result.status === 200) {
+        // The signed envelope plus the draft-report payload fields.
+        assert.deepEqual(
+          Object.keys(result.body).sort(),
+          ["issuedAt", "keyId", "keyVersion", "payload", "requestId", "resource", "signature", "signatureVersion"]
+        );
+        assert.equal(result.body.resource, "report:kyc-queue-daily");
+        assert.equal(result.body.payload.id, "kyc-queue-daily");
+        assert.equal(result.body.payload.status, "draft");
+        assert.equal(result.body.payload.not_for_submission, true);
+        assert.equal(result.body.payload.environment, "dev-synthetic");
+        assert.equal(result.body.payload.decisionAuthority, "none");
+      }
+      if (result.kind === "wallet" && result.status === 200) {
+        assert.deepEqual(Object.keys(result.body).sort(), ["assets", "availableRub", "depositAddresses", "holdRub", "kyc", "totalRub"]);
+        assert.ok(["verified", "kyc-gated"].includes(result.body.kyc));
+        assert.deepEqual(result.body.assets.map((entry) => entry.code), ["RUB", "USDT", "TON"]);
+        if (result.body.kyc === "kyc-gated") {
+          assert.deepEqual(result.body, gatedWalletView);
+        }
+      }
+      if (result.kind === "checks" && result.status === 200) {
+        assert.equal(result.body.mode, "test");
+        assert.ok(Array.isArray(result.body.checks));
+        for (const entry of result.body.checks) {
+          assert.equal(entry.mode, "test");
+          assert.ok(["sent", "received"].includes(entry.direction));
+          assert.ok(["RUB", "USDT", "TON"].includes(entry.asset));
+          assert.equal(entry.executable, false);
+          assert.equal(entry.executionUnavailableReason, "dev_test_version");
+          assert.ok(entry.expiresAt > entry.createdAt);
+        }
+      }
+      for (const [kind, listKey] of [["deposits", "deposits"], ["withdrawals", "withdrawals"], ["exchange-orders", "orders"], ["trades", "trades"], ["markets", "markets"], ["payments", "payments"], ["cards", "cards"], ["quotes", "quotes"]]) {
+        if (result.kind === kind && result.status === 200) {
+          // Served upstream view or the in-place gated degrade: the key set
+          // never gains or loses a member either way.
+          assert.deepEqual(Object.keys(result.body).sort(), ["kyc", "mode", listKey].sort(), kind);
+          assert.equal(result.body.mode, "test");
+          assert.ok(["verified", "kyc-gated"].includes(result.body.kyc), kind);
+          assert.ok(Array.isArray(result.body[listKey]), kind);
+          if (result.body.kyc === "kyc-gated") assert.equal(result.body[listKey].length, 0, kind);
+        }
+      }
+      if (result.kind === "operations" && result.status === 200) {
+        assert.deepEqual(Object.keys(result.body), ["operations"]);
+        assert.ok(Array.isArray(result.body.operations));
+      }
+      if (result.kind === "screening" && result.status === 202) {
+        assert.equal(result.body.mode, "test");
+        assert.match(result.body.id, /^scr_[0-9a-f]{32}$/);
+        assert.equal(result.body.advisory, true);
+        assert.equal(result.body.executable, false);
+      }
+      if (result.kind === "screening" && result.status === 429) {
+        assert.deepEqual(result.body, { error: "screening_rate_limited" });
+      }
+      if (result.kind === "screening-list" && result.status === 200) {
+        assert.equal(result.body.mode, "test");
+        assert.ok(Array.isArray(result.body.screenings));
+        for (const entry of result.body.screenings) {
+          assert.equal(entry.mode, "test");
+          assert.match(entry.id, /^scr_[0-9a-f]{32}$/);
+        }
       }
       if (result.kind === "notifications" && result.status === 200) {
+        assert.equal(result.body.mode, "test");
+        assert.equal(result.body.delivery, "disabled");
         assert.ok(result.body.notifications.length <= defaultMaxPerSubject);
+        assert.equal(result.body.unread, result.body.notifications.length);
+        for (const entry of result.body.notifications) {
+          assert.equal(entry.channel, "telegram-draft");
+          assert.equal(entry.delivered, false);
+        }
       }
       if (result.kind === "activity" && result.status === 200) {
+        assert.equal(result.body.mode, "test");
         assert.ok(result.body.items.length <= maxActivityPerSubject);
         assert.equal(result.body.executable, false);
       }
