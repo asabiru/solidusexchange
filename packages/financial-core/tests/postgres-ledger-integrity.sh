@@ -270,6 +270,165 @@ $(artifact_rows e9000000-0000-4000-8000-000000000009 postgres-integrity-9-key "r
 $(toggle_completeness 'ENABLE ALWAYS')" \
   journal_timestamps
 
+assert_integrity_rejected \
+  "migration owner drops the uuid shape constraint and stores a nil correlation id" \
+  "ALTER TABLE financial_core.ledger_journals
+     DROP CONSTRAINT ledger_journals_correlation_id_rfc_shape;
+$(toggle_completeness DISABLE)
+$(journal_row ea000000-0000-4000-8000-00000000000a postgres-integrity-a-key "repeat('a', 64)" | sed 's/e9000000-0000-4000-8000-0000000000e9/00000000-0000-0000-0000-000000000000/')
+$(entry_row ea100000-0000-4000-8000-00000000000a ea000000-0000-4000-8000-00000000000a 1 "$debit_account" DEBIT 3)
+$(entry_row ea200000-0000-4000-8000-00000000000a ea000000-0000-4000-8000-00000000000a 2 "$credit_account" CREDIT 3)
+$(artifact_rows ea000000-0000-4000-8000-00000000000a postgres-integrity-a-key "repeat('a', 64)" ea300000-0000-4000-8000-00000000000a 2)
+$(toggle_completeness 'ENABLE ALWAYS')
+ALTER TABLE financial_core.ledger_journals
+  ADD CONSTRAINT ledger_journals_correlation_id_rfc_shape
+  CHECK (
+    correlation_id::TEXT ~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  ) NOT VALID;" \
+  journal_uuid_shape
+
+assert_integrity_rejected \
+  "migration owner drops the timestamp range constraint and stores a five-digit year" \
+  "ALTER TABLE financial_core.ledger_journals
+     DROP CONSTRAINT ledger_journals_effective_at_range;
+$(toggle_completeness DISABLE)
+$(journal_row eb000000-0000-4000-8000-00000000000b postgres-integrity-b-key "repeat('9', 64)" | sed 's/2026-09-25T11:59:59.000Z/15000-01-01T00:00:00Z/')
+$(entry_row eb100000-0000-4000-8000-00000000000b eb000000-0000-4000-8000-00000000000b 1 "$debit_account" DEBIT 3)
+$(entry_row eb200000-0000-4000-8000-00000000000b eb000000-0000-4000-8000-00000000000b 2 "$credit_account" CREDIT 3)
+$(artifact_rows eb000000-0000-4000-8000-00000000000b postgres-integrity-b-key "repeat('9', 64)" eb300000-0000-4000-8000-00000000000b 2)
+$(toggle_completeness 'ENABLE ALWAYS')
+ALTER TABLE financial_core.ledger_journals
+  ADD CONSTRAINT ledger_journals_effective_at_range
+  CHECK (
+    effective_at >= '0001-01-01 00:00:00+14:00'::TIMESTAMPTZ
+    AND effective_at <= '9999-12-31 23:59:59.999999-14:00'::TIMESTAMPTZ
+  ) NOT VALID;" \
+  journal_timestamp_range
+
+assert_integrity_rejected \
+  "migration owner drops entry and artifact uuid shape constraints for non-RFC identifiers" \
+  "ALTER TABLE financial_core.ledger_entries
+     DROP CONSTRAINT ledger_entries_entry_id_rfc_shape;
+ALTER TABLE financial_core.ledger_outbox_events
+     DROP CONSTRAINT ledger_outbox_outbox_id_rfc_shape;
+$(toggle_completeness DISABLE)
+$(journal_row ec000000-0000-4000-8000-00000000000c postgres-integrity-c-key "repeat('8', 64)")
+$(entry_row ec100000-0000-4000-8000-00000000000c ec000000-0000-4000-8000-00000000000c 1 "$debit_account" DEBIT 3 | sed 's/ec100000-0000-4000-8000-00000000000c/11111111-1111-1111-1111-111111111111/')
+$(entry_row ec200000-0000-4000-8000-00000000000c ec000000-0000-4000-8000-00000000000c 2 "$credit_account" CREDIT 3)
+$(artifact_rows ec000000-0000-4000-8000-00000000000c postgres-integrity-c-key "repeat('8', 64)" ffffffff-ffff-ffff-ffff-ffffffffffff 2)
+$(toggle_completeness 'ENABLE ALWAYS')
+ALTER TABLE financial_core.ledger_entries
+  ADD CONSTRAINT ledger_entries_entry_id_rfc_shape
+  CHECK (
+    entry_id::TEXT ~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  ) NOT VALID;
+ALTER TABLE financial_core.ledger_outbox_events
+  ADD CONSTRAINT ledger_outbox_outbox_id_rfc_shape
+  CHECK (
+    outbox_id::TEXT ~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  ) NOT VALID;" \
+  entry_uuid_shape artifact_uuid_shape
+
+assert_integrity_rejected \
+  "migration owner drops singleton and uuid guards for a version-2 account definition" \
+  "ALTER TABLE financial_core.account_definitions
+     DROP CONSTRAINT account_definitions_chart_version_singleton;
+ALTER TABLE financial_core.ledger_accounts
+     DROP CONSTRAINT ledger_accounts_chart_version_singleton;
+ALTER TABLE financial_core.ledger_accounts
+     DROP CONSTRAINT ledger_accounts_account_id_rfc_shape;
+INSERT INTO financial_core.account_definitions (
+   chart_version, definition_code, category, account_class, normal_side,
+   owner_scope, purpose, created_at
+ ) VALUES (
+   2, 'DRIFT_V2_DEF', 'treasury', 'ASSET', 'DEBIT', 'optional',
+   'Drifted version-two account definition.', '2026-09-25T12:00:00.000Z'
+ );
+INSERT INTO financial_core.ledger_accounts (
+   account_id, chart_version, definition_code, legal_entity_id, asset_code,
+   owner_reference, created_at
+ ) VALUES (
+   '00000000-0000-0000-0000-000000000000', 2, 'DRIFT_V2_DEF', 'solidchange-dev',
+   'TUSDT', 'drift', '2026-09-25T12:00:00.000Z'
+ );
+ALTER TABLE financial_core.account_definitions
+  ADD CONSTRAINT account_definitions_chart_version_singleton
+  CHECK (chart_version = 1) NOT VALID;
+ALTER TABLE financial_core.ledger_accounts
+  ADD CONSTRAINT ledger_accounts_chart_version_singleton
+  CHECK (chart_version = 1) NOT VALID;
+ALTER TABLE financial_core.ledger_accounts
+  ADD CONSTRAINT ledger_accounts_account_id_rfc_shape
+  CHECK (
+    account_id::TEXT ~
+      '^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+  ) NOT VALID;" \
+  account_uuid_shape chart_version_singleton
+
+assert_integrity_rejected \
+  "migration owner disables rule validation and drops the version singleton for a malformed rule" \
+  "ALTER TABLE financial_core.posting_rule_registry
+     DISABLE TRIGGER posting_rule_registry_validate;
+ALTER TABLE financial_core.posting_rule_registry
+     DROP CONSTRAINT posting_rule_registry_version_singleton;
+INSERT INTO financial_core.posting_rule_registry (
+   registry_version, journal_type, posting_rule_version, status, runtime_boundary,
+   production_execution_enabled, scope, allowed_actor_types, entry_pattern,
+   purpose, created_at
+ ) VALUES (
+   2, 'DRIFT_RULE', 'drift-rule-v1', 'draft', 'dev-dry-run', FALSE,
+   'synthetic-test-only', ARRAY['SERVICE', 'SERVICE'],
+   '[{\"definition_code\":\"TREASURY_ASSET\",\"side\":\"DEBIT\"},{\"definition_code\":\"TREASURY_ASSET\",\"side\":\"DEBIT\"}]'::JSONB,
+   'Drifted malformed posting rule.', '2026-09-25T12:00:00.000Z'
+ );
+ALTER TABLE financial_core.posting_rule_registry
+  ADD CONSTRAINT posting_rule_registry_version_singleton
+  CHECK (registry_version = 1) NOT VALID;
+ALTER TABLE financial_core.posting_rule_registry
+  ENABLE ALWAYS TRIGGER posting_rule_registry_validate;" \
+  rule_registry_shape
+
+assert_integrity_rejected \
+  "migration owner drops artifact timestamp range for a delivery attempt year 15000" \
+  "ALTER TABLE financial_core.ledger_outbox_delivery_attempts
+     DROP CONSTRAINT ledger_delivery_attempts_attempted_at_range;
+INSERT INTO financial_core.ledger_outbox_delivery_attempts (
+   delivery_id, outbox_id, attempted_at, outcome, response_digest, error_code
+ ) VALUES (
+   'ed000000-0000-4000-8000-00000000000d',
+   'b0000000-0000-4000-8000-00000000000b',
+   '15000-01-01T00:00:00Z', 'FAILED', NULL, 'DRIFT_PROBE'
+ );
+ALTER TABLE financial_core.ledger_outbox_delivery_attempts
+  ADD CONSTRAINT ledger_delivery_attempts_attempted_at_range
+  CHECK (
+    attempted_at >= '0001-01-01 00:00:00+14:00'::TIMESTAMPTZ
+    AND attempted_at <= '9999-12-31 23:59:59.999999-14:00'::TIMESTAMPTZ
+  ) NOT VALID;" \
+  artifact_timestamp_range
+
+assert_integrity_rejected \
+  "migration owner drops config timestamp range for a BC account definition" \
+  "ALTER TABLE financial_core.account_definitions
+     DROP CONSTRAINT account_definitions_created_at_range;
+INSERT INTO financial_core.account_definitions (
+   chart_version, definition_code, category, account_class, normal_side,
+   owner_scope, purpose, created_at
+ ) VALUES (
+   1, 'DRIFT_BC_DEF', 'treasury', 'ASSET', 'DEBIT', 'optional',
+   'Drifted BC-dated account definition.', '0100-06-01 00:00:00 BC'
+ );
+ALTER TABLE financial_core.account_definitions
+  ADD CONSTRAINT account_definitions_created_at_range
+  CHECK (
+    created_at >= '0001-01-01 00:00:00+14:00'::TIMESTAMPTZ
+    AND created_at <= '9999-12-31 23:59:59.999999-14:00'::TIMESTAMPTZ
+  ) NOT VALID;" \
+  config_timestamp_range
+
 verify_integrity
 
 echo "postgres-ledger-integrity-negative-ok"

@@ -1316,7 +1316,7 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-finite-timestamps.sh": {
-      "minLines": 431,
+      "minLines": 828,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-immutability-catalog.sh": {
@@ -1336,11 +1336,11 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-ledger-integrity.sh": {
-      "minLines": 209,
+      "minLines": 343,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-ledger-integrity.sql": {
-      "minLines": 192,
+      "minLines": 375,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-migration-history.sh": {

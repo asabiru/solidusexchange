@@ -54,8 +54,8 @@ assert_infinite_timestamp_rejected \
       migration_name,
       applied_at
     ) VALUES (
-      13,
-      '0013_finite_timestamp_probe',
+      14,
+      '0014_finite_timestamp_probe',
       'infinity'
     );
   "
@@ -478,6 +478,442 @@ assert_infinite_timestamp_rejected \
       repeat('5', 64),
       2,
       '-infinity'
+    );
+    COMMIT;
+  "
+
+assert_infinite_timestamp_rejected \
+  "schema_migrations_applied_at_range" \
+  "
+    INSERT INTO financial_core.schema_migrations (
+      version,
+      migration_name,
+      applied_at
+    ) VALUES (
+      14,
+      '0014_range_timestamp_probe',
+      '15000-01-01 00:00:00+00'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_assets_created_at_range" \
+  "
+    INSERT INTO financial_core.ledger_assets (
+      asset_code,
+      decimal_places,
+      enabled_for_posting,
+      evidence_reference,
+      created_at
+    ) VALUES (
+      'TRNG',
+      2,
+      FALSE,
+      'range-timestamp-negative-probe',
+      '0100-06-01 00:00:00 BC'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "account_definitions_created_at_range" \
+  "
+    INSERT INTO financial_core.account_definitions (
+      chart_version,
+      definition_code,
+      category,
+      account_class,
+      normal_side,
+      owner_scope,
+      purpose,
+      created_at
+    ) VALUES (
+      1,
+      'RANGE_TIMESTAMP_PROBE',
+      'treasury',
+      'ASSET',
+      'DEBIT',
+      'forbidden',
+      'Reject out-of-range account-definition timestamps.',
+      '15000-01-01 00:00:00+00'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "posting_rule_registry_created_at_range" \
+  "
+    INSERT INTO financial_core.posting_rule_registry (
+      registry_version,
+      journal_type,
+      posting_rule_version,
+      status,
+      runtime_boundary,
+      production_execution_enabled,
+      scope,
+      allowed_actor_types,
+      entry_pattern,
+      purpose,
+      created_at
+    ) VALUES (
+      1,
+      'RANGE_TIMESTAMP_PROBE',
+      'range-timestamp-probe-v1',
+      'draft',
+      'dev-dry-run',
+      FALSE,
+      'synthetic-test-only',
+      ARRAY['SERVICE'],
+      '[
+        {\"definition_code\":\"TREASURY_ASSET\",\"side\":\"DEBIT\"},
+        {\"definition_code\":\"PROVIDER_PAYABLE_LIABILITY\",\"side\":\"CREDIT\"}
+      ]'::JSONB,
+      'Reject out-of-range posting-rule timestamps.',
+      '0100-06-01 00:00:00 BC'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_accounts_created_at_range" \
+  "
+    INSERT INTO financial_core.ledger_accounts (
+      account_id,
+      chart_version,
+      definition_code,
+      legal_entity_id,
+      asset_code,
+      owner_reference,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-000000000001',
+      1,
+      'TREASURY_ASSET',
+      'solidchange-dev',
+      'TUSDT',
+      'range-timestamp-probe',
+      '15000-01-01 00:00:00+00'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_journals_effective_at_range" \
+  "
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-000000000002',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'solidchange-dev',
+      'range-effective-at-probe',
+      repeat('a', 64),
+      'af000000-0000-4000-8000-000000000003',
+      NULL,
+      '15000-01-01 00:00:00+00',
+      '2026-10-01T12:00:00.000Z',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'range-effective-at-probe',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'range-effective-at-probe',
+      repeat('b', 64),
+      '2026-10-01T12:00:00.000Z'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_journals_accepted_at_range" \
+  "
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-000000000004',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'solidchange-dev',
+      'range-accepted-at-probe',
+      repeat('c', 64),
+      'af000000-0000-4000-8000-000000000005',
+      NULL,
+      '2026-10-01T12:05:00.000Z',
+      '0100-06-01 00:00:00 BC',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'range-accepted-at-probe',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'range-accepted-at-probe',
+      repeat('d', 64),
+      '2026-10-01T12:05:00.000Z'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_journals_created_at_range" \
+  "
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-000000000006',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'solidchange-dev',
+      'range-created-at-probe',
+      repeat('e', 64),
+      'af000000-0000-4000-8000-000000000007',
+      NULL,
+      '2026-10-01T12:10:00.000Z',
+      '2026-10-01T12:10:01.000Z',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'range-created-at-probe',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'range-created-at-probe',
+      repeat('f', 64),
+      '15000-01-01 00:00:00+00'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_entries_created_at_range" \
+  "
+    BEGIN;
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-000000000008',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'solidchange-dev',
+      'range-entry-created-at-probe',
+      repeat('1', 64),
+      'af000000-0000-4000-8000-000000000009',
+      NULL,
+      '2026-10-01T12:15:00.000Z',
+      '2026-10-01T12:15:01.000Z',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'range-entry-created-at-probe',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'range-entry-created-at-probe',
+      repeat('2', 64),
+      '2026-10-01T12:15:01.000Z'
+    );
+    INSERT INTO financial_core.ledger_entries (
+      entry_id,
+      journal_id,
+      sequence_number,
+      account_id,
+      legal_entity_id,
+      asset_code,
+      side,
+      amount,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-00000000000a',
+      'af000000-0000-4000-8000-000000000008',
+      1,
+      '10000000-0000-4000-8000-000000000001',
+      'solidchange-dev',
+      'TUSDT',
+      'DEBIT',
+      1,
+      '0100-06-01 00:00:00 BC'
+    );
+    COMMIT;
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_idempotency_first_seen_at_range" \
+  "
+    BEGIN;
+    ALTER TABLE financial_core.ledger_idempotency_registry
+      DISABLE TRIGGER ledger_idempotency_validate_acceptance_timestamp;
+    INSERT INTO financial_core.ledger_idempotency_registry (
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      journal_id,
+      first_seen_at
+    ) VALUES (
+      'solidchange-dev',
+      'range-idempotency-probe',
+      repeat('3', 64),
+      '70000000-0000-4000-8000-000000000007',
+      '15000-01-01 00:00:00+00'
+    );
+    COMMIT;
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_outbox_created_at_range" \
+  "
+    BEGIN;
+    ALTER TABLE financial_core.ledger_outbox_events
+      DISABLE TRIGGER ledger_outbox_validate_acceptance_timestamp;
+    INSERT INTO financial_core.ledger_outbox_events (
+      outbox_id,
+      journal_id,
+      event_type,
+      payload,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-00000000000b',
+      '70000000-0000-4000-8000-000000000007',
+      'internal.ledger.journal-accepted.v1',
+      jsonb_build_object(
+        'journal_id',
+        '70000000-0000-4000-8000-000000000007',
+        'command_digest',
+        repeat('3', 64)
+      ),
+      '0100-06-01 00:00:00 BC'
+    );
+    COMMIT;
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_delivery_attempts_attempted_at_range" \
+  "
+    INSERT INTO financial_core.ledger_outbox_delivery_attempts (
+      delivery_id,
+      outbox_id,
+      attempted_at,
+      outcome,
+      response_digest,
+      error_code
+    ) VALUES (
+      'af000000-0000-4000-8000-00000000000c',
+      'b0000000-0000-4000-8000-00000000000b',
+      '15000-01-01 00:00:00+00',
+      'FAILED',
+      NULL,
+      'RANGE_TIMESTAMP_PROBE'
+    );
+  "
+
+assert_infinite_timestamp_rejected \
+  "ledger_journal_seals_sealed_at_range" \
+  "
+    BEGIN;
+    INSERT INTO financial_core.ledger_journals (
+      journal_id,
+      journal_type,
+      legal_entity_id,
+      idempotency_key,
+      command_digest,
+      correlation_id,
+      causation_id,
+      effective_at,
+      accepted_at,
+      actor_type,
+      actor_id,
+      authorization_reference,
+      policy_version,
+      posting_rule_version,
+      source_type,
+      source_reference,
+      evidence_digest,
+      created_at
+    ) VALUES (
+      'af000000-0000-4000-8000-00000000000d',
+      'SYNTHETIC_PROVIDER_POSITION',
+      'solidchange-dev',
+      'range-seal-probe',
+      repeat('5', 64),
+      'af000000-0000-4000-8000-00000000000e',
+      NULL,
+      '2026-10-01T12:20:00.000Z',
+      '2026-10-01T12:20:01.000Z',
+      'SERVICE',
+      'financial-core-postgres-test',
+      'range-seal-probe',
+      'ledger-dev-policy-v1',
+      'synthetic-provider-position-v1',
+      'synthetic-test',
+      'range-seal-probe',
+      repeat('6', 64),
+      '2026-10-01T12:20:01.000Z'
+    );
+    INSERT INTO financial_core.ledger_journal_seals (
+      journal_id,
+      command_digest,
+      entry_count,
+      sealed_at
+    ) VALUES (
+      'af000000-0000-4000-8000-00000000000d',
+      repeat('5', 64),
+      2,
+      '0100-06-01 00:00:00 BC'
     );
     COMMIT;
   "

@@ -52,6 +52,10 @@ const expectedSources = [
   [
     "0012_ledger_command_digest_uniqueness.sql",
     "f9ce165b0d4ef01b6ba02ce8f975b25a235e1821126fd105513c62e9465ff5db"
+  ],
+  [
+    "0013_ledger_representation_guard.sql",
+    "2e35a66063e850d1376c2e573669b1df9fc12425d33830379d5b0172b99cad86"
   ]
 ];
 
