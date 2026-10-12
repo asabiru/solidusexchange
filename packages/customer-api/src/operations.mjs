@@ -43,6 +43,11 @@ const OPERATION_ASSET_ENTRIES = Object.freeze(Object.entries(OPERATION_ASSETS));
 const QUOTE_ASSET_ENTRIES = Object.freeze(
   OPERATION_ASSET_ENTRIES.filter(([asset]) => asset !== "USDT")
 );
+// A qr operation projects the subject's own SBP rail payment: like the
+// payments domain it settles in RUB only.
+const QR_ASSET_ENTRIES = Object.freeze(
+  OPERATION_ASSET_ENTRIES.filter(([asset]) => asset === "RUB")
+);
 const OPERATION_ASSET_SCALES = new Map(Object.entries(OPERATION_ASSETS));
 const RATE_SCALE = 6;
 
@@ -177,7 +182,12 @@ function buildOperationItem(subject, index) {
   const kind = OPERATION_KINDS[(offset + index) % OPERATION_KINDS.length];
   const statuses = OPERATION_STATUSES[kind];
   const status = statuses[Number(units(subject, `status:${index}`, BigInt(statuses.length)))];
-  const assetPool = kind === "exchange" ? QUOTE_ASSET_ENTRIES : OPERATION_ASSET_ENTRIES;
+  const assetPool =
+    kind === "exchange"
+      ? QUOTE_ASSET_ENTRIES
+      : kind === "qr"
+        ? QR_ASSET_ENTRIES
+        : OPERATION_ASSET_ENTRIES;
   const [asset, scale] =
     assetPool[Number(units(subject, `asset:${index}`, BigInt(assetPool.length)))];
   const amount = decimal(1_000_000n + units(subject, `amount:${index}`, 9_999_000_001n), scale);
@@ -198,7 +208,8 @@ function buildOperationItem(subject, index) {
           Object.freeze({
             asset,
             amount,
-            direction: kind === "withdrawal" ? "out" : "in"
+            // Money leaves the subject on withdrawals and QR payments alike.
+            direction: kind === "withdrawal" || kind === "qr" ? "out" : "in"
           })
         ]);
   const exchange =
@@ -398,7 +409,13 @@ export function validOperationView(item) {
     if (candidate.exchange !== null) {
       return false;
     }
-    if (candidate.legs[0].direction !== (candidate.kind === "withdrawal" ? "out" : "in")) {
+    if (
+      candidate.legs[0].direction !== (candidate.kind === "withdrawal" || candidate.kind === "qr" ? "out" : "in")
+    ) {
+      return false;
+    }
+    // A qr leg mirrors the payments domain's single settlement asset.
+    if (candidate.kind === "qr" && candidate.legs[0].asset !== "RUB") {
       return false;
     }
   }
