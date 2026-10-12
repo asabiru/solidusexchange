@@ -5,10 +5,10 @@ import { isCheckReference } from "../shared/checks";
 import { isDecimalString, toUnits } from "../shared/decimal";
 import { ApiError, api } from "./api";
 import { checkDirectionKey, checkStatusBadge } from "./checks-badges";
+import { checkPreviewOf, checksViewOf, checkViewOf } from "./checks-view";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { arrayOf } from "./server-fields";
 import { Coin, DisabledCta, Sheet } from "./ui";
 
 type CheckAsset = Exclude<AssetCode, "RUB">;
@@ -19,12 +19,10 @@ const previewErrors: Readonly<Record<string, MessageKey>> = {
   invalid_amount: "checks.errorInvalidAmount"
 };
 
-const previewIdPattern = /^CHK-[0-9A-F]{12}$/;
-
 type Mode = { kind: "compose" } | { kind: "detail"; reference: string };
 
 export function ChecksSheet({ close, initial }: { close: () => void; initial?: string }) {
-  const [checks, setChecks] = useState<readonly CheckView[] | undefined>();
+  const [view, setView] = useState<unknown>();
   const [listFailed, setListFailed] = useState(false);
   const [mode, setMode] = useState<Mode>(() => (initial ? { kind: "detail", reference: initial } : { kind: "compose" }));
   const [asset, setAsset] = useState<CheckAsset>("USDT");
@@ -48,7 +46,7 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
   useEffect(() => {
     let active = true;
     api.checks()
-      .then((view) => { if (active) setChecks(arrayOf(view.checks)); })
+      .then((view) => { if (active) setView(view); })
       .catch(() => { if (active) setListFailed(true); });
     return () => { active = false; };
   }, []);
@@ -56,6 +54,11 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
   useEffect(() => {
     if (switches > 0) heading.current?.focus();
   }, [switches]);
+
+  // The served collection renders only through the fail-closed adapter.
+  const checksView = checksViewOf(view);
+  const rows = checksView?.rows;
+  const fetchFailed = listFailed || (view !== undefined && checksView === undefined);
 
   const normalized = format.parseAmountInput(input);
   const valid = isDecimalString(normalized, assets[asset].scale) && toUnits(normalized, assets[asset].scale) > 0n;
@@ -80,8 +83,9 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
     setError(undefined);
     try {
       const value = await api.checkPreview(asset, normalized);
-      setPreview(previewIdPattern.test(value.id) && !value.executable ? value : undefined);
-      if (!previewIdPattern.test(value.id)) setError("checks.errorFailed");
+      const adapted = checkPreviewOf(value);
+      setPreview(adapted);
+      if (adapted === undefined) setError("checks.errorFailed");
     } catch (caught) {
       setPreview(undefined);
       setError(caught instanceof ApiError ? messageKeyFor(previewErrors, caught.code) ?? "checks.errorFailed" : "common.serverUnreachable");
@@ -99,8 +103,8 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
     setRefBusy(true);
     setRefError(undefined);
     try {
-      const check = await api.check(trimmed);
-      if (check.reference === trimmed) show({ kind: "detail", reference: check.reference });
+      const check = checkViewOf(await api.check(trimmed));
+      if (check !== undefined && check.reference === trimmed) show({ kind: "detail", reference: check.reference });
       else setRefError("checks.notFound");
     } catch (caught) {
       setRefError(caught instanceof ApiError && caught.status === 404 ? "checks.notFound" : "common.serverUnreachable");
@@ -167,20 +171,20 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
                 <div><dt>{t("checks.claimRule")}</dt><dd>{t("checks.claimRulePersonal")}</dd></div>
                 <div><dt>{t("checks.expires")}</dt><dd className="num">{format.epochMs(preview.expiresAt)} · {t("checks.ttl", { hours: preview.ttlSeconds / 3600 })}</dd></div>
               </dl>
-              {preview.kycRequired ? <p className="sheet__note">{t("checks.kycRequired")}</p> : null}
-              {preview.insufficientBalance ? <p className="form-error">{t("checks.insufficientBalance")}</p> : null}
+              {preview.kycRequired === true ? <p className="sheet__note">{t("checks.kycRequired")}</p> : null}
+              {preview.insufficientBalance === true ? <p className="form-error">{t("checks.insufficientBalance")}</p> : null}
               <DisabledCta label={t("checks.confirm")} hint={t("checks.confirmHint")} />
             </>
           ) : null}
           <p className="sheet__note">{t("checks.note")}</p>
 
           <h3 className="section-label">{t("checks.listTitle")}</h3>
-          {listFailed ? <p className="form-error" role="alert">{t("checks.loadFailed")}</p> : null}
-          {checks === undefined && !listFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
-          {checks?.length === 0 ? <p className="sheet__note">{t("checks.empty")}</p> : null}
-          {checks && checks.length > 0 ? (
+          {fetchFailed ? <p className="form-error" role="alert">{t("checks.loadFailed")}</p> : null}
+          {rows === undefined && !fetchFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+          {rows?.length === 0 ? <p className="sheet__note">{t("checks.empty")}</p> : null}
+          {rows && rows.length > 0 ? (
             <ul className="list" aria-label={t("checks.listLabel")}>
-              {checks.map((check, index) => {
+              {rows.map((check, index) => {
                 const badge = checkStatusBadge(check.status);
                 const direction = checkDirectionKey(check.direction);
                 return (
@@ -197,6 +201,9 @@ export function ChecksSheet({ close, initial }: { close: () => void; initial?: s
                 );
               })}
             </ul>
+          ) : null}
+          {checksView !== undefined && checksView.total > checksView.rows.length ? (
+            <p className="sheet__note">{t("common.truncated", { shown: checksView.rows.length, total: checksView.total })}</p>
           ) : null}
 
           <h3 className="section-label">{t("checks.openByLink")}</h3>
@@ -237,7 +244,16 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
   useEffect(() => {
     let active = true;
     api.check(reference)
-      .then((value) => { if (active) setCheck(value); })
+      .then((value) => {
+        // Fail closed when the member read drifts or echoes a foreign reference.
+        const adapted = checkViewOf(value);
+        if (!active) return;
+        if (adapted === undefined || adapted.reference !== reference) {
+          setFailed("checks.notFound");
+        } else {
+          setCheck(adapted);
+        }
+      })
       .catch((caught: unknown) => {
         if (active) setFailed(caught instanceof ApiError && caught.status === 404 ? "checks.notFound" : "common.serverUnreachable");
       });
@@ -272,7 +288,7 @@ function CheckDetail({ reference, heading, onBack }: { reference: string; headin
           </dl>
           <p className="sheet__note">{t("checks.linkNote")}</p>
           <ol className="timeline" aria-label={t("checks.timelineLabel")}>
-            {arrayOf<CheckView["timeline"][number]>(check.timeline).map((entry, index) => {
+            {check.timeline.map((entry, index) => {
               const step = checkStatusBadge(entry.status);
               return (
                 <li key={`${entry.status}:${index}`} className="timeline__step is-done">

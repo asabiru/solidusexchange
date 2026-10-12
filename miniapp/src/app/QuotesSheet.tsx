@@ -5,8 +5,7 @@ import { contractQuotePair, quotePriceScale, quoteState } from "../shared/quote"
 import { api } from "./api";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { quoteRoundingBadge, quoteSideBadge, quoteStateBadge, quoteStatusBadge } from "./quotes";
-import { arrayOf } from "./server-fields";
+import { quoteRoundingBadge, quoteSideBadge, quoteStateBadge, quoteStatusBadge, quotesHistory } from "./quotes";
 import { Sheet } from "./ui";
 
 type Mode = { kind: "list" } | { kind: "detail"; quote: QuoteView };
@@ -60,9 +59,18 @@ export function QuotesSheet({ close }: { close: () => void }) {
     setMode(next);
   };
 
-  const quotes = arrayOf<QuoteView>(view?.quotes);
-  const gated = view !== undefined && view.kyc !== "verified";
-  const nowMs = Date.now();
+  // The served view is untrusted: it renders only through the fail-closed adapter.
+  const history = quotesHistory(view);
+  const quotes = history?.rows ?? [];
+  const gated = history !== undefined && history.kyc !== "verified";
+  const failed = listFailed || (view !== undefined && history === undefined);
+
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    // The indicative/issued/expired state badge keeps ticking while the sheet is open.
+    const timer = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <Sheet title={t("quotes.title")} onClose={close}>
@@ -76,14 +84,14 @@ export function QuotesSheet({ close }: { close: () => void }) {
           <h3 className="section-label" ref={heading} tabIndex={-1}>
             {t("quotes.listTitle")}
           </h3>
-          {listFailed ? (
+          {failed ? (
             <p className="form-error" role="alert">
               {t("quotes.loadFailed")}
             </p>
           ) : null}
-          {view === undefined && !listFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+          {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
           {gated ? <p className="sheet__note">{t("quotes.gated")}</p> : null}
-          {view !== undefined && !gated && quotes.length === 0 ? (
+          {history !== undefined && !gated && quotes.length === 0 ? (
             <p className="sheet__note">{t("quotes.empty")}</p>
           ) : null}
           {!gated && quotes.length > 0 ? (
@@ -121,6 +129,9 @@ export function QuotesSheet({ close }: { close: () => void }) {
                 );
               })}
             </ul>
+          ) : null}
+          {history !== undefined && history.total > quotes.length ? (
+            <p className="sheet__note">{t("common.truncated", { shown: quotes.length, total: history.total })}</p>
           ) : null}
           <p className="sheet__note">{t("quotes.note")}</p>
         </>

@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import type { ExchangeOrderView } from "../shared/api.js";
 import { contractQuotePair, contractQuotePairs, quotePriceScale } from "../shared/quote.js";
 import { ApiError, api } from "./api.js";
 import { locales, translate } from "./i18n.js";
-import { orderSideBadge, orderStatusBadge, orderTypeBadge } from "./orders.js";
+import { orderSideBadge, ordersHistory, orderStatusBadge, orderTypeBadge } from "./orders.js";
+import { servedRowsLimit } from "./served-views.js";
 
 const sheetSource = readFileSync(new URL("../../src/app/OrdersSheet.tsx", import.meta.url), "utf8");
 const homeSource = readFileSync(new URL("../../src/app/screens/HomeScreen.tsx", import.meta.url), "utf8");
@@ -132,7 +134,7 @@ describe("orders sheet", () => {
 
   it("renders the list rows from the served view without fabricating orders", () => {
     assert.ok(sheetSource.includes("api.exchangeOrders()"));
-    assert.ok(sheetSource.includes("arrayOf<ExchangeOrderView>(view?.orders)"));
+    assert.ok(sheetSource.includes("ordersHistory(view)"));
     assert.ok(sheetSource.includes("aria-label={t(\"orders.listLabel\")}"));
     // Quantity at the pair's baseScale, price at the fixed contract priceScale.
     assert.ok(sheetSource.includes("formattedLeg(order.baseAmount, pairDef?.baseScale, format.decimal)"));
@@ -171,7 +173,7 @@ describe("orders sheet", () => {
   });
 
   it("covers the empty, gated and load-failed states like the sibling sheets", () => {
-    assert.ok(sheetSource.includes('view.kyc !== "verified"'));
+    assert.ok(sheetSource.includes('history.kyc !== "verified"'));
     assert.ok(sheetSource.includes('t("orders.gated")'));
     assert.ok(sheetSource.includes('t("orders.empty")'));
     assert.ok(sheetSource.includes('t("orders.loadFailed")'));
@@ -195,5 +197,83 @@ describe("orders sheet", () => {
     assert.ok(sheetSource.includes('from "../shared/quote"'));
     assert.ok(serverQuotesSource.includes('from "../shared/quote.js"'));
     assert.ok(serverQuotesSource.includes("contractQuotePair"));
+  });
+
+  it("surfaces served-history truncation instead of silently dropping rows", () => {
+    assert.ok(sheetSource.includes('t("common.truncated"'));
+  });
+});
+
+const orderRow: ExchangeOrderView = {
+  id: "ord_a1b2c3d4e5f6a7b8c9d0e1f2",
+  pair: "TON/RUB",
+  base: "TON",
+  quote: "RUB",
+  side: "sell",
+  orderType: "limit",
+  baseAmount: "10.000000000",
+  price: "450.00000000",
+  quoteAmount: "4500.00",
+  feeBps: 25,
+  feeAmount: "11.25",
+  totalQuoteAmount: "4511.25",
+  status: "open",
+  createdAt: Date.parse("2026-10-10T09:00:00.000Z"),
+  updatedAt: Date.parse("2026-10-10T09:05:00.000Z"),
+  execution: "not_supported",
+  posting: "none"
+};
+
+const ordersView = { mode: "test", kyc: "verified", orders: [orderRow] } as const;
+
+describe("ordersHistory served-view adapter", () => {
+  it("adapts a valid orders view, keeping the kyc flag, rows and pre-truncation total", () => {
+    const history = ordersHistory(ordersView);
+    assert.equal(history?.kyc, "verified");
+    assert.equal(history?.rows.length, 1);
+    assert.equal(history?.total, 1);
+    assert.equal(history?.rows[0]?.id, orderRow.id);
+    const gated = ordersHistory({ mode: "test", kyc: "kyc-gated", orders: [] });
+    assert.equal(gated?.kyc, "kyc-gated");
+    assert.equal(gated?.rows.length, 0);
+  });
+
+  it("fails closed on malformed orders views and rows (exact keys)", () => {
+    for (const corrupt of [
+      { ...ordersView, extra: true },
+      { mode: "test", kyc: "verified" },
+      { ...ordersView, mode: "live" },
+      { ...ordersView, kyc: "unknown" },
+      { ...ordersView, orders: "nope" },
+      { ...ordersView, orders: [null] },
+      { ...ordersView, orders: [{ ...orderRow, extra: 1 }] },
+      { ...ordersView, orders: [{ ...orderRow, id: "ord_uppercaseAAAAAAAAAAAAAAAAAAAAAA" }] },
+      { ...ordersView, orders: [{ ...orderRow, id: "trd_b2c3d4e5f6a7b8c9d0e1f2a3" }] },
+      { ...ordersView, orders: [{ ...orderRow, pair: "BTC/USD" }] },
+      { ...ordersView, orders: [{ ...orderRow, base: "USDT" }] },
+      { ...ordersView, orders: [{ ...orderRow, side: "hold" }] },
+      { ...ordersView, orders: [{ ...orderRow, orderType: "stop" }] },
+      { ...ordersView, orders: [{ ...orderRow, status: "filled" }] },
+      { ...ordersView, orders: [{ ...orderRow, baseAmount: "10.0000000000" }] },
+      { ...ordersView, orders: [{ ...orderRow, price: "450.000000000" }] },
+      { ...ordersView, orders: [{ ...orderRow, quoteAmount: "abc" }] },
+      { ...ordersView, orders: [{ ...orderRow, feeBps: "25" }] },
+      { ...ordersView, orders: [{ ...orderRow, createdAt: "2026-10-10" }] },
+      { ...ordersView, orders: [{ ...orderRow, updatedAt: Number.NaN }] },
+      { ...ordersView, orders: [{ ...orderRow, execution: "supported" }] },
+      { ...ordersView, orders: [{ ...orderRow, posting: "signed" }] }
+    ]) {
+      assert.equal(ordersHistory(corrupt), undefined, JSON.stringify(corrupt).slice(0, 120));
+    }
+  });
+
+  it("bounds the rendered history and reports the pre-truncation total", () => {
+    const many = Array.from({ length: servedRowsLimit + 10 }, (_, index) => ({
+      ...orderRow,
+      id: `ord_${String(index).padStart(24, "0")}`
+    }));
+    const history = ordersHistory({ mode: "test", kyc: "verified", orders: many });
+    assert.equal(history?.rows.length, servedRowsLimit);
+    assert.equal(history?.total, servedRowsLimit + 10);
   });
 });

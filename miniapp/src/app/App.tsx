@@ -60,7 +60,7 @@ function authErrorMessage(): MessageKey | undefined {
   params.delete("error");
   const query = params.toString();
   window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
-  return rejectionMessages[code] ?? "launch.errorAuthFailed";
+  return messageKeyFor(rejectionMessages, code) ?? "launch.errorAuthFailed";
 }
 
 function localeStorage(): LocaleStorage | undefined {
@@ -258,7 +258,7 @@ export function App() {
             <h1>{t("launch.welcome")}</h1>
             <p>{t("launch.intro")}</p>
             {launch.message ? <p className="form-error" role="alert">{t(launch.message)}</p> : null}
-            {launch.health?.devLogin ? (
+            {launch.health?.devLogin === true ? (
               <div className="launch__actions">
                 <button type="button" className="cta" onClick={() => devLogin("verified")}>
                   {t("launch.devLoginVerified")}

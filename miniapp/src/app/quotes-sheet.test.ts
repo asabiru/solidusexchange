@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
+import type { QuoteView } from "../shared/api.js";
 import { contractQuotePair, contractQuotePairs, quotePriceScale, quoteState } from "../shared/quote.js";
 import { ApiError, api } from "./api.js";
 import { locales, translate } from "./i18n.js";
-import { quoteRoundingBadge, quoteSideBadge, quoteStateBadge, quoteStatusBadge } from "./quotes.js";
+import { quoteRoundingBadge, quoteSideBadge, quoteStateBadge, quoteStatusBadge, quotesHistory } from "./quotes.js";
+import { servedRowsLimit } from "./served-views.js";
 
 const sheetSource = readFileSync(new URL("../../src/app/QuotesSheet.tsx", import.meta.url), "utf8");
 const homeSource = readFileSync(new URL("../../src/app/screens/HomeScreen.tsx", import.meta.url), "utf8");
@@ -144,7 +146,7 @@ describe("quotes sheet", () => {
 
   it("renders the list rows from the served view without fabricating quotes", () => {
     assert.ok(sheetSource.includes("api.quotes()"));
-    assert.ok(sheetSource.includes("arrayOf<QuoteView>(view?.quotes)"));
+    assert.ok(sheetSource.includes("quotesHistory(view)"));
     assert.ok(sheetSource.includes("aria-label={t(\"quotes.listLabel\")}"));
     // Base amount at the pair's baseScale, price at the fixed contract priceScale.
     assert.ok(sheetSource.includes("formattedLeg(quote.baseAmount, pairDef?.baseScale, format.decimal)"));
@@ -188,7 +190,7 @@ describe("quotes sheet", () => {
   });
 
   it("covers the empty, gated and load-failed states like the sibling sheets", () => {
-    assert.ok(sheetSource.includes('view.kyc !== "verified"'));
+    assert.ok(sheetSource.includes('history.kyc !== "verified"'));
     assert.ok(sheetSource.includes('t("quotes.gated")'));
     assert.ok(sheetSource.includes('t("quotes.empty")'));
     assert.ok(sheetSource.includes('t("quotes.loadFailed")'));
@@ -212,5 +214,97 @@ describe("quotes sheet", () => {
     assert.ok(sheetSource.includes('from "../shared/quote"'));
     assert.ok(serverQuotesSource.includes('from "../shared/quote.js"'));
     assert.ok(serverQuotesSource.includes("contractQuotePair"));
+  });
+
+  it("keeps the timing-state badge live while the sheet stays open", () => {
+    assert.ok(sheetSource.includes("setNowMs"));
+    assert.ok(sheetSource.includes("setInterval"));
+    assert.ok(sheetSource.includes("quoteState(quote, nowMs)"));
+  });
+
+  it("surfaces served-history truncation instead of silently dropping rows", () => {
+    assert.ok(sheetSource.includes('t("common.truncated"'));
+  });
+});
+
+const quoteRow: QuoteView = {
+  id: "qte_a1b2c3d4e5f6a7b8c9d0e1f2",
+  pair: "USDT/RUB",
+  base: "USDT",
+  quote: "RUB",
+  side: "buy",
+  baseAmount: "100.000000",
+  midPrice: "95.50000000",
+  price: "96.00000000",
+  spreadBps: 50,
+  feeBps: 25,
+  quoteAmount: "9600.00",
+  feeAmount: "24.00",
+  totalQuoteAmount: "9624.00",
+  rounding: "up",
+  priceObservedAt: Date.parse("2026-10-10T10:00:00.000Z"),
+  issuedAt: Date.parse("2026-10-10T10:00:01.000Z"),
+  expiresAt: Date.parse("2026-10-10T10:00:31.000Z"),
+  ttlSeconds: 30,
+  status: "indicative",
+  execution: "not_supported",
+  posting: "none"
+};
+
+const quotesView = { mode: "test", kyc: "verified", quotes: [quoteRow] } as const;
+
+describe("quotesHistory served-view adapter", () => {
+  it("adapts a valid quotes view, keeping the kyc flag, rows and pre-truncation total", () => {
+    const history = quotesHistory(quotesView);
+    assert.equal(history?.kyc, "verified");
+    assert.equal(history?.rows.length, 1);
+    assert.equal(history?.total, 1);
+    assert.equal(history?.rows[0]?.id, quoteRow.id);
+    const gated = quotesHistory({ mode: "test", kyc: "kyc-gated", quotes: [] });
+    assert.equal(gated?.kyc, "kyc-gated");
+    assert.equal(gated?.rows.length, 0);
+  });
+
+  it("fails closed on malformed quotes views and rows (exact keys)", () => {
+    for (const corrupt of [
+      { ...quotesView, extra: true },
+      { mode: "test", kyc: "verified" },
+      { ...quotesView, mode: "live" },
+      { ...quotesView, kyc: "unknown" },
+      { ...quotesView, quotes: "nope" },
+      { ...quotesView, quotes: [null] },
+      { ...quotesView, quotes: [{ ...quoteRow, extra: 1 }] },
+      { ...quotesView, quotes: [{ ...quoteRow, id: "qte_uppercaseAAAAAAAAAAAAAAAAAAAAAA" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, id: "ord_a1b2c3d4e5f6a7b8c9d0e1f2" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, pair: "BTC/USD" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, base: "TON" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, quote: "USDT" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, side: "hold" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, rounding: "half-up" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, status: "filled" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, baseAmount: "abc" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, baseAmount: "100.0000000" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, price: "96.000000000" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, quoteAmount: "9600.001" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, spreadBps: "50" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, feeBps: -1 }] },
+      { ...quotesView, quotes: [{ ...quoteRow, issuedAt: "2026-10-10" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, expiresAt: Number.NaN }] },
+      { ...quotesView, quotes: [{ ...quoteRow, ttlSeconds: "30" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, execution: "supported" }] },
+      { ...quotesView, quotes: [{ ...quoteRow, posting: "signed" }] }
+    ]) {
+      assert.equal(quotesHistory(corrupt), undefined, JSON.stringify(corrupt).slice(0, 120));
+    }
+  });
+
+  it("bounds the rendered history and reports the pre-truncation total", () => {
+    const many = Array.from({ length: servedRowsLimit + 10 }, (_, index) => ({
+      ...quoteRow,
+      id: `qte_${String(index).padStart(24, "0")}`
+    }));
+    const history = quotesHistory({ mode: "test", kyc: "verified", quotes: many });
+    assert.equal(history?.rows.length, servedRowsLimit);
+    assert.equal(history?.total, servedRowsLimit + 10);
   });
 });

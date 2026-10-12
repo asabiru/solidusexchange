@@ -1,16 +1,24 @@
 import type {
   ActivityKind,
   AddressScreeningStatus,
+  DeviceSessionsView,
   KycActivity,
   KycVerificationState,
+  NotificationsView,
+  OperationDetail,
+  OperationKind,
   OperationStatus,
   SessionClient,
-  SessionSource
+  SessionSource,
+  SupportRequestView
 } from "../shared/api.js";
+import { assetMetaOf } from "../shared/assets.js";
+import { isDecimalString } from "../shared/decimal.js";
 import type { ScreeningNetwork } from "../shared/address-screening.js";
 import type { SupportCategory, SupportStatus } from "../shared/support.js";
 import type { IconName } from "./icon-data.js";
 import type { MessageKey } from "./i18n.js";
+import { boundedRows, hasContractKeys, hasExactKeys, isEpochMs, isNonNegativeInt, isRecord, type ServedRows } from "./served-views.js";
 
 /**
  * Server-supplied enum and status fields are untrusted input: only declared own
@@ -277,4 +285,204 @@ export function timelineStepState(state: string): StepState {
 /** Server list fields are untrusted: a non-array payload degrades to an empty list. */
 export function arrayOf<T>(value: unknown): readonly T[] {
   return Array.isArray(value) ? (value as readonly T[]) : [];
+}
+
+/* ——— Served view validators (wave-73 audit: fail-closed member reads) ——— */
+
+const sessionIdPattern = /^sess_[0-9a-f]{24}$/;
+const notificationIdPattern = /^ntf_[0-9a-f]{24}$/;
+const supportIdPattern = /^sup_[0-9a-f]{24}$/;
+const operationKinds = new Set<OperationKind>(["exchange", "deposit", "withdrawal", "qr"]);
+const operationStatusNames = new Set<OperationStatus>(["completed", "in-review", "needs-action", "failed"]);
+const timelineStepStates = new Set(["done", "current", "pending", "blocked"]);
+const sessionClientNames = new Set<SessionClient>(["telegram", "dev-login"]);
+const supportCategoryNames = new Set<SupportCategory>(["question", "operation_problem", "complaint", "data_request"]);
+const supportStatusNames = new Set<SupportStatus>(["received", "in_review", "answered", "closed"]);
+
+function isLeg(value: unknown): value is OperationDetail["legs"][number] {
+  if (!isRecord(value) || !hasExactKeys(value, ["asset", "amount", "direction"]) || typeof value.asset !== "string") {
+    return false;
+  }
+  const meta = assetMetaOf(value.asset);
+  return (
+    meta !== undefined
+    && typeof value.amount === "string"
+    && isDecimalString(value.amount, meta.scale)
+    && (value.direction === "in" || value.direction === "out")
+  );
+}
+
+/**
+ * Validates the served operation detail (member read) — the rendered legs,
+ * timeline and rate must match the contract shape or the sheet fails closed.
+ */
+export function operationDetailOf(value: unknown): OperationDetail | undefined {
+  if (
+    !isRecord(value)
+    || !hasContractKeys(
+      value,
+      ["id", "reference", "kind", "status", "title", "channel", "createdAt", "legs", "note", "timeline"],
+      ["fee", "rate"]
+    )
+    || typeof value.id !== "string"
+    || typeof value.reference !== "string"
+    || !operationKinds.has(value.kind as OperationKind)
+    || !operationStatusNames.has(value.status as OperationStatus)
+    || typeof value.title !== "string"
+    || typeof value.channel !== "string"
+    || typeof value.createdAt !== "string"
+    || typeof value.note !== "string"
+    || !Array.isArray(value.legs)
+    || (value.legs as readonly unknown[]).length === 0
+    || !(value.legs as readonly unknown[]).every(isLeg)
+    || !Array.isArray(value.timeline)
+    || !(value.timeline as readonly unknown[]).every(
+      (step) =>
+        isRecord(step)
+        && hasContractKeys(step, ["title", "detail", "state"], ["at"])
+        && typeof step.title === "string"
+        && typeof step.detail === "string"
+        && (step.at === undefined || typeof step.at === "string")
+        && timelineStepStates.has(step.state as string)
+    )
+    || (value.fee !== undefined
+      && (!isRecord(value.fee)
+        || !hasExactKeys(value.fee, ["asset", "amount"])
+        || typeof value.fee.asset !== "string"
+        || assetMetaOf(value.fee.asset) === undefined
+        || typeof value.fee.amount !== "string"
+        || !isDecimalString(value.fee.amount, (assetMetaOf(value.fee.asset) as { scale: number }).scale)))
+    || (value.rate !== undefined
+      && (!isRecord(value.rate)
+        || !hasExactKeys(value.rate, ["base", "quote", "value"])
+        || typeof value.rate.base !== "string"
+        || assetMetaOf(value.rate.base) === undefined
+        || typeof value.rate.quote !== "string"
+        || assetMetaOf(value.rate.quote) === undefined
+        || typeof value.rate.value !== "string"
+        || !isDecimalString(value.rate.value, 30)))
+  ) {
+    return undefined;
+  }
+  return value as unknown as OperationDetail;
+}
+
+/** Validates the served device-sessions view. */
+export function sessionsViewOf(view: unknown): DeviceSessionsView | undefined {
+  if (
+    !isRecord(view)
+    || !hasExactKeys(view, ["mode", "sessions"])
+    || view.mode !== "test"
+    || !Array.isArray(view.sessions)
+    || !(view.sessions as readonly unknown[]).every(
+      (session) =>
+        isRecord(session)
+        && hasExactKeys(session, ["handle", "client", "createdAt", "lastSeenAt", "current"])
+        && typeof session.handle === "string"
+        && sessionIdPattern.test(session.handle)
+        && sessionClientNames.has(session.client as SessionClient)
+        && isEpochMs(session.createdAt)
+        && isEpochMs(session.lastSeenAt)
+        && typeof session.current === "boolean"
+    )
+  ) {
+    return undefined;
+  }
+  return view as unknown as DeviceSessionsView;
+}
+
+/**
+ * Validates the served notifications view. template is deliberately not
+ * re-asserted: the view model declares forward-compatible raw-text rendering
+ * for future template kinds (the sheet falls back to draft.text).
+ */
+export function notificationsViewOf(view: unknown): NotificationsView | undefined {
+  if (
+    !isRecord(view)
+    || !hasExactKeys(view, ["mode", "delivery", "unread", "notifications"])
+    || view.mode !== "test"
+    || view.delivery !== "disabled"
+    || !isNonNegativeInt(view.unread)
+    || !Array.isArray(view.notifications)
+    || !(view.notifications as readonly unknown[]).every(
+      (draft) =>
+        isRecord(draft)
+        && hasExactKeys(
+          draft,
+          ["id", "createdAt", "channel", "template", "locale", "text", "mode", "delivered", "read"]
+        )
+        && typeof draft.id === "string"
+        && notificationIdPattern.test(draft.id)
+        && isEpochMs(draft.createdAt)
+        && draft.channel === "telegram-draft"
+        && typeof draft.template === "string"
+        && draft.locale === "ru"
+        && typeof draft.text === "string"
+        && draft.mode === "test"
+        && draft.delivered === false
+        && typeof draft.read === "boolean"
+    )
+  ) {
+    return undefined;
+  }
+  return view as unknown as NotificationsView;
+}
+
+/** Validates the served support-requests collection, bounding the rendered history. */
+export function supportRequestsViewOf(view: unknown): ServedRows<SupportRequestView> | undefined {
+  if (
+    !isRecord(view)
+    || !hasExactKeys(view, ["mode", "delivery", "requests"])
+    || view.mode !== "test"
+    || view.delivery !== "disabled"
+    || !Array.isArray(view.requests)
+    || !(view.requests as readonly unknown[]).every(
+      (request) =>
+        isRecord(request)
+        && hasContractKeys(
+          request,
+          [
+            "id",
+            "mode",
+            "delivery",
+            "category",
+            "topic",
+            "message",
+            "status",
+            "timeline",
+            "complaintAcknowledged",
+            "createdAt",
+            "expiresAt"
+          ],
+          ["activityRef"]
+        )
+        && typeof request.id === "string"
+        && supportIdPattern.test(request.id)
+        && request.mode === "test"
+        && request.delivery === "disabled"
+        && supportCategoryNames.has(request.category as SupportCategory)
+        && typeof request.topic === "string"
+        && typeof request.message === "string"
+        && supportStatusNames.has(request.status as SupportStatus)
+        && Array.isArray(request.timeline)
+        && (request.timeline as readonly unknown[]).every(
+          (step) =>
+            isRecord(step)
+            && hasExactKeys(step, ["status", "at"])
+            && supportStatusNames.has(step.status as SupportStatus)
+            && isEpochMs(step.at)
+        )
+        && typeof request.complaintAcknowledged === "boolean"
+        && isEpochMs(request.createdAt)
+        && isEpochMs(request.expiresAt)
+        && (request.activityRef === undefined
+          || (isRecord(request.activityRef)
+            && hasExactKeys(request.activityRef, ["id", "kind"])
+            && typeof request.activityRef.id === "string"
+            && activityKindKeyOf(request.activityRef.kind as string) !== undefined))
+    )
+  ) {
+    return undefined;
+  }
+  return boundedRows(view.requests as readonly SupportRequestView[]);
 }

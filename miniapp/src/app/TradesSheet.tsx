@@ -4,8 +4,7 @@ import { contractQuotePair, quotePriceScale } from "../shared/quote";
 import { api } from "./api";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { arrayOf } from "./server-fields";
-import { tradeLiquidityBadge, tradeSideBadge } from "./trades";
+import { tradeLiquidityBadge, tradeSideBadge, tradesHistory } from "./trades";
 import { Sheet } from "./ui";
 
 type Mode = { kind: "list" } | { kind: "detail"; trade: TradeView };
@@ -53,8 +52,10 @@ export function TradesSheet({ close }: { close: () => void }) {
     setMode(next);
   };
 
-  const trades = arrayOf<TradeView>(view?.trades);
-  const gated = view !== undefined && view.kyc !== "verified";
+  const history = tradesHistory(view);
+  const trades = history?.rows ?? [];
+  const gated = history !== undefined && history.kyc !== "verified";
+  const failed = listFailed || (view !== undefined && history === undefined);
 
   return (
     <Sheet title={t("trades.title")} onClose={close}>
@@ -68,14 +69,14 @@ export function TradesSheet({ close }: { close: () => void }) {
           <h3 className="section-label" ref={heading} tabIndex={-1}>
             {t("trades.listTitle")}
           </h3>
-          {listFailed ? (
+          {failed ? (
             <p className="form-error" role="alert">
               {t("trades.loadFailed")}
             </p>
           ) : null}
-          {view === undefined && !listFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+          {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
           {gated ? <p className="sheet__note">{t("trades.gated")}</p> : null}
-          {view !== undefined && !gated && trades.length === 0 ? (
+          {history !== undefined && !gated && trades.length === 0 ? (
             <p className="sheet__note">{t("trades.empty")}</p>
           ) : null}
           {!gated && trades.length > 0 ? (
@@ -113,6 +114,9 @@ export function TradesSheet({ close }: { close: () => void }) {
                 );
               })}
             </ul>
+          ) : null}
+          {history !== undefined && history.total > trades.length ? (
+            <p className="sheet__note">{t("common.truncated", { shown: trades.length, total: history.total })}</p>
           ) : null}
           <p className="sheet__note">{t("trades.note")}</p>
         </>

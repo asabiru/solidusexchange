@@ -32,6 +32,7 @@ export const en: Messages = {
   "common.loading": "Loading…",
   "common.soon": "Soon",
   "common.test": "Test",
+  "common.truncated": "Showing the first {shown} of {total} records",
   "common.serverUnreachable": "Could not reach the test server.",
   "common.deposit": "Top up",
   "common.withdraw": "Withdraw",

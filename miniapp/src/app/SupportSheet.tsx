@@ -13,7 +13,8 @@ import { ApiError, api } from "./api";
 import { type MessageKey, messageKeyFor } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { activityKindKeyOf, arrayOf, supportCategoryKeyOf, supportStatusOf } from "./server-fields";
+import { activityKindKeyOf, arrayOf, supportCategoryKeyOf, supportRequestsViewOf, supportStatusOf } from "./server-fields";
+import type { ServedRows } from "./served-views";
 import { Sheet } from "./ui";
 
 type Field = "topic" | "message" | "activityId";
@@ -50,7 +51,7 @@ function TestBanner() {
 }
 
 export function SupportSheet({ close }: { close: () => void }) {
-  const [requests, setRequests] = useState<readonly SupportRequestView[] | undefined>();
+  const [requests, setRequests] = useState<ServedRows<SupportRequestView> | undefined>();
   const [failed, setFailed] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [announcement, setAnnouncement] = useState("");
@@ -61,7 +62,13 @@ export function SupportSheet({ close }: { close: () => void }) {
   useEffect(() => {
     let active = true;
     api.supportRequests()
-      .then((view) => { if (active) setRequests(arrayOf(view.requests)); })
+      .then((view) => {
+        // The served collection renders only through the fail-closed adapter.
+        const adapted = supportRequestsViewOf(view);
+        if (!active) return;
+        if (adapted === undefined) setFailed(true);
+        else setRequests(adapted);
+      })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, []);
@@ -85,7 +92,11 @@ export function SupportSheet({ close }: { close: () => void }) {
           heading={heading}
           onCancel={() => show({ kind: "list" })}
           onCreated={(created) => {
-            setRequests((current) => [created, ...(current ?? [])]);
+            setRequests((current) =>
+              current === undefined
+                ? { rows: [created], total: 1 }
+                : { rows: [created, ...current.rows], total: current.total + 1 }
+            );
             show({ kind: "detail", request: created });
             setAnnouncement(t("support.created"));
           }}
@@ -95,7 +106,7 @@ export function SupportSheet({ close }: { close: () => void }) {
       ) : (
         <SupportList
           heading={heading}
-          requests={requests}
+          view={requests}
           failed={failed}
           onNew={() => show({ kind: "form" })}
           onOpen={(request) => show({ kind: "detail", request })}
@@ -109,13 +120,14 @@ interface HeadingProps {
   heading: RefObject<HTMLHeadingElement | null>;
 }
 
-function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps & {
-  requests: readonly SupportRequestView[] | undefined;
+function SupportList({ heading, view, failed, onNew, onOpen }: HeadingProps & {
+  view: ReturnType<typeof supportRequestsViewOf>;
   failed: boolean;
   onNew: () => void;
   onOpen: (request: SupportRequestView) => void;
 }) {
   const { t, format } = useI18n();
+  const requests = view?.rows;
   return (
     <>
       <p className="sheet__note">{t("support.note")}</p>
@@ -124,7 +136,7 @@ function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps 
       </button>
       <h3 className="section-label" ref={heading} tabIndex={-1}>{t("support.listTitle")}</h3>
       <div aria-live="polite">
-        {failed ? <p className="form-error">{t("support.loadFailed")}</p> : null}
+        {failed ? <p className="form-error" role="alert">{t("support.loadFailed")}</p> : null}
         {requests === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
         {requests?.length === 0 ? <p className="sheet__note">{t("support.empty")}</p> : null}
       </div>
@@ -148,6 +160,9 @@ function SupportList({ heading, requests, failed, onNew, onOpen }: HeadingProps 
             );
           })}
         </ul>
+      ) : null}
+      {view !== undefined && view.total > view.rows.length ? (
+        <p className="sheet__note">{t("common.truncated", { shown: view.rows.length, total: view.total })}</p>
       ) : null}
     </>
   );
@@ -196,7 +211,14 @@ function SupportForm({ heading, onCancel, onCreated }: HeadingProps & {
     return () => { active = false; };
   }, []);
 
-  const clear = (field: Field) => setErrors((current) => (current[field] ? {} : current));
+  // Editing a field clears only its own error — other field errors stay visible.
+  const clear = (field: Field) =>
+    setErrors((current) => {
+      if (!current[field]) return current;
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
 
   const fail = (field: Field, key: MessageKey) => {
     setErrors({ [field]: key });
@@ -298,7 +320,7 @@ function SupportDetail({ heading, request, onBack }: HeadingProps & { request: S
   const { t, format } = useI18n();
   const when = (at: number) => format.epochMs(at);
   const badge = supportStatusOf(request.status);
-  const reached = (status: string) => arrayOf<SupportRequestView["timeline"][number]>(request.timeline).find((entry) => entry.status === status);
+  const reached = (status: string) => request.timeline.find((entry) => entry.status === status);
   const resolved = reached("answered") ?? reached("closed");
   const resolvedLabel = resolved ? supportStatusOf(resolved.status)?.label : undefined;
   const refKind = request.activityRef ? activityKindKeyOf(request.activityRef.kind) : undefined;
