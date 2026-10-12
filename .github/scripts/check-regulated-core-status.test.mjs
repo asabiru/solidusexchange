@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { loadRegulatedCore, validateRegulatedCoreDocuments } from "./check-regulated-core-status.mjs";
+import { loadRegulatedCore, validateRegulatedCoreDocuments, validateStatusBaseline } from "./check-regulated-core-status.mjs";
 
 const { documents, baseline } = await loadRegulatedCore();
 
@@ -224,8 +224,38 @@ test("accepts explicitly negated or pending approval wording in new documents", 
     "Until approved, production remains disabled.",
     "Acceptance criteria are listed below.",
   ]) {
-    assert.deepEqual(validateWith({ "zz-new.md": `# X\n\n${line}\n` }), [], line);
+    assert.deepEqual(validateWith({ "zz-new.md": `# X\n\n- Status: Proposed\n\n${line}\n` }), [], line);
   }
+});
+
+test("rejects new documents that do not declare a status", () => {
+  assertRejected(
+    { "zz-new.md": "# X\n\nBody without a status line.\n" },
+    /must declare "- Status: Proposed" or "- Status: Draft"/,
+  );
+  assertRejected(
+    { "zz-new.md": "# X\n\n- Production effect: none\n\nBody.\n" },
+    /must declare "- Status: Proposed" or "- Status: Draft"/,
+  );
+});
+
+test("rejects malformed or empty status baselines", () => {
+  assert.match(
+    validateStatusBaseline([]).join("\n"),
+    /baseline must be a JSON object/,
+  );
+  assert.match(
+    validateStatusBaseline({}).join("\n"),
+    /"documents" must pin at least one document/,
+  );
+  assert.match(
+    validateStatusBaseline({ documents: baseline.documents, requiredPhrases: {} }).join("\n"),
+    /"requiredPhrases" must pin at least one document/,
+  );
+  assert.match(
+    validateStatusBaseline({ documents: baseline.documents, requiredPhrases: { "x.md": "text" } }).join("\n"),
+    /"requiredPhrases\.x\.md" must be a non-empty list/,
+  );
 });
 
 test("keeps unrelated valid edits accepted", () => {

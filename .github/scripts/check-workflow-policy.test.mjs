@@ -154,6 +154,55 @@ test("accepts filtered pull_request and push triggers on validation workflows", 
   assert.deepEqual(errors, []);
 });
 
+test("rejects trigger filters other than branches and paths", () => {
+  const typed = workflow("      - run: echo ok").replace(
+    "  pull_request:\n",
+    "  pull_request:\n    types: [opened]\n",
+  );
+  assert.match(
+    validateWorkflowText(typed).join("\n"),
+    /pull_request triggers may only filter on branches and paths/,
+  );
+
+  const ignored = workflow("      - run: echo ok").replace(
+    "  push:\n    branches:\n      - main",
+    "  push:\n    branches-ignore:\n      - feature",
+  );
+  assert.match(
+    validateWorkflowText(ignored).join("\n"),
+    /push triggers may only filter on branches and paths/,
+  );
+
+  const empty = workflow("      - run: echo ok").replace(
+    "  pull_request:\n",
+    "  pull_request:\n    paths: []\n",
+  );
+  assert.match(
+    validateWorkflowText(empty).join("\n"),
+    /pull_request paths filter must be a non-empty block list/,
+  );
+});
+
+test("rejects non-ubuntu runners and job-level secrets on validation workflows", () => {
+  const selfHosted = workflow("      - run: echo ok").replace(
+    "    runs-on: ubuntu-latest",
+    "    runs-on: [self-hosted, linux]",
+  );
+  assert.match(
+    validateWorkflowText(selfHosted).join("\n"),
+    /jobs must run on ubuntu-latest/,
+  );
+
+  const inherited = workflow("      - run: echo ok").replace(
+    "    runs-on: ubuntu-latest",
+    "    runs-on: ubuntu-latest\n    secrets: inherit",
+  );
+  assert.match(
+    validateWorkflowText(inherited).join("\n"),
+    /job-level secrets are not allowed on validation workflows/,
+  );
+});
+
 test("rejects workflow_dispatch outside the approved manual workflow", () => {
   const errors = validateWorkflowText(
     workflow("      - run: echo ok").replace(
@@ -479,7 +528,7 @@ jobs:
   assert.deepEqual(errors, []);
 });
 
-test("accepts unrelated flow-style list data", () => {
+test("rejects runner expressions that hide the runner label", () => {
   const errors = validateWorkflowText(`name: Policy fixture
 ${validationTriggers}
 
@@ -497,7 +546,7 @@ jobs:
       - run: node --version
 `);
 
-  assert.deepEqual(errors, []);
+  assert.match(errors.join("\n"), /jobs must run on ubuntu-latest/);
 });
 
 test("rejects excessive workflow permissions", () => {
