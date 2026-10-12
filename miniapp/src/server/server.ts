@@ -51,6 +51,13 @@ import {
   notificationIdPattern
 } from "./notifications.js";
 import { type Gauge, createRequestObserver, metricsContentType, metricsRequestAllowed } from "./observability.js";
+import {
+  type PendingOidcLogin,
+  authorizationUrl,
+  createOpaqueValue,
+  exchangeAuthorizationCode,
+  verifyIdToken
+} from "./oidc.js";
 import { contractProfileView } from "./profile.js";
 import { QuoteError, contractQuotesView, quotesView } from "./quotes.js";
 import { RequestBodyError, readJsonBody } from "./request-body.js";
@@ -61,6 +68,7 @@ import {
   lastSeenGranularityMs,
   sessionHandlePattern
 } from "./session.js";
+import { ExpiringStore } from "./session.js";
 import {
   type CustomerSessionRecord,
   type SessionStore,
@@ -94,6 +102,16 @@ const displayName = "Тестовый клиент";
 const devTelegramUserId = 900_000_001;
 const maxSessionsPerSubject = 5;
 const maxRevokedHandlesPerSubject = 20;
+
+// Dev-only OIDC login: the transaction cookie carries `${state}.${nonce}` so
+// the callback can prove the browser that started the flow is the browser that
+// returned; the server-side pending map holds the PKCE verifier. Both expire
+// inside ten minutes. The auth routes stay out of `routeTable` so an
+// unconfigured BFF answers exactly as before (404 for unknown GETs).
+const oidcTransactionCookie = "solidchange_ma_oidc_tx";
+const oidcTransactionTtlSeconds = 600;
+const maxPendingOidcLoginsPerInitiator = 2;
+const maxPendingOidcLogins = 256;
 
 // The default backend keeps the seam in-process so an unconfigured BFF is
 // byte-identical to the previous in-memory map; a configured postgres
@@ -286,6 +304,11 @@ function pseudonymousSubject(source: CustomerSession["source"], telegramUserId: 
   return `tg-${createHash("sha256").update(`solidchange-miniapp-dev|${telegramUserId}`).digest("hex").slice(0, 16)}`;
 }
 
+/** The issuer's `sub` mapped through the same pseudonymous derivation style. */
+function oidcSubject(sub: string): string {
+  return `dev-${createHash("sha256").update(`solidchange-miniapp-oidc|${sub}`).digest("hex").slice(0, 16)}`;
+}
+
 export function createMiniappServer(
   config: ServerConfig,
   options: MiniappServerOptions = {}
@@ -340,7 +363,10 @@ export function createMiniappServer(
 
   const observer = createRequestObserver({
     service: "miniapp-bff",
-    routes: routeTable.map((route) => route.path),
+    routes: [
+      ...routeTable.map((route) => route.path),
+      ...(config.oidc ? ["/bff/auth/login", "/bff/auth/callback"] : [])
+    ],
     config: config.observability,
     sink: options.logSink,
     timer: options.timer,
@@ -462,6 +488,113 @@ export function createMiniappServer(
     json(response, 201, sessionView(toCustomerSession(created)));
   }
 
+  const pendingOidcLogins = new ExpiringStore<PendingOidcLogin>(clock);
+
+  function redirect(response: ServerResponse, location: string): void {
+    securityHeaders(response);
+    response.statusCode = 302;
+    response.setHeader("location", location);
+    response.end();
+  }
+
+  function oidcTxCookieValue(value: string, maxAge: number): string {
+    const secure = config.allowedOrigins.every((origin) => origin.startsWith("https:")) ? "; Secure" : "";
+    return `${oidcTransactionCookie}=${encodeURIComponent(value)}; Path=/bff/auth; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  }
+
+  function oidcAuthFailed(response: ServerResponse): void {
+    response.setHeader("set-cookie", oidcTxCookieValue("", 0));
+    redirect(response, `${config.allowedOrigins[0]}/?error=auth_failed`);
+  }
+
+  async function oidcLogin(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const oidc = config.oidc;
+    if (!oidc) {
+      json(response, 404, { error: "not_found" });
+      return;
+    }
+    const presented = parseCookies(request)[oidcTransactionCookie];
+    const presentedState = presented?.split(".")[0];
+    const prior = presentedState ? pendingOidcLogins.get(presentedState) : undefined;
+    const session = await currentSession(request);
+    const state = createOpaqueValue();
+    const nonce = createOpaqueValue();
+    const verifier = createOpaqueValue(48);
+    // `sub` is unknowable until the token verifies, so the outstanding bound
+    // keys on the initiating identity: the live session's subject when one
+    // exists, otherwise the chain of transaction cookies this browser
+    // presented (self-rooted on a first login).
+    const initiator = session ? `sess:${session.subject}` : prior?.initiator ?? `flow:${state}`;
+    pendingOidcLogins.set(state, {
+      nonce,
+      verifier,
+      initiator,
+      expiresAt: clock() + oidcTransactionTtlSeconds * 1_000
+    });
+    pendingOidcLogins.retainNewest(
+      (entry) => entry.initiator === initiator,
+      maxPendingOidcLoginsPerInitiator
+    );
+    pendingOidcLogins.retainNewest(() => true, maxPendingOidcLogins);
+    response.setHeader("set-cookie", oidcTxCookieValue(`${state}.${nonce}`, oidcTransactionTtlSeconds));
+    redirect(response, authorizationUrl(oidc, state, nonce, verifier));
+  }
+
+  async function oidcCallback(
+    request: IncomingMessage,
+    response: ServerResponse,
+    url: URL
+  ): Promise<void> {
+    const oidc = config.oidc;
+    if (!oidc) {
+      json(response, 404, { error: "not_found" });
+      return;
+    }
+    if (url.searchParams.get("error") !== null) {
+      oidcAuthFailed(response);
+      return;
+    }
+    const codes = url.searchParams.getAll("code");
+    const states = url.searchParams.getAll("state");
+    if (codes.length !== 1 || states.length !== 1 || !codes[0]) {
+      oidcAuthFailed(response);
+      return;
+    }
+    const transaction = parseCookies(request)[oidcTransactionCookie];
+    const [txState, txNonce] = transaction?.split(".") ?? [];
+    if (txState !== states[0] || !txNonce) {
+      oidcAuthFailed(response);
+      return;
+    }
+    const pending = pendingOidcLogins.take(states[0]);
+    if (!pending || pending.nonce !== txNonce) {
+      oidcAuthFailed(response);
+      return;
+    }
+    try {
+      const exchange = await exchangeAuthorizationCode(oidc, codes[0], pending.verifier);
+      const identity = await verifyIdToken(exchange.idToken, oidc, pending.nonce, exchange.accessToken);
+      const subject = oidcSubject(identity.subject);
+      kycOnboarding.reset(subject);
+      const previous = parseCookies(request)[sessionCookie];
+      if (previous) await sessionDirectory.dropByToken(previous);
+      const { session: created, token } = await sessionDirectory.issue({
+        subject,
+        source: "dev-synthetic",
+        kyc: "verified"
+      });
+      outbox.record(created.subject, "session_login");
+      activity.recordLogin(created.subject, created.source);
+      response.setHeader("set-cookie", [
+        oidcTxCookieValue("", 0),
+        sessionCookieValue(token, config.sessionTtlSeconds, config.allowedOrigins[0])
+      ]);
+      redirect(response, config.allowedOrigins[0]);
+    } catch {
+      oidcAuthFailed(response);
+    }
+  }
+
   async function handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     if (!isLoopbackHostname(requestHostname(request.headers.host) ?? "")) {
       json(response, 421, { error: "host_rejected" });
@@ -486,6 +619,20 @@ export function createMiniappServer(
     // had already drifted (several customer routes lacked it).
     if (request.headers["x-device-id"] !== undefined) {
       json(response, 400, { error: "invalid_request" });
+      return;
+    }
+    // The OIDC login endpoints are the two cross-site entry points: the
+    // callback legitimately arrives with `Sec-Fetch-Site: same-site` (the
+    // issuer lives on another loopback port), and the transaction cookie —
+    // not the fetch-site header — binds the flow. They dispatch only when
+    // OIDC is configured, so an unconfigured BFF answers 404 exactly as
+    // before.
+    if (config.oidc && request.method === "GET" && path === "/bff/auth/login") {
+      await oidcLogin(request, response);
+      return;
+    }
+    if (config.oidc && request.method === "GET" && path === "/bff/auth/callback") {
+      await oidcCallback(request, response, url);
       return;
     }
     if (!customerFetchAllowed(request)) {
