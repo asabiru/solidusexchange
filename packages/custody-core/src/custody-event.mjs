@@ -248,13 +248,15 @@ export function createCustodyIntentPreparedEvent({
   });
 }
 
-export function createCustodyProjectionRegistry() {
+export function createCustodyProjectionRegistry({ maxEntries = 10_000 } = {}) {
+  assert(
+    Number.isSafeInteger(maxEntries) && maxEntries > 0,
+    "custody projection registry capacity must be a positive integer"
+  );
   const idempotency = new Map();
   const eventIds = new Map();
-  const approvalEventIds = new Map();
   const withdrawalIds = new Map();
   const custodyIntentIds = new Map();
-  const approvalSetIds = new Map();
   const approvalIds = new Map();
   const stepUpGrantIds = new Map();
   const evidenceDigests = new Map();
@@ -274,10 +276,14 @@ export function createCustodyProjectionRegistry() {
       return prior.event;
     }
 
+    assert(
+      idempotency.size < maxEntries,
+      "custody projection registry capacity reached"
+    );
     for (const [registry, identity, message] of [
       [eventIds, event.event_id, "custody event_id has already been projected"],
       [
-        approvalEventIds,
+        eventIds,
         event.causation_id,
         "WithdrawalApproved event has already been projected"
       ],
@@ -288,7 +294,7 @@ export function createCustodyProjectionRegistry() {
         "custody intent already has a projection"
       ],
       [
-        approvalSetIds,
+        approvalIds,
         request.withdrawalApprovedEvent.payload.approval_id,
         "withdrawal approval set has already been consumed"
       ]
@@ -319,10 +325,10 @@ export function createCustodyProjectionRegistry() {
     });
     idempotency.set(idempotencyKey, record);
     eventIds.set(event.event_id, idempotencyKey);
-    approvalEventIds.set(event.causation_id, idempotencyKey);
+    eventIds.set(event.causation_id, idempotencyKey);
     withdrawalIds.set(event.aggregate_id, idempotencyKey);
     custodyIntentIds.set(event.payload.custody_intent_id, idempotencyKey);
-    approvalSetIds.set(
+    approvalIds.set(
       request.withdrawalApprovedEvent.payload.approval_id,
       idempotencyKey
     );
