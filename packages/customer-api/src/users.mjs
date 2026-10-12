@@ -108,6 +108,7 @@ function isIsoTimestamp(value) {
   return (
     typeof value === "string" &&
     ISO_TIMESTAMP.test(value) &&
+    Number.isFinite(Date.parse(value)) &&
     new Date(Date.parse(value)).toISOString() === value
   );
 }
