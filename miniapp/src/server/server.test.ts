@@ -97,7 +97,7 @@ describe("session and Origin boundary", () => {
     const response = await post(running.base, "/bff/auth/dev-session", { kyc: "verified" });
     assert.equal(response.status, 201);
     const header = response.headers.get("set-cookie") ?? "";
-    assert.match(header, new RegExp(`^${sessionCookie}=[0-9a-f-]{36}; `));
+    assert.match(header, new RegExp(`^${sessionCookie}=smt_[0-9a-f]{64}; `));
     assert.match(header, /; Path=\/bff;/);
     assert.match(header, /; HttpOnly;/);
     assert.match(header, /; SameSite=Strict;/);

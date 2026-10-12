@@ -19,7 +19,8 @@
       "build:bff": "tsc -p tsconfig.server.json",
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/markets-depth.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/app/api-audit.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/customer-api-audit.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/withdrawals-upstream.test.js .test-dist/server/quotes-upstream.test.js .test-dist/server/exchange-orders-upstream.test.js .test-dist/server/trades-upstream.test.js .test-dist/server/markets-upstream.test.js .test-dist/server/payments-upstream.test.js .test-dist/server/cards-upstream.test.js .test-dist/server/checks-upstream.test.js .test-dist/server/wallet-upstream.test.js .test-dist/server/address-screening-upstream.test.js .test-dist/server/activity-upstream.test.js .test-dist/server/operations-upstream.test.js .test-dist/server/sessions-upstream.test.js .test-dist/server/account-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js .test-dist/server/fallback-arms.test.js"
+      "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs",
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/shared/decimal.test.js .test-dist/shared/quote.test.js .test-dist/app/i18n.test.js .test-dist/app/a11y.test.js .test-dist/app/checks-badges.test.js .test-dist/app/markets-depth.test.js .test-dist/app/notification-seen.test.js .test-dist/app/server-fields.test.js .test-dist/app/api-audit.test.js .test-dist/server/init-data.test.js .test-dist/server/quotes.test.js .test-dist/server/provider-quotes.test.js .test-dist/server/kyc.test.js .test-dist/server/kyc-routes.test.js .test-dist/server/address-screening.test.js .test-dist/server/address-screening-routes.test.js .test-dist/server/bff-security.test.js .test-dist/server/notifications.test.js .test-dist/server/notifications-routes.test.js .test-dist/server/activity.test.js .test-dist/server/activity-routes.test.js .test-dist/server/sessions-routes.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/customer-api-audit.test.js .test-dist/server/wallet-routes.test.js .test-dist/server/notifications-upstream.test.js .test-dist/server/kyc-status-upstream.test.js .test-dist/server/profile-upstream.test.js .test-dist/server/support-requests-upstream.test.js .test-dist/server/deposits-upstream.test.js .test-dist/server/withdrawals-upstream.test.js .test-dist/server/quotes-upstream.test.js .test-dist/server/exchange-orders-upstream.test.js .test-dist/server/trades-upstream.test.js .test-dist/server/markets-upstream.test.js .test-dist/server/payments-upstream.test.js .test-dist/server/cards-upstream.test.js .test-dist/server/checks-upstream.test.js .test-dist/server/wallet-upstream.test.js .test-dist/server/address-screening-upstream.test.js .test-dist/server/activity-upstream.test.js .test-dist/server/operations-upstream.test.js .test-dist/server/sessions-upstream.test.js .test-dist/server/account-upstream.test.js .test-dist/server/integration.test.js .test-dist/server/server.test.js .test-dist/server/dev-server.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/support.test.js .test-dist/server/support-routes.test.js .test-dist/server/checks.test.js .test-dist/server/checks-routes.test.js .test-dist/server/bff-core.test.js .test-dist/server/fallback-arms.test.js .test-dist/server/session-store.test.js"
     },
     "packages/api-contracts/package.json": {
       "check": "node scripts/check-contracts.mjs",
@@ -359,6 +360,13 @@
       },
       {
         "run": "npm test"
+      },
+      {
+        "run": "npm run verify:migrations"
+      },
+      {
+        "run": "bash tests/postgres-store.sh",
+        "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       },
       {
         "run": "npm run build"
@@ -804,6 +812,10 @@
       "minLines": 294,
       "minCases": 7
     },
+    "miniapp/src/server/postgres-session-store-contract.ts": {
+      "minLines": 241,
+      "minCases": 9
+    },
     "miniapp/src/server/profile-upstream.test.ts": {
       "minLines": 243,
       "minCases": 7
@@ -827,6 +839,14 @@
     "miniapp/src/server/server.test.ts": {
       "minLines": 343,
       "minCases": 22
+    },
+    "miniapp/src/server/session-store-contract.ts": {
+      "minLines": 515,
+      "minCases": 16
+    },
+    "miniapp/src/server/session-store.test.ts": {
+      "minLines": 159,
+      "minCases": 5
     },
     "miniapp/src/server/sessions-routes.test.ts": {
       "minLines": 342,
@@ -871,6 +891,10 @@
     "miniapp/src/shared/quote.test.ts": {
       "minLines": 54,
       "minCases": 5
+    },
+    "miniapp/tests/postgres-store.sh": {
+      "minLines": 210,
+      "minCases": 0
     },
     "miniapp/tsconfig.test.json": {
       "minLines": 38,

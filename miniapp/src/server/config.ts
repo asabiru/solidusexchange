@@ -22,7 +22,13 @@ export interface ServerConfig {
   kytScreeningTimeoutSeconds: number;
   customerApiUrl?: string;
   customerApiDevTokenKey?: string;
+  session?: SessionStorageConfig;
   observability?: ObservabilityConfig;
+}
+
+export interface SessionStorageConfig {
+  storage: "memory" | "postgresql";
+  databaseUrl?: string;
 }
 
 export type Environment = Readonly<Record<string, string | undefined>>;
@@ -127,6 +133,33 @@ function parseCustomerApi(env: Environment): { customerApiUrl?: string; customer
   return { customerApiUrl: url, customerApiDevTokenKey: key };
 }
 
+function parseSessionStorage(env: Environment): { session?: SessionStorageConfig } {
+  const storage = env.MINIAPP_SESSION_STORE?.trim() || "memory";
+  const dsn = env.MINIAPP_SESSION_STORE_DSN?.trim() || undefined;
+  if (storage === "memory") {
+    if (dsn !== undefined) {
+      throw new Error("MINIAPP_SESSION_STORE_DSN requires MINIAPP_SESSION_STORE=postgresql");
+    }
+    return { session: { storage: "memory" } };
+  }
+  if (storage !== "postgresql") {
+    throw new Error("MINIAPP_SESSION_STORE must be one of memory, postgresql");
+  }
+  if (dsn === undefined) {
+    throw new Error("MINIAPP_SESSION_STORE_DSN must be set with MINIAPP_SESSION_STORE=postgresql");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(dsn);
+  } catch {
+    throw new Error("MINIAPP_SESSION_STORE_DSN must be a valid connection URL");
+  }
+  if (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:") {
+    throw new Error("MINIAPP_SESSION_STORE_DSN must use a postgres:// or postgresql:// URL");
+  }
+  return { session: { storage: "postgresql", databaseUrl: dsn } };
+}
+
 function seedSetting(env: Environment, name: string, fallback: string): string {
   const value = env[name]?.trim() || fallback;
   if (!seedPattern.test(value)) throw new Error(`${name} must match ^[A-Za-z0-9._:-]{1,64}$`);
@@ -164,6 +197,7 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     kytSeed: seedSetting(env, "MINIAPP_KYT_SEED", "miniapp-dev-kyt"),
     kytScreeningTimeoutSeconds: integerSetting(env, "MINIAPP_KYT_TIMEOUT_SECONDS", 900, 60, 3_600),
     ...parseCustomerApi(env),
+    ...parseSessionStorage(env),
     observability: {
       log: oneOf(env, "MINIAPP_LOG", logModes, "off"),
       metrics: oneOf(env, "MINIAPP_METRICS", metricsModes, "off")
