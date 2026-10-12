@@ -529,3 +529,32 @@ test("identical redelivery after a lost response records nothing twice", async (
   await store.append(batch);
   assert.deepEqual(await store.load(), batch);
 });
+
+test("an end-of-day timestamp spelling is rejected at insert, before it poisons the stream", async (t) => {
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  // 'T24:00:00Z' passes the ISO shape regex and PostgreSQL normalizes the
+  // cast into the next day instead of rejecting it — without the canonical
+  // round-trip check the row would land and replay could never restore.
+  await assert.rejects(
+    () =>
+      pool.query(`SELECT matching_core.append_matching_journal($1, $2::jsonb)`, [
+        "at_end_of_day",
+        JSON.stringify([
+          {
+            seq: 1,
+            at: "2026-01-01T24:00:00Z",
+            type: "accepted",
+            posting: "none",
+            order_id: "ord_000000000000000000000001",
+            instrument: "USDT/RUB",
+            side: "buy",
+            order_type: "limit",
+            price: "90.00000000",
+            quantity: "1.000000",
+          },
+        ]),
+      ]),
+    /payload_event|violat/i,
+  );
+});

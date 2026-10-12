@@ -354,11 +354,11 @@ describe("market orders through replay and restore", () => {
 
     const renamedReason = plain(journal);
     renamedReason[rejectedIndex] = { ...renamedReason[rejectedIndex], reason: "no_liquidity" };
-    assertStreamRejected(renamedReason, /unknown reject reason/);
+    assertStreamRejected(renamedReason, /in flight/);
 
     const limitVictim = plain(journal);
     limitVictim[rejectedIndex] = { ...limitVictim[rejectedIndex], order_id: ord(4), side: "buy" };
-    assertStreamRejected(limitVictim, /only rejects market orders/);
+    assertStreamRejected(limitVictim, /in flight/);
   });
 
   test("rejects a fill whose maker is a market order", () => {
@@ -367,7 +367,20 @@ describe("market orders through replay and restore", () => {
     const stream = plain(engine.journal()).slice(0, 1);
     stream.push(
       {
+        // The market taker resolves (empty book) so the stream stays
+        // inside one live-emittable operation per boundary.
         seq: 2,
+        at: AT,
+        type: "rejected",
+        order_id: ord(1),
+        instrument: "USDT/RUB",
+        side: "sell",
+        reason: "insufficient_liquidity",
+        quantity: "5.000000",
+        posting: "none",
+      },
+      {
+        seq: 3,
         at: AT,
         type: "accepted",
         order_id: ord(2),
@@ -379,7 +392,7 @@ describe("market orders through replay and restore", () => {
         posting: "none",
       },
       {
-        seq: 3,
+        seq: 4,
         at: AT,
         type: "filled",
         order_id: ord(1),
