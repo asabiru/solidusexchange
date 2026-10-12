@@ -7,6 +7,7 @@ import type { ServerConfig } from "./config.js";
 import {
   type CustomerApiClient,
   type CustomerApiOperatorQueue,
+  type CustomerApiOperatorQueueItem,
   createCustomerApiClient,
   customerApiSubject
 } from "./customer-api-client.js";
@@ -79,8 +80,19 @@ interface SeenCall {
   kind: string;
 }
 
-function stubClient(result: CustomerApiOperatorQueue | ((kind: string) => CustomerApiOperatorQueue)): { client: CustomerApiClient; seen: SeenCall[] } {
+interface SeenItemCall {
+  subject: string;
+  deviceId: string;
+  kind: string;
+  itemId: string;
+}
+
+function stubClient(
+  result: CustomerApiOperatorQueue | ((kind: string) => CustomerApiOperatorQueue),
+  itemResult?: CustomerApiOperatorQueueItem | ((kind: string, itemId: string) => CustomerApiOperatorQueueItem)
+): { client: CustomerApiClient; seen: SeenCall[]; seenItems: SeenItemCall[] } {
   const seen: SeenCall[] = [];
+  const seenItems: SeenItemCall[] = [];
   const client: CustomerApiClient = {
     configured: true,
     operatorAdmin: async () => ({ status: "not-configured" }),
@@ -89,9 +101,19 @@ function stubClient(result: CustomerApiOperatorQueue | ((kind: string) => Custom
     operatorQueue: async (subject: string, deviceId: string, kind: "kyc" | "aml" | "tickets"): Promise<CustomerApiOperatorQueue> => {
       seen.push({ subject, deviceId, kind });
       return typeof result === "function" ? result(kind) : result;
+    },
+    operatorQueueItem: async (
+      subject: string,
+      deviceId: string,
+      kind: "kyc" | "aml" | "tickets",
+      itemId: string
+    ): Promise<CustomerApiOperatorQueueItem> => {
+      seenItems.push({ subject, deviceId, kind, itemId });
+      if (itemResult === undefined) return { status: "not-found" };
+      return typeof itemResult === "function" ? itemResult(kind, itemId) : itemResult;
     }
   };
-  return { client, seen };
+  return { client, seen, seenItems };
 }
 
 function contractView(): CustomerApiOperatorQueue {
@@ -509,5 +531,301 @@ describe("operator queue BFF surface", () => {
       String(seen[0].authorization),
       new RegExp(`^Bearer sodev1\\.${customerApiSubject("dev:compliance-lead")}\\.[0-9]{10}\\.[0-9a-f]{64}$`)
     );
+  });
+});
+
+function kycDetailView(): CustomerApiOperatorQueueItem {
+  return {
+    status: "ok",
+    view: {
+      mode: "test",
+      kind: "kyc",
+      item: {
+        queue_id: "qky_00112233445566778899aabb",
+        subject_id: "syn_cust_00112233445566778899aabb",
+        display_name: "Alina Mironova",
+        submitted_at: "2026-09-20T00:00:00.000Z",
+        sla_due_at: "2026-09-23T00:00:00.000Z",
+        state: "in_review",
+        priority: "high",
+        assignee: { subject: "syn_oper_0011223344556677" },
+        age_ms: 1_000_000,
+        kyc: {
+          status: "in_review",
+          level: "enhanced",
+          session_id: "kys_00112233445566778899aabb",
+          history: [
+            { session_id: "kys_00112233445566778899aabb", state: "in_review", submitted_at: "2026-09-20T00:00:00.000Z", decided_at: null, rejection_reason: null },
+            { session_id: "kys_bbccddee00112233445566", state: "timed_out", submitted_at: "2026-09-01T00:00:00.000Z", decided_at: "2026-09-05T00:00:00.000Z", rejection_reason: null }
+          ]
+        }
+      }
+    }
+  };
+}
+
+function amlDetailView(): CustomerApiOperatorQueueItem {
+  return {
+    status: "ok",
+    view: {
+      mode: "test",
+      kind: "aml",
+      item: {
+        queue_id: "qml_00112233445566778899aabb",
+        subject_id: "syn_cust_00112233445566778899aabb",
+        alert_type: "structuring",
+        evidence_refs: ["evd_00112233445566778899aabb"],
+        sla_due_at: "2026-09-23T00:00:00.000Z",
+        state: "escalated",
+        priority: "urgent",
+        assignee: null,
+        age_ms: 2_000_000,
+        flags: [
+          { flag_id: "flg_00112233445566778899aabb", alert_type: "structuring", raised_at: "2026-09-19T00:00:00.000Z" },
+          { flag_id: "flg_bbccddee00112233445566", alert_type: "velocity", raised_at: "2026-09-21T00:00:00.000Z" }
+        ]
+      }
+    }
+  };
+}
+
+function ticketsDetailView(): CustomerApiOperatorQueueItem {
+  return {
+    status: "ok",
+    view: {
+      mode: "test",
+      kind: "tickets",
+      item: {
+        queue_id: "qtick_00112233445566778899aabb",
+        subject_id: "syn_cust_00112233445566778899aabb",
+        category: "operation_problem",
+        opened_at: "2026-09-19T00:00:00.000Z",
+        state: "open",
+        priority: "normal",
+        assignee: { subject: "syn_oper_0011223344556677" },
+        age_ms: 4_000_000,
+        subject: "Card declined at checkout",
+        last_message_at: "2026-09-21T00:00:00.000Z",
+        other_open_tickets: 2
+      }
+    }
+  };
+}
+
+async function operatorQueueItemEnvelope(baseUrl: string, cookie: string, kind: string, itemId: string) {
+  const response = await fetch(`${baseUrl}/bff/api/operator/queue/${kind}/${itemId}`, { headers: { cookie, origin } });
+  const body = await response.json() as { resource?: string; payload?: Record<string, unknown>; error?: string };
+  return { response, body };
+}
+
+describe("operator queue item BFF surface", () => {
+  it("requires an operator session", async () => {
+    const baseUrl = await listen(createBackofficeServer(config()));
+    const response = await fetch(`${baseUrl}/bff/api/operator/queue/kyc/qky_00112233445566778899aabb`, { headers: { origin } });
+    assert.equal(response.status, 401);
+    assert.deepEqual(await response.json(), { error: "operator_session_required" });
+  });
+
+  it("answers every unknown kind with the uniform not-found before any upstream call", async () => {
+    const { client, seenItems } = stubClient(contractView(), kycDetailView());
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const cookie = `${session}; solidchange_bo_device=${testDeviceId}`;
+    for (const kind of ["fraud", "KYC", ""]) {
+      const { response } = await operatorQueueItemEnvelope(baseUrl, cookie, kind, "qky_00112233445566778899aabb");
+      assert.equal(response.status, 404, kind);
+    }
+    assert.equal(seenItems.length, 0);
+  });
+
+  it("maps the upstream kyc member view onto the signed camelCase payload", async () => {
+    const { client, seenItems } = stubClient(contractView(), kycDetailView());
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const { response, body } = await operatorQueueItemEnvelope(
+      baseUrl,
+      `${session}; solidchange_bo_device=${testDeviceId}`,
+      "kyc",
+      "qky_00112233445566778899aabb"
+    );
+    assert.equal(response.status, 200);
+    assert.equal(body.resource, "operator-queue-item:kyc:qky_00112233445566778899aabb");
+    assert.deepEqual(body.payload, {
+      mode: "test",
+      kind: "kyc",
+      item: {
+        queueId: "qky_00112233445566778899aabb",
+        subjectId: "syn_cust_00112233445566778899aabb",
+        displayName: "Alina Mironova",
+        submittedAt: "2026-09-20T00:00:00.000Z",
+        slaDueAt: "2026-09-23T00:00:00.000Z",
+        state: "in_review",
+        priority: "high",
+        assignee: { subject: "syn_oper_0011223344556677" },
+        ageMs: 1_000_000,
+        kyc: {
+          status: "in_review",
+          level: "enhanced",
+          sessionId: "kys_00112233445566778899aabb",
+          history: [
+            { sessionId: "kys_00112233445566778899aabb", state: "in_review", submittedAt: "2026-09-20T00:00:00.000Z", decidedAt: null, rejectionReason: null },
+            { sessionId: "kys_bbccddee00112233445566", state: "timed_out", submittedAt: "2026-09-01T00:00:00.000Z", decidedAt: "2026-09-05T00:00:00.000Z", rejectionReason: null }
+          ]
+        }
+      }
+    });
+    assert.deepEqual(seenItems, [
+      { subject: "dev:compliance-lead", deviceId: testDeviceId, kind: "kyc", itemId: "qky_00112233445566778899aabb" }
+    ]);
+  });
+
+  it("maps the aml and tickets member views per kind", async () => {
+    const { client, seenItems } = stubClient(contractView(), (kind) =>
+      kind === "aml" ? amlDetailView() : ticketsDetailView()
+    );
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const cookie = `${session}; solidchange_bo_device=${testDeviceId}`;
+
+    const aml = await operatorQueueItemEnvelope(baseUrl, cookie, "aml", "qml_00112233445566778899aabb");
+    assert.equal(aml.response.status, 200);
+    assert.equal(aml.body.resource, "operator-queue-item:aml:qml_00112233445566778899aabb");
+    assert.deepEqual(aml.body.payload, {
+      mode: "test",
+      kind: "aml",
+      item: {
+        queueId: "qml_00112233445566778899aabb",
+        subjectId: "syn_cust_00112233445566778899aabb",
+        alertType: "structuring",
+        evidenceRefs: ["evd_00112233445566778899aabb"],
+        slaDueAt: "2026-09-23T00:00:00.000Z",
+        state: "escalated",
+        priority: "urgent",
+        assignee: null,
+        ageMs: 2_000_000,
+        flags: [
+          { flagId: "flg_00112233445566778899aabb", alertType: "structuring", raisedAt: "2026-09-19T00:00:00.000Z" },
+          { flagId: "flg_bbccddee00112233445566", alertType: "velocity", raisedAt: "2026-09-21T00:00:00.000Z" }
+        ]
+      }
+    });
+
+    const tickets = await operatorQueueItemEnvelope(baseUrl, cookie, "tickets", "qtick_00112233445566778899aabb");
+    assert.equal(tickets.response.status, 200);
+    assert.deepEqual(tickets.body.payload, {
+      mode: "test",
+      kind: "tickets",
+      item: {
+        queueId: "qtick_00112233445566778899aabb",
+        subjectId: "syn_cust_00112233445566778899aabb",
+        category: "operation_problem",
+        openedAt: "2026-09-19T00:00:00.000Z",
+        state: "open",
+        priority: "normal",
+        assignee: { subject: "syn_oper_0011223344556677" },
+        ageMs: 4_000_000,
+        subject: "Card declined at checkout",
+        lastMessageAt: "2026-09-21T00:00:00.000Z",
+        otherOpenTickets: 2
+      }
+    });
+    assert.deepEqual(
+      seenItems.map((call) => [call.kind, call.itemId]),
+      [["aml", "qml_00112233445566778899aabb"], ["tickets", "qtick_00112233445566778899aabb"]]
+    );
+  });
+
+  it("keeps the upstream uniform 404 for unknown and wrong-kind ids", async () => {
+    const { client, seenItems } = stubClient(contractView(), { status: "not-found" });
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const { response, body } = await operatorQueueItemEnvelope(
+      baseUrl,
+      `${session}; solidchange_bo_device=${testDeviceId}`,
+      "kyc",
+      "qky_ffffffffffffffffffffffff"
+    );
+    assert.equal(response.status, 404);
+    assert.deepEqual(body, { error: "operator_queue_item_not_found" });
+    assert.equal(seenItems.length, 1);
+  });
+
+  it("rejects absent or malformed device identities before any upstream call", async () => {
+    const { client, seenItems } = stubClient(contractView(), kycDetailView());
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    for (const deviceCookie of [
+      "",
+      "solidchange_bo_device=not-a-device",
+      "solidchange_bo_device=F47AC10B-58CC-4372-A567-0E02B2C3D479"
+    ]) {
+      const cookie = deviceCookie ? `${session}; ${deviceCookie}` : session;
+      const { response, body } = await operatorQueueItemEnvelope(baseUrl, cookie, "kyc", "qky_00112233445566778899aabb");
+      assert.equal(response.status, 403, deviceCookie || "absent");
+      assert.deepEqual(body, { error: "device_required" });
+    }
+    assert.equal(seenItems.length, 0);
+  });
+
+  it("maps any non-ok upstream outcome to operator_queue_item_unavailable", async () => {
+    const { client } = stubClient(contractView(), { status: "unavailable" });
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const { response, body } = await operatorQueueItemEnvelope(
+      baseUrl,
+      `${session}; solidchange_bo_device=${testDeviceId}`,
+      "kyc",
+      "qky_00112233445566778899aabb"
+    );
+    assert.equal(response.status, 503);
+    assert.deepEqual(body, { error: "operator_queue_item_unavailable" });
+  });
+
+  it("answers the uniform not-found for every member read when the upstream is unconfigured", async () => {
+    const baseUrl = await listen(createBackofficeServer(config()));
+    const cookie = await devSession(baseUrl);
+    for (const [kind, itemId] of [["kyc", "qky_00112233445566778899aabb"], ["aml", "qml_00112233445566778899aabb"], ["tickets", "qtick_00112233445566778899aabb"]]) {
+      const { response, body } = await operatorQueueItemEnvelope(baseUrl, cookie, kind, itemId);
+      assert.equal(response.status, 404, kind);
+      assert.deepEqual(body, { error: "operator_queue_item_not_found" });
+    }
+  });
+
+  it("fails closed to 503 on upstream contract drift end-to-end", async () => {
+    const key = randomBytes(32).toString("hex");
+    const drifted = {
+      mode: "test",
+      kind: "kyc",
+      item: {
+        queue_id: "qky_00112233445566778899aabb",
+        subject_id: "syn_oper_00000001",
+        display_name: "Alina Mironova",
+        submitted_at: "2026-09-20T00:00:00.000Z",
+        sla_due_at: "2026-09-23T00:00:00.000Z",
+        state: "in_review",
+        priority: "high",
+        assignee: null,
+        age_ms: 1_000_000,
+        kyc: null
+      }
+    };
+    const upstream = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(drifted));
+    });
+    servers.push(upstream);
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    const upstreamUrl = `http://127.0.0.1:${(upstream.address() as AddressInfo).port}`;
+    const client = createCustomerApiClient({ baseUrl: upstreamUrl, devTokenKey: key });
+    const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
+    const session = await devSession(baseUrl);
+    const { response, body } = await operatorQueueItemEnvelope(
+      baseUrl,
+      `${session}; solidchange_bo_device=${testDeviceId}`,
+      "kyc",
+      "qky_00112233445566778899aabb"
+    );
+    assert.equal(response.status, 503);
+    assert.deepEqual(body, { error: "operator_queue_item_unavailable" });
   });
 });

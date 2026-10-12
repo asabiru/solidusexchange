@@ -18,6 +18,7 @@ import {
   getInvestigations,
   getKycCases,
   getOperatorQueue,
+  getOperatorQueueItem,
   getOperatorSubject,
   getOperatorSubjects,
   getReport,
@@ -87,14 +88,19 @@ import type {
 } from "../data/provider-evidence.js";
 import {
   type OperatorQueueView,
+  parseOperatorQueueItemDetailView,
   parseOperatorQueueView,
   parseOperatorSubjectView,
   parseOperatorSubjectsView,
   type OperatorAmlQueueItem,
+  type OperatorAmlQueueItemDetail,
+  type OperatorKycQueueItemDetail,
   type OperatorQueueItem,
   type OperatorSubjectDetail,
+  type OperatorSubjectKyc,
   type OperatorSubjectRow,
-  type OperatorTicketQueueItem
+  type OperatorTicketQueueItem,
+  type OperatorTicketQueueItemDetail
 } from "../data/operator.js";
 import { navigation, navigationGroups, type NavigationItem, type ScreenId } from "./navigation.js";
 import { runtime } from "./runtime.js";
@@ -476,6 +482,46 @@ function OperatorSubjectsView({ query, subjects }: { query: string; subjects: re
   );
 }
 
+/** The subject kyc dossier block shared by the subject detail and the kyc queue item detail. */
+function OperatorSubjectKycDossier({ kyc }: { kyc: OperatorSubjectKyc }) {
+  const { t, date, time } = useI18n();
+  return (
+    <>
+      <p>
+        <Status tone={kyc.status === "approved" ? "success" : kyc.status === "rejected" ? "danger" : "info"}>
+          {enumText(t, operatorSubjectKycStatusKeyOf(kyc.status), kyc.status)}
+        </Status>{" "}
+        {enumText(t, operatorSubjectKycLevelKeyOf(kyc.level), kyc.level)}{" "}
+        <code>{kyc.sessionId}</code>
+      </p>
+      <div className="timeline-list">
+        {kyc.history.map((attempt, index) => (
+          <div key={`${attempt.sessionId}:${index}`}>
+            <span />
+            <div>
+              <strong>
+                <Status tone={attempt.state === "approved" ? "success" : attempt.state === "rejected" ? "danger" : "info"}>
+                  {enumText(t, operatorSubjectKycStatusKeyOf(attempt.state), attempt.state)}
+                </Status>{" "}
+                <code>{attempt.sessionId}</code>
+              </strong>
+              <small>
+                {t("kyc.submitted")} {date(attempt.submittedAt)} · {time(attempt.submittedAt)}
+                {attempt.decidedAt === null ? "" : ` · ${t("customers.kycDecided")} ${date(attempt.decidedAt)} · ${time(attempt.decidedAt)}`}
+              </small>
+              <p>
+                {attempt.rejectionReason === null
+                  ? ""
+                  : `${t("customers.kycReason")}: ${enumText(t, operatorSubjectKycReasonKeyOf(attempt.rejectionReason), attempt.rejectionReason)}`}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
 /** Lazily fetches `/bff/api/operator/subjects/{id}` for the picked row; failures fall back to the demo projection. */
 function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | null }) {
   const { t, count, date, time } = useI18n();
@@ -539,39 +585,7 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
           {detail.kyc === null ? (
             <div className="empty"><p>{t("customers.kycEmpty")}</p></div>
           ) : (
-            <>
-              <p>
-                <Status tone={detail.kyc.status === "approved" ? "success" : detail.kyc.status === "rejected" ? "danger" : "info"}>
-                  {enumText(t, operatorSubjectKycStatusKeyOf(detail.kyc.status), detail.kyc.status)}
-                </Status>{" "}
-                {enumText(t, operatorSubjectKycLevelKeyOf(detail.kyc.level), detail.kyc.level)}{" "}
-                <code>{detail.kyc.sessionId}</code>
-              </p>
-              <div className="timeline-list">
-                {detail.kyc.history.map((attempt, index) => (
-                  <div key={`${attempt.sessionId}:${index}`}>
-                    <span />
-                    <div>
-                      <strong>
-                        <Status tone={attempt.state === "approved" ? "success" : attempt.state === "rejected" ? "danger" : "info"}>
-                          {enumText(t, operatorSubjectKycStatusKeyOf(attempt.state), attempt.state)}
-                        </Status>{" "}
-                        <code>{attempt.sessionId}</code>
-                      </strong>
-                      <small>
-                        {t("kyc.submitted")} {date(attempt.submittedAt)} · {time(attempt.submittedAt)}
-                        {attempt.decidedAt === null ? "" : ` · ${t("customers.kycDecided")} ${date(attempt.decidedAt)} · ${time(attempt.decidedAt)}`}
-                      </small>
-                      <p>
-                        {attempt.rejectionReason === null
-                          ? ""
-                          : `${t("customers.kycReason")}: ${enumText(t, operatorSubjectKycReasonKeyOf(attempt.rejectionReason), attempt.rejectionReason)}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </>
+            <OperatorSubjectKycDossier kyc={detail.kyc} />
           )}
         </div>
         <div className="subject-activity">
@@ -824,14 +838,33 @@ function OperatorQueueScreen({
             </table>
           </TableShell>
         </article>
-        {active && <OperatorQueueItemDetail item={active} />}
+        {active && <OperatorKycQueueItemPanel item={active} />}
       </section>
     </>
   );
 }
 
-function OperatorQueueItemDetail({ item }: { item: OperatorQueueItem }) {
+function OperatorKycQueueItemPanel({ item }: { item: OperatorQueueItem }) {
   const { t, count, date } = useI18n();
+  // Drill-down: the row fields render at once while the member read lazily
+  // fetches `/bff/api/operator/queue/kyc/{id}` for the dossier extension.
+  // Any failure degrades to the row-only view — the same `.catch(() =>
+  // undefined)` idiom the route loaders use.
+  const [detail, setDetail] = useState<OperatorKycQueueItemDetail | null | "loading">("loading");
+  useEffect(() => {
+    let alive = true;
+    setDetail("loading");
+    getOperatorQueueItem("kyc", item.queueId)
+      .catch(() => undefined)
+      .then((payload) => {
+        if (!alive) return;
+        const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "kyc", item.queueId);
+        setDetail(view !== undefined && view.kind === "kyc" ? view.item : null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [item.queueId]);
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -846,6 +879,18 @@ function OperatorQueueItemDetail({ item }: { item: OperatorQueueItem }) {
         <div><dt>{t("kyc.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("kyc.unassigned") : item.assignee.subject}</dd></div>
       </dl>
+      {detail === "loading" ? (
+        <div className="empty"><p>{t("kyc.detailLoading")}</p></div>
+      ) : detail === null ? null : (
+        <div className="subject-activity">
+          <h3>{t("customers.kycDossier")}</h3>
+          {detail.kyc === null ? (
+            <div className="empty"><p>{t("customers.kycEmpty")}</p></div>
+          ) : (
+            <OperatorSubjectKycDossier kyc={detail.kyc} />
+          )}
+        </div>
+      )}
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("kyc.queueNote")}</p>
@@ -1009,14 +1054,32 @@ function OperatorAmlQueueScreen({
             </table>
           </TableShell>
         </article>
-        {active && <OperatorAmlQueueItemDetail item={active} />}
+        {active && <OperatorAmlQueueItemPanel item={active} />}
       </section>
     </>
   );
 }
 
-function OperatorAmlQueueItemDetail({ item }: { item: OperatorAmlQueueItem }) {
-  const { t, count, date } = useI18n();
+function OperatorAmlQueueItemPanel({ item }: { item: OperatorAmlQueueItem }) {
+  const { t, count, date, time } = useI18n();
+  // Drill-down: same lazy member read as the kyc queue — the flags list
+  // lands behind `/bff/api/operator/queue/aml/{id}` and any failure
+  // degrades to the row-only view.
+  const [detail, setDetail] = useState<OperatorAmlQueueItemDetail | null | "loading">("loading");
+  useEffect(() => {
+    let alive = true;
+    setDetail("loading");
+    getOperatorQueueItem("aml", item.queueId)
+      .catch(() => undefined)
+      .then((payload) => {
+        if (!alive) return;
+        const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "aml", item.queueId);
+        setDetail(view !== undefined && view.kind === "aml" ? view.item : null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [item.queueId]);
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -1032,6 +1095,30 @@ function OperatorAmlQueueItemDetail({ item }: { item: OperatorAmlQueueItem }) {
         <div><dt>{t("aml.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("aml.unassigned") : item.assignee.subject}</dd></div>
       </dl>
+      {detail === "loading" ? (
+        <div className="empty"><p>{t("aml.detailLoading")}</p></div>
+      ) : detail === null ? null : (
+        <div className="subject-activity">
+          <h3>{t("aml.flagsTitle")}</h3>
+          {detail.flags.length === 0 && (
+            <div className="empty"><p>{t("aml.flagsEmpty")}</p></div>
+          )}
+          <div className="timeline-list">
+            {detail.flags.map((flag) => (
+              <div key={flag.flagId}>
+                <span />
+                <div>
+                  <strong>
+                    <Status tone="warning">{enumText(t, operatorAmlAlertTypeKeyOf(flag.alertType), flag.alertType)}</Status>{" "}
+                    <code>{flag.flagId}</code>
+                  </strong>
+                  <small>{date(flag.raisedAt)} · {time(flag.raisedAt)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("aml.queueNote")}</p>
@@ -2238,14 +2325,32 @@ function OperatorTicketQueueScreen({
             </table>
           </TableShell>
         </article>
-        {active && <OperatorTicketQueueItemDetail item={active} />}
+        {active && <OperatorTicketQueueItemPanel item={active} />}
       </section>
     </>
   );
 }
 
-function OperatorTicketQueueItemDetail({ item }: { item: OperatorTicketQueueItem }) {
+function OperatorTicketQueueItemPanel({ item }: { item: OperatorTicketQueueItem }) {
   const { t, count, date } = useI18n();
+  // Drill-down: same lazy member read as the sibling queues — the ticket
+  // extension lands behind `/bff/api/operator/queue/tickets/{id}` and any
+  // failure degrades to the row-only view.
+  const [detail, setDetail] = useState<OperatorTicketQueueItemDetail | null | "loading">("loading");
+  useEffect(() => {
+    let alive = true;
+    setDetail("loading");
+    getOperatorQueueItem("tickets", item.queueId)
+      .catch(() => undefined)
+      .then((payload) => {
+        if (!alive) return;
+        const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "tickets", item.queueId);
+        setDetail(view !== undefined && view.kind === "tickets" ? view.item : null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [item.queueId]);
   return (
     <aside className="panel case-detail">
       <header className="panel-heading">
@@ -2259,7 +2364,17 @@ function OperatorTicketQueueItemDetail({ item }: { item: OperatorTicketQueueItem
         <div><dt>{t("common.opened")}</dt><dd>{date(item.openedAt)}</dd></div>
         <div><dt>{t("support.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("support.unassigned") : item.assignee.subject}</dd></div>
+        {detail !== "loading" && detail !== null && (
+          <>
+            <div><dt>{t("support.ticketSubject")}</dt><dd>{detail.subject}</dd></div>
+            <div><dt>{t("support.lastMessageAt")}</dt><dd>{date(detail.lastMessageAt)}</dd></div>
+            <div><dt>{t("support.otherOpenTickets")}</dt><dd>{count(detail.otherOpenTickets)}</dd></div>
+          </>
+        )}
       </dl>
+      {detail === "loading" && (
+        <div className="empty"><p>{t("support.detailLoading")}</p></div>
+      )}
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("support.queueNote")}</p>

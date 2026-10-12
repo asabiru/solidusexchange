@@ -92,6 +92,12 @@ export interface OperatorQueuePayload {
   queue: unknown;
 }
 
+export interface OperatorQueueItemPayload {
+  mode: string;
+  kind: string;
+  item: unknown;
+}
+
 export interface ChecksPayload {
   statuses: readonly CheckStatus[];
   checks: readonly ChatCheck[];
@@ -561,6 +567,15 @@ export function getOperatorQueue(kind?: OperatorQueueKind): Promise<OperatorQueu
   const resolved = kind ?? "kyc";
   const query = kind === undefined ? "" : `?kind=${encodeURIComponent(kind)}`;
   return getSigned(`/bff/api/operator/queue${query}`, `operator-queue:${resolved}`);
+}
+
+export function getOperatorQueueItem(kind: OperatorQueueKind, itemId: string): Promise<OperatorQueueItemPayload> {
+  // The attestation binds kind and id exactly like subject:${id}: a detail
+  // signed for another kind or item can never satisfy this request.
+  return getSigned(
+    `/bff/api/operator/queue/${encodeURIComponent(kind)}/${encodeURIComponent(itemId)}`,
+    `operator-queue-item:${kind}:${itemId}`
+  );
 }
 
 export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {

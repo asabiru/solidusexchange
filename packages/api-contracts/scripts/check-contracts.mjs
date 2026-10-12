@@ -570,6 +570,115 @@ const pinnedResponseSchemas = {
       age_ms: { type: "integer", minimum: 0 }
     }
   },
+  OperatorQueueItemDetailView: {
+    type: "object",
+    additionalProperties: false,
+    required: ["mode", "kind", "item"],
+    properties: {
+      mode: { const: "test" },
+      kind: { type: "string", enum: ["kyc", "aml", "tickets"] },
+      item: { $ref: "#/components/schemas/OperatorQueueItemDetail" }
+    }
+  },
+  // The queue item detail is the same merged-kind ceiling as the item —
+  // the shared queue row plus the per-kind extension keys (kyc dossier,
+  // flags list, ticket subject/last message/other-open tally) staying
+  // optional for the same reason: the served validator enforces the
+  // per-kind required sets verbatim.
+  OperatorQueueItemDetail: {
+    type: "object",
+    additionalProperties: false,
+    required: [
+      "queue_id",
+      "subject_id",
+      "state",
+      "priority",
+      "assignee",
+      "age_ms"
+    ],
+    properties: {
+      queue_id: { type: "string", pattern: "^(qky|qml|qtick)_[0-9a-f]{24}$" },
+      subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
+      display_name: { type: "string", pattern: "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$" },
+      submitted_at: { type: "string", format: "date-time" },
+      sla_due_at: { type: "string", format: "date-time" },
+      opened_at: { type: "string", format: "date-time" },
+      alert_type: { type: "string", enum: ["structuring", "velocity", "geo_mismatch"] },
+      evidence_refs: {
+        type: "array",
+        maxItems: 8,
+        uniqueItems: true,
+        items: { type: "string", pattern: "^evd_[0-9a-f]{24}$" }
+      },
+      category: { type: "string", enum: ["question", "operation_problem", "complaint", "data_request"] },
+      state: { type: "string", enum: ["pending", "in_review", "escalated", "open", "waiting"] },
+      priority: { type: "string", enum: ["normal", "high", "urgent"] },
+      assignee: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["subject"],
+        properties: {
+          subject: { type: "string", pattern: "^syn_oper_[a-z0-9]{8,32}$" }
+        }
+      },
+      age_ms: { type: "integer", minimum: 0 },
+      kyc: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["status", "level", "session_id", "history"],
+        properties: {
+          status: {
+            type: "string",
+            enum: ["approved", "in_review", "needs_more_data", "rejected", "submitted", "timed_out"]
+          },
+          level: { type: "string", enum: ["basic", "enhanced"] },
+          session_id: { type: "string", pattern: "^kys_[0-9a-f]{24}$" },
+          history: {
+            type: "array",
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["session_id", "state", "submitted_at", "decided_at", "rejection_reason"],
+              properties: {
+                session_id: { type: "string", pattern: "^kys_[0-9a-f]{24}$" },
+                state: {
+                  type: "string",
+                  enum: ["approved", "in_review", "needs_more_data", "rejected", "submitted", "timed_out"]
+                },
+                submitted_at: { type: "string", format: "date-time" },
+                decided_at: { type: ["string", "null"], format: "date-time" },
+                rejection_reason: {
+                  type: ["string", "null"],
+                  enum: ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH", null]
+                }
+              }
+            }
+          }
+        }
+      },
+      flags: {
+        type: "array",
+        maxItems: 8,
+        uniqueItems: true,
+        items: { $ref: "#/components/schemas/OperatorQueueItemFlag" }
+      },
+      subject: { type: "string", minLength: 1, maxLength: 160 },
+      last_message_at: { type: "string", format: "date-time" },
+      other_open_tickets: { type: "integer", minimum: 0 }
+    }
+  },
+  OperatorQueueItemFlag: {
+    type: "object",
+    additionalProperties: false,
+    required: ["flag_id", "alert_type", "raised_at"],
+    properties: {
+      flag_id: { type: "string", pattern: "^flg_[0-9a-f]{24}$" },
+      alert_type: { type: "string", enum: ["structuring", "velocity", "geo_mismatch"] },
+      raised_at: { type: "string", format: "date-time" }
+    }
+  },
   WalletsView: {
     type: "object",
     additionalProperties: false,
@@ -1812,6 +1921,8 @@ const pinnedParameterNames = new Set([
   "OperationId",
   "OrderId",
   "Platform",
+  "QueueItemId",
+  "QueueKind",
   "RequestId",
   "ScreeningId",
   "SubjectId"
@@ -1819,11 +1930,14 @@ const pinnedParameterNames = new Set([
 
 // Templated paths bind exactly one canonical path parameter per placeholder
 // name: {checkId} -> CheckId, {instrument} -> Instrument,
+// {itemId} -> QueueItemId, {kind} -> QueueKind,
 // {operationId} -> OperationId, {orderId} -> OrderId,
 // {screeningId} -> ScreeningId, {subjectId} -> SubjectId.
 const canonicalPathParameters = new Map([
   ["checkId", "#/components/parameters/CheckId"],
   ["instrument", "#/components/parameters/Instrument"],
+  ["itemId", "#/components/parameters/QueueItemId"],
+  ["kind", "#/components/parameters/QueueKind"],
   ["operationId", "#/components/parameters/OperationId"],
   ["orderId", "#/components/parameters/OrderId"],
   ["screeningId", "#/components/parameters/ScreeningId"],
@@ -1997,6 +2111,7 @@ function checkOpenApi() {
     ["getOperatorSubjects", "/api/v1/operator/subjects"],
     ["getOperatorSubject", "/api/v1/operator/subjects/{subjectId}"],
     ["getOperatorQueue", "/api/v1/operator/queue"],
+    ["getOperatorQueueItem", "/api/v1/operator/queue/{kind}/{itemId}"],
     ["getCustomerChecks", "/api/v1/customer/checks"],
     ["getCustomerActivity", "/api/v1/customer/activity"],
     ["getCustomerOperations", "/api/v1/customer/operations"],
@@ -2059,6 +2174,7 @@ function checkOpenApi() {
     ["getOperatorSubjects", readStatuses],
     ["getOperatorSubject", ["200", "401", "404", "429", "500"]],
     ["getOperatorQueue", readStatuses],
+    ["getOperatorQueueItem", ["200", "401", "404", "429", "500"]],
     ["getCustomerChecks", gatedReadStatuses],
     ["getCustomerActivity", gatedReadStatuses],
     ["getCustomerOperations", gatedReadStatuses],
@@ -2098,6 +2214,7 @@ function checkOpenApi() {
     ["getOperatorSubjects", "#/components/schemas/OperatorSubjectsView"],
     ["getOperatorSubject", "#/components/schemas/OperatorSubjectDetailView"],
     ["getOperatorQueue", "#/components/schemas/OperatorQueueView"],
+    ["getOperatorQueueItem", "#/components/schemas/OperatorQueueItemDetailView"],
     ["getCustomerChecks", "#/components/schemas/ChecksView"],
     ["getCustomerActivity", "#/components/schemas/ActivityView"],
     ["getCustomerOperations", "#/components/schemas/OperationsView"],

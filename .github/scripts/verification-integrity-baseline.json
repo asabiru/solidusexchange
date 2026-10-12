@@ -477,8 +477,8 @@
       "minCases": 29
     },
     "backoffice/src/app/app-render.test.ts": {
-      "minLines": 436,
-      "minCases": 25
+      "minLines": 477,
+      "minCases": 27
     },
     "backoffice/src/app/checks.test.ts": {
       "minLines": 51,
@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 353,
-      "minCases": 14
+      "minLines": 542,
+      "minCases": 20
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -549,8 +549,8 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 775,
-      "minCases": 27
+      "minLines": 961,
+      "minCases": 31
     },
     "backoffice/src/server/dev-server.test.ts": {
       "minLines": 49,
@@ -573,19 +573,19 @@
       "minCases": 19
     },
     "backoffice/src/server/operator-admin-upstream.test.ts": {
-      "minLines": 233,
+      "minLines": 234,
       "minCases": 7
     },
     "backoffice/src/server/operator-queue-upstream.test.ts": {
-      "minLines": 481,
-      "minCases": 9
+      "minLines": 778,
+      "minCases": 18
     },
     "backoffice/src/server/operator-subject-upstream.test.ts": {
-      "minLines": 330,
+      "minLines": 374,
       "minCases": 9
     },
     "backoffice/src/server/operator-subjects-upstream.test.ts": {
-      "minLines": 235,
+      "minLines": 236,
       "minCases": 6
     },
     "backoffice/src/server/postgres-audit-store.test.ts": {
@@ -605,7 +605,7 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 551,
+      "minLines": 595,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
@@ -1033,11 +1033,11 @@
       "minCases": 15
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 964,
+      "minLines": 974,
       "minCases": 45
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 292,
+      "minLines": 295,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -1133,7 +1133,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 321,
+      "minLines": 325,
       "minCases": 14
     },
     "packages/customer-api/tests/routing.test.mjs": {
@@ -1141,7 +1141,7 @@
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
-      "minLines": 147,
+      "minLines": 152,
       "minCases": 6
     },
     "packages/customer-api/tests/store-config.test.mjs": {

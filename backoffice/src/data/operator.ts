@@ -173,6 +173,36 @@ export type OperatorQueueView =
       };
     };
 
+/** One flag record inside the aml queue item detail. */
+export interface OperatorQueueItemFlag {
+  flagId: string;
+  alertType: OperatorAmlAlertType;
+  raisedAt: string;
+}
+
+/** A kyc queue item detail: the queue row plus the subject's kyc dossier block. */
+export interface OperatorKycQueueItemDetail extends OperatorQueueItem {
+  kyc: OperatorSubjectKyc | null;
+}
+
+/** An aml queue item detail: the queue row plus the subject's open flag list. */
+export interface OperatorAmlQueueItemDetail extends OperatorAmlQueueItem {
+  flags: readonly OperatorQueueItemFlag[];
+}
+
+/** A tickets queue item detail: the queue row plus the ticket extension. */
+export interface OperatorTicketQueueItemDetail extends OperatorTicketQueueItem {
+  subject: string;
+  lastMessageAt: string;
+  otherOpenTickets: number;
+}
+
+/** The queue item member read, discriminated by kind like the collection. */
+export type OperatorQueueItemDetailView =
+  | { mode: "test"; kind: "kyc"; item: OperatorKycQueueItemDetail }
+  | { mode: "test"; kind: "aml"; item: OperatorAmlQueueItemDetail }
+  | { mode: "test"; kind: "tickets"; item: OperatorTicketQueueItemDetail };
+
 const operatorSubjectsViewKeys = ["mode", "subjects"] as const;
 const subjectRowKeys = [
   "displayName",
@@ -301,6 +331,16 @@ const ticketQueueItemKeys = [
   "state",
   "subjectId"
 ] as const;
+const queueItemDetailViewKeys = ["item", "kind", "mode"] as const;
+const kycQueueItemDetailKeys = [...queueItemKeys, "kyc"] as const;
+const amlQueueItemDetailKeys = [...amlQueueItemKeys, "flags"] as const;
+const ticketQueueItemDetailKeys = [
+  ...ticketQueueItemKeys,
+  "lastMessageAt",
+  "otherOpenTickets",
+  "subject"
+] as const;
+const queueItemFlagKeys = ["alertType", "flagId", "raisedAt"] as const;
 
 const customerSubjectPattern = /^syn_cust_[a-z0-9]{8,32}$/;
 const operatorSubjectPattern = /^syn_oper_[a-z0-9]{8,32}$/;
@@ -311,8 +351,11 @@ const deviceRefPattern = /^dev_[0-9a-f]{16}$/;
 const queueIdPattern = /^qky_[0-9a-f]{24}$/;
 const amlQueueIdPattern = /^qml_[0-9a-f]{24}$/;
 const ticketQueueIdPattern = /^qtick_[0-9a-f]{24}$/;
+const flagIdPattern = /^flg_[0-9a-f]{24}$/;
 const evidenceRefPattern = /^evd_[0-9a-f]{24}$/;
 const evidenceRefsMaxItems = 8;
+const queueItemFlagsMaxItems = 8;
+const ticketSubjectMaxLength = 160;
 
 const kycStatuses: ReadonlySet<string> = new Set(["unverified", "pending", "verified"]);
 const accountStatuses: ReadonlySet<string> = new Set(["active", "closed", "dormant", "restricted"]);
@@ -514,7 +557,7 @@ function parseRecentActivity(value: unknown): readonly OperatorActivityItem[] | 
  * the newest attempt and the roster kyc_status coherence — the same axes
  * the upstream `validOperatorSubjectKyc` validator pins.
  */
-function parseSubjectKyc(value: unknown, rosterKycStatus: string): OperatorSubjectKyc | undefined {
+function parseSubjectKyc(value: unknown, rosterKycStatus?: string): OperatorSubjectKyc | undefined {
   if (
     !isRecord(value)
     || !hasExactKeys(value, subjectKycKeys)
@@ -532,6 +575,8 @@ function parseSubjectKyc(value: unknown, rosterKycStatus: string): OperatorSubje
   }
   const status = value.status as OperatorSubjectKycStatus;
   // The roster kyc_status bounds the current state — subset discipline.
+  // Callers without the roster row (the queue item detail validates the
+  // dossier standalone, like upstream) pass no status and skip the bound.
   if (
     (rosterKycStatus === "verified" && status !== "approved")
     || (rosterKycStatus === "pending" && !subjectKycPendingStatuses.has(status))
@@ -888,6 +933,143 @@ export function parseOperatorQueueView(value: unknown): OperatorQueueView | unde
       items: Object.freeze(items as OperatorQueueItem[]),
       summary: parsedSummary as { count: number; byState: { pending: number; inReview: number; escalated: number } },
       posting: "none"
+    })
+  });
+}
+
+/**
+ * The queue item member read: the view keys and kind echo plus the queue
+ * row's own axes with the kind's detail key list in place of the collection
+ * row keys — the nullable kyc dossier block for `kyc` (validated standalone
+ * like the upstream dossier recipe), the bounded unique `flg_*` flag list
+ * for `aml`, and the ticket subject/last-message/open-tally for `tickets`.
+ * The requested kind and item id are the cross-check: a view answering a
+ * different kind or a different queue_id is drift, not a not-found.
+ */
+export function parseOperatorQueueItemDetailView(
+  value: unknown,
+  kind: OperatorQueueKind,
+  itemId: string
+): OperatorQueueItemDetailView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, queueItemDetailViewKeys)) {
+    return undefined;
+  }
+  if (value.mode !== "test" || value.kind !== kind) {
+    return undefined;
+  }
+  const item = value.item;
+  if (!isRecord(item) || item.queueId !== itemId) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  if (kind === "aml") {
+    if (
+      !validQueueItemCore(item, amlQueueItemDetailKeys, amlQueueIdPattern, queueStates, seen)
+      || typeof item.alertType !== "string"
+      || !amlAlertTypes.has(item.alertType)
+      || !Array.isArray(item.evidenceRefs)
+      || item.evidenceRefs.length < 1
+      || item.evidenceRefs.length > evidenceRefsMaxItems
+      || new Set(item.evidenceRefs).size !== item.evidenceRefs.length
+      || !item.evidenceRefs.every((ref) => typeof ref === "string" && evidenceRefPattern.test(ref))
+      || !isIsoTimestamp(item.slaDueAt)
+      || !Array.isArray(item.flags)
+      || item.flags.length > queueItemFlagsMaxItems
+      || !item.flags.every(
+        (flag) =>
+          isRecord(flag)
+          && hasExactKeys(flag, queueItemFlagKeys)
+          && typeof flag.flagId === "string"
+          && flagIdPattern.test(flag.flagId)
+          && typeof flag.alertType === "string"
+          && amlAlertTypes.has(flag.alertType)
+          && isIsoTimestamp(flag.raisedAt)
+      )
+      || new Set((item.flags as { flagId: string }[]).map((flag) => flag.flagId)).size !== item.flags.length
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      mode: "test",
+      kind: "aml",
+      item: Object.freeze({
+        queueId: item.queueId as string,
+        subjectId: item.subjectId as string,
+        alertType: item.alertType as OperatorAmlAlertType,
+        evidenceRefs: Object.freeze([...(item.evidenceRefs as string[])]),
+        slaDueAt: item.slaDueAt as string,
+        state: item.state as OperatorQueueState,
+        priority: item.priority as OperatorQueuePriority,
+        assignee: parseQueueAssignee(item),
+        ageMs: item.ageMs as number,
+        flags: Object.freeze(
+          (item.flags as { flagId: string; alertType: OperatorAmlAlertType; raisedAt: string }[]).map((flag) =>
+            Object.freeze({ flagId: flag.flagId, alertType: flag.alertType, raisedAt: flag.raisedAt })
+          )
+        )
+      })
+    });
+  }
+  if (kind === "tickets") {
+    if (
+      !validQueueItemCore(item, ticketQueueItemDetailKeys, ticketQueueIdPattern, queueTicketStates, seen)
+      || typeof item.category !== "string"
+      || !ticketCategories.has(item.category)
+      || !isIsoTimestamp(item.openedAt)
+      || typeof item.subject !== "string"
+      || item.subject.length === 0
+      || item.subject.length > ticketSubjectMaxLength
+      || !isIsoTimestamp(item.lastMessageAt)
+      || !isNonNegativeInt(item.otherOpenTickets)
+      || item.otherOpenTickets > queueMaxItems
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      mode: "test",
+      kind: "tickets",
+      item: Object.freeze({
+        queueId: item.queueId as string,
+        subjectId: item.subjectId as string,
+        category: item.category as OperatorTicketCategory,
+        openedAt: item.openedAt as string,
+        state: item.state as OperatorTicketQueueState,
+        priority: item.priority as OperatorQueuePriority,
+        assignee: parseQueueAssignee(item),
+        ageMs: item.ageMs as number,
+        subject: item.subject as string,
+        lastMessageAt: item.lastMessageAt as string,
+        otherOpenTickets: item.otherOpenTickets as number
+      })
+    });
+  }
+  if (
+    !validQueueItemCore(item, kycQueueItemDetailKeys, queueIdPattern, queueStates, seen)
+    || typeof item.displayName !== "string"
+    || !displayNamePattern.test(item.displayName)
+    || !isIsoTimestamp(item.submittedAt)
+    || !isIsoTimestamp(item.slaDueAt)
+    || Date.parse(item.slaDueAt as string) <= Date.parse(item.submittedAt as string)
+  ) {
+    return undefined;
+  }
+  // The nullable kyc dossier degrades like the sibling reads: a malformed
+  // block drops to the no-dossier state instead of failing the whole detail.
+  const kyc = item.kyc === null ? null : parseSubjectKyc(item.kyc) ?? null;
+  return Object.freeze({
+    mode: "test",
+    kind: "kyc",
+    item: Object.freeze({
+      queueId: item.queueId as string,
+      subjectId: item.subjectId as string,
+      displayName: item.displayName as string,
+      submittedAt: item.submittedAt as string,
+      slaDueAt: item.slaDueAt as string,
+      state: item.state as OperatorQueueState,
+      priority: item.priority as OperatorQueuePriority,
+      assignee: parseQueueAssignee(item),
+      ageMs: item.ageMs as number,
+      kyc
     })
   });
 }

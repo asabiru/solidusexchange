@@ -453,6 +453,57 @@ describe("operator queue surfaces", () => {
     assert.match(html, /KYC-CASE-1/);
     assert.doesNotMatch(html, /qml_0123456789abcdef01234567/);
   });
+
+  const kycQueueItem = {
+    queueId: "qky_0123456789abcdef01234567",
+    subjectId: "syn_cust_alpha001",
+    displayName: "Aibek Ermatov",
+    submittedAt: "2026-10-01T10:00:00.000Z",
+    slaDueAt: "2026-10-12T10:00:00.000Z",
+    state: "in_review",
+    priority: "high",
+    assignee: { subject: "syn_oper_alice001" },
+    ageMs: 240000
+  } as const;
+
+  const kycQueuePayload = {
+    mode: "test",
+    queue: {
+      kind: "kyc",
+      items: [kycQueueItem],
+      summary: { count: 1, byState: { pending: 0, inReview: 1, escalated: 0 } },
+      posting: "none"
+    }
+  } as const;
+
+  // SSR never fires the lazy member read, so each aside shows its row fields plus the loading line.
+  it("each queue aside renders the selected row with its detail loading placeholder", () => {
+    // SSR renders the default ru locale; the lazy member read never fires,
+    // so only the row fields and the loading line appear.
+    const kyc = render(E(KycView, { query: "", data: hostile({ cases: [], providerEvidence: {} }), operatorQueue: kycQueuePayload }));
+    assert.match(kyc, /qky_0123456789abcdef01234567/);
+    assert.match(kyc, /Aibek Ermatov/);
+    assert.match(kyc, /Загрузка элемента очереди/);
+    assert.doesNotMatch(kyc, /kys_|Открытые флаги|Другие открытые тикеты/);
+
+    const aml = render(E(AmlView, { query: "", data: hostile(demoAml), operatorQueue: amlQueuePayload }));
+    assert.match(aml, /qml_0123456789abcdef01234567/);
+    assert.match(aml, /Загрузка алерта/);
+    assert.doesNotMatch(aml, /Открытые флаги/);
+
+    const support = render(E(SupportView, { query: "", data: hostile(demoSupport), operatorQueue: ticketQueuePayload }));
+    assert.match(support, /qtick_0123456789abcdef01234567/);
+    assert.match(support, /Загрузка тикета/);
+    assert.doesNotMatch(support, /Другие открытые тикеты/);
+  });
+
+  it("an unparseable member payload leaves the row fields rendered (degrade)", () => {
+    // The adapter is the only gate between the wire and the extension keys; a malformed row still renders its own fields.
+    const bad = { mode: "test", queue: { kind: "kyc", items: [{ ...kycQueueItem, state: "blocked" }], summary: { count: 1, byState: { pending: 1, inReview: 0, escalated: 0 } }, posting: "none" } };
+    const html = render(E(KycView, { query: "", data: hostile({ cases: [{ id: "KYC-CASE-9" }], providerEvidence: {} }), operatorQueue: bad }));
+    assert.match(html, /KYC-CASE-9/);
+    assert.doesNotMatch(html, /qky_0123456789abcdef01234567/);
+  });
 });
 
 describe("fail-closed regressions", () => {

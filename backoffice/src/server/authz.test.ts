@@ -112,10 +112,10 @@ describe("backoffice authorization matrix", () => {
 
     // Only /bff/api/session, /bff/api/operator/admin, the
     // /bff/api/operator/subjects list + member reads and the
-    // /bff/api/operator/queue projection read run the gate without a
-    // capability — they read the operator's own record and the shared
-    // roster projections, which every role holds.
-    assert.equal(calls.filter((call) => !call.capability).length, 5);
+    // /bff/api/operator/queue collection + member reads run the gate
+    // without a capability — they read the operator's own record and the
+    // shared roster projections, which every role holds.
+    assert.equal(calls.filter((call) => !call.capability).length, 6);
   });
 
   it("matches roles and capabilities exactly, never by prefix, case or wildcard", () => {

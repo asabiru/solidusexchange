@@ -14,6 +14,7 @@ import {
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
+  validOperatorQueueItemDetail,
   validOperatorQueueView,
   validOperatorSessionView,
   validOperatorSubjectDetailView,
@@ -454,7 +455,7 @@ test("a malformed operator subjects view fails closed", async () => {
   for (const view of malformed) {
     assert.equal(validOperatorSubjectsView(view), false, JSON.stringify(view));
     await withServer(
-      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; }, async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); } } },
+      { operatorSubjectsDirectory: { async subjectsFor() { return view; }, async subjectFor() { return null; }, async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); }, async queueItemFor() { return null; } } },
       async (port) => {
         const response = await request(port, { path: OPERATOR_SUBJECTS, headers: operatorHeaders() });
         assert.equal(response.status, 500, JSON.stringify(view));
@@ -769,7 +770,8 @@ test("a malformed operator subject detail fails closed", async () => {
         operatorSubjectsDirectory: {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
           async subjectFor() { return view; },
-          async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); }
+          async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); },
+          async queueItemFor() { return null; }
         }
       },
       async (port) => {
@@ -1096,7 +1098,8 @@ test("a malformed operator queue view fails closed", async () => {
         operatorSubjectsDirectory: {
           async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
           async subjectFor() { return null; },
-          async queueFor() { return view; }
+          async queueFor() { return view; },
+          async queueItemFor() { return null; }
         }
       },
       async (port) => {
@@ -1124,4 +1127,257 @@ test("the operator meta pair serves the session and capability views for a synth
     const denied = await request(port, { path: OPERATOR_SESSION, headers: customerHeaders({ "X-Device-Id": DEVICE_ID }) });
     assert.equal(denied.status, 401);
   });
+});
+
+const queueItemIdRe = /^(qky|qml|qtick)_[0-9a-f]{24}$/u;
+
+test("GET /api/v1/operator/queue/{kind}/{itemId} returns the deterministic item detail for every kind", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  await withServer({}, async (port) => {
+    for (const kind of OPERATOR_QUEUE_KINDS) {
+      const queue = await directory.queueFor(kind);
+      assert.ok(queue.queue.items.length > 0, kind);
+      for (const item of queue.queue.items) {
+        const response = await request(port, {
+          path: `${OPERATOR_QUEUE}/${kind}/${item.queue_id}`,
+          headers: operatorHeaders()
+        });
+        assert.equal(response.status, 200, `${kind}/${item.queue_id}`);
+        assert.equal(header(response, "x-request-id"), REQUEST_ID);
+        const served = JSON.parse(response.body);
+        const expected = await directory.queueItemFor(kind, item.queue_id);
+        assert.deepEqual(served, expected, `${kind}/${item.queue_id}`);
+        assert.equal(validOperatorQueueItemDetail(served), true, `${kind}/${item.queue_id}`);
+        assert.deepEqual(
+          validator.validate(
+            validator.resolve("#/components/schemas/OperatorQueueItemDetailView"),
+            served
+          ),
+          [],
+          `${kind}/${item.queue_id}`
+        );
+        // The detail is the queue row the collection serves verbatim — every
+        // item field — plus the kind's extension keys.
+        for (const [key, value] of Object.entries(item)) {
+          assert.deepEqual(served.item[key], value, `${kind}/${item.queue_id}.${key}`);
+        }
+        // Every operator sees the same detail: the projection is shared.
+        const other = await request(port, {
+          path: `${OPERATOR_QUEUE}/${kind}/${item.queue_id}`,
+          headers: operatorHeaders({ Authorization: `Bearer ${operatorToken({ subject: "syn_oper_00000002" })}` })
+        });
+        assert.deepEqual(JSON.parse(other.body), served, `${kind}/${item.queue_id}`);
+      }
+    }
+  });
+});
+
+test("queue item detail extensions agree with the neighboring surfaces", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  // kyc: the embedded dossier reuses the #312 recipe verbatim — identical to
+  // the block the subject detail serves for the same subject.
+  for (const item of (await directory.queueFor("kyc")).queue.items) {
+    const detail = await directory.queueItemFor("kyc", item.queue_id);
+    const subject = await directory.subjectFor(item.subject_id);
+    assert.deepEqual(detail.item.kyc, subject.subject.kyc, item.queue_id);
+  }
+  // aml: the flags list is exactly the subject's open roster flags, and every
+  // flag_added activity row the subject feed shows is announced by one of
+  // them — the flag id shares the event's digest under its own grammar.
+  for (const item of (await directory.queueFor("aml")).queue.items) {
+    const detail = await directory.queueItemFor("aml", item.queue_id);
+    const subject = await directory.subjectFor(item.subject_id);
+    assert.equal(detail.item.flags.length, subject.subject.flags, item.queue_id);
+    const events = new Map(
+      subject.subject.recent_activity
+        .filter((entry) => entry.kind === "flag_added")
+        .map((entry) => [entry.activity_id.slice("opact_".length), entry])
+    );
+    for (const flag of detail.item.flags) {
+      assert.match(flag.flag_id, /^flg_[0-9a-f]{24}$/u);
+      const announced = events.get(flag.flag_id.slice("flg_".length));
+      if (announced !== undefined) {
+        assert.equal(announced.summary, flag.alert_type, flag.flag_id);
+        assert.equal(announced.occurred_at, flag.raised_at, flag.flag_id);
+      }
+    }
+    for (const hex of events.keys()) {
+      assert.ok(
+        detail.item.flags.some((flag) => flag.flag_id === `flg_${hex}`),
+        `flag_added ${hex} missing from ${item.queue_id} flags`
+      );
+    }
+  }
+  // tickets: the detail projects the subject's newest support ticket — its
+  // topic, newest message instant and the tally of the subject's other
+  // still-open tickets (open until the ticket status reaches "closed").
+  for (const item of (await directory.queueFor("tickets")).queue.items) {
+    const detail = await directory.queueItemFor("tickets", item.queue_id);
+    const tickets = syntheticSupportTickets(item.subject_id);
+    const ticket = tickets[0];
+    assert.equal(detail.item.subject, ticket.topic, item.queue_id);
+    assert.equal(detail.item.category, ticket.category, item.queue_id);
+    assert.equal(detail.item.opened_at, ticket.created_at, item.queue_id);
+    assert.equal(detail.item.last_message_at, ticket.timeline[ticket.timeline.length - 1].at, item.queue_id);
+    assert.equal(
+      detail.item.other_open_tickets,
+      tickets.slice(1).filter((entry) => entry.status !== "closed").length,
+      item.queue_id
+    );
+  }
+});
+
+test("unknown kind or unknown/wrong-kind item ids fail closed with the uniform 404", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const kycItem = (await directory.queueFor("kyc")).queue.items[0];
+  const amlItem = (await directory.queueFor("aml")).queue.items[0];
+  const ticketItem = (await directory.queueFor("tickets")).queue.items[0];
+  await withServer({}, async (port) => {
+    for (const path of [
+      `${OPERATOR_QUEUE}/fraud/${kycItem.queue_id}`,
+      `${OPERATOR_QUEUE}/KYC/${kycItem.queue_id}`,
+      `${OPERATOR_QUEUE}/kyc/qky_${"f".repeat(24)}`,
+      `${OPERATOR_QUEUE}/aml/qml_${"0".repeat(24)}`,
+      `${OPERATOR_QUEUE}/tickets/qtick_${"9".repeat(24)}`,
+      // A well-formed id minted for another kind resolves inside the
+      // requested kind only — the mismatch is indistinguishable.
+      `${OPERATOR_QUEUE}/kyc/${amlItem.queue_id}`,
+      `${OPERATOR_QUEUE}/aml/${kycItem.queue_id}`,
+      `${OPERATOR_QUEUE}/tickets/${kycItem.queue_id}`,
+      `${OPERATOR_QUEUE}/aml/${ticketItem.queue_id}`,
+      `${OPERATOR_QUEUE}/tickets/${amlItem.queue_id}`,
+      // A subject id or any other admitted shape is never an item.
+      `${OPERATOR_QUEUE}/kyc/${kycItem.subject_id}`,
+      `${OPERATOR_QUEUE}/kyc/unknownitemid`
+    ]) {
+      const response = await request(port, { path, headers: operatorHeaders() });
+      assert.equal(response.status, 404, path);
+      assert.equal(JSON.parse(response.body).code, "CAPABILITY_DENIED", path);
+    }
+    // A query string stays undeclared on the member path too.
+    const withQuery = await request(port, {
+      path: `${OPERATOR_QUEUE}/kyc/${kycItem.queue_id}?kind=aml`,
+      headers: operatorHeaders()
+    });
+    assert.equal(withQuery.status, 404);
+    assert.equal(JSON.parse(withQuery.body).code, "CAPABILITY_DENIED");
+    // The device and audience gates bind the member path exactly like the
+    // collection: no X-Device-Id is 400, a customer-family token is 401.
+    const bare = await request(port, { path: `${OPERATOR_QUEUE}/kyc/${kycItem.queue_id}` });
+    assert.equal(bare.status, 400);
+    assert.equal(JSON.parse(bare.body).code, "VALIDATION_FAILED");
+    const customer = await request(port, {
+      path: `${OPERATOR_QUEUE}/kyc/${kycItem.queue_id}`,
+      headers: [...customerHeaders(), ["X-Device-Id", DEVICE_ID]]
+    });
+    assert.equal(customer.status, 401);
+    assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
+  });
+});
+
+test("queueItemFor stays deterministic, frozen and kind-scoped", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  for (const kind of OPERATOR_QUEUE_KINDS) {
+    const item = (await directory.queueFor(kind)).queue.items[0];
+    const first = await directory.queueItemFor(kind, item.queue_id);
+    const second = await directory.queueItemFor(kind, item.queue_id);
+    assert.deepEqual(first, second, kind);
+    assert.ok(Object.isFrozen(first) && Object.isFrozen(first.item), kind);
+    assert.equal(first.mode, "test");
+    assert.equal(first.kind, kind);
+    assert.equal(validOperatorQueueItemDetail(first), true, kind);
+    assert.match(first.item.queue_id, queueItemIdRe);
+  }
+  const kycItem = (await directory.queueFor("kyc")).queue.items[0];
+  const amlItem = (await directory.queueFor("aml")).queue.items[0];
+  for (const [kind, itemId] of [
+    ["fraud", kycItem.queue_id],
+    ["kyc", amlItem.queue_id],
+    ["aml", kycItem.queue_id],
+    ["tickets", kycItem.queue_id],
+    ["kyc", `qky_${"0".repeat(24)}`],
+    ["kyc", ""],
+    ["kyc", kycItem.subject_id]
+  ]) {
+    assert.equal(await directory.queueItemFor(kind, itemId), null, `${kind}/${itemId}`);
+  }
+});
+
+test("a malformed operator queue item detail fails closed", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const kycItem = (await directory.queueFor("kyc")).queue.items[0];
+  const amlItem = (await directory.queueFor("aml")).queue.items[0];
+  const ticketItem = (await directory.queueFor("tickets")).queue.items[0];
+  const kycReal = await directory.queueItemFor("kyc", kycItem.queue_id);
+  const amlReal = await directory.queueItemFor("aml", amlItem.queue_id);
+  const ticketReal = await directory.queueItemFor("tickets", ticketItem.queue_id);
+  const view = (base, itemOverrides = {}, viewOverrides = {}) => ({
+    mode: "test",
+    kind: base.kind,
+    item: { ...base.item, ...itemOverrides },
+    ...viewOverrides
+  });
+  const differentName = kycReal.item.display_name === "Roman Sokolov" ? "Vera Aliyev" : "Roman Sokolov";
+  const wrongAlertType = ["structuring", "velocity", "geo_mismatch"].find(
+    (entry) => entry !== amlReal.item.flags[0].alert_type
+  );
+  const missingItem = view(kycReal);
+  delete missingItem.item;
+  const malformed = [
+    view(kycReal, {}, { mode: "live" }),
+    // The kind selects the detail shape: a kyc item under another kind is drift.
+    view(kycReal, {}, { kind: "aml" }),
+    view(kycReal, {}, { kind: "tickets" }),
+    view(amlReal, {}, { kind: "kyc" }),
+    view(ticketReal, {}, { kind: "aml" }),
+    // An id or subject outside the queue's universe is fabrication.
+    view(kycReal, { queue_id: `qky_${"f".repeat(24)}` }),
+    view(kycReal, { queue_id: amlReal.item.queue_id }),
+    view(kycReal, { subject_id: `syn_cust_${"f".repeat(24)}` }),
+    // Every row field must equal the collection row verbatim.
+    view(kycReal, { display_name: differentName }),
+    view(kycReal, { state: "closed" }),
+    view(kycReal, { priority: "urgent" }),
+    view(kycReal, { submitted_at: "2000-01-01T00:00:00.000Z" }),
+    view(amlReal, { evidence_refs: ["evd_000000000000000000000001"] }),
+    view(ticketReal, { category: "complaint" === ticketReal.item.category ? "question" : "complaint" }),
+    // Extensions carry their own shape and recompute.
+    view(kycReal, { kyc: "dossier" }),
+    view(kycReal, { kyc: { status: "approved", level: "basic", session_id: "x", history: [] } }),
+    view(kycReal, { kyc: { ...kycReal.item.kyc ?? {}, status: "approved" } }),
+    view(amlReal, { flags: [] }),
+    view(amlReal, { flags: [{ flag_id: `flg_${"a".repeat(24)}`, alert_type: amlReal.item.flags[0].alert_type, raised_at: amlReal.item.flags[0].raised_at }] }),
+    view(amlReal, { flags: amlReal.item.flags.map((flag) => ({ ...flag, alert_type: wrongAlertType })) }),
+    view(amlReal, { flags: [{ flag_id: `opact_${"a".repeat(24)}`, alert_type: amlReal.item.flags[0].alert_type, raised_at: amlReal.item.flags[0].raised_at }] }),
+    view(ticketReal, { subject: "" }),
+    view(ticketReal, { last_message_at: "never" }),
+    view(ticketReal, { last_message_at: "2000-01-01T00:00:00.000Z" }),
+    view(ticketReal, { other_open_tickets: -1 }),
+    view(ticketReal, { other_open_tickets: ticketReal.item.other_open_tickets + 1 }),
+    view(kycReal, { extra: true }),
+    missingItem,
+    "view"
+  ];
+  assert.equal(validOperatorQueueItemDetail(null), false);
+  for (const candidate of malformed) {
+    assert.equal(validOperatorQueueItemDetail(candidate), false, JSON.stringify(candidate));
+    await withServer(
+      {
+        operatorSubjectsDirectory: {
+          async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
+          async subjectFor() { return null; },
+          async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); },
+          async queueItemFor() { return candidate; }
+        }
+      },
+      async (port) => {
+        const response = await request(port, {
+          path: `${OPERATOR_QUEUE}/kyc/${kycItem.queue_id}`,
+          headers: operatorHeaders()
+        });
+        assert.equal(response.status, 500, JSON.stringify(candidate));
+        assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+      }
+    );
+  }
 });

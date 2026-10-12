@@ -2084,6 +2084,69 @@
           }
         }
       }
+    },
+    "/api/v1/operator/queue/{kind}/{itemId}": {
+      "get": {
+        "operationId": "getOperatorQueueItem",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read one operator queue item's detail inside the selected kind's item set",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "$ref": "#/components/parameters/QueueKind"
+          },
+          {
+            "$ref": "#/components/parameters/QueueItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator queue item detail",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorQueueItemDetailView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -2209,6 +2272,30 @@
         "schema": {
           "type": "string",
           "pattern": "^ord_[0-9a-f]{24}$"
+        }
+      },
+      "QueueKind": {
+        "name": "kind",
+        "in": "path",
+        "required": true,
+        "description": "Queue kind selector: `kyc`, `aml` or `tickets`. Any other value is answered as the same uniform not-found as an unknown item id.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "kyc",
+            "aml",
+            "tickets"
+          ]
+        }
+      },
+      "QueueItemId": {
+        "name": "itemId",
+        "in": "path",
+        "required": true,
+        "description": "Queue item identifier (`qky_*`, `qml_*` or `qtick_*` per kind).",
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{2,127}$"
         }
       },
       "SubjectId": {
@@ -2998,6 +3085,261 @@
           "age_ms": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "OperatorQueueItemDetailView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "kind",
+          "item"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "kyc",
+              "aml",
+              "tickets"
+            ]
+          },
+          "item": {
+            "$ref": "#/components/schemas/OperatorQueueItemDetail"
+          }
+        }
+      },
+      "OperatorQueueItemDetail": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "queue_id",
+          "subject_id",
+          "state",
+          "priority",
+          "assignee",
+          "age_ms"
+        ],
+        "properties": {
+          "queue_id": {
+            "type": "string",
+            "pattern": "^(qky|qml|qtick)_[0-9a-f]{24}$"
+          },
+          "subject_id": {
+            "type": "string",
+            "pattern": "^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "display_name": {
+            "type": "string",
+            "pattern": "^[A-Z][a-z]{1,31} [A-Z][a-z]{1,31}$"
+          },
+          "submitted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sla_due_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "alert_type": {
+            "type": "string",
+            "enum": [
+              "structuring",
+              "velocity",
+              "geo_mismatch"
+            ]
+          },
+          "evidence_refs": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^evd_[0-9a-f]{24}$"
+            }
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "question",
+              "operation_problem",
+              "complaint",
+              "data_request"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_review",
+              "escalated",
+              "open",
+              "waiting"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "normal",
+              "high",
+              "urgent"
+            ]
+          },
+          "assignee": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "subject"
+            ],
+            "properties": {
+              "subject": {
+                "type": "string",
+                "pattern": "^syn_oper_[a-z0-9]{8,32}$"
+              }
+            }
+          },
+          "age_ms": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "kyc": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "status",
+              "level",
+              "session_id",
+              "history"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "approved",
+                  "in_review",
+                  "needs_more_data",
+                  "rejected",
+                  "submitted",
+                  "timed_out"
+                ]
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "basic",
+                  "enhanced"
+                ]
+              },
+              "session_id": {
+                "type": "string",
+                "pattern": "^kys_[0-9a-f]{24}$"
+              },
+              "history": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "session_id",
+                    "state",
+                    "submitted_at",
+                    "decided_at",
+                    "rejection_reason"
+                  ],
+                  "properties": {
+                    "session_id": {
+                      "type": "string",
+                      "pattern": "^kys_[0-9a-f]{24}$"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "in_review",
+                        "needs_more_data",
+                        "rejected",
+                        "submitted",
+                        "timed_out"
+                      ]
+                    },
+                    "submitted_at": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "decided_at": {
+                      "type": ["string", "null"],
+                      "format": "date-time"
+                    },
+                    "rejection_reason": {
+                      "type": ["string", "null"],
+                      "enum": [
+                        "SIM_DOCUMENT_UNREADABLE",
+                        "SIM_DATA_MISMATCH",
+                        null
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "flags": {
+            "type": "array",
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OperatorQueueItemFlag"
+            }
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "last_message_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "other_open_tickets": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "OperatorQueueItemFlag": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "flag_id",
+          "alert_type",
+          "raised_at"
+        ],
+        "properties": {
+          "flag_id": {
+            "type": "string",
+            "pattern": "^flg_[0-9a-f]{24}$"
+          },
+          "alert_type": {
+            "type": "string",
+            "enum": [
+              "structuring",
+              "velocity",
+              "geo_mismatch"
+            ]
+          },
+          "raised_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
