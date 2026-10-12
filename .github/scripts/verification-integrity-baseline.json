@@ -761,8 +761,8 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-audit.test.ts": {
-      "minLines": 597,
-      "minCases": 12
+      "minLines": 1267,
+      "minCases": 26
     },
     "miniapp/src/server/customer-api-client.test.ts": {
       "minLines": 2217,
@@ -1272,11 +1272,11 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-access-control-catalog.sh": {
-      "minLines": 54,
+      "minLines": 61,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-access-control-catalog.sql": {
-      "minLines": 281,
+      "minLines": 288,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-backup-consistency.sql": {
@@ -1336,11 +1336,11 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-invariant-trigger-catalog.sh": {
-      "minLines": 68,
+      "minLines": 103,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-invariant-trigger-catalog.sql": {
-      "minLines": 47,
+      "minLines": 57,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-ledger-integrity.sh": {
@@ -1364,7 +1364,7 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-migration-source-policy.sh": {
-      "minLines": 119,
+      "minLines": 164,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-owner-truncate-guard.sh": {
@@ -1416,11 +1416,11 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-relation-catalog.sh": {
-      "minLines": 200,
+      "minLines": 245,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-relation-catalog.sql": {
-      "minLines": 156,
+      "minLines": 319,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-replica-reference-integrity.sh": {
@@ -1428,11 +1428,11 @@
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-runtime-privilege-catalog.sql": {
-      "minLines": 332,
+      "minLines": 346,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-runtime-privileges.sh": {
-      "minLines": 401,
+      "minLines": 420,
       "minCases": 0
     },
     "packages/financial-core/tests/postgres-smoke.sql": {
@@ -1667,9 +1667,213 @@
       "minLines": 334,
       "minCases": 17
     },
+    "backoffice/src/data/demo-oracles.test.ts": {
+      "minLines": 241,
+      "minCases": 9
+    },
+    "miniapp/src/server/synthetic-oracles.test.ts": {
+      "minLines": 76,
+      "minCases": 3
+    },
     "packages/matching-core/tests/replay-recovery-audit.test.mjs": {
       "minLines": 383,
       "minCases": 23
     }
-  }
+  },
+  "uses": {
+    ".github/workflows/backoffice-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/contracts-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/custody-core-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/customer-api-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/deploy.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634",
+      "appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262"
+    ],
+    ".github/workflows/e2e-dev-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/financial-core-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/local-dev-stack-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/matching-core-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/miniapp-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/provider-simulators-ci.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ],
+    ".github/workflows/workflow-policy.yml": [
+      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
+      "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
+    ]
+  },
+  "containerImages": {
+    ".github/workflows/backoffice-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ],
+    ".github/workflows/custody-core-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ],
+    ".github/workflows/customer-api-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ],
+    ".github/workflows/financial-core-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ],
+    ".github/workflows/matching-core-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ],
+    ".github/workflows/miniapp-ci.yml": [
+      "postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
+    ]
+  },
+  "triggerPaths": {
+    ".github/workflows/backoffice-ci.yml": {
+      "pull_request": [
+        "backoffice/**",
+        "packages/provider-simulators/**",
+        ".github/workflows/backoffice-ci.yml"
+      ],
+      "push": [
+        "backoffice/**",
+        "packages/provider-simulators/**",
+        ".github/workflows/backoffice-ci.yml"
+      ]
+    },
+    ".github/workflows/contracts-ci.yml": {
+      "pull_request": [
+        "packages/api-contracts/**",
+        ".github/workflows/contracts-ci.yml"
+      ],
+      "push": [
+        "packages/api-contracts/**",
+        ".github/workflows/contracts-ci.yml"
+      ]
+    },
+    ".github/workflows/custody-core-ci.yml": {
+      "pull_request": [
+        "packages/custody-core/**",
+        "Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/custody-core-ci.yml"
+      ],
+      "push": [
+        "packages/custody-core/**",
+        "Documentation/regulated-core/adr/0003-isolate-custody-signing-boundary.md",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/custody-core-ci.yml"
+      ]
+    },
+    ".github/workflows/customer-api-ci.yml": {
+      "pull_request": [
+        "packages/customer-api/**",
+        "packages/api-contracts/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/customer-api-ci.yml"
+      ],
+      "push": [
+        "packages/customer-api/**",
+        "packages/api-contracts/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/customer-api-ci.yml"
+      ]
+    },
+    ".github/workflows/e2e-dev-ci.yml": {
+      "pull_request": [
+        "miniapp/**",
+        "backoffice/**",
+        "packages/**",
+        ".github/workflows/e2e-dev-ci.yml"
+      ],
+      "push": [
+        "miniapp/**",
+        "backoffice/**",
+        "packages/**",
+        ".github/workflows/e2e-dev-ci.yml"
+      ]
+    },
+    ".github/workflows/financial-core-ci.yml": {
+      "pull_request": [
+        "packages/financial-core/**",
+        "Documentation/regulated-core/finance-ledger-approval-pack.md",
+        "Documentation/regulated-core/adr/0002-ledger-is-financial-source-of-truth.md",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/financial-core-ci.yml"
+      ],
+      "push": [
+        "packages/financial-core/**",
+        "Documentation/regulated-core/finance-ledger-approval-pack.md",
+        "Documentation/regulated-core/adr/0002-ledger-is-financial-source-of-truth.md",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/financial-core-ci.yml"
+      ]
+    },
+    ".github/workflows/matching-core-ci.yml": {
+      "pull_request": [
+        "packages/matching-core/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/matching-core-ci.yml"
+      ],
+      "push": [
+        "packages/matching-core/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/matching-core-ci.yml"
+      ]
+    },
+    ".github/workflows/miniapp-ci.yml": {
+      "pull_request": [
+        "miniapp/**",
+        "packages/customer-api/**",
+        "packages/provider-simulators/**",
+        ".github/workflows/miniapp-ci.yml"
+      ],
+      "push": [
+        "miniapp/**",
+        "packages/customer-api/**",
+        "packages/provider-simulators/**",
+        ".github/workflows/miniapp-ci.yml"
+      ]
+    },
+    ".github/workflows/provider-simulators-ci.yml": {
+      "pull_request": [
+        "packages/provider-simulators/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/provider-simulators-ci.yml"
+      ],
+      "push": [
+        "packages/provider-simulators/**",
+        "Documentation/regulated-core/decision-register.md",
+        ".github/workflows/provider-simulators-ci.yml"
+      ]
+    }
+  },
+  "unpinnedTestFiles": [
+    "packages/e2e-dev/tests/postgres-stack.compose.yaml",
+    "packages/matching-core/tests/helpers.mjs",
+    "packages/provider-simulators/tests/helpers.mjs"
+  ]
 }

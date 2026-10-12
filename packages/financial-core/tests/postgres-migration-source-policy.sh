@@ -139,4 +139,54 @@ assert_source_policy_rejected \
   "PostgreSQL migration source versions must form a contiguous sequence starting at 0001" \
   "$scratch/non-contiguous"
 
+mkdir "$scratch/identifier-dollar-body"
+cp -R "$workspace/migrations/." "$scratch/identifier-dollar-body/"
+sed -i \
+  '/^COMMIT;$/i\
+CREATE TABLE cover(a$b$ integer);\
+DELETE FROM financial_core.schema_migrations;\
+-- $b$\
+INSERT INTO cover VALUES (1);' \
+  "$scratch/identifier-dollar-body/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must change history only through canonical history rows: 0002_ledger_verification_views.sql" \
+  "$scratch/identifier-dollar-body"
+
+mkdir "$scratch/mislexed-e-literal"
+cp -R "$workspace/migrations/." "$scratch/mislexed-e-literal/"
+sed -i \
+  "/^COMMIT;$/i SELECT 1 WHERE ('a' LIKE'b\\\\');\\nDELETE FROM financial_core.schema_migrations; --'\\nSELECT 2;" \
+  "$scratch/mislexed-e-literal/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must change history only through canonical history rows: 0002_ledger_verification_views.sql" \
+  "$scratch/mislexed-e-literal"
+
+mkdir "$scratch/mid-line-meta-command"
+cp -R "$workspace/migrations/." "$scratch/mid-line-meta-command/"
+sed -i \
+  '/^COMMIT;$/i SELECT 1; \\g\
+INSERT INTO cover VALUES (1);' \
+  "$scratch/mid-line-meta-command/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must not execute psql meta-commands: 0002_ledger_verification_views.sql" \
+  "$scratch/mid-line-meta-command"
+
+mkdir "$scratch/multi-object-truncate"
+cp -R "$workspace/migrations/." "$scratch/multi-object-truncate/"
+sed -i \
+  "/^COMMIT;$/i TRUNCATE financial_core.ledger_assets, financial_core.schema_migrations;" \
+  "$scratch/multi-object-truncate/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must change history only through canonical history rows: 0002_ledger_verification_views.sql" \
+  "$scratch/multi-object-truncate"
+
+mkdir "$scratch/multi-object-drop"
+cp -R "$workspace/migrations/." "$scratch/multi-object-drop/"
+sed -i \
+  "/^COMMIT;$/i DROP TABLE financial_core.ledger_assets, financial_core.schema_migrations;" \
+  "$scratch/multi-object-drop/0002_ledger_verification_views.sql"
+assert_source_policy_rejected \
+  "PostgreSQL migration must change history only through canonical history rows: 0002_ledger_verification_views.sql" \
+  "$scratch/multi-object-drop"
+
 echo "postgres-migration-source-policy-negative-ok"

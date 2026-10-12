@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 const expectedCatalogSha256 =
-  "681835101e4a3f357b005279066f581df9528ec58a2d2b3bf9b2096894f81938";
+  "0c82e7e8698add8410d598671af395e3c89a870afc7d10e01a580a8229a47ea1";
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -38,6 +38,26 @@ assert.equal(
   actual.relations.filter((relation) => relation.relation_type === "view").length,
   2,
   "Unexpected PostgreSQL view count"
+);
+assert.deepStrictEqual(
+  actual.policies,
+  [],
+  "Unexpected PostgreSQL row-level security policies in financial_core"
+);
+assert.deepStrictEqual(
+  actual.publications,
+  [],
+  "Unexpected PostgreSQL logical replication publications touching financial_core"
+);
+assert.deepStrictEqual(
+  actual.statistics,
+  [],
+  "Unexpected PostgreSQL extended statistics in financial_core"
+);
+assert.deepStrictEqual(
+  actual.event_triggers,
+  [],
+  "Unexpected PostgreSQL event triggers"
 );
 
 const actualCatalogSha256 = createHash("sha256")

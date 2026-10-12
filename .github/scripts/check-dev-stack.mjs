@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -359,16 +360,98 @@ export function checkCompose(text, file) {
   return errors;
 }
 
-async function* walk(directory) {
+async function* walk(directory, nonRegular = []) {
   const entries = await readdir(directory, { withFileTypes: true });
   for (const entry of entries) {
     const resolved = path.join(directory, entry.name);
     if (entry.isDirectory()) {
-      if (!SKIPPED_DIRECTORY.has(entry.name)) yield* walk(resolved);
+      if (!SKIPPED_DIRECTORY.has(entry.name)) yield* walk(resolved, nonRegular);
     } else if (entry.isFile()) {
       yield resolved;
+    } else {
+      nonRegular.push(resolved);
     }
   }
+}
+
+function trackedEnvErrors(envFiles) {
+  const errors = [];
+  for (const absolute of envFiles) {
+    let tracked = false;
+    try {
+      execFileSync(
+        "git",
+        [
+          "-C",
+          path.dirname(absolute),
+          "ls-files",
+          "--error-unmatch",
+          "--",
+          path.basename(absolute),
+        ],
+        { stdio: "pipe" },
+      );
+      tracked = true;
+    } catch {
+      tracked = false;
+    }
+    if (tracked) {
+      errors.push(
+        `${relativeFile(absolute)}: committed .env files are not allowed under the dev stack root`,
+      );
+    }
+  }
+  return errors;
+}
+
+export async function checkE2ePackage(packageRoot = "packages/e2e-dev") {
+  const errors = [];
+  let manifest;
+  try {
+    manifest = JSON.parse(
+      await readFile(path.join(packageRoot, "package.json"), "utf8"),
+    );
+  } catch {
+    return [`${packageRoot}/package.json: must be readable JSON`];
+  }
+  const scripts = manifest.scripts ?? {};
+  const lint = typeof scripts.lint === "string" ? scripts.lint : "";
+  const test = typeof scripts.test === "string" ? scripts.test : "";
+  if (!/\bnode --check\b/.test(lint)) {
+    errors.push(`${packageRoot}: the lint script must use node --check`);
+  }
+  if (!/\bnode --test\b/.test(test)) {
+    errors.push(`${packageRoot}: the test script must use node --test`);
+  }
+
+  let entries;
+  try {
+    entries = await readdir(path.join(packageRoot, "tests"), {
+      withFileTypes: true,
+    });
+  } catch {
+    return [...errors, `${packageRoot}/tests: directory must exist`];
+  }
+  const mjs = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".mjs"))
+    .map((entry) => `tests/${entry.name}`);
+  const onDisk = new Set(mjs);
+  for (const file of mjs) {
+    if (!lint.includes(file)) {
+      errors.push(`${file}: the e2e lint script must cover this file`);
+    }
+    if (file.endsWith(".test.mjs") && !test.includes(file)) {
+      errors.push(`${file}: the e2e test script must run this file`);
+    }
+  }
+  for (const script of [lint, test]) {
+    for (const match of script.matchAll(/tests\/[\w.-]+\.mjs/g)) {
+      if (!onDisk.has(match[0])) {
+        errors.push(`${match[0]}: referenced by an e2e script but missing on disk`);
+      }
+    }
+  }
+  return errors;
 }
 
 function relativeFile(absolute) {
@@ -400,35 +483,57 @@ async function checkExternalDockerfiles(text, composePath, root, checked) {
 export async function checkDevStack(root = DEFAULT_ROOT) {
   const errors = [];
   const externalDockerfiles = new Set();
+  const nonRegular = [];
+  const envFiles = [];
   let composeFiles = 0;
   let dockerfiles = 0;
-  for await (const absolute of walk(root)) {
+  for await (const absolute of walk(root, nonRegular)) {
     const file = relativeFile(absolute);
     const base = path.basename(file);
-    if (base === ".env") continue;
+    if (base === ".env") {
+      envFiles.push(absolute);
+      continue;
+    }
     const text = await readFile(absolute, "utf8");
-    if (/^(?:docker-)?compose\.ya?ml$/.test(base)) {
+    const isCompose = /^(?:docker-)?compose\.ya?ml$/.test(base);
+    const isYaml = /\.ya?ml$/i.test(base);
+    const isDockerfile = /(?:^|\.)Dockerfile$/.test(base);
+    const isText = TEXT_FILE.test(base) || base.startsWith(".env");
+    if (isCompose) {
       composeFiles += 1;
       errors.push(...checkCompose(text, file));
       errors.push(...(await checkExternalDockerfiles(text, absolute, root, externalDockerfiles)));
-    } else if (/\.ya?ml$/i.test(base)) {
+    } else if (isYaml) {
       errors.push(`${file}: unexpected YAML file; the dev stack is a single compose file (no override, extends or include files)`);
     }
-    if (/(?:^|\.)Dockerfile$/.test(base)) {
+    if (isDockerfile) {
       dockerfiles += 1;
       errors.push(...checkDockerfile(text, file));
     }
-    if (TEXT_FILE.test(base) || base.startsWith(".env")) {
+    if (isText) {
       errors.push(...checkNodeEnv(text, file), ...checkSecrets(text, file));
     }
+    if (!isCompose && !isYaml && !isDockerfile && !isText) {
+      errors.push(`${file}: unexpected file under the dev stack root`);
+    }
   }
+  for (const absolute of nonRegular) {
+    errors.push(
+      `${relativeFile(absolute)}: non-regular file entries are not allowed under the dev stack root`,
+    );
+  }
+  errors.push(...trackedEnvErrors(envFiles));
   if (composeFiles === 0) errors.push(`${root}: no compose file found`);
   if (dockerfiles === 0) errors.push(`${root}: no Dockerfile found`);
   return errors;
 }
 
 async function main() {
-  const errors = await checkDevStack(process.argv[2] ?? DEFAULT_ROOT);
+  const root = process.argv[2] ?? DEFAULT_ROOT;
+  const errors = await checkDevStack(root);
+  if (root === DEFAULT_ROOT) {
+    errors.push(...(await checkE2ePackage()));
+  }
   if (errors.length > 0) {
     console.error(errors.join("\n"));
     process.exitCode = 1;

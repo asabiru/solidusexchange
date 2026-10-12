@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -8,6 +8,7 @@ import {
   checkCompose,
   checkDevStack,
   checkDockerfile,
+  checkE2ePackage,
   checkNodeEnv,
   checkSecrets,
 } from "./check-dev-stack.mjs";
@@ -327,6 +328,61 @@ test("checks Dockerfiles that compose builds from outside the stack directory", 
     async (root) => {
       const errors = (await checkDevStack(path.join(root, "stack"))).join("\n");
       assert.match(errors, /elsewhere\/app\.Dockerfile:1: base image node:24 must be pinned by @sha256 digest/);
+    },
+  );
+});
+
+test("rejects unexpected file types and non-regular entries in the stack directory", async () => {
+  await withStack(
+    {
+      "compose.yaml": compose(),
+      "app.Dockerfile": DOCKERFILE,
+      "tools/setup.py": "print(1)\n",
+      "data/payload.bin": "x\n",
+    },
+    async (root) => {
+      await symlink("/etc/hostname", path.join(root, "linked.sh"));
+      const errors = (await checkDevStack(root)).join("\n");
+      assert.match(errors, /setup\.py: unexpected file under the dev stack root/);
+      assert.match(errors, /payload\.bin: unexpected file under the dev stack root/);
+      assert.match(errors, /linked\.sh: non-regular file entries are not allowed/);
+    },
+  );
+});
+
+test("requires e2e test files to be wired into the package scripts", async () => {
+  await withStack(
+    {
+      "pkg/package.json": JSON.stringify({
+        scripts: {
+          lint: "node --check tests/helper.mjs && node --check tests/a.test.mjs",
+          test: "npm run build && node --test tests/a.test.mjs",
+        },
+      }),
+      "pkg/tests/helper.mjs": "export {}\n",
+      "pkg/tests/a.test.mjs": "import test from 'node:test';\n",
+      "pkg/tests/unwired.test.mjs": "import test from 'node:test';\n",
+    },
+    async (root) => {
+      const errors = (await checkE2ePackage(path.join(root, "pkg"))).join("\n");
+      assert.match(errors, /unwired\.test\.mjs: the e2e lint script must cover/);
+      assert.match(errors, /unwired\.test\.mjs: the e2e test script must run/);
+    },
+  );
+
+  await withStack(
+    {
+      "pkg/package.json": JSON.stringify({
+        scripts: {
+          lint: "node --check tests/helper.mjs && node --check tests/gone.test.mjs",
+          test: "node --test tests/gone.test.mjs",
+        },
+      }),
+      "pkg/tests/helper.mjs": "export {}\n",
+    },
+    async (root) => {
+      const errors = (await checkE2ePackage(path.join(root, "pkg"))).join("\n");
+      assert.match(errors, /gone\.test\.mjs: referenced by an e2e script but missing/);
     },
   );
 });

@@ -198,6 +198,25 @@ function triggerErrors(lines, fileName) {
     );
   }
 
+  for (const event of events.filter(
+    ({ name, value }) =>
+      (name === "pull_request" || name === "push") && !value,
+  )) {
+    for (const child of childMappings(lines, event.index)) {
+      if (child.name === "branches" || child.name === "paths") {
+        if (child.value || childListValues(lines, child.index).length === 0) {
+          errors.push(
+            `${fileName}:${child.index + 1}: ${event.name} ${child.name} filter must be a non-empty block list`,
+          );
+        }
+      } else {
+        errors.push(
+          `${fileName}:${child.index + 1}: ${event.name} triggers may only filter on branches and paths`,
+        );
+      }
+    }
+  }
+
   const push = events.find((event) => event.name === "push");
   if (!push || push.value) {
     return errors;
@@ -526,12 +545,60 @@ function jobText(lines, jobIndex, jobIndent) {
   return parts.join(" ");
 }
 
+function jobPolicyErrors(lines, fileName, validation) {
+  const errors = [];
+  const jobsLine = lines.findIndex((line) =>
+    /^jobs:\s*(?:#.*)?$/.test(normalizeKeys(line, ANY_KEY)),
+  );
+  if (jobsLine === -1 || !validation) {
+    return errors;
+  }
+
+  for (const job of childMappings(lines, jobsLine, undefined, ANY_KEY)) {
+    if (/^\s*\*[\w-]+\s*$/.test(job.value ?? "")) {
+      continue;
+    }
+    const keys = childMappings(lines, job.index, undefined, ANY_KEY);
+    const flow = job.value ?? "";
+    const runsOn = [
+      ...keys
+        .filter(({ name }) => name === "runs-on")
+        .map(({ value }) => scalar(value ?? "")),
+      ...[...flow.matchAll(/\bruns-on\s*:\s*([^,}\]]+)/g)].map((match) =>
+        scalar(match[1].trim()),
+      ),
+    ];
+    const uses =
+      keys.some(({ name }) => name === "uses") || /\buses\s*:/.test(flow);
+    if (!uses && (runsOn.length !== 1 || runsOn[0] !== "ubuntu-latest")) {
+      errors.push(
+        `${fileName}:${job.index + 1}: jobs must run on ubuntu-latest`,
+      );
+    }
+    if (
+      keys.some(({ name }) => name === "secrets") ||
+      /\bsecrets\s*:/.test(flow)
+    ) {
+      errors.push(
+        `${fileName}:${job.index + 1}: job-level secrets are not allowed on validation workflows`,
+      );
+    }
+  }
+
+  return errors;
+}
+
 export function validateWorkflowText(text, fileName = "<workflow>") {
   const lines = text.split(/\r?\n/);
   const errors = [
     ...triggerErrors(lines, fileName),
     ...executionErrors(lines, fileName),
     ...containerErrors(lines, fileName),
+    ...jobPolicyErrors(
+      lines,
+      fileName,
+      !MANUAL_WORKFLOWS.has(fileName.replaceAll("\\", "/")),
+    ),
   ];
   const rootPermissions = [];
   let jobsIndent = -1;
