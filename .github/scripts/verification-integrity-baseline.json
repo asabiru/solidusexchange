@@ -745,8 +745,8 @@
       "minCases": 10
     },
     "miniapp/src/server/customer-api-audit.test.ts": {
-      "minLines": 355,
-      "minCases": 7
+      "minLines": 597,
+      "minCases": 12
     },
     "miniapp/src/server/customer-api-client.test.ts": {
       "minLines": 2217,
@@ -789,8 +789,8 @@
       "minCases": 14
     },
     "miniapp/src/server/markets-upstream.test.ts": {
-      "minLines": 417,
-      "minCases": 13
+      "minLines": 431,
+      "minCases": 14
     },
     "miniapp/src/server/notifications-routes.test.ts": {
       "minLines": 137,
@@ -809,8 +809,8 @@
       "minCases": 13
     },
     "miniapp/src/server/operations-upstream.test.ts": {
-      "minLines": 319,
-      "minCases": 10
+      "minLines": 333,
+      "minCases": 11
     },
     "miniapp/src/server/payments-upstream.test.ts": {
       "minLines": 294,

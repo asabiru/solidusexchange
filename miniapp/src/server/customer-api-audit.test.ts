@@ -142,6 +142,112 @@ function notificationEntry(id: string, read: boolean): Record<string, unknown> {
   };
 }
 
+function marketDepthView(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    mode: "test",
+    instrument: "USDT/RUB",
+    base_asset: "USDT",
+    quote_asset: "RUB",
+    bids: [{ price: "89.99000000", quantity: "25.000000", order_count: 1 }],
+    asks: [{ price: "90.01000000", quantity: "18.000000", order_count: 1 }],
+    last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:05:00.000Z" },
+    depth_levels: 1,
+    as_of: "2026-10-02T14:10:00.000Z",
+    posting: "none",
+    ...overrides
+  };
+}
+
+function marketEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    instrument: "USDT/RUB",
+    base_asset: "USDT",
+    quote_asset: "RUB",
+    best_bid: { price: "89.99000000", quantity: "25.000000", order_count: 1 },
+    best_ask: { price: "90.01000000", quantity: "18.000000", order_count: 1 },
+    last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:05:00.000Z" },
+    spread_bps: 2,
+    base_scale: 6,
+    quote_scale: 2,
+    price_scale: 8,
+    as_of: "2026-10-02T14:10:00.000Z",
+    posting: "none",
+    ...overrides
+  };
+}
+
+/** The canonical ORDER_PAIRS sequence the contract view must report once, in order. */
+function canonicalMarkets(): Record<string, unknown>[] {
+  return [
+    marketEntry(),
+    marketEntry({
+      instrument: "TON/RUB",
+      base_asset: "TON",
+      base_scale: 9,
+      best_bid: null,
+      best_ask: null,
+      last_trade: null,
+      spread_bps: null
+    }),
+    marketEntry({
+      instrument: "TON/USDT",
+      base_asset: "TON",
+      quote_asset: "USDT",
+      base_scale: 9,
+      quote_scale: 6,
+      best_bid: null,
+      best_ask: null,
+      last_trade: null,
+      spread_bps: null
+    })
+  ];
+}
+
+function tradeEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    trade_id: "trd_0123456789abcdef01234567",
+    order_id: "ord_0123456789abcdef01234567",
+    pair: "USDT/RUB",
+    base_asset: "USDT",
+    quote_asset: "RUB",
+    side: "sell",
+    liquidity: "maker",
+    price: "90.00000000",
+    quantity: "10.000000",
+    quote_amount: "900.00",
+    fee_bps: 30,
+    fee_amount: "2.70",
+    total_quote_amount: "897.30",
+    executed_at: "2026-10-02T14:05:00.000Z",
+    execution: "not_supported",
+    posting: "none",
+    ...overrides
+  };
+}
+
+function orderEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    order_id: "ord_0123456789abcdef01234567",
+    pair: "USDT/RUB",
+    base_asset: "USDT",
+    quote_asset: "RUB",
+    side: "sell",
+    order_type: "limit",
+    base_amount: "25.000000",
+    price: "89.77500000",
+    quote_amount: "2244.37",
+    fee_bps: 30,
+    fee_amount: "6.74",
+    total_quote_amount: "2237.63",
+    status: "open",
+    created_at: "2026-10-02T14:05:00.000Z",
+    updated_at: "2026-10-02T14:05:00.000Z",
+    execution: "not_supported",
+    posting: "none",
+    ...overrides
+  };
+}
+
 describe("customer-api client envelope audit", () => {
   it("fails closed on a member operation view echoing a different operation_id", async () => {
     const key = randomBytes(32).toString("hex");
@@ -375,5 +481,164 @@ describe("customer-api client envelope audit", () => {
         assert.equal(result.status, "ok", "a coherent view still serves");
       }
     );
+  });
+});
+
+describe("customer-api depth/order/trade adapter audit (wave 63)", () => {
+  it("fails closed on timestamps that normalize instead of reserializing canonically", async () => {
+    const key = randomBytes(32).toString("hex");
+    // The upstream validator reserializes the parsed stamp: a pattern-passing
+    // string whose components overflow ("2026-02-31" rolls into March,
+    // "T24:00" into the next day) is not the contract's timestamp.
+    const normalized = [
+      "2026-02-31T00:00:00.000Z",
+      "2026-04-31T00:00:00.000Z",
+      "2026-01-01T24:00:00.000Z"
+    ];
+    for (const stamp of normalized) {
+      const drifted: [Record<string, unknown>, (client: ReturnType<typeof createCustomerApiClient>) => Promise<unknown>][] = [
+        [marketDepthView({ as_of: stamp }), (client) => client.marketDepth(bffSubject, "USDT/RUB", Date.now())],
+        [
+          marketDepthView({ last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: stamp } }),
+          (client) => client.marketDepth(bffSubject, "USDT/RUB", Date.now())
+        ],
+        [
+          { mode: "test", markets: [marketEntry({ as_of: stamp }), ...canonicalMarkets().slice(1)] },
+          (client) => client.markets(bffSubject, Date.now())
+        ],
+        [{ mode: "test", trades: [tradeEntry({ executed_at: stamp })] }, (client) => client.trades(bffSubject, Date.now())],
+        [{ mode: "test", orders: [orderEntry({ created_at: stamp })] }, (client) => client.exchangeOrders(bffSubject, Date.now())]
+      ];
+      for (const [body, read] of drifted) {
+        await withFakeApi(
+          () => body,
+          async (baseUrl) => {
+            const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+            assert.deepEqual(await read(client), { status: "unavailable" }, JSON.stringify(body));
+          }
+        );
+      }
+    }
+    // Boundary control: a last trade stamped exactly at the snapshot close is inside the session.
+    await withFakeApi(
+      () => marketDepthView({ last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-02T14:10:00.000Z" } }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.marketDepth(bffSubject, "USDT/RUB", Date.now());
+        assert.equal(result.status, "ok", "executed_at === as_of stays inside the replayed session");
+      }
+    );
+  });
+
+  it("fails closed on a markets view dropping or reordering the canonical pair sequence", async () => {
+    const key = randomBytes(32).toString("hex");
+    const canonical = canonicalMarkets();
+    const bad: Record<string, unknown>[][] = [
+      [canonical[0] as Record<string, unknown>, canonical[1] as Record<string, unknown>],
+      [canonical[1] as Record<string, unknown>, canonical[0] as Record<string, unknown>, canonical[2] as Record<string, unknown>],
+      [canonical[0] as Record<string, unknown>, canonical[2] as Record<string, unknown>, canonical[1] as Record<string, unknown>],
+      [canonical[0] as Record<string, unknown>],
+      [...canonical, marketEntry({ instrument: "BTC/EUR", base_asset: "BTC", quote_asset: "EUR" })]
+    ];
+    for (const markets of bad) {
+      await withFakeApi(
+        () => ({ mode: "test", markets }),
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.markets(bffSubject, Date.now()),
+            { status: "unavailable" },
+            `${markets.length} markets, first ${String(markets[0]?.instrument)}`
+          );
+        }
+      );
+    }
+    await withFakeApi(
+      () => ({ mode: "test", markets: canonical }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.markets(bffSubject, Date.now());
+        assert.equal(result.status, "ok", "the canonical sequence still serves");
+      }
+    );
+  });
+
+  it("fails closed on a markets entry whose last_trade post-dates the snapshot", async () => {
+    const key = randomBytes(32).toString("hex");
+    const drifted = canonicalMarkets();
+    drifted[0] = marketEntry({
+      last_trade: { price: "90.00000000", quantity: "10.000000", executed_at: "2026-10-03T00:00:00.000Z" }
+    });
+    await withFakeApi(
+      () => ({ mode: "test", markets: drifted }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(await client.markets(bffSubject, Date.now()), { status: "unavailable" });
+      }
+    );
+  });
+
+  it("fails closed on duplicated ids inside the trades and exchange-orders collections", async () => {
+    const key = randomBytes(32).toString("hex");
+    // A trade id is minted once per (order, fill) and an order id once per
+    // submission: a repeat is two rows claiming one record upstream pins as
+    // invalid, and the adapter must pin it too.
+    await withFakeApi(
+      () => ({ mode: "test", trades: [tradeEntry(), tradeEntry()] }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(await client.trades(bffSubject, Date.now()), { status: "unavailable" });
+      }
+    );
+    await withFakeApi(
+      () => ({ mode: "test", orders: [orderEntry(), orderEntry()] }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        assert.deepEqual(await client.exchangeOrders(bffSubject, Date.now()), { status: "unavailable" });
+      }
+    );
+    // Positive control: one order filling twice keeps distinct trade ids.
+    await withFakeApi(
+      () => ({
+        mode: "test",
+        trades: [tradeEntry(), tradeEntry({ trade_id: "trd_fedcba9876543210fedcba98" })]
+      }),
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.trades(bffSubject, Date.now());
+        assert.equal(result.status, "ok", "distinct trade ids for one order_id still serve");
+      }
+    );
+  });
+
+  it("degrades to unavailable — never throws — on decimals beyond the adapter's numeric bounds", async () => {
+    const key = randomBytes(32).toString("hex");
+    // The wire validator bounds scale, not magnitude: a pattern-valid price
+    // wider than the adapter's 30-digit unit conversion must reject cleanly
+    // as unavailable, not escape as a thrown error.
+    const giant = "1" + "0".repeat(31);
+    const drifted: [Record<string, unknown>, (client: ReturnType<typeof createCustomerApiClient>) => Promise<unknown>][] = [
+      [
+        marketDepthView({ asks: [{ price: `${giant}.00000000`, quantity: "18.000000", order_count: 1 }] }),
+        (client) => client.marketDepth(bffSubject, "USDT/RUB", Date.now())
+      ],
+      [
+        marketDepthView({ bids: [{ price: "89.99000000", quantity: `${giant}.000000`, order_count: 1 }] }),
+        (client) => client.marketDepth(bffSubject, "USDT/RUB", Date.now())
+      ],
+      [
+        { mode: "test", trades: [tradeEntry({ quantity: `${giant}.000000` })] },
+        (client) => client.trades(bffSubject, Date.now())
+      ]
+    ];
+    for (const [body, read] of drifted) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(await read(client), { status: "unavailable" }, JSON.stringify(body));
+        }
+      );
+    }
   });
 });

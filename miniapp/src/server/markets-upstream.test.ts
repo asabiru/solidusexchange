@@ -363,6 +363,7 @@ describe("GET /bff/markets/{instrument} through the customer-api seam", () => {
         "/bff/markets/usdt%2Frub",
         "/bff/markets/NOT-A-PAIR",
         "/bff/markets/%ZZ",
+        "/bff/markets/USDT%252FRUB",
         "/bff/markets/"
       ]) {
         const response = await get(running.base, path, cookie);
@@ -370,6 +371,20 @@ describe("GET /bff/markets/{instrument} through the customer-api seam", () => {
         assert.deepEqual(await response.json(), { error: "not_found" });
       }
       assert.equal(stub.depthCalls.length, 0, "malformed segments must not reach upstream");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("rejects an undeclared query string on the member read without an upstream call", async () => {
+    const stub = marketsStub({ status: "unavailable" }, { status: "ok", depth: upstreamDepth() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB?trace=1", cookie);
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "invalid_request" });
+      assert.equal(stub.depthCalls.length, 0, "an undeclared query must not reach upstream");
     } finally {
       await running.close();
     }

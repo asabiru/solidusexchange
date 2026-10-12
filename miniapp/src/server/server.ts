@@ -933,6 +933,12 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/operations/")) {
+      // The member read declares no query input — the same pin the other
+      // upstream member reads carry.
+      if (url.search !== "") {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
       const id = path.slice("/bff/operations/".length);
       const local = (kyc: KycStatus) => {
         const operation = syntheticData.operation(kyc, id);
@@ -1289,6 +1295,13 @@ export function createMiniappServer(
       return;
     }
     if (path.startsWith("/bff/markets/")) {
+      // The member read declares no query input — matching the other
+      // upstream member reads and the upstream contract, which rejects a
+      // query on the depth operation outright.
+      if (url.search !== "") {
+        json(response, 400, { error: "invalid_request" });
+        return;
+      }
       // The instrument travels percent-encoded inside one path segment
       // ("USDT%2FRUB"), like the upstream contract. A bare slash splits
       // extra segments and an undecodable sequence can never name a book —
