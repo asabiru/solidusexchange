@@ -149,7 +149,7 @@ describe("prototype-key lookups fail closed", () => {
 
 describe("enum whitelists cover exactly the documented members", () => {
   it("check statuses", () => {
-    for (const status of ["created", "waiting-recipient-kyc", "claimed", "cancelled", "expired"]) {
+    for (const status of ["created", "awaiting_recipient_kyc", "claimed", "cancelled", "expired"]) {
       assert.equal(checkStatusOf(status), status);
       assert.equal(checkStatusKeyOf(status), `checks.status.${status}`, status);
     }
@@ -182,7 +182,7 @@ describe("enum whitelists cover exactly the documented members", () => {
   });
 
   it("withdrawal statuses, roles and decisions", () => {
-    for (const status of ["draft", "pending-approval", "screened", "broadcast", "confirmed", "rejected", "cancelled"]) {
+    for (const status of ["draft", "screened", "pending_maker_approval", "pending_checker_approval", "unsigned_intent_ready", "broadcast", "confirmed", "rejected", "cancelled", "expired"]) {
       assert.equal(withdrawalStatusOf(status), status);
       assert.equal(withdrawalStatusKeyOf(status), `withdrawals.status.${status}`);
     }

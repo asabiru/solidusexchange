@@ -179,7 +179,7 @@ describe("subject timeline BFF", () => {
       payload: { entries: readonly { kind: string; ref: string }[] };
     }).payload.entries;
     const auditRefs = new Set(entries.filter((entry) => entry.kind === "audit").map((entry) => entry.ref));
-    for (const expected of ["AUD-000148", "AUD-000149", "AUD-000152", "AUD-000154", "AUD-000155"]) {
+    for (const expected of ["AUD-000152", "AUD-000154", "AUD-000155", "AUD-000156", "AUD-000157"]) {
       assert.ok(auditRefs.has(expected), `missing ${expected}`);
     }
     for (const denied of ["AUD-000150", "AUD-000151", "AUD-000153"]) {

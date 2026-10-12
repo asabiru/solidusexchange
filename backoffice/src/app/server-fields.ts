@@ -110,7 +110,7 @@ export function capabilitiesOf(operator: unknown): readonly Capability[] {
 
 const checkStatuses: Readonly<Record<CheckStatus, MessageKey>> = {
   created: "checks.status.created",
-  "waiting-recipient-kyc": "checks.status.waiting-recipient-kyc",
+  awaiting_recipient_kyc: "checks.status.awaiting_recipient_kyc",
   claimed: "checks.status.claimed",
   cancelled: "checks.status.cancelled",
   expired: "checks.status.expired"
@@ -173,12 +173,15 @@ export function supportAuthorKeyOf(value: unknown): MessageKey | undefined {
 
 const withdrawalStatuses: Readonly<Record<WithdrawalIntentStatus, MessageKey>> = {
   draft: "withdrawals.status.draft",
-  "pending-approval": "withdrawals.status.pending-approval",
   screened: "withdrawals.status.screened",
+  pending_maker_approval: "withdrawals.status.pending_maker_approval",
+  pending_checker_approval: "withdrawals.status.pending_checker_approval",
+  unsigned_intent_ready: "withdrawals.status.unsigned_intent_ready",
   broadcast: "withdrawals.status.broadcast",
   confirmed: "withdrawals.status.confirmed",
   rejected: "withdrawals.status.rejected",
-  cancelled: "withdrawals.status.cancelled"
+  cancelled: "withdrawals.status.cancelled",
+  expired: "withdrawals.status.expired"
 };
 
 export function withdrawalStatusOf(value: unknown): WithdrawalIntentStatus | undefined {

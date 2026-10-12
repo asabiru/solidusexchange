@@ -30,7 +30,7 @@ export interface CustomerRow {
   volume: string;
   nextAction: string;
   restriction: string;
-  kycCaseId: string;
+  kycCaseId?: string;
   openAmlCases: number;
   lastReviewedAt: string;
   tone: Tone;
@@ -136,7 +136,7 @@ export interface FraudAlert {
   auditEvidenceDigest: string;
 }
 
-export type CheckStatus = "created" | "waiting-recipient-kyc" | "claimed" | "cancelled" | "expired";
+export type CheckStatus = "created" | "awaiting_recipient_kyc" | "claimed" | "cancelled" | "expired";
 
 export interface CheckTimelineEvent {
   id: string;
@@ -218,12 +218,15 @@ export interface SupportTicket {
 
 export type WithdrawalIntentStatus =
   | "draft"
-  | "pending-approval"
   | "screened"
+  | "pending_maker_approval"
+  | "pending_checker_approval"
+  | "unsigned_intent_ready"
   | "broadcast"
   | "confirmed"
   | "rejected"
-  | "cancelled";
+  | "cancelled"
+  | "expired";
 
 export type WithdrawalApprovalRole = "custody_maker" | "custody_checker";
 
@@ -544,15 +547,15 @@ function buildSubjectTimeline(
 
 const data = deepFreeze({
   metrics: [
-    { label: "Открытые кейсы", value: "29", detail: "−6 с начала смены", tone: "info" },
+    { label: "Открытые кейсы", value: "13", detail: "−6 с начала смены", tone: "info" },
     { label: "SLA под риском", value: "5", detail: "2 требуют решения в течение часа", tone: "warning" },
     { label: "Выводы на hold", value: "₽ 8.4M", detail: "4 операции · без автоподтверждения", tone: "danger" },
     { label: "Reconciliation", value: "99.98%", detail: "2 расхождения из 11 642 записей", tone: "success" }
   ],
   queues: [
-    { queue: "High-risk withdrawals", critical: 2, total: 4, oldest: "42 мин", sla: "At risk", tone: "danger" },
-    { queue: "AML alerts", critical: 1, total: 7, oldest: "1 ч 18 мин", sla: "Watch", tone: "warning" },
-    { queue: "KYC review", critical: 0, total: 18, oldest: "2 ч 04 мин", sla: "On track", tone: "success" },
+    { queue: "High-risk withdrawals", critical: 2, total: 6, oldest: "42 мин", sla: "At risk", tone: "danger" },
+    { queue: "AML alerts", critical: 1, total: 3, oldest: "1 ч 18 мин", sla: "Watch", tone: "warning" },
+    { queue: "KYC review", critical: 0, total: 3, oldest: "2 ч 04 мин", sla: "On track", tone: "success" },
     { queue: "Ledger mismatch", critical: 1, total: 2, oldest: "26 мин", sla: "Watch", tone: "warning" }
   ],
   customers: [
@@ -608,7 +611,6 @@ const data = deepFreeze({
       volume: "426 010 ₽",
       nextAction: "—",
       restriction: "None",
-      kycCaseId: "KYC-220171",
       openAmlCases: 0,
       lastReviewedAt: "2026-09-27T16:05:44.000Z",
       tone: "success"
@@ -627,7 +629,6 @@ const data = deepFreeze({
       volume: "2 114 800 ₽",
       nextAction: "Restriction review",
       restriction: "Enhanced monitoring",
-      kycCaseId: "KYC-220168",
       openAmlCases: 1,
       lastReviewedAt: "2026-09-28T10:24:11.000Z",
       tone: "warning"
@@ -663,7 +664,7 @@ const data = deepFreeze({
       recipient: "@berlin_life",
       amount: "25.000000",
       asset: "USDT",
-      fee: "0.050000",
+      fee: "0.075000",
       comment: "Долг за ужин",
       createdAt: "2026-09-28T13:41:22.000Z",
       expiresAt: "2026-10-01T13:41:22.000Z",
@@ -685,14 +686,14 @@ const data = deepFreeze({
       id: "CHK-771298",
       kind: "personal",
       channel: "Telegram chat",
-      status: "waiting-recipient-kyc",
-      senderCustomerId: "CUS-10477",
-      sender: "Никита Серов",
-      recipient: "София Романова",
-      recipientCustomerId: "CUS-10468",
+      status: "awaiting_recipient_kyc",
+      senderCustomerId: "CUS-10482",
+      sender: "Алина Миронова",
+      recipient: "Никита Серов",
+      recipientCustomerId: "CUS-10477",
       amount: "120.000000",
       asset: "USDT",
-      fee: "0.240000",
+      fee: "0.360000",
       createdAt: "2026-09-28T11:58:07.000Z",
       expiresAt: "2026-10-01T11:58:07.000Z",
       monitoring: [
@@ -701,7 +702,7 @@ const data = deepFreeze({
         { id: "structuring", label: "Structuring screen", status: "clear", detail: "No split-payment pattern", tone: "success" }
       ],
       timeline: [
-        { id: "T1", occurredAt: "2026-09-28T11:58:07.000Z", actor: "customer:CUS-10477", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:7cc42e91b301" },
+        { id: "T1", occurredAt: "2026-09-28T11:58:07.000Z", actor: "customer:CUS-10482", action: "check.created", outcome: "recorded", evidenceDigest: "sha256:7cc42e91b301" },
         { id: "T2", occurredAt: "2026-09-28T12:36:49.000Z", actor: "service:check-engine", action: "check.claim_held", outcome: "recorded", evidenceDigest: "sha256:e5149c08af62" }
       ],
       evidenceItems: [
@@ -722,7 +723,7 @@ const data = deepFreeze({
       recipientCustomerId: "CUS-10482",
       amount: "8.750000000",
       asset: "TON",
-      fee: "0.015000000",
+      fee: "0.026250000",
       comment: "За билеты",
       createdAt: "2026-09-27T19:12:44.000Z",
       expiresAt: "2026-09-30T19:12:44.000Z",
@@ -753,7 +754,7 @@ const data = deepFreeze({
       recipient: "@tourmate_anna",
       amount: "430.000000",
       asset: "USDT",
-      fee: "0.860000",
+      fee: "1.290000",
       comment: "Аренда студии",
       createdAt: "2026-09-28T09:26:18.000Z",
       expiresAt: "2026-10-01T09:26:18.000Z",
@@ -783,7 +784,7 @@ const data = deepFreeze({
       recipient: "@kite_school",
       amount: "65.500000",
       asset: "USDT",
-      fee: "0.131000",
+      fee: "0.196500",
       createdAt: "2026-09-25T14:33:51.000Z",
       expiresAt: "2026-09-28T14:33:51.000Z",
       resolvedAt: "2026-09-28T14:33:51.000Z",
@@ -821,7 +822,7 @@ const data = deepFreeze({
       disputedAmount: "120.000000",
       asset: "USDT",
       messages: [
-        { id: "M1", occurredAt: "2026-09-28T12:41:09.000Z", author: "customer", body: "Отправила чек подруге — у неё ошибка «получатель не прошёл проверку». Деньги вернутся?" },
+        { id: "M1", occurredAt: "2026-09-28T12:41:09.000Z", author: "customer", body: "Отправила чек — у получателя ошибка «не прошёл проверку». Деньги вернутся?" },
         { id: "M2", occurredAt: "2026-09-28T12:52:36.000Z", author: "operator", body: "Чек в статусе ожидания: получателю нужно завершить идентификацию. Средства удержаны и не списаны окончательно." },
         { id: "M3", occurredAt: "2026-09-28T13:35:47.000Z", author: "system", body: "Эскалация в очередь комплаенс: связанный кейс KYC-220177 ждёт документы о происхождении средств." }
       ],
@@ -936,14 +937,14 @@ const data = deepFreeze({
       network: "TON_TESTNET",
       destination: "EQDkR9u5xT2mB8wP4nS7vH3fL6jK1cA0dG4yN9iQ5oE7rU2tVz",
       destinationReference: "destination_ref_alina_ton_main",
-      status: "pending-approval",
+      status: "pending_checker_approval",
       screening: [
         { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened at creation", tone: "success" },
         { id: "kyt", label: "KYT destination trace", status: "review", detail: "Indirect high-risk wallet exposure — case AML-78041", tone: "warning" },
         { id: "velocity", label: "Withdrawal velocity", status: "review", detail: "3 withdrawal intents in 24h, above baseline", tone: "warning" }
       ],
       approvalSteps: [
-        { id: "approval_991804_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T12:58:11.000Z", stepUpGrantId: "step_up_grant_991804_mk", evidenceDigest: "sha256:96ff7d30da42" },
+        { id: "approval_991804_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T14:31:31.000Z", stepUpGrantId: "step_up_grant_991804_mk", evidenceDigest: "sha256:96ff7d30da42" },
         { id: "approval_991804_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
       ],
       requiredApprovals: 2,
@@ -959,13 +960,13 @@ const data = deepFreeze({
       correlationId: "7a2f1c9e-4b35-4d68-9a71-2c8e5f01b3d4",
       linkedKytCaseId: "AML-78041",
       linkedApprovalId: "APV-843921",
-      createdAt: "2026-09-28T12:44:37.000Z",
-      updatedAt: "2026-09-28T12:58:11.000Z",
-      expiresAt: "2026-09-28T12:49:37.000Z",
+      createdAt: "2026-09-28T14:29:37.000Z",
+      updatedAt: "2026-09-28T14:32:11.000Z",
+      expiresAt: "2026-09-28T14:34:37.000Z",
       timeline: [
-        { id: "T1", occurredAt: "2026-09-28T12:44:37.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:f07fd061c671" },
-        { id: "T2", occurredAt: "2026-09-28T12:53:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:96ff7d30da42" },
-        { id: "T3", occurredAt: "2026-09-28T12:58:11.000Z", actor: "service:custody-orchestrator", action: "withdrawal.pending_approval", outcome: "recorded", evidenceDigest: "sha256:63c1ae27f09b" }
+        { id: "T1", occurredAt: "2026-09-28T14:29:37.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:f07fd061c671" },
+        { id: "T2", occurredAt: "2026-09-28T14:31:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:96ff7d30da42" },
+        { id: "T3", occurredAt: "2026-09-28T14:32:11.000Z", actor: "service:custody-orchestrator", action: "withdrawal.pending_approval", outcome: "recorded", evidenceDigest: "sha256:63c1ae27f09b" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:f07fd061c671" },
@@ -1008,12 +1009,12 @@ const data = deepFreeze({
       idempotencyKey: "custody_idempotency_991817",
       correlationId: "3b8d4e21-7c46-4f59-b2a8-9d1e6f03c7b5",
       linkedKytCaseId: "AML-78038",
-      createdAt: "2026-09-28T13:12:05.000Z",
-      updatedAt: "2026-09-28T13:22:48.000Z",
-      expiresAt: "2026-09-28T13:17:05.000Z",
+      createdAt: "2026-09-28T14:29:05.000Z",
+      updatedAt: "2026-09-28T14:30:48.000Z",
+      expiresAt: "2026-09-28T14:34:05.000Z",
       timeline: [
-        { id: "T1", occurredAt: "2026-09-28T13:12:05.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:5ce29d81b4f6" },
-        { id: "T2", occurredAt: "2026-09-28T13:22:48.000Z", actor: "service:kyt-simulator", action: "withdrawal.screened", outcome: "recorded", evidenceDigest: "sha256:7d04c8be1a63" }
+        { id: "T1", occurredAt: "2026-09-28T14:29:05.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:5ce29d81b4f6" },
+        { id: "T2", occurredAt: "2026-09-28T14:30:48.000Z", actor: "service:kyt-simulator", action: "withdrawal.screened", outcome: "recorded", evidenceDigest: "sha256:7d04c8be1a63" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:5ce29d81b4f6" },
@@ -1043,7 +1044,7 @@ const data = deepFreeze({
       ],
       approvalSteps: [
         { id: "approval_991822_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T11:41:16.000Z", stepUpGrantId: "step_up_grant_991822_mk", evidenceDigest: "sha256:2b7f9c40d1e5" },
-        { id: "approval_991822_checker", role: "custody_checker", subjectReference: "operator_ref_elena_sokolova", decision: "approved", decidedAt: "2026-09-28T11:44:52.000Z", stepUpGrantId: "step_up_grant_991822_es", evidenceDigest: "sha256:8a13e6d5b904" }
+        { id: "approval_991822_checker", role: "custody_checker", subjectReference: "operator_ref_elena_sokolova", decision: "approved", decidedAt: "2026-09-28T11:42:52.000Z", stepUpGrantId: "step_up_grant_991822_es", evidenceDigest: "sha256:8a13e6d5b904" }
       ],
       requiredApprovals: 2,
       policyVersion: "custody-dev-v1",
@@ -1057,13 +1058,13 @@ const data = deepFreeze({
       idempotencyKey: "custody_idempotency_991822",
       correlationId: "9e5c2a71-3d84-4b16-8f47-1a6c0e52d9b8",
       createdAt: "2026-09-28T11:38:44.000Z",
-      updatedAt: "2026-09-28T11:52:09.000Z",
+      updatedAt: "2026-09-28T11:43:30.000Z",
       expiresAt: "2026-09-28T11:43:44.000Z",
       timeline: [
         { id: "T1", occurredAt: "2026-09-28T11:38:44.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:0f53a7c1e8d9" },
         { id: "T2", occurredAt: "2026-09-28T11:41:16.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:2b7f9c40d1e5" },
-        { id: "T3", occurredAt: "2026-09-28T11:44:52.000Z", actor: "operator_ref_elena_sokolova", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:8a13e6d5b904" },
-        { id: "T4", occurredAt: "2026-09-28T11:52:09.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:c48d05f1a7e2" }
+        { id: "T3", occurredAt: "2026-09-28T11:42:52.000Z", actor: "operator_ref_elena_sokolova", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:8a13e6d5b904" },
+        { id: "T4", occurredAt: "2026-09-28T11:43:30.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:c48d05f1a7e2" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:0f53a7c1e8d9" },
@@ -1092,8 +1093,8 @@ const data = deepFreeze({
         { id: "velocity", label: "Withdrawal velocity", status: "clear", detail: "Within customer baseline", tone: "success" }
       ],
       approvalSteps: [
-        { id: "approval_991805_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T15:02:31.000Z", stepUpGrantId: "step_up_grant_991805_mk", evidenceDigest: "sha256:31e8b7c5f2a0" },
-        { id: "approval_991805_checker", role: "custody_checker", subjectReference: "operator_ref_anton_bely", decision: "approved", decidedAt: "2026-09-27T15:05:47.000Z", stepUpGrantId: "step_up_grant_991805_ab", evidenceDigest: "sha256:66d4a1e08c39" }
+        { id: "approval_991805_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T14:59:31.000Z", stepUpGrantId: "step_up_grant_991805_mk", evidenceDigest: "sha256:31e8b7c5f2a0" },
+        { id: "approval_991805_checker", role: "custody_checker", subjectReference: "operator_ref_anton_bely", decision: "approved", decidedAt: "2026-09-27T15:00:47.000Z", stepUpGrantId: "step_up_grant_991805_ab", evidenceDigest: "sha256:66d4a1e08c39" }
       ],
       requiredApprovals: 2,
       policyVersion: "custody-dev-v1",
@@ -1107,15 +1108,15 @@ const data = deepFreeze({
       idempotencyKey: "custody_idempotency_991805",
       correlationId: "1c7e4b90-5f23-4a58-9d36-8e0b2c47a5f1",
       createdAt: "2026-09-27T14:58:12.000Z",
-      updatedAt: "2026-09-27T15:21:36.000Z",
+      updatedAt: "2026-09-27T15:02:36.000Z",
       expiresAt: "2026-09-27T15:03:12.000Z",
-      resolvedAt: "2026-09-27T15:21:36.000Z",
+      resolvedAt: "2026-09-27T15:02:36.000Z",
       timeline: [
         { id: "T1", occurredAt: "2026-09-27T14:58:12.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:4f68d2a91e05" },
-        { id: "T2", occurredAt: "2026-09-27T15:02:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:31e8b7c5f2a0" },
-        { id: "T3", occurredAt: "2026-09-27T15:05:47.000Z", actor: "operator_ref_anton_bely", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:66d4a1e08c39" },
-        { id: "T4", occurredAt: "2026-09-27T15:14:20.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:9c01d7e6f4a2" },
-        { id: "T5", occurredAt: "2026-09-27T15:21:36.000Z", actor: "service:custody-orchestrator", action: "withdrawal.confirmed", outcome: "recorded", evidenceDigest: "sha256:b2e17c95a308" }
+        { id: "T2", occurredAt: "2026-09-27T14:59:31.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:31e8b7c5f2a0" },
+        { id: "T3", occurredAt: "2026-09-27T15:00:47.000Z", actor: "operator_ref_anton_bely", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:66d4a1e08c39" },
+        { id: "T4", occurredAt: "2026-09-27T15:01:20.000Z", actor: "service:custody-orchestrator", action: "withdrawal.broadcast", outcome: "recorded", evidenceDigest: "sha256:9c01d7e6f4a2" },
+        { id: "T5", occurredAt: "2026-09-27T15:02:36.000Z", actor: "service:custody-orchestrator", action: "withdrawal.confirmed", outcome: "recorded", evidenceDigest: "sha256:b2e17c95a308" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:4f68d2a91e05" },
@@ -1156,11 +1157,11 @@ const data = deepFreeze({
       policyDigest: "sha256:4b2d91f0c7e8",
       idempotencyKey: "custody_idempotency_991799",
       correlationId: "6f0a3d85-2c91-4e47-a5b8-7d9f1e04c6a3",
-      createdAt: "2026-09-28T13:40:22.000Z",
-      updatedAt: "2026-09-28T13:40:22.000Z",
-      expiresAt: "2026-09-28T13:45:22.000Z",
+      createdAt: "2026-09-28T14:30:22.000Z",
+      updatedAt: "2026-09-28T14:30:22.000Z",
+      expiresAt: "2026-09-28T14:35:22.000Z",
       timeline: [
-        { id: "T1", occurredAt: "2026-09-28T13:40:22.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:d51f8a2c7e94" }
+        { id: "T1", occurredAt: "2026-09-28T14:30:22.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:d51f8a2c7e94" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:d51f8a2c7e94" },
@@ -1187,8 +1188,8 @@ const data = deepFreeze({
         { id: "kyt", label: "KYT destination trace", status: "match", detail: "Destination matches case AML-78038 cluster", tone: "danger" }
       ],
       approvalSteps: [
-        { id: "approval_991788_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T09:14:08.000Z", stepUpGrantId: "step_up_grant_991788_mk", evidenceDigest: "sha256:12f7c4a9d6b0" },
-        { id: "approval_991788_checker", role: "custody_checker", subjectReference: "operator_ref_roman_yudin", decision: "rejected", decidedAt: "2026-09-27T09:26:41.000Z", stepUpGrantId: "step_up_grant_991788_ry", evidenceDigest: "sha256:5d92e0b7f3c1" }
+        { id: "approval_991788_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-27T09:11:08.000Z", stepUpGrantId: "step_up_grant_991788_mk", evidenceDigest: "sha256:12f7c4a9d6b0" },
+        { id: "approval_991788_checker", role: "custody_checker", subjectReference: "operator_ref_roman_yudin", decision: "rejected", decidedAt: "2026-09-27T09:12:41.000Z", stepUpGrantId: "step_up_grant_991788_ry", evidenceDigest: "sha256:5d92e0b7f3c1" }
       ],
       requiredApprovals: 2,
       policyVersion: "custody-dev-v1",
@@ -1203,13 +1204,13 @@ const data = deepFreeze({
       correlationId: "4d9b2e67-8a15-4c03-b7f2-5e6a9c10d3f8",
       linkedKytCaseId: "AML-78038",
       createdAt: "2026-09-27T09:08:55.000Z",
-      updatedAt: "2026-09-27T09:26:41.000Z",
+      updatedAt: "2026-09-27T09:12:41.000Z",
       expiresAt: "2026-09-27T09:13:55.000Z",
-      resolvedAt: "2026-09-27T09:26:41.000Z",
+      resolvedAt: "2026-09-27T09:12:41.000Z",
       timeline: [
         { id: "T1", occurredAt: "2026-09-27T09:08:55.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:71b9e5c3d0f6" },
-        { id: "T2", occurredAt: "2026-09-27T09:14:08.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:12f7c4a9d6b0" },
-        { id: "T3", occurredAt: "2026-09-27T09:26:41.000Z", actor: "operator_ref_roman_yudin", action: "withdrawal.rejected", outcome: "denied", evidenceDigest: "sha256:5d92e0b7f3c1" }
+        { id: "T2", occurredAt: "2026-09-27T09:11:08.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:12f7c4a9d6b0" },
+        { id: "T3", occurredAt: "2026-09-27T09:12:41.000Z", actor: "operator_ref_roman_yudin", action: "withdrawal.rejected", outcome: "denied", evidenceDigest: "sha256:5d92e0b7f3c1" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:71b9e5c3d0f6" },
@@ -1250,12 +1251,12 @@ const data = deepFreeze({
       idempotencyKey: "custody_idempotency_991760",
       correlationId: "8b5e1f42-6d79-4a20-9c84-3f7d0e52b9a6",
       createdAt: "2026-09-26T17:33:40.000Z",
-      updatedAt: "2026-09-26T17:41:12.000Z",
+      updatedAt: "2026-09-26T17:36:12.000Z",
       expiresAt: "2026-09-26T17:38:40.000Z",
-      resolvedAt: "2026-09-26T17:41:12.000Z",
+      resolvedAt: "2026-09-26T17:36:12.000Z",
       timeline: [
         { id: "T1", occurredAt: "2026-09-26T17:33:40.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:08e4f6a2b9d7" },
-        { id: "T2", occurredAt: "2026-09-26T17:41:12.000Z", actor: "customer:CUS-10482", action: "withdrawal.cancelled", outcome: "recorded", evidenceDigest: "sha256:3f91c8d5e0a2" }
+        { id: "T2", occurredAt: "2026-09-26T17:36:12.000Z", actor: "customer:CUS-10482", action: "withdrawal.cancelled", outcome: "recorded", evidenceDigest: "sha256:3f91c8d5e0a2" }
       ],
       evidenceItems: [
         { id: "command", label: "Intent command record", status: "ready", digest: "sha256:08e4f6a2b9d7" },
@@ -1263,6 +1264,146 @@ const data = deepFreeze({
       ],
       tone: "neutral",
       auditEvidenceDigest: "sha256:3f91c8d5e0a2"
+    },
+    {
+      id: "WDR-991840",
+      intentId: "custody_intent_991840",
+      withdrawalId: "withdrawal_991840",
+      subject: "sim-sofia-romanova",
+      customerId: "CUS-10468",
+      customer: "София Романова",
+      asset: "USDT",
+      amount: "3650.000000",
+      network: "TRON_TESTNET",
+      destination: "0x9C2dF7aB31e4580cD6bE4A19f8D3c5E72aB91F0d",
+      destinationReference: "destination_ref_sofia_tron",
+      status: "unsigned_intent_ready",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "Clean testnet destination", tone: "success" },
+        { id: "velocity", label: "Withdrawal velocity", status: "clear", detail: "Within customer baseline", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991840_maker", role: "custody_maker", subjectReference: "operator_ref_maria_koval", decision: "approved", decidedAt: "2026-09-28T14:30:42.000Z", stepUpGrantId: "step_up_grant_991840_mk", evidenceDigest: "sha256:5af1c9d2e7b4" },
+        { id: "approval_991840_checker", role: "custody_checker", subjectReference: "operator_ref_elena_sokolova", decision: "approved", decidedAt: "2026-09-28T14:31:57.000Z", stepUpGrantId: "step_up_grant_991840_es", evidenceDigest: "sha256:8d3a7e1c5b60" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:2e7f4a9d1c83",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      approvalEvidenceDigest: "sha256:8d3a7e1c5b60",
+      idempotencyKey: "custody_idempotency_991840",
+      correlationId: "4c1e8a52-9d37-4f06-b295-6a0d3e17c8f4",
+      createdAt: "2026-09-28T14:29:51.000Z",
+      updatedAt: "2026-09-28T14:31:57.000Z",
+      expiresAt: "2026-09-28T14:34:51.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T14:29:51.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:2e7f4a9d1c83" },
+        { id: "T2", occurredAt: "2026-09-28T14:30:42.000Z", actor: "operator_ref_maria_koval", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:5af1c9d2e7b4" },
+        { id: "T3", occurredAt: "2026-09-28T14:31:57.000Z", actor: "operator_ref_elena_sokolova", action: "approval.decision_recorded", outcome: "reviewed", evidenceDigest: "sha256:8d3a7e1c5b60" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:2e7f4a9d1c83" },
+        { id: "quorum", label: "Maker-checker quorum", status: "ready", digest: "sha256:8d3a7e1c5b60" },
+        { id: "broadcast", label: "Broadcast receipt", status: "missing", digest: "sha256:000000000000" }
+      ],
+      tone: "info",
+      auditEvidenceDigest: "sha256:8d3a7e1c5b60"
+    },
+    {
+      id: "WDR-991830",
+      intentId: "custody_intent_991830",
+      withdrawalId: "withdrawal_991830",
+      subject: "sim-dmitry-panov",
+      customerId: "CUS-10475",
+      customer: "Дмитрий Панов",
+      asset: "TON",
+      amount: "192.000000000",
+      network: "TON_TESTNET",
+      destination: "UQAkT9xM2wR5vP8sN3yF6hL4dA7cE1iG0uB5oQ9zK2eJ3tD8",
+      destinationReference: "destination_ref_dmitry_ton",
+      status: "pending_maker_approval",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "Clean testnet destination", tone: "success" },
+        { id: "velocity", label: "Withdrawal velocity", status: "clear", detail: "Within customer baseline", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991830_maker", role: "custody_maker", subjectReference: "operator_ref_pending", decision: "pending" },
+        { id: "approval_991830_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:91c6e3a0f4d2",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      idempotencyKey: "custody_idempotency_991830",
+      correlationId: "2d9f4b18-7e63-4a90-8c51-3b6d0e95a4c7",
+      createdAt: "2026-09-28T14:31:05.000Z",
+      updatedAt: "2026-09-28T14:31:05.000Z",
+      expiresAt: "2026-09-28T14:36:05.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-28T14:31:05.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:91c6e3a0f4d2" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:91c6e3a0f4d2" },
+        { id: "quorum", label: "Maker-checker quorum", status: "missing", digest: "sha256:000000000000" }
+      ],
+      tone: "warning",
+      auditEvidenceDigest: "sha256:91c6e3a0f4d2"
+    },
+    {
+      id: "WDR-991820",
+      intentId: "custody_intent_991820",
+      withdrawalId: "withdrawal_991820",
+      subject: "sim-alina-mironova",
+      customerId: "CUS-10482",
+      customer: "Алина Миронова",
+      asset: "USDT",
+      amount: "890.000000",
+      network: "TRON_TESTNET",
+      destination: "0x5B8eD3aF91c24E07bA63f1C8dE4a9D2c0B7f5A16",
+      destinationReference: "destination_ref_alina_tron",
+      status: "expired",
+      screening: [
+        { id: "sanctions", label: "Sanctions screening", status: "clear", detail: "Customer and destination screened", tone: "success" },
+        { id: "kyt", label: "KYT destination trace", status: "clear", detail: "Clean testnet destination", tone: "success" }
+      ],
+      approvalSteps: [
+        { id: "approval_991820_maker", role: "custody_maker", subjectReference: "operator_ref_pending", decision: "pending" },
+        { id: "approval_991820_checker", role: "custody_checker", subjectReference: "operator_ref_pending", decision: "pending" }
+      ],
+      requiredApprovals: 2,
+      policyVersion: "custody-dev-v1",
+      runtimeBoundary: "dev-dry-run",
+      executionAuthority: false,
+      productionSigningEnabled: false,
+      keyMaterialPresent: false,
+      intentDigest: "sha256:44d0b9e6a2f8",
+      policyDigest: "sha256:4b2d91f0c7e8",
+      idempotencyKey: "custody_idempotency_991820",
+      correlationId: "6e3c0a94-1f72-4d85-b9e0-5c2a7f43d8b1",
+      createdAt: "2026-09-26T18:22:13.000Z",
+      updatedAt: "2026-09-26T18:27:13.000Z",
+      expiresAt: "2026-09-26T18:27:13.000Z",
+      resolvedAt: "2026-09-26T18:27:13.000Z",
+      timeline: [
+        { id: "T1", occurredAt: "2026-09-26T18:22:13.000Z", actor: "service:custody-orchestrator", action: "withdrawal.intent_drafted", outcome: "recorded", evidenceDigest: "sha256:44d0b9e6a2f8" },
+        { id: "T2", occurredAt: "2026-09-26T18:27:13.000Z", actor: "service:custody-orchestrator", action: "withdrawal.expired", outcome: "recorded", evidenceDigest: "sha256:7ac51d0e8f39" }
+      ],
+      evidenceItems: [
+        { id: "command", label: "Intent command record", status: "ready", digest: "sha256:44d0b9e6a2f8" },
+        { id: "expiry", label: "Expiry record", status: "ready", digest: "sha256:7ac51d0e8f39" }
+      ],
+      tone: "neutral",
+      auditEvidenceDigest: "sha256:7ac51d0e8f39"
     }
   ],
   kycCases: [
@@ -1655,7 +1796,7 @@ const data = deepFreeze({
       action: "Withdrawal review",
       maker: "Payments orchestration",
       makerSubject: "service:payments-orchestration",
-      resource: "withdrawal:WDL-991804",
+      resource: "withdrawal:WDR-991804",
       exposure: "2 450 000 ₽",
       evidence: "2 of 3",
       evidenceItems: [
@@ -1663,7 +1804,7 @@ const data = deepFreeze({
         { id: "kyt", label: "KYT trace", status: "ready", digest: "sha256:96ff7d30da42" },
         { id: "sof", label: "Source of funds", status: "missing", digest: "sha256:000000000000" }
       ],
-      age: "18 мин",
+      age: "4 мин",
       state: "Evidence gap",
       tone: "danger",
       requiredApprovals: 2,
@@ -1792,24 +1933,6 @@ const data = deepFreeze({
   ],
   auditSource: [
     {
-      eventId: "AUD-000148",
-      occurredAt: "2026-09-28T12:46:10.000Z",
-      actor: "service:payments-orchestration",
-      action: "approval.requested",
-      resource: "withdrawal:WDR-991804",
-      outcome: "recorded",
-      evidenceDigest: "sha256:f07fd061c671"
-    },
-    {
-      eventId: "AUD-000149",
-      occurredAt: "2026-09-28T12:53:31.000Z",
-      actor: "operator:aml-08",
-      action: "evidence.reviewed",
-      resource: "withdrawal:WDR-991804",
-      outcome: "reviewed",
-      evidenceDigest: "sha256:96ff7d30da42"
-    },
-    {
       eventId: "AUD-000150",
       occurredAt: "2026-09-28T13:01:02.000Z",
       actor: "operator:support-l1-12",
@@ -1862,6 +1985,24 @@ const data = deepFreeze({
       resource: "fraud-alert:FRD-61084",
       outcome: "recorded",
       evidenceDigest: "sha256:ac7f8c9321d4"
+    },
+    {
+      eventId: "AUD-000156",
+      occurredAt: "2026-09-28T14:29:52.000Z",
+      actor: "service:payments-orchestration",
+      action: "approval.requested",
+      resource: "withdrawal:WDR-991804",
+      outcome: "recorded",
+      evidenceDigest: "sha256:f07fd061c671"
+    },
+    {
+      eventId: "AUD-000157",
+      occurredAt: "2026-09-28T14:32:44.000Z",
+      actor: "operator:aml-08",
+      action: "evidence.reviewed",
+      resource: "withdrawal:WDR-991804",
+      outcome: "reviewed",
+      evidenceDigest: "sha256:96ff7d30da42"
     }
   ]
 } as const);

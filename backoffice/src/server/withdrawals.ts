@@ -5,12 +5,15 @@ import type { AuditSourceEvent, WithdrawalIntent, WithdrawalIntentStatus } from 
 // remain on the maker-checker path — this view accepts no commands.
 export const withdrawalStatuses: readonly WithdrawalIntentStatus[] = Object.freeze([
   "draft",
-  "pending-approval",
   "screened",
+  "pending_maker_approval",
+  "pending_checker_approval",
+  "unsigned_intent_ready",
   "broadcast",
   "confirmed",
   "rejected",
-  "cancelled"
+  "cancelled",
+  "expired"
 ]);
 
 export function isWithdrawalStatus(value: string): value is WithdrawalIntentStatus {

@@ -34,7 +34,7 @@ describe("audit store", () => {
     const store = new MemoryAuditStore(demoRepository.auditSource(), 30);
     const before = await store.snapshot();
     const appended = await store.append({
-      eventId: "AUD-000156",
+      eventId: "AUD-000801",
       occurredAt: "2026-09-29T10:30:00.000Z",
       actor: "service:test",
       action: "audit.tested",
@@ -66,9 +66,9 @@ describe("audit store", () => {
     const source = demoRepository.auditSource();
     const store = new MemoryAuditStore(source, 30, source.length + 1);
     const head = (await store.snapshot()).status.headHash;
-    const appended = await store.append(syntheticEvent("AUD-000157"), head);
+    const appended = await store.append(syntheticEvent("AUD-000802"), head);
     await assert.rejects(
-      store.append(syntheticEvent("AUD-000158"), appended.hash),
+      store.append(syntheticEvent("AUD-000803"), appended.hash),
       AuditUnavailableError
     );
     // Reads still succeed at capacity; only appends fail closed.
