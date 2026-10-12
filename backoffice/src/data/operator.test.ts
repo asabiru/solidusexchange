@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  parseOperatorQueueItemDetailView,
   parseOperatorQueueView,
   parseOperatorSubjectsView,
   parseOperatorSubjectView
@@ -562,5 +563,137 @@ describe("operator queue adapter", () => {
     for (const [payload, label] of cases) {
       assert.equal(parseOperatorQueueView(payload), undefined, label);
     }
+  });
+});
+
+describe("operator queue item detail adapter", () => {
+  const kycDetail = {
+    mode: "test",
+    kind: "kyc",
+    item: {
+      queueId: "qky_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      displayName: "Aibek Ermatov",
+      submittedAt: "2026-10-01T08:00:00.000Z",
+      slaDueAt: "2026-10-04T08:00:00.000Z",
+      state: "in_review",
+      priority: "high",
+      assignee: { subject: "syn_oper_lead0001" },
+      ageMs: 120000,
+      kyc: {
+        status: "in_review",
+        level: "enhanced",
+        sessionId: `kys_${"a".repeat(24)}`,
+        history: [
+          { sessionId: `kys_${"a".repeat(24)}`, state: "in_review", submittedAt: "2026-10-01T08:00:00.000Z", decidedAt: null, rejectionReason: null },
+          { sessionId: `kys_${"b".repeat(24)}`, state: "rejected", submittedAt: "2026-09-01T08:00:00.000Z", decidedAt: "2026-09-02T08:00:00.000Z", rejectionReason: "SIM_DATA_MISMATCH" }
+        ]
+      }
+    }
+  } as const;
+
+  const amlDetail = {
+    mode: "test",
+    kind: "aml",
+    item: {
+      queueId: "qml_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      alertType: "structuring",
+      evidenceRefs: [`evd_${"c".repeat(24)}`],
+      slaDueAt: "2026-10-04T08:00:00.000Z",
+      state: "escalated",
+      priority: "urgent",
+      assignee: null,
+      ageMs: 240000,
+      flags: [
+        { flagId: `flg_${"d".repeat(24)}`, alertType: "structuring", raisedAt: "2026-09-30T08:00:00.000Z" },
+        { flagId: `flg_${"e".repeat(24)}`, alertType: "velocity", raisedAt: "2026-10-02T08:00:00.000Z" }
+      ]
+    }
+  } as const;
+
+  const ticketDetail = {
+    mode: "test",
+    kind: "tickets",
+    item: {
+      queueId: "qtick_0123456789abcdef01234567",
+      subjectId: "syn_cust_alpha001",
+      category: "operation_problem",
+      openedAt: "2026-10-02T08:00:00.000Z",
+      state: "waiting",
+      priority: "normal",
+      assignee: { subject: "syn_oper_lead0001" },
+      ageMs: 300000,
+      subject: "Card declined at checkout",
+      lastMessageAt: "2026-10-03T08:00:00.000Z",
+      otherOpenTickets: 2
+    }
+  } as const;
+
+  it("maps each kind's detail verbatim", () => {
+    const kyc = parseOperatorQueueItemDetailView(kycDetail, "kyc", kycDetail.item.queueId);
+    assert.equal(kyc?.kind, "kyc");
+    if (kyc?.kind !== "kyc") return;
+    assert.equal(kyc.item.queueId, kycDetail.item.queueId);
+    assert.equal(kyc.item.kyc?.status, "in_review");
+    assert.equal(kyc.item.kyc?.history.length, 2);
+
+    const aml = parseOperatorQueueItemDetailView(amlDetail, "aml", amlDetail.item.queueId);
+    assert.equal(aml?.kind, "aml");
+    if (aml?.kind !== "aml") return;
+    assert.equal(aml.item.flags.length, 2);
+    assert.equal(aml.item.flags[0].flagId, `flg_${"d".repeat(24)}`);
+
+    const tickets = parseOperatorQueueItemDetailView(ticketDetail, "tickets", ticketDetail.item.queueId);
+    assert.equal(tickets?.kind, "tickets");
+    if (tickets?.kind !== "tickets") return;
+    assert.equal(tickets.item.subject, "Card declined at checkout");
+    assert.equal(tickets.item.otherOpenTickets, 2);
+  });
+
+  it("accepts a null kyc dossier", () => {
+    const parsed = parseOperatorQueueItemDetailView(
+      { ...kycDetail, item: { ...kycDetail.item, kyc: null } },
+      "kyc",
+      kycDetail.item.queueId
+    );
+    assert.equal(parsed?.kind, "kyc");
+    if (parsed?.kind !== "kyc") return;
+    assert.equal(parsed.item.kyc, null);
+  });
+
+  it("rejects a kind or queue_id mismatch instead of trusting the payload", () => {
+    assert.equal(parseOperatorQueueItemDetailView(kycDetail, "aml", kycDetail.item.queueId), undefined);
+    assert.equal(parseOperatorQueueItemDetailView(kycDetail, "kyc", "qky_ffffffffffffffffffffffff"), undefined);
+    assert.equal(parseOperatorQueueItemDetailView({ ...kycDetail, kind: "aml" }, "kyc", kycDetail.item.queueId), undefined);
+  });
+
+  it("rejects drift in every kind's detail", () => {
+    const drifts: readonly [unknown, "kyc" | "aml" | "tickets", string][] = [
+      [null, "kyc", "qky_0123456789abcdef01234567"],
+      [{ ...kycDetail, mode: "live" }, "kyc", kycDetail.item.queueId],
+      [{ ...kycDetail, item: { ...kycDetail.item, state: "blocked" } }, "kyc", kycDetail.item.queueId],
+      [{ ...kycDetail, item: { ...kycDetail.item, extra: 1 } }, "kyc", kycDetail.item.queueId],
+      [{ ...amlDetail, item: { ...amlDetail.item, flags: [{ flagId: "bad", alertType: "structuring", raisedAt: "2026-09-30T08:00:00.000Z" }] } }, "aml", amlDetail.item.queueId],
+      [{ ...amlDetail, item: { ...amlDetail.item, flags: [amlDetail.item.flags[0], amlDetail.item.flags[0]] } }, "aml", amlDetail.item.queueId],
+      [{ ...amlDetail, item: { ...amlDetail.item, flags: Array.from({ length: 9 }, (_v, i) => ({ ...amlDetail.item.flags[0], flagId: `flg_${"0".repeat(23)}${i}` })) } }, "aml", amlDetail.item.queueId],
+      [{ ...ticketDetail, item: { ...ticketDetail.item, subject: "" } }, "tickets", ticketDetail.item.queueId],
+      [{ ...ticketDetail, item: { ...ticketDetail.item, otherOpenTickets: -1 } }, "tickets", ticketDetail.item.queueId],
+      [{ ...ticketDetail, item: { ...ticketDetail.item, lastMessageAt: "soon" } }, "tickets", ticketDetail.item.queueId]
+    ];
+    for (const [payload, kind, itemId] of drifts) {
+      assert.equal(parseOperatorQueueItemDetailView(payload, kind, itemId), undefined, JSON.stringify(payload).slice(0, 96));
+    }
+  });
+
+  it("degrades a malformed kyc dossier to null instead of failing the detail", () => {
+    const parsed = parseOperatorQueueItemDetailView(
+      { ...kycDetail, item: { ...kycDetail.item, kyc: { status: "in_review" } } },
+      "kyc",
+      kycDetail.item.queueId
+    );
+    assert.equal(parsed?.kind, "kyc");
+    if (parsed?.kind !== "kyc") return;
+    assert.equal(parsed.item.kyc, null);
   });
 });

@@ -24,6 +24,11 @@ const KNOWN_SCREENING_ID = (
 const KNOWN_OPERATOR_SUBJECT_ID = (
   await createSyntheticOperatorSubjectsDirectory().subjectsFor()
 ).subjects[0].subject_id;
+// The queue item member read needs a real queue id to reach its 200: the
+// roster's first minted kyc item.
+const KNOWN_QUEUE_ITEM_ID = (
+  await createSyntheticOperatorSubjectsDirectory().queueFor()
+).queue.items[0].queue_id;
 
 const JSON_TYPE = "application/json; charset=utf-8";
 
@@ -85,7 +90,9 @@ test("every operation sends the security headers on success and on its error pat
         .replaceAll("{orderId}", VERIFIED_ORDER_ID)
         .replaceAll("{instrument}", "USDT%2FRUB")
         .replaceAll("{screeningId}", KNOWN_SCREENING_ID)
-        .replaceAll("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
+        .replaceAll("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID)
+        .replaceAll("{kind}", "kyc")
+        .replaceAll("{itemId}", KNOWN_QUEUE_ITEM_ID);
       const ok = await request(port, { method, path, headers: operationHeaders(operation) });
       assert.equal(ok.status, 200, path);
       assertSecurityHeaders(ok, `${method} ${path} 200`);

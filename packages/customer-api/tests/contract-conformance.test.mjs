@@ -63,9 +63,15 @@ const OPERATOR_SUBJECTS = "/api/v1/operator/subjects";
 const KNOWN_OPERATOR_SUBJECT_ID = (
   await createSyntheticOperatorSubjectsDirectory().subjectsFor()
 ).subjects[0].subject_id;
+// The queue item member read likewise only serves ids inside the queue
+// projection, so the pinned itemId is the first minted kyc item.
+const KNOWN_QUEUE_ITEM_ID = (
+  await createSyntheticOperatorSubjectsDirectory().queueFor()
+).queue.items[0].queue_id;
 const OPERATOR_SUBJECT_DETAIL = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
 const OPERATOR_QUEUE = "/api/v1/operator/queue";
-const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`, OPERATOR_QUEUE];
+const OPERATOR_QUEUE_ITEM = `${OPERATOR_QUEUE}/{kind}/{itemId}`;
+const OPERATOR_PATHS = [OPERATOR_SESSION, OPERATOR_CAPABILITIES, ADMIN, OPERATOR_SUBJECTS, `${OPERATOR_SUBJECTS}/{subjectId}`, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM];
 const metaHeaders = [["X-Request-Id", REQUEST_ID]];
 const observed = new Set();
 
@@ -242,7 +248,7 @@ test("rate limiting returns 429 with Retry-After before authentication", async (
     assert.equal(limitedScreening.status, 429);
     assert.equal(JSON.parse(limitedScreening.body).code, "RATE_LIMITED");
     for (const path of OPERATOR_PATHS) {
-      const target = path.replace("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID);
+      const target = path.replace("{subjectId}", KNOWN_OPERATOR_SUBJECT_ID).replace("{kind}", "kyc").replace("{itemId}", KNOWN_QUEUE_ITEM_ID);
       now += 61_000;
       assert.equal((await observe(port, { path: target, headers: operatorHeaders() })).status, 200);
       assert.equal((await observe(port, { path: target, headers: operatorHeaders({ Authorization: null }) })).status, 401);
@@ -442,10 +448,11 @@ test("verifier and directory failures return a client-safe 500 envelope", async 
     operatorSubjectsDirectory: {
       async subjectsFor() { throw new Error("subject store exploded: secret=abc"); },
       async subjectFor() { throw new Error("subject store exploded: secret=abc"); },
-      async queueFor() { throw new Error("queue store exploded: secret=abc"); }
+      async queueFor() { throw new Error("queue store exploded: secret=abc"); },
+      async queueItemFor() { throw new Error("queue store exploded: secret=abc"); }
     }
   }, async (port) => {
-    for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL, OPERATOR_QUEUE]) {
+    for (const path of [OPERATOR_SUBJECTS, OPERATOR_SUBJECT_DETAIL, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM]) {
       const response = await observe(port, { path, headers: operatorHeaders() });
       assert.equal(response.status, 500);
       assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
@@ -748,6 +755,14 @@ test("GET /api/v1/operator/queue serves the shared KYC work queue to the operato
     assert.equal(customer.status, 401);
     assert.equal(JSON.parse(customer.body).code, "AUTHENTICATION_REQUIRED");
     assert.equal(header(customer, "www-authenticate"), "Bearer");
+    // The member read indistinguishes every miss: an unknown kind, a
+    // well-formed id outside the queue, and an id shaped for another kind all
+    // answer the same 404 envelope.
+    for (const target of [`${OPERATOR_QUEUE}/bogus/qky_${"0".repeat(24)}`, `${OPERATOR_QUEUE}/kyc/qky_${"f".repeat(24)}`, `${OPERATOR_QUEUE}/kyc/qml_${"f".repeat(24)}`]) {
+      const missing = await observe(port, { path: target, headers: operatorHeaders() });
+      assert.equal(missing.status, 404, target);
+      assert.equal(JSON.parse(missing.body).code, "CAPABILITY_DENIED");
+    }
   });
 });
 

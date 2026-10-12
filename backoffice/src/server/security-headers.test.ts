@@ -21,6 +21,7 @@ import {
   permissionsPolicy,
   serializeCsp
 } from "./security-headers.js";
+import type { CustomerApiClient } from "./customer-api-client.js";
 import { createBackofficeServer, routeTemplates } from "./server.js";
 
 const backofficeRoot = fileURLToPath(new URL("../../", import.meta.url));
@@ -367,6 +368,51 @@ describe("Backoffice BFF security headers on every route", () => {
       "/bff/api/operator/subjects": () => get("/bff/api/operator/subjects"),
       "/bff/api/operator/subjects/:id": () => get("/bff/api/operator/subjects/CUS-10482"),
       "/bff/api/operator/queue": () => get("/bff/api/operator/queue"),
+      "/bff/api/operator/queue/:kind/:id": async () => {
+        // The member read has no local degrade (queue ids only exist
+        // upstream), so its success path needs a stubbed configured client.
+        const client: CustomerApiClient = {
+          configured: true,
+          operatorAdmin: async () => ({ status: "not-configured" }),
+          operatorSubjects: async () => ({ status: "not-configured" }),
+          operatorSubject: async () => ({ status: "not-configured" }),
+          operatorQueue: async () => ({ status: "not-configured" }),
+          operatorQueueItem: async () => ({
+            status: "ok",
+            view: {
+              mode: "test",
+              kind: "kyc",
+              item: {
+                queue_id: "qky_00112233445566778899aabb",
+                subject_id: "syn_cust_00112233445566778899aabb",
+                display_name: "Alina Mironova",
+                submitted_at: "2026-09-20T00:00:00.000Z",
+                sla_due_at: "2026-09-23T00:00:00.000Z",
+                state: "pending",
+                priority: "normal",
+                assignee: null,
+                age_ms: 0,
+                kyc: null
+              }
+            }
+          })
+        };
+        const server = createBackofficeServer(config(), undefined, undefined, {}, client);
+        const url = await listen(server);
+        try {
+          const session = await fetch(`${url}/bff/auth/dev-session`, {
+            method: "POST",
+            headers: { "content-type": "application/json", origin },
+            body: JSON.stringify({ role: "auditor" })
+          });
+          const cookie = String(session.headers.get("set-cookie")).split(";")[0];
+          return await fetch(`${url}/bff/api/operator/queue/kyc/qky_00112233445566778899aabb`, {
+            headers: { cookie: `${cookie}; solidchange_bo_device=f47ac10b-58cc-4372-a567-0e02b2c3d479` }
+          });
+        } finally {
+          await close(server);
+        }
+      },
       "/bff/api/aml": () => get("/bff/api/aml"),
       "/bff/api/investigations": () => get("/bff/api/investigations"),
       "/bff/api/fraud-alerts": () => get("/bff/api/fraud-alerts"),

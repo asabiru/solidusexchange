@@ -158,9 +158,27 @@ const ticketQueueItemKeys = [
 const queueIdPattern = /^qky_[0-9a-f]{24}$/;
 const amlQueueIdPattern = /^qml_[0-9a-f]{24}$/;
 const ticketQueueIdPattern = /^qtick_[0-9a-f]{24}$/;
+const queueItemIdPatterns: Readonly<Record<CustomerApiQueueKind, RegExp>> = {
+  kyc: queueIdPattern,
+  aml: amlQueueIdPattern,
+  tickets: ticketQueueIdPattern
+};
 const evidenceRefPattern = /^evd_[0-9a-f]{24}$/;
 const evidenceRefsMaxItems = 8;
 const queueMaxItems = 64;
+const queueItemDetailViewKeys = ["item", "kind", "mode"] as const;
+const kycQueueItemDetailKeys = [...queueItemKeys, "kyc"] as const;
+const amlQueueItemDetailKeys = [...amlQueueItemKeys, "flags"] as const;
+const ticketQueueItemDetailKeys = [
+  ...ticketQueueItemKeys,
+  "last_message_at",
+  "other_open_tickets",
+  "subject"
+] as const;
+const queueItemFlagKeys = ["alert_type", "flag_id", "raised_at"] as const;
+const flagIdPattern = /^flg_[0-9a-f]{24}$/;
+const queueItemFlagsMaxItems = 8;
+const ticketSubjectMaxLength = 160;
 const queueKinds: ReadonlySet<string> = new Set(["kyc", "aml", "tickets"]);
 const queueStates: ReadonlySet<string> = new Set(["pending", "in_review", "escalated"]);
 const queueTicketStates: ReadonlySet<string> = new Set(["open", "waiting", "escalated"]);
@@ -376,12 +394,55 @@ export type CustomerApiOperatorQueue =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** One flag record embedded in the aml queue item detail — snake_case contract fields. */
+export interface CustomerApiQueueItemFlag {
+  flag_id: string;
+  alert_type: string;
+  raised_at: string;
+}
+
+/** Detail of GET /api/v1/operator/queue/kyc/{itemId} — the queue row plus the kyc dossier block. */
+export interface CustomerApiKycQueueItemDetail extends CustomerApiQueueItem {
+  kyc: CustomerApiSubjectKyc | null;
+}
+
+/** Detail of GET /api/v1/operator/queue/aml/{itemId} — the queue row plus the subject's open flags. */
+export interface CustomerApiAmlQueueItemDetail extends CustomerApiAmlQueueItem {
+  flags: readonly CustomerApiQueueItemFlag[];
+}
+
+/** Detail of GET /api/v1/operator/queue/tickets/{itemId} — the queue row plus the ticket extension. */
+export interface CustomerApiTicketQueueItemDetail extends CustomerApiTicketQueueItem {
+  subject: string;
+  last_message_at: string;
+  other_open_tickets: number;
+}
+
+/** Wire view of GET /api/v1/operator/queue/{kind}/{itemId} — discriminated by kind like the collection. */
+export type CustomerApiOperatorQueueItemDetailView =
+  | { mode: "test"; kind: "kyc"; item: CustomerApiKycQueueItemDetail }
+  | { mode: "test"; kind: "aml"; item: CustomerApiAmlQueueItemDetail }
+  | { mode: "test"; kind: "tickets"; item: CustomerApiTicketQueueItemDetail };
+
+export type CustomerApiOperatorQueueItem =
+  | { status: "ok"; view: CustomerApiOperatorQueueItemDetailView }
+  | { status: "not-found" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   operatorAdmin(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorAdmin>;
   operatorSubjects(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorSubjects>;
   operatorSubject(bffSubject: string, deviceId: string, subjectId: string, nowMs: number): Promise<CustomerApiOperatorSubject>;
   operatorQueue(bffSubject: string, deviceId: string, kind: CustomerApiQueueKind, nowMs: number): Promise<CustomerApiOperatorQueue>;
+  operatorQueueItem(
+    bffSubject: string,
+    deviceId: string,
+    kind: CustomerApiQueueKind,
+    itemId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperatorQueueItem>;
 }
 
 /** Maps a BFF pseudonymous operator subject onto the customer-api operator subject space. */
@@ -1108,6 +1169,149 @@ function parseOperatorQueueView(value: unknown, kind: CustomerApiQueueKind): Cus
   });
 }
 
+/**
+ * Fail-closed parser for the operator queue item detail contract view — the
+ * same axes `parseOperatorQueueView` pins for the row (exact key sets, ref
+ * grammar, enums, coherent timestamps, a non-negative integer age), with the
+ * kind's detail key list in place of the collection's row keys plus each
+ * kind's extension: the nullable kyc dossier block, the bounded open flag
+ * list with unique `flg_*` ids, or the ticket subject/last-message/open
+ * tally. The declared kind selects the shape; a view that answers a
+ * different kind than requested is drift.
+ */
+function parseOperatorQueueItemDetailView(
+  value: unknown,
+  kind: CustomerApiQueueKind
+): CustomerApiOperatorQueueItemDetailView | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, queueItemDetailViewKeys)
+    || value.mode !== "test"
+    || value.kind !== kind
+  ) {
+    return undefined;
+  }
+  const item = value.item;
+  if (!isRecord(item)) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  if (kind === "aml") {
+    if (
+      !validQueueItemCore(item, amlQueueItemDetailKeys, amlQueueIdPattern, queueStates, seen)
+      || typeof item.alert_type !== "string"
+      || !amlAlertTypes.has(item.alert_type)
+      || !Array.isArray(item.evidence_refs)
+      || item.evidence_refs.length < 1
+      || item.evidence_refs.length > evidenceRefsMaxItems
+      || new Set(item.evidence_refs).size !== item.evidence_refs.length
+      || !item.evidence_refs.every((ref) => typeof ref === "string" && evidenceRefPattern.test(ref))
+      || !isIsoTimestamp(item.sla_due_at)
+      || !Array.isArray(item.flags)
+      || item.flags.length > queueItemFlagsMaxItems
+      || !item.flags.every(
+        (flag) =>
+          isRecord(flag)
+          && hasExactKeys(flag, queueItemFlagKeys)
+          && typeof flag.flag_id === "string"
+          && flagIdPattern.test(flag.flag_id)
+          && typeof flag.alert_type === "string"
+          && amlAlertTypes.has(flag.alert_type)
+          && isIsoTimestamp(flag.raised_at)
+      )
+      || new Set((item.flags as { flag_id: string }[]).map((flag) => flag.flag_id)).size !== item.flags.length
+    ) {
+      return undefined;
+    }
+    const flags = Object.freeze(
+      (item.flags as { flag_id: string; alert_type: string; raised_at: string }[]).map((flag) =>
+        Object.freeze({ flag_id: flag.flag_id, alert_type: flag.alert_type, raised_at: flag.raised_at })
+      )
+    );
+    return Object.freeze({
+      mode: "test",
+      kind: "aml",
+      item: Object.freeze({
+        queue_id: item.queue_id as string,
+        subject_id: item.subject_id as string,
+        alert_type: item.alert_type as string,
+        evidence_refs: Object.freeze([...(item.evidence_refs as string[])]),
+        sla_due_at: item.sla_due_at as string,
+        state: item.state as string,
+        priority: item.priority as string,
+        assignee: parseQueueAssignee(item),
+        age_ms: item.age_ms as number,
+        flags
+      })
+    });
+  }
+  if (kind === "tickets") {
+    if (
+      !validQueueItemCore(item, ticketQueueItemDetailKeys, ticketQueueIdPattern, queueTicketStates, seen)
+      || typeof item.category !== "string"
+      || !ticketCategories.has(item.category)
+      || !isIsoTimestamp(item.opened_at)
+      || typeof item.subject !== "string"
+      || item.subject.length === 0
+      || item.subject.length > ticketSubjectMaxLength
+      || !isIsoTimestamp(item.last_message_at)
+      || typeof item.other_open_tickets !== "number"
+      || !Number.isInteger(item.other_open_tickets)
+      || item.other_open_tickets < 0
+      || item.other_open_tickets > queueMaxItems
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      mode: "test",
+      kind: "tickets",
+      item: Object.freeze({
+        queue_id: item.queue_id as string,
+        subject_id: item.subject_id as string,
+        category: item.category as string,
+        opened_at: item.opened_at as string,
+        state: item.state as string,
+        priority: item.priority as string,
+        assignee: parseQueueAssignee(item),
+        age_ms: item.age_ms as number,
+        subject: item.subject as string,
+        last_message_at: item.last_message_at as string,
+        other_open_tickets: item.other_open_tickets as number
+      })
+    });
+  }
+  if (
+    !validQueueItemCore(item, kycQueueItemDetailKeys, queueIdPattern, queueStates, seen)
+    || typeof item.display_name !== "string"
+    || !displayNamePattern.test(item.display_name)
+    || !isIsoTimestamp(item.submitted_at)
+    || !isIsoTimestamp(item.sla_due_at)
+    || Date.parse(item.sla_due_at as string) <= Date.parse(item.submitted_at as string)
+  ) {
+    return undefined;
+  }
+  const kyc = item.kyc === null ? null : parseSubjectKyc(item.kyc);
+  if (kyc === undefined) {
+    return undefined;
+  }
+  return Object.freeze({
+    mode: "test",
+    kind: "kyc",
+    item: Object.freeze({
+      queue_id: item.queue_id as string,
+      subject_id: item.subject_id as string,
+      display_name: item.display_name as string,
+      submitted_at: item.submitted_at as string,
+      sla_due_at: item.sla_due_at as string,
+      state: item.state as string,
+      priority: item.priority as string,
+      assignee: parseQueueAssignee(item),
+      age_ms: item.age_ms as number,
+      kyc
+    })
+  });
+}
+
 class CustomerApiHttpError extends Error {
   constructor(readonly status: number) {
     super("customer-api request failed");
@@ -1134,7 +1338,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       operatorAdmin: async (): Promise<CustomerApiOperatorAdmin> => ({ status: "not-configured" }),
       operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" }),
       operatorSubject: async (): Promise<CustomerApiOperatorSubject> => ({ status: "not-configured" }),
-      operatorQueue: async (): Promise<CustomerApiOperatorQueue> => ({ status: "not-configured" })
+      operatorQueue: async (): Promise<CustomerApiOperatorQueue> => ({ status: "not-configured" }),
+      operatorQueueItem: async (): Promise<CustomerApiOperatorQueueItem> => ({ status: "not-configured" })
     });
   }
 
@@ -1275,5 +1480,53 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject, operatorQueue });
+  async function operatorQueueItem(
+    bffSubject: string,
+    deviceId: string,
+    kind: CustomerApiQueueKind,
+    itemId: string,
+    nowMs: number
+  ): Promise<CustomerApiOperatorQueueItem> {
+    // Same device guard as operatorQueue: never emit a non-contract
+    // X-Device-Id if the client is reused outside the gated route. The kind
+    // guard and the per-kind item ref guard mirror the subject detail read:
+    // an out-of-enum kind or a non-contract id — including a well-formed id
+    // minted for another kind — is answered locally as the uniform
+    // not-found, never propagated upstream.
+    if (!isDeviceId(deviceId)) {
+      return { status: "unavailable" };
+    }
+    if (!queueKinds.has(kind)) {
+      return { status: "not-found" };
+    }
+    if (!queueItemIdPatterns[kind].test(itemId)) {
+      return { status: "not-found" };
+    }
+    const subject = customerApiSubject(bffSubject);
+    try {
+      const token = mintSyntheticOperatorToken({
+        key: devTokenKey as string,
+        subject,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(
+        `/api/v1/operator/queue/${encodeURIComponent(kind)}/${encodeURIComponent(itemId)}`,
+        token,
+        deviceId,
+        nowMs
+      );
+      const view = parseOperatorQueueItemDetailView(body, kind);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch (error) {
+      // The upstream member read answers unknown and wrong-kind ids with its
+      // uniform 404; that is a real not-found, not drift — surface it
+      // distinctly so the route can keep the same uniform response.
+      if (error instanceof CustomerApiHttpError && error.status === 404) {
+        return { status: "not-found" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject, operatorQueue, operatorQueueItem });
 }

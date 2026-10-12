@@ -33,6 +33,7 @@ import {
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
+  validOperatorQueueItemDetail,
   validOperatorQueueView,
   validOperatorSessionView,
   validOperatorSubjectsView,
@@ -478,7 +479,8 @@ export function createCustomerApiHandler({
   if (
     typeof operatorSubjectsDirectory?.subjectsFor !== "function" ||
     typeof operatorSubjectsDirectory?.subjectFor !== "function" ||
-    typeof operatorSubjectsDirectory?.queueFor !== "function"
+    typeof operatorSubjectsDirectory?.queueFor !== "function" ||
+    typeof operatorSubjectsDirectory?.queueItemFor !== "function"
   ) {
     throw new Error("An operator subjects directory is required");
   }
@@ -713,6 +715,31 @@ export function createCustomerApiHandler({
       const view = await operatorSubjectsDirectory.queueFor(kind);
       if (!validOperatorQueueView(view)) {
         throw new Error("Operator subjects directory returned an invalid queue view");
+      }
+      send(response, 200, { ...view }, requestId);
+      return;
+    }
+
+    if (operation.operationId === "getOperatorQueueItem") {
+      // The member read shares the collection's operator.queue.read
+      // capability: a detail is never wider than the queue it belongs to.
+      // An out-of-enum kind, an unknown item id or a well-formed id minted
+      // for another kind all fail closed as the same pinned 404 — uniform,
+      // so the response never reveals which ids or kinds exist.
+      const operatorEvaluation = evaluateOperatorCapabilities();
+      if (!operatorEvaluation.granted.includes("operator.queue.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      const kind = parameters.get("kind") ?? "";
+      const itemId = parameters.get("itemId") ?? "";
+      const view = await operatorSubjectsDirectory.queueItemFor(kind, itemId);
+      if (view === null) {
+        fail(404, "CAPABILITY_DENIED");
+        return;
+      }
+      if (!validOperatorQueueItemDetail(view)) {
+        throw new Error("Operator subjects directory returned an invalid queue item detail");
       }
       send(response, 200, { ...view }, requestId);
       return;

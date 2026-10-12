@@ -580,6 +580,28 @@ export const OPERATIONS = Object.freeze([
       "x-device-id"
     ]),
     statuses: Object.freeze([200, 401, 429, 500])
+  }),
+  // The operator queue item read is the member read of the queue
+  // collection: kind selects the item set (`kyc|aml|tickets`) and itemId
+  // resolves inside it. The same `operator.queue.read` grant as the
+  // collection covers the detail — an item is never wider than the queue it
+  // belongs to — and the same 404 contract gap as the subject member read
+  // applies: an out-of-enum kind, an unknown id or a well-formed id minted
+  // for another kind all answer the uniform 404, never revealing which ids
+  // or kinds exist.
+  Object.freeze({
+    operationId: "getOperatorQueueItem",
+    method: "GET",
+    path: "/api/v1/operator/queue/{kind}/{itemId}",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 404, 429, 500])
   })
 ]);
 

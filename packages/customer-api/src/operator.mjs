@@ -591,10 +591,78 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  */
 
 /**
+ * One open flag on an AML queue item's subject. The flag record is what the
+ * subject's flag_added activity rows announce: the same raised instant and
+ * alert type, with its own `flg_*` handle minted from the same digest — so
+ * the flag list, the activity feed and the roster flag count always agree.
+ * @typedef {object} OperatorQueueItemFlag
+ * @property {string} flag_id
+ * @property {string} alert_type
+ * @property {string} raised_at
+ */
+
+/**
+ * @typedef {object} OperatorKycQueueItemDetail
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} display_name
+ * @property {string} submitted_at
+ * @property {string} sla_due_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ * @property {OperatorSubjectKyc | null} kyc
+ */
+
+/**
+ * @typedef {object} OperatorAmlQueueItemDetail
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} alert_type
+ * @property {readonly string[]} evidence_refs
+ * @property {string} sla_due_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ * @property {readonly OperatorQueueItemFlag[]} flags
+ */
+
+/**
+ * @typedef {object} OperatorTicketQueueItemDetail
+ * @property {string} queue_id
+ * @property {string} subject_id
+ * @property {string} category
+ * @property {string} opened_at
+ * @property {string} state
+ * @property {string} priority
+ * @property {{ subject: string } | null} assignee
+ * @property {number} age_ms
+ * @property {string} subject
+ * @property {string} last_message_at
+ * @property {number} other_open_tickets
+ */
+
+/**
+ * The member read of one queue item. `kind` echoes the path selector so the
+ * item shape stays discriminated; `item` is the queue row the collection
+ * would serve for that queue_id verbatim plus the per-kind detail keys —
+ * the kyc dossier block for `kyc`, the subject's open flag list for `aml`,
+ * and the projected ticket's subject/last message/open-ticket tally for
+ * `tickets`.
+ * @typedef {object} OperatorQueueItemDetailView
+ * @property {string} mode
+ * @property {string} kind
+ * @property {OperatorKycQueueItemDetail | OperatorAmlQueueItemDetail | OperatorTicketQueueItemDetail} item
+ */
+
+/**
  * @typedef {object} OperatorSubjectsDirectory
  * @property {() => Promise<OperatorSubjectsView>} subjectsFor
  * @property {(subjectId: string) => Promise<OperatorSubjectDetailView | null>} subjectFor
  * @property {(kind?: string) => Promise<OperatorQueueView>} queueFor
+ * @property {(kind: string, itemId: string) => Promise<OperatorQueueItemDetailView | null>} queueItemFor
  */
 
 /**
@@ -1335,6 +1403,31 @@ export function createSyntheticOperatorSubjectsDirectory() {
     /** @param {string} [kind] */
     async queueFor(kind) {
       return buildOperatorQueueView(kind);
+    },
+    // The member read resolves inside the requested kind's item set only:
+    // an out-of-enum kind, an unknown id or a well-formed id minted for a
+    // different kind all answer the same null — the kind-mismatch case can
+    // never leak which ids the other kinds hold. A hit re-derives the row
+    // plus its per-kind extension, so the detail can never disagree with
+    // the list row for the same queue_id.
+    /** @param {string} kind @param {string} itemId */
+    async queueItemFor(kind, itemId) {
+      if (!OPERATOR_QUEUE_KINDS.includes(kind)) {
+        return null;
+      }
+      const item = expectedQueueItems(kind).find((candidate) => candidate.queue_id === itemId);
+      if (item === undefined) {
+        return null;
+      }
+      const index = subjectRowIndex(item.subject_id);
+      if (index === -1) {
+        return null;
+      }
+      return Object.freeze({
+        mode: "test",
+        kind,
+        item: buildQueueItemDetail(kind, item, buildSubjectRow(index))
+      });
     }
   });
 }
@@ -1427,6 +1520,20 @@ const TICKET_QUEUE_ID_PATTERN = /^qtick_[0-9a-f]{24}$/u;
 const EVIDENCE_REF_PATTERN = /^evd_[0-9a-f]{24}$/u;
 const EVIDENCE_REFS_MAX_ITEMS = 8;
 const QUEUE_MAX_ITEMS = 64;
+const QUEUE_ITEM_DETAIL_VIEW_KEYS = Object.freeze(["item", "kind", "mode"]);
+const KYC_QUEUE_ITEM_DETAIL_KEYS = Object.freeze([...QUEUE_ITEM_KEYS, "kyc"]);
+const AML_QUEUE_ITEM_DETAIL_KEYS = Object.freeze([...AML_QUEUE_ITEM_KEYS, "flags"]);
+const TICKET_QUEUE_ITEM_DETAIL_KEYS = Object.freeze([
+  ...TICKET_QUEUE_ITEM_KEYS,
+  "last_message_at",
+  "other_open_tickets",
+  "subject"
+]);
+const QUEUE_ITEM_FLAG_KEYS = Object.freeze(["alert_type", "flag_id", "raised_at"]);
+const FLAG_ID_PATTERN = /^flg_[0-9a-f]{24}$/u;
+// Support ticket subjects are short single-line topics; the wire never
+// carries free-form text longer than this.
+const TICKET_SUBJECT_MAX_LENGTH = 160;
 // The pinned snapshot instant the queue ages against. The read is a pure
 // function, so its "now" is part of the derivation — it lands after every
 // roster registration (the registered window is 120 days from BASE_MS),
@@ -1681,6 +1788,73 @@ function expectedQueueItems(kind) {
 }
 
 /**
+ * The subject's open flag list — one flag record per roster flag, raised
+ * inside the registration→snapshot window and typed by the same draws the
+ * flag_added activity rows use, so the queue detail, the recent-activity
+ * feed and the roster flag count can never disagree. The flag id shares
+ * the flag_added event's digest under its own `flg_*` grammar.
+ * @param {OperatorSubjectRow} row
+ * @returns {readonly OperatorQueueItemFlag[]}
+ */
+function queueItemFlags(row) {
+  const subjectId = row.subject_id;
+  const registeredMs = Date.parse(row.registered_at);
+  /** @type {OperatorQueueItemFlag[]} */
+  const flags = [];
+  for (let index = 0; index < row.flags; index += 1) {
+    const flagMs = registeredMs + Number(
+      subjectsUnits(subjectId, `flag-at-${index}`, BigInt(QUEUE_SNAPSHOT_MS - registeredMs))
+    );
+    flags.push(Object.freeze({
+      flag_id: `flg_${subjectsDigest(subjectId, `flag-${index}`).toString("hex").slice(0, 24)}`,
+      alert_type:
+        AML_ALERT_TYPES[Number(subjectsUnits(subjectId, `flag-type-${index}`, BigInt(AML_ALERT_TYPES.length)))],
+      raised_at: new Date(flagMs).toISOString()
+    }));
+  }
+  // Oldest flag first; the id breaks ties so the order is total.
+  flags.sort((left, right) =>
+    left.raised_at === right.raised_at
+      ? left.flag_id.localeCompare(right.flag_id)
+      : left.raised_at.localeCompare(right.raised_at)
+  );
+  return Object.freeze(flags);
+}
+
+/**
+ * The queue-item member read: the item row exactly as the kind's collection
+ * derives it, plus that kind's detail keys — the kyc dossier reusing the
+ * subject-detail recipe verbatim for `kyc`, the subject's open flag list
+ * for `aml`, and the projected ticket's subject line, newest message
+ * instant and other-open-ticket tally for `tickets` (a ticket counts as
+ * open until its support status reaches "closed").
+ * @param {string} kind
+ * @param {OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem} item
+ * @param {OperatorSubjectRow} row
+ * @returns {OperatorKycQueueItemDetail | OperatorAmlQueueItemDetail | OperatorTicketQueueItemDetail}
+ */
+function buildQueueItemDetail(kind, item, row) {
+  if (kind === "aml") {
+    const amlItem = /** @type {OperatorAmlQueueItem} */ (item);
+    return Object.freeze({ ...amlItem, flags: queueItemFlags(row) });
+  }
+  if (kind === "tickets") {
+    const ticketItem = /** @type {OperatorTicketQueueItem} */ (item);
+    const tickets = syntheticSupportTickets(row.subject_id);
+    const ticket = tickets[0];
+    const otherOpenTickets = tickets.slice(1).filter((entry) => entry.status !== "closed").length;
+    return Object.freeze({
+      ...ticketItem,
+      subject: ticket.topic,
+      last_message_at: ticket.timeline[ticket.timeline.length - 1].at,
+      other_open_tickets: otherOpenTickets
+    });
+  }
+  const kycItem = /** @type {OperatorQueueItem} */ (item);
+  return Object.freeze({ ...kycItem, kyc: deriveSubjectKyc(row) });
+}
+
+/**
  * @param {string} kind
  * @param {readonly (OperatorQueueItem | OperatorAmlQueueItem | OperatorTicketQueueItem)[]} items
  * @returns {OperatorQueueSummary}
@@ -1908,5 +2082,139 @@ export function validOperatorQueueView(view) {
     stateKeys.every(
       (state) => section.summary.by_state[state] === recomputed.by_state[state]
     )
+  );
+}
+
+/**
+ * Shape check for one AML queue-item flag record: exact keys, the `flg_*`
+ * grammar, the alert-type vocabulary and a raised instant inside the
+ * roster's window.
+ * @param {unknown} flag
+ */
+function validQueueItemFlag(flag) {
+  if (flag === null || typeof flag !== "object" || Array.isArray(flag)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorQueueItemFlag} */ (flag);
+  if (JSON.stringify(Object.keys(flag).sort()) !== JSON.stringify([...QUEUE_ITEM_FLAG_KEYS].sort())) {
+    return false;
+  }
+  return (
+    FLAG_ID_PATTERN.test(candidate.flag_id) &&
+    AML_ALERT_TYPES.includes(candidate.alert_type) &&
+    isIsoTimestamp(candidate.raised_at) &&
+    Date.parse(candidate.raised_at) <= QUEUE_SNAPSHOT_MS
+  );
+}
+
+/**
+ * A kyc queue-item detail is the queue row verbatim plus the nullable kyc
+ * dossier block — exact keys, the row's own shape and the dossier's own
+ * validator.
+ * @param {unknown} detail
+ */
+function validKycQueueItemDetail(detail) {
+  const candidate = /** @type {OperatorKycQueueItemDetail} */ (detail);
+  if (JSON.stringify(Object.keys(/** @type {object} */ (detail)).sort()) !== JSON.stringify([...KYC_QUEUE_ITEM_DETAIL_KEYS].sort())) {
+    return false;
+  }
+  const { kyc, ...item } = candidate;
+  return validQueueItemShape(item) && (kyc === null || validOperatorSubjectKyc(kyc));
+}
+
+/**
+ * An aml queue-item detail is the queue row verbatim plus the subject's
+ * open flag list — exact keys, the row's own shape and bounded flag records
+ * with unique ids.
+ * @param {unknown} detail
+ */
+function validAmlQueueItemDetail(detail) {
+  const candidate = /** @type {OperatorAmlQueueItemDetail} */ (detail);
+  if (JSON.stringify(Object.keys(/** @type {object} */ (detail)).sort()) !== JSON.stringify([...AML_QUEUE_ITEM_DETAIL_KEYS].sort())) {
+    return false;
+  }
+  const { flags, ...item } = candidate;
+  return (
+    validAmlQueueItemShape(item) &&
+    Array.isArray(flags) &&
+    flags.length <= FLAGS_BOUND &&
+    flags.every(validQueueItemFlag) &&
+    new Set(flags.map((flag) => flag.flag_id)).size === flags.length
+  );
+}
+
+/**
+ * A tickets queue-item detail is the queue row verbatim plus the projected
+ * ticket's subject line, its newest message instant and the subject's
+ * other-open-ticket tally.
+ * @param {unknown} detail
+ */
+function validTicketQueueItemDetail(detail) {
+  const candidate = /** @type {OperatorTicketQueueItemDetail} */ (detail);
+  if (JSON.stringify(Object.keys(/** @type {object} */ (detail)).sort()) !== JSON.stringify([...TICKET_QUEUE_ITEM_DETAIL_KEYS].sort())) {
+    return false;
+  }
+  const { subject, last_message_at, other_open_tickets, ...item } = candidate;
+  return (
+    validTicketQueueItemShape(item) &&
+    typeof subject === "string" &&
+    subject.length > 0 &&
+    subject.length <= TICKET_SUBJECT_MAX_LENGTH &&
+    isIsoTimestamp(last_message_at) &&
+    Date.parse(last_message_at) <= QUEUE_SNAPSHOT_MS &&
+    Number.isInteger(other_open_tickets) &&
+    other_open_tickets >= 0 &&
+    other_open_tickets <= SUBJECTS_MAX_ITEMS
+  );
+}
+
+/**
+ * Member-read check for `GET /api/v1/operator/queue/{kind}/{itemId}`: the
+ * top-level view keys, the kind enum, and the detail's own per-kind shape —
+ * then the full verbatim recompute. The detail must equal the item row the
+ * kind's collection derives for that queue_id plus the derived extension
+ * (the #312 dossier recipe for kyc, the flag list for aml, the ticket
+ * extension for tickets), so a detail can never disagree with the queue
+ * row — or name a subject outside `subjectsFor()` — without failing.
+ * @param {unknown} view
+ */
+export function validOperatorQueueItemDetail(view) {
+  if (view === null || typeof view !== "object" || Array.isArray(view)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorQueueItemDetailView} */ (view);
+  if (
+    JSON.stringify(Object.keys(view).sort()) !== JSON.stringify([...QUEUE_ITEM_DETAIL_VIEW_KEYS].sort()) ||
+    candidate.mode !== "test" ||
+    !OPERATOR_QUEUE_KINDS.includes(candidate.kind)
+  ) {
+    return false;
+  }
+  const detail = /** @type {unknown} */ (candidate.item);
+  if (detail === null || typeof detail !== "object" || Array.isArray(detail)) {
+    return false;
+  }
+  if (
+    candidate.kind === "aml"
+      ? !validAmlQueueItemDetail(detail)
+      : candidate.kind === "tickets"
+        ? !validTicketQueueItemDetail(detail)
+        : !validKycQueueItemDetail(detail)
+  ) {
+    return false;
+  }
+  const index = subjectRowIndex(candidate.item.subject_id);
+  if (index === -1) {
+    return false;
+  }
+  const expected = expectedQueueItems(candidate.kind).find(
+    (item) => item.queue_id === candidate.item.queue_id
+  );
+  if (expected === undefined) {
+    return false;
+  }
+  return (
+    JSON.stringify(detail) ===
+    JSON.stringify(buildQueueItemDetail(candidate.kind, expected, buildSubjectRow(index)))
   );
 }

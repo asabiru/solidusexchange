@@ -47,7 +47,12 @@ const KNOWN_SCREENING_ID = (
 const KNOWN_OPERATOR_SUBJECT_ID = (
   await createSyntheticOperatorSubjectsDirectory().subjectsFor()
 ).subjects[0].subject_id;
-const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", instrument: "USDT%2FRUB", operationId: await operationIdFor(), orderId: await orderIdFor(), screeningId: KNOWN_SCREENING_ID, subjectId: KNOWN_OPERATOR_SUBJECT_ID });
+// The queue item member read likewise only serves ids inside the shared
+// queue projection, so the pinned itemId is the first minted kyc item.
+const KNOWN_QUEUE_ITEM_ID = (
+  await createSyntheticOperatorSubjectsDirectory().queueFor()
+).queue.items[0].queue_id;
+const PATH_PARAMETER_VALUES = Object.freeze({ checkId: "syn_check_0001", instrument: "USDT%2FRUB", itemId: KNOWN_QUEUE_ITEM_ID, kind: "kyc", operationId: await operationIdFor(), orderId: await orderIdFor(), screeningId: KNOWN_SCREENING_ID, subjectId: KNOWN_OPERATOR_SUBJECT_ID });
 const OPERATOR_HEADERS = [
   ...customerHeaders({ "X-Platform": "operator-web" }),
   ["X-Device-Id", "4d1c3a52-1f43-4c6b-9b3a-2a1f7e9c0d11"]

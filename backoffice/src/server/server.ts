@@ -154,6 +154,7 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/operator/subjects",
   "/bff/api/operator/subjects/:id",
   "/bff/api/operator/queue",
+  "/bff/api/operator/queue/:kind/:id",
   "/bff/api/dashboard",
   "/bff/api/customers",
   "/bff/api/checks",
@@ -959,6 +960,106 @@ export function createBackofficeServer(
             posting: "none"
           }
         });
+        return;
+      }
+
+      const operatorQueueItemMatch = path.match(/^\/bff\/api\/operator\/queue\/([^/]+)\/([^/]+)$/);
+      if (request.method === "GET" && operatorQueueItemMatch) {
+        const session = await authorized(request, response);
+        if (!session) return;
+        const kind = decodeURIComponent(operatorQueueItemMatch[1]);
+        const itemId = decodeURIComponent(operatorQueueItemMatch[2]);
+        // Unknown kind shares the member read's uniform 404 — same as
+        // upstream, a kind outside the enum never reveals which ids exist.
+        if (kind !== "kyc" && kind !== "aml" && kind !== "tickets") {
+          json(response, 404, { error: "operator_queue_item_not_found" });
+          return;
+        }
+        if (customerApi.configured) {
+          // Same device gate as the other operator reads: the upstream
+          // audience requires X-Device-Id, so the BFF rejects locally before
+          // any call when the session presents no device identity.
+          const deviceId = requestDeviceId(request);
+          if (!deviceId) {
+            json(response, 403, { error: "device_required" });
+            return;
+          }
+          const upstream = await customerApi.operatorQueueItem(session.subject, deviceId, kind, itemId, Date.now());
+          // Unknown and wrong-kind ids share the upstream's uniform 404 —
+          // the BFF keeps that shape instead of revealing which ids exist.
+          if (upstream.status === "not-found") {
+            json(response, 404, { error: "operator_queue_item_not_found" });
+            return;
+          }
+          if (upstream.status !== "ok") {
+            json(response, 503, { error: "operator_queue_item_unavailable" });
+            return;
+          }
+          const core = {
+            queueId: upstream.view.item.queue_id,
+            subjectId: upstream.view.item.subject_id,
+            state: upstream.view.item.state,
+            priority: upstream.view.item.priority,
+            assignee: upstream.view.item.assignee === null ? null : { subject: upstream.view.item.assignee.subject },
+            ageMs: upstream.view.item.age_ms
+          };
+          // Per-kind item mapping: the shared queue axes plus the kind's
+          // detail fields on the same camelCase surface as the collection.
+          let item: Record<string, unknown>;
+          if (upstream.view.kind === "aml") {
+            const detail = upstream.view.item;
+            item = {
+              ...core,
+              alertType: detail.alert_type,
+              evidenceRefs: [...detail.evidence_refs],
+              slaDueAt: detail.sla_due_at,
+              flags: detail.flags.map((flag) => ({ flagId: flag.flag_id, alertType: flag.alert_type, raisedAt: flag.raised_at }))
+            };
+          } else if (upstream.view.kind === "tickets") {
+            const detail = upstream.view.item;
+            item = {
+              ...core,
+              category: detail.category,
+              openedAt: detail.opened_at,
+              subject: detail.subject,
+              lastMessageAt: detail.last_message_at,
+              otherOpenTickets: detail.other_open_tickets
+            };
+          } else {
+            const detail = upstream.view.item;
+            item = {
+              ...core,
+              displayName: detail.display_name,
+              submittedAt: detail.submitted_at,
+              slaDueAt: detail.sla_due_at,
+              kyc: detail.kyc === null
+                ? null
+                : {
+                    status: detail.kyc.status,
+                    level: detail.kyc.level,
+                    sessionId: detail.kyc.session_id,
+                    history: detail.kyc.history.map((attempt) => ({
+                      sessionId: attempt.session_id,
+                      state: attempt.state,
+                      submittedAt: attempt.submitted_at,
+                      decidedAt: attempt.decided_at,
+                      rejectionReason: attempt.rejection_reason
+                    }))
+                  }
+            };
+          }
+          signed(response, `operator-queue-item:${kind}:${itemId}`, {
+            mode: upstream.view.mode,
+            kind: upstream.view.kind,
+            item
+          });
+          return;
+        }
+        // Unconfigured: the local synthetic directory has no queue ids to
+        // resolve — the collection fabricates `queueId: null` rows, so any
+        // member read is the uniform not-found rather than an invented
+        // detail.
+        json(response, 404, { error: "operator_queue_item_not_found" });
         return;
       }
 

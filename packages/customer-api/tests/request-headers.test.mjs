@@ -57,7 +57,13 @@ const KNOWN_OPERATOR_SUBJECT_ID = (
 ).subjects[0].subject_id;
 const OPERATOR_SUBJECT = `${OPERATOR_SUBJECTS}/${KNOWN_OPERATOR_SUBJECT_ID}`;
 const OPERATOR_QUEUE = "/api/v1/operator/queue";
-const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT, OPERATOR_QUEUE];
+// A real kyc queue item id: the member read only reaches its 200 path for
+// ids inside the queue projection.
+const KNOWN_QUEUE_ITEM_ID = (
+  await createSyntheticOperatorSubjectsDirectory().queueFor()
+).queue.items[0].queue_id;
+const OPERATOR_QUEUE_ITEM = `${OPERATOR_QUEUE}/kyc/${KNOWN_QUEUE_ITEM_ID}`;
+const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM];
 const TRADES = "/api/v1/customer/trades";
 const MARKETS = "/api/v1/customer/markets";
 const MARKET_DEPTH = "/api/v1/customer/markets/USDT%2FRUB";
