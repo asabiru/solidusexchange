@@ -244,9 +244,12 @@ describe("operator audit BFF surface", () => {
       assert.equal(response.status, 400, query);
       assert.equal(body.error, "operator_audit_cursor_invalid");
     }
+    // An undeclared key is rejected by the uniform query pin inside
+    // authorized() with the shared invalid_request shape; the route's own
+    // operator_audit_query_invalid remains for cursor multiplicity.
     const { response, body } = await operatorAuditEnvelope(baseUrl, cookie, "?debug=1");
     assert.equal(response.status, 400);
-    assert.equal(body.error, "operator_audit_query_invalid");
+    assert.equal(body.error, "invalid_request");
   });
 
   it("rejects a repeated cursor param like the upstream strict allowlist", async () => {
