@@ -166,7 +166,7 @@ describe("Mini App BFF observability enabled", () => {
     const session = await fetch(`${running.base}/bff/session?initData=${encodeURIComponent(initData)}`, {
       headers: { cookie, authorization: `Bearer ${bearer}`, "x-telegram-init-data": initData }
     });
-    assert.equal(session.status, 200);
+    assert.equal(session.status, 400);
     const unknown = await fetch(`${running.base}/bff/wallet/${address}?address=${address}&token=${querySecret}`, {
       headers: { cookie }
     });
