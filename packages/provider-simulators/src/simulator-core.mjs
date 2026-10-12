@@ -132,6 +132,11 @@ export function capacityError(what) {
  * @template T
  */
 export class IdempotencyRegistry {
+  /** @type {number} */
+  #maxEntries;
+  /** @type {Map<string, { digest: string, response: T }>} */
+  #entries = new Map();
+
   /**
    * @param {{ maxEntries?: number }} [options]
    */
@@ -139,9 +144,7 @@ export class IdempotencyRegistry {
     if (!Number.isSafeInteger(maxEntries) || maxEntries < 1) {
       throw new RangeError("maxEntries must be a positive integer");
     }
-    this.maxEntries = maxEntries;
-    /** @type {Map<string, { digest: string, response: T }>} */
-    this.entries = new Map();
+    this.#maxEntries = maxEntries;
   }
 
   /**
@@ -152,7 +155,7 @@ export class IdempotencyRegistry {
    */
   run(key, request, create) {
     const digest = sha256Hex(request);
-    const existing = this.entries.get(key);
+    const existing = this.#entries.get(key);
     if (existing) {
       if (existing.digest !== digest) {
         throw new ProviderError(
@@ -162,11 +165,11 @@ export class IdempotencyRegistry {
       }
       return structuredClone(existing.response);
     }
-    if (this.entries.size >= this.maxEntries) {
+    if (this.#entries.size >= this.#maxEntries) {
       throw capacityError("idempotency registry");
     }
     const response = create();
-    this.entries.set(key, { digest, response: structuredClone(response) });
+    this.#entries.set(key, { digest, response: structuredClone(response) });
     return structuredClone(response);
   }
 }
@@ -236,6 +239,15 @@ export function outageError(seconds = 0) {
  * when a callback is scheduled, so outputs do not depend on drain timing.
  */
 export class DeliveryQueue {
+  /** @type {CallbackSigner} */
+  #signer;
+  /** @type {number} */
+  #maxPending;
+  /** @type {{ deliverAt: number, order: number, delivery: SignedDelivery }[]} */
+  #pending = [];
+  /** @type {number} */
+  #order = 0;
+
   /**
    * @param {CallbackSigner} signer
    * @param {{ maxPending?: number }} [options]
@@ -244,11 +256,8 @@ export class DeliveryQueue {
     if (!Number.isSafeInteger(maxPending) || maxPending < 1) {
       throw new RangeError("maxPending must be a positive integer");
     }
-    this.signer = signer;
-    this.maxPending = maxPending;
-    /** @type {{ deliverAt: number, order: number, delivery: SignedDelivery }[]} */
-    this.pending = [];
-    this.order = 0;
+    this.#signer = signer;
+    this.#maxPending = maxPending;
   }
 
   /**
@@ -257,12 +266,12 @@ export class DeliveryQueue {
    */
   schedule(payload, deliverAt) {
     assertEpochSeconds(deliverAt, "delivery time");
-    if (this.pending.length >= this.maxPending) {
+    if (this.#pending.length >= this.#maxPending) {
       throw capacityError("scheduled callback");
     }
-    const delivery = this.signer.sign(payload, deliverAt);
-    this.pending.push({ deliverAt, order: this.order, delivery });
-    this.order += 1;
+    const delivery = this.#signer.sign(payload, deliverAt);
+    this.#pending.push({ deliverAt, order: this.#order, delivery });
+    this.#order += 1;
   }
 
   /**
@@ -273,10 +282,10 @@ export class DeliveryQueue {
    */
   drain(now) {
     assertEpochSeconds(now, "delivery time");
-    const due = this.pending
+    const due = this.#pending
       .filter((entry) => entry.deliverAt <= now)
       .sort((left, right) => left.deliverAt - right.deliverAt || left.order - right.order);
-    this.pending = this.pending.filter((entry) => entry.deliverAt > now);
+    this.#pending = this.#pending.filter((entry) => entry.deliverAt > now);
     return due.map(({ deliverAt, delivery }) => ({
       deliverAt,
       headers: { ...delivery.headers },
@@ -285,7 +294,7 @@ export class DeliveryQueue {
   }
 
   size() {
-    return this.pending.length;
+    return this.#pending.length;
   }
 }
 
@@ -323,7 +332,15 @@ export function isIsoSeconds(value) {
     return false;
   }
   const parsed = Date.parse(value);
-  return Number.isFinite(parsed) && new Date(parsed).toISOString().replace(".000Z", "Z") === value;
+  if (!Number.isFinite(parsed)) {
+    return false;
+  }
+  try {
+    assertEpochSeconds(Math.floor(parsed / 1000), "timestamp");
+  } catch {
+    return false;
+  }
+  return new Date(parsed).toISOString().replace(".000Z", "Z") === value;
 }
 
 /**
@@ -348,6 +365,9 @@ export function isStringMatching(value, pattern) {
  * @param {import("./deterministic.mjs").SeededRandom} random
  */
 export function scheduleTimeline(queue, events, mode, random) {
+  if (mode !== "normal" && mode !== "duplicate" && mode !== "out_of_order" && mode !== "none") {
+    throw new TypeError("unknown delivery mode");
+  }
   if (mode === "none" || events.length === 0) {
     return;
   }

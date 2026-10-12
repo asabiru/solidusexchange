@@ -105,6 +105,6 @@ describe("callback inbox", () => {
     assert.equal(inbox.get("sim-s").reviewEvents, 2);
     assert.deepEqual(inbox.expire(101), ["sim-s"]);
     assert.equal(inbox.accept(event(3, "done"), { receivedAt: 50 }).action, "late");
-    assert.throws(() => inbox.openSubject("sim-t", { deadline: 1.5 }), TypeError);
+    assert.throws(() => inbox.openSubject("sim-t", { deadline: 1.5 }), RangeError);
   });
 });

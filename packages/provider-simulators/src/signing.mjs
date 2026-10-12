@@ -317,9 +317,15 @@ export function createCallbackVerifier(options) {
   if (!(keyring instanceof Map) || keyring.size === 0) {
     throw new TypeError("keyring must be a non-empty Map");
   }
+  if (nonceStore === null || typeof nonceStore !== "object" || typeof nonceStore.record !== "function") {
+    throw new TypeError("nonceStore must implement record(nonce, expiresAt, now)");
+  }
   if (typeof validatePayload !== "function") {
     throw new TypeError("validatePayload is required");
   }
+  // The verifier pins the keyset it was built with: callers mutating the
+  // original map afterwards must not change what verifies.
+  const pinnedKeyring = createVerificationKeyring([...keyring.values()]);
   for (const [name, value, max] of /** @type {const} */ ([
     ["maxBodyBytes", maxBodyBytes, 1024 * 1024],
     ["maxAgeSeconds", maxAgeSeconds, 3600],
@@ -384,7 +390,7 @@ export function createCallbackVerifier(options) {
       return reject("future_timestamp");
     }
 
-    const entry = /** @type {ReadonlyMap<string, VerificationKey>} */ (keyring).get(keyId);
+    const entry = pinnedKeyring.get(keyId);
     if (!entry) {
       return reject("unknown_key_id");
     }

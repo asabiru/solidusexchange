@@ -699,16 +699,14 @@ function validateMembers(members) {
     if (!SYNTHETIC_REFERENCE.test(ref)) {
       throw new TypeError(`invalid member reference: ${ref}`);
     }
-    if (
-      profile === null
-      || typeof profile !== "object"
-      || Array.isArray(profile)
-      || Object.keys(profile).length !== 1
-      || typeof (/** @type {CheckMember} */ (profile)).kyc_verified !== "boolean"
-    ) {
+    if (profile === null || typeof profile !== "object" || Array.isArray(profile)) {
       throw new TypeError(`member profile for ${ref} must contain only kyc_verified`);
     }
-    directory.set(ref, { kyc_verified: (/** @type {CheckMember} */ (profile)).kyc_verified });
+    const kycVerified = (/** @type {CheckMember} */ (profile)).kyc_verified;
+    if (Object.keys(profile).length !== 1 || typeof kycVerified !== "boolean") {
+      throw new TypeError(`member profile for ${ref} must contain only kyc_verified`);
+    }
+    directory.set(ref, { kyc_verified: kycVerified });
   }
   if (directory.size === 0) {
     throw new TypeError("members must declare at least one member");

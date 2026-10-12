@@ -35,7 +35,7 @@ export const ADAPTER_OPERATIONS = Object.freeze({
  * stay out of scope (`SIGNATURE_HEADERS` must not match on `sign`).
  */
 export const FORBIDDEN_OPERATION =
-  /^(?!^[A-Z0-9_]+$)(?i:accept|approve|broadcast|capture|confirm|execute|fill|hedge|order|pay|payout|place|post|refund|release|settle|sign|submitOrder|trade|transfer|withdraw)(?![a-z])/;
+  /^(?!^[A-Z0-9_]+$)_*(?i:accept|approve|broadcast|capture|confirm|execute|fill|hedge|order|pay|payout|place|post|refund|release|settle|sign|submitOrder|trade|transfer|withdraw)(?![a-z])/;
 
 /**
  * @param {AdapterKind} kind
@@ -57,7 +57,12 @@ export function assertProviderAdapter(kind, adapter) {
       throw new TypeError(`${kind} adapter must implement ${operation}`);
     }
   }
+  const seen = new Set();
   for (let target = record; target && target !== Object.prototype; target = Object.getPrototypeOf(target)) {
+    if (seen.has(target) || seen.size >= 64) {
+      throw new TypeError(`${kind} adapter prototype chain must terminate`);
+    }
+    seen.add(target);
     for (const name of Object.getOwnPropertyNames(target)) {
       if (FORBIDDEN_OPERATION.test(name)) {
         throw new TypeError(`${kind} adapter must not expose ${name}`);
