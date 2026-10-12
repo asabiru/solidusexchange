@@ -8,7 +8,7 @@ import {
   createSimulatedClock,
   validateChecksCallback,
 } from "../src/index.mjs";
-import { epochOf, freshKey } from "./helpers.mjs";
+import { freshKey } from "./helpers.mjs";
 
 const MEMBERS = {
   "sim-sender-1": { kyc_verified: true },
