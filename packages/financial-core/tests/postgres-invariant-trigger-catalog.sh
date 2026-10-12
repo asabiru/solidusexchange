@@ -13,7 +13,7 @@ workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 run_psql() {
   if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
-    docker run --rm --network host \
+    docker run --rm -i --network host \
       -e PGPASSWORD="$PGPASSWORD" \
       -v "$workspace:/workspace:ro" -w /workspace \
       "$PSQL_DOCKER_IMAGE" \
@@ -84,4 +84,53 @@ assert_replica_rejected \
   "requires at least two entries" \
   -f tests/postgres-reject-incomplete.sql
 
+assert_catalog_rejected() {
+  local statement="$1"
+  local output
+  local status
+
+  set +e
+  output="$(
+    {
+      printf '%s\n' "BEGIN;" "$statement"
+      cat tests/postgres-invariant-trigger-catalog.sql
+      printf '%s\n' "ROLLBACK;"
+    } | run_psql -v ON_ERROR_STOP=1 -Atq \
+      | node scripts/verify-postgres-invariant-trigger-catalog.mjs 2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Invariant trigger drift unexpectedly matched the expected policy." >&2
+    exit 1
+  fi
+  grep -F "differ" <<<"$output"
+}
+
+assert_catalog_rejected "
+  DROP TRIGGER ledger_entries_validate_amount ON financial_core.ledger_entries;
+  CREATE TRIGGER ledger_entries_validate_amount
+    BEFORE INSERT ON financial_core.ledger_entries
+    FOR EACH ROW WHEN (FALSE)
+    EXECUTE FUNCTION financial_core.validate_entry_amount();
+"
+assert_catalog_rejected "
+  DROP TRIGGER posting_rule_registry_validate ON financial_core.posting_rule_registry;
+  CREATE TRIGGER posting_rule_registry_validate
+    BEFORE INSERT ON financial_core.posting_rule_registry
+    FOR EACH ROW WHEN (FALSE)
+    EXECUTE FUNCTION financial_core.validate_posting_rule();
+"
+assert_catalog_rejected "
+  DROP TRIGGER ledger_journals_complete ON financial_core.ledger_journals;
+  CREATE CONSTRAINT TRIGGER ledger_journals_complete
+    AFTER INSERT ON financial_core.ledger_journals
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW WHEN (FALSE)
+    EXECUTE FUNCTION financial_core.assert_journal_complete();
+"
+
+echo "postgres-invariant-trigger-catalog-negative-ok"
 echo "postgres-replica-mode-invariants-ok"

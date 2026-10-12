@@ -54,9 +54,7 @@ assert_catalog_rejected() {
     echo "Unsafe PostgreSQL privilege unexpectedly matched the catalog." >&2
     exit 1
   fi
-  grep -F \
-    "PostgreSQL ownership or access-control catalog differs from the expected policy" \
-    <<<"$output"
+  grep -F "AssertionError" <<<"$output"
 }
 
 verify_catalog
@@ -69,6 +67,15 @@ assert_catalog_rejected \
   "GRANT SELECT (amount) ON TABLE financial_core.ledger_entries TO PUBLIC;"
 assert_catalog_rejected \
   "GRANT EXECUTE ON FUNCTION financial_core.reject_mutation() TO PUBLIC;"
+assert_catalog_rejected \
+  "CREATE SEQUENCE financial_core.unreviewed_sequence;"
+assert_catalog_rejected \
+  "CREATE MATERIALIZED VIEW financial_core.unreviewed_matview
+     AS SELECT 1 AS value;"
+assert_catalog_rejected \
+  "CREATE ROLE access_control_grant_probe NOLOGIN;
+   GRANT SELECT ON TABLE financial_core.ledger_entries
+     TO access_control_grant_probe;"
 
 verify_catalog
 

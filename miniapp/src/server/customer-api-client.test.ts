@@ -543,7 +543,7 @@ describe("customer API client", () => {
           { leg_id: "wdl_222222222222222222222222", asset: "TON", amount: "0.010000000", direction: "out" }
         ],
         created_at: "2026-10-06T09:30:00.000Z",
-        updated_at: "2026-10-06T09:30:00.000Z",
+        updated_at: "2026-10-06T09:31:00.000Z",
         expires_at: "2026-10-06T09:35:00.000Z",
         posting: "none"
       }
