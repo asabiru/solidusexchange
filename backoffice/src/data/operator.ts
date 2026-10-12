@@ -1,3 +1,5 @@
+import type { OperatorRole } from "../auth/access.js";
+
 /**
  * Fail-closed adapter for the backoffice BFF operator reads
  * (`/bff/api/operator/subjects`, `/bff/api/operator/subjects/{subjectId}`,
@@ -202,6 +204,37 @@ export type OperatorQueueItemDetailView =
   | { mode: "test"; kind: "kyc"; item: OperatorKycQueueItemDetail }
   | { mode: "test"; kind: "aml"; item: OperatorAmlQueueItemDetail }
   | { mode: "test"; kind: "tickets"; item: OperatorTicketQueueItemDetail };
+
+export type OperatorAuditAction =
+  | "session.opened"
+  | "session.rotated"
+  | "queue.viewed"
+  | "subject.viewed"
+  | "flag.reviewed";
+
+export type OperatorAuditTargetKind = "session" | "queue_item" | "subject" | "flag";
+
+/** One operator action-log row — opaque handles only, never PII. */
+export interface OperatorAuditEntry {
+  auditId: string;
+  actorSubjectId: string;
+  actorRole: string;
+  action: OperatorAuditAction;
+  targetKind: OperatorAuditTargetKind;
+  targetId: string;
+  at: string;
+  detailHash: string;
+}
+
+/** The operator audit feed read, newest-first with a page cursor. */
+export interface OperatorAuditView {
+  mode: "test";
+  audit: {
+    asOf: string;
+    entries: readonly OperatorAuditEntry[];
+    nextCursor: string | null;
+  };
+}
 
 const operatorSubjectsViewKeys = ["mode", "subjects"] as const;
 const subjectRowKeys = [
@@ -1133,6 +1166,109 @@ export function parseOperatorQueueItemDetailView(
       assignee: parseQueueAssignee(item),
       ageMs: item.ageMs as number,
       kyc
+    })
+  });
+}
+
+const auditViewKeys = ["audit", "mode"] as const;
+const auditFeedKeys = ["asOf", "entries", "nextCursor"] as const;
+const auditEntryKeys = [
+  "action",
+  "actorRole",
+  "actorSubjectId",
+  "at",
+  "auditId",
+  "detailHash",
+  "targetId",
+  "targetKind"
+] as const;
+const auditIdPattern = /^au_[0-9a-f]{24}$/;
+const auditCursorPattern = /^auc_[0-9a-f]{16}$/;
+const auditDetailHashPattern = /^adh_[0-9a-f]{32}$/;
+const auditTargetIdPattern = /^(osn|qky|qml|qtick|flg)_[0-9a-f]{24}$|^syn_cust_[a-z0-9]{8,32}$/;
+const operatorRoleSet: ReadonlySet<string> = new Set<OperatorRole>([
+  "compliance-lead",
+  "support-l1",
+  "aml-investigator",
+  "fraud-investigator",
+  "auditor"
+]);
+const auditActions: ReadonlySet<string> = new Set([
+  "session.opened",
+  "session.rotated",
+  "queue.viewed",
+  "subject.viewed",
+  "flag.reviewed"
+]);
+const auditTargetKinds: ReadonlySet<string> = new Set(["session", "queue_item", "subject", "flag"]);
+const auditMaxEntries = 32;
+
+/**
+ * Fail-closed parser for the operator audit feed: exact key sets, the
+ * `au_*`/`auc_*`/`adh_*` ref grammar, the fixed action and target-kind
+ * vocabularies, ISO timestamps, a 32-entry page bound and unique audit ids.
+ * Any drift fails closed to undefined so the screen degrades to its local
+ * demo rows instead of rendering unverifiable data.
+ */
+export function parseOperatorAuditView(value: unknown): OperatorAuditView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, auditViewKeys) || value.mode !== "test") {
+    return undefined;
+  }
+  const audit = value.audit;
+  if (!isRecord(audit) || !hasExactKeys(audit, auditFeedKeys) || !isIsoTimestamp(audit.asOf)) {
+    return undefined;
+  }
+  if (audit.nextCursor !== null && (typeof audit.nextCursor !== "string" || !auditCursorPattern.test(audit.nextCursor))) {
+    return undefined;
+  }
+  if (!Array.isArray(audit.entries) || audit.entries.length < 1 || audit.entries.length > auditMaxEntries) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const entries: OperatorAuditEntry[] = [];
+  for (const entry of audit.entries) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, auditEntryKeys)
+      || typeof entry.auditId !== "string"
+      || !auditIdPattern.test(entry.auditId)
+      || seen.has(entry.auditId)
+      || typeof entry.actorSubjectId !== "string"
+      || !operatorSubjectPattern.test(entry.actorSubjectId)
+      || typeof entry.actorRole !== "string"
+      || !operatorRoleSet.has(entry.actorRole as OperatorRole)
+      || typeof entry.action !== "string"
+      || !auditActions.has(entry.action)
+      || typeof entry.targetKind !== "string"
+      || !auditTargetKinds.has(entry.targetKind)
+      || typeof entry.targetId !== "string"
+      || !auditTargetIdPattern.test(entry.targetId)
+      || !isIsoTimestamp(entry.at)
+      || typeof entry.detailHash !== "string"
+      || !auditDetailHashPattern.test(entry.detailHash)
+    ) {
+      return undefined;
+    }
+    seen.add(entry.auditId);
+    entries.push(
+      Object.freeze({
+        auditId: entry.auditId,
+        actorSubjectId: entry.actorSubjectId,
+        actorRole: entry.actorRole,
+        action: entry.action as OperatorAuditAction,
+        targetKind: entry.targetKind as OperatorAuditTargetKind,
+        targetId: entry.targetId,
+        at: entry.at,
+        detailHash: entry.detailHash
+      })
+    );
+  }
+  return Object.freeze({
+    mode: "test",
+    audit: Object.freeze({
+      asOf: audit.asOf as string,
+      entries: Object.freeze(entries),
+      nextCursor: audit.nextCursor as string | null
     })
   });
 }

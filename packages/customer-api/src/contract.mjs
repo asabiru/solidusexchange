@@ -602,6 +602,29 @@ export const OPERATIONS = Object.freeze([
       "x-device-id"
     ]),
     statuses: Object.freeze([200, 401, 404, 429, 500])
+  }),
+  // The operator audit read is the staff action-log feed over the same
+  // shared customer universe, paged by the optional `cursor` query
+  // parameter (a served `auc_*` token, absent means the first page).
+  // Unlike its siblings the capability is role-scoped — accountability
+  // data stays with the audit-oversight roles — so it declares the 403
+  // for a staff role outside the grant, plus the same uniform 404 the
+  // member reads use for a well-formed cursor that was never minted. A
+  // malformed cursor is invalid input and answers 400 VALIDATION_FAILED,
+  // an undeclared gap like the malformed-kind rules.
+  Object.freeze({
+    operationId: "getOperatorAudit",
+    method: "GET",
+    path: "/api/v1/operator/audit",
+    authenticated: true,
+    requiredHeaders: Object.freeze([
+      "authorization",
+      "x-request-id",
+      "x-client-version",
+      "x-platform",
+      "x-device-id"
+    ]),
+    statuses: Object.freeze([200, 401, 403, 404, 429, 500])
   })
 ]);
 

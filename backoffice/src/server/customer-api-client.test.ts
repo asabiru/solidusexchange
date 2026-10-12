@@ -18,7 +18,8 @@ const operatorCapabilities = [
   "operator.capabilities.read",
   "operator.admin.read",
   "operator.subjects.read",
-  "operator.queue.read"
+  "operator.queue.read",
+  "operator.audit.read"
 ];
 
 async function withCustomerApi<T>(key: string, run: (baseUrl: string) => Promise<T>): Promise<T> {

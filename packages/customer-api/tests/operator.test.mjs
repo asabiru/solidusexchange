@@ -11,9 +11,11 @@ import {
   OPERATOR_ROLES,
   OPERATOR_TICKET_QUEUE_STATES,
   operatorCapabilitiesViewFor,
+  operatorRoleFor,
   operatorSessionViewFor,
   validOperatorAdminView,
   validOperatorCapabilitiesView,
+  validOperatorAuditView,
   validOperatorQueueItemDetail,
   validOperatorQueueView,
   validOperatorSessionView,
@@ -23,6 +25,7 @@ import {
 } from "../src/operator.mjs";
 import { syntheticSupportTickets, TICKET_CATEGORIES } from "../src/support.mjs";
 import {
+  auditOperatorHeaders,
   customerHeaders,
   DEVICE_ID,
   header,
@@ -69,10 +72,28 @@ function adminView(overrides = {}) {
 }
 
 test("operator capabilities grant exactly the operator read tier", () => {
-  const evaluation = evaluateOperatorCapabilities();
-  assert.deepEqual([...evaluation.granted], GRANTED);
-  assert.deepEqual(evaluation.denied, []);
-  assert.equal(evaluation.commandsEnabled, false);
+  // The roleless evaluation projects the whole vocabulary — the audit read
+  // included — so the contract's capability vocabulary stays complete.
+  const vocabulary = evaluateOperatorCapabilities();
+  assert.deepEqual([...vocabulary.granted], [...GRANTED, "operator.audit.read"]);
+  assert.deepEqual(vocabulary.denied, []);
+  assert.equal(vocabulary.commandsEnabled, false);
+  // The route-scoped evaluation applies the audit role gate: the oversight
+  // roles keep the audit read, every other operator role loses exactly it.
+  for (const role of ["auditor", "compliance-lead"]) {
+    const evaluation = evaluateOperatorCapabilities({ role });
+    assert.deepEqual([...evaluation.granted], [...GRANTED, "operator.audit.read"], role);
+    assert.deepEqual(evaluation.denied, [], role);
+  }
+  for (const role of ["support-l1", "aml-investigator", "fraud-investigator"]) {
+    const evaluation = evaluateOperatorCapabilities({ role });
+    assert.deepEqual([...evaluation.granted], GRANTED, role);
+    assert.deepEqual(
+      evaluation.denied.map((item) => [item.capability, [...item.reasons]]),
+      [["operator.audit.read", ["OPERATOR_ROLE_RESTRICTED"]]],
+      role
+    );
+  }
 });
 
 test("GET /api/v1/operator/admin returns the deterministic synthetic view", async () => {
@@ -333,7 +354,7 @@ test("a malformed operator session view fails closed", async () => {
 });
 
 test("operatorCapabilitiesViewFor projects the policy evaluation, frozen", () => {
-  const evaluation = evaluateOperatorCapabilities();
+  const evaluation = evaluateOperatorCapabilities({ role: operatorRoleFor(OPERATOR_SUBJECT) });
   const view = operatorCapabilitiesViewFor(evaluation);
   assert.ok(Object.isFrozen(view));
   assert.ok(Object.isFrozen(view.capabilities));
@@ -1380,4 +1401,117 @@ test("a malformed operator queue item detail fails closed", async () => {
       }
     );
   }
+});
+
+const OPERATOR_AUDIT = "/api/v1/operator/audit";
+
+test("the operator audit feed is deterministic, frozen and within the contract shape", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const first = await directory.auditFor();
+  const second = await createSyntheticOperatorSubjectsDirectory().auditFor();
+  assert.deepEqual(first, second);
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.audit));
+  assert.ok(Object.isFrozen(first.audit.entries));
+  assert.equal(first.mode, "test");
+  assert.equal(first.audit.as_of, "2027-01-29T00:00:00.000Z");
+  assert.ok(first.audit.entries.length > 0 && first.audit.entries.length <= 32);
+  const ids = new Set(first.audit.entries.map((entry) => entry.audit_id));
+  assert.equal(ids.size, first.audit.entries.length);
+  // Newest-first with the audit_id tie-break, all timestamps within the
+  // feed's as_of horizon.
+  for (let index = 1; index < first.audit.entries.length; index += 1) {
+    const [previous, current] = [first.audit.entries[index - 1], first.audit.entries[index]];
+    assert.ok(
+      previous.at > current.at || (previous.at === current.at && previous.audit_id > current.audit_id),
+      `${previous.audit_id} -> ${current.audit_id}`
+    );
+  }
+  for (const entry of first.audit.entries) {
+    assert.ok(Date.parse(entry.at) <= Date.parse(first.audit.as_of));
+    assert.match(entry.detail_hash, /^adh_[0-9a-f]{32}$/u);
+  }
+  assert.equal(validOperatorAuditView(first), true);
+  assert.deepEqual(
+    validator.validate(
+      validator.resolve("#/components/schemas/OperatorAuditView"),
+      JSON.parse(JSON.stringify(first))
+    ),
+    []
+  );
+});
+
+test("the audit feed paginates through the whole synthetic universe without overlap", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  const seen = new Set();
+  let cursor;
+  let pages = 0;
+  for (;;) {
+    const view = await directory.auditFor(cursor);
+    assert.ok(view !== null, `page ${pages}`);
+    assert.equal(validOperatorAuditView(view), true);
+    for (const entry of view.audit.entries) {
+      assert.ok(!seen.has(entry.audit_id), entry.audit_id);
+      seen.add(entry.audit_id);
+    }
+    pages += 1;
+    if (view.audit.next_cursor === null) {
+      break;
+    }
+    assert.match(view.audit.next_cursor, /^auc_[0-9a-f]{16}$/u);
+    cursor = view.audit.next_cursor;
+  }
+  assert.ok(pages >= 2, "the feed spans more than one page");
+});
+
+test("auditFor answers null for well-formed tokens the feed never minted", async () => {
+  const directory = createSyntheticOperatorSubjectsDirectory();
+  let probe = "0".repeat(16);
+  while ((await directory.auditFor(`auc_${probe}`)) !== null) {
+    probe = (BigInt(`0x${probe}`) + 1n).toString(16).padStart(16, "0").slice(-16);
+  }
+  assert.match(probe, /^[0-9a-f]{16}$/u);
+  // Malformed tokens are rejected before the directory: the route grammar
+  // gate answers them itself, so only the minted-token space reaches
+  // auditFor.
+});
+
+test("a malformed operator audit view fails closed and never serves", async () => {
+  const real = await createSyntheticOperatorSubjectsDirectory().auditFor();
+  const entry = real.audit.entries[0];
+  const view = (overrides = {}) => ({ ...real, audit: { ...real.audit, ...overrides } });
+  const malformed = [
+    null,
+    "view",
+    { ...real, mode: "live" },
+    view({ as_of: "2020-01-01T00:00:00.000Z" }),
+    view({ entries: [] }),
+    view({ entries: [...real.audit.entries, entry] }),
+    view({ next_cursor: "auc_zzz" }),
+    view({ next_cursor: real.audit.next_cursor === null ? "auc_0000000000000000" : null }),
+    view({ entries: real.audit.entries.map((item) => ({ ...item, detail_hash: "adh_zzz" })) }),
+    view({ entries: real.audit.entries.map((item) => ({ ...item, action: "money.moved" })) }),
+    view({ entries: [{ ...entry, pii: "a@b.c" }, ...real.audit.entries.slice(1)] }),
+    { ...real, extra: true }
+  ];
+  assert.equal(validOperatorAuditView(null), false);
+  for (const candidate of malformed) {
+    assert.equal(validOperatorAuditView(candidate), false, JSON.stringify(candidate));
+  }
+  await withServer(
+    {
+      operatorSubjectsDirectory: {
+        async subjectsFor() { return createSyntheticOperatorSubjectsDirectory().subjectsFor(); },
+        async subjectFor() { return null; },
+        async queueFor() { return createSyntheticOperatorSubjectsDirectory().queueFor(); },
+        async queueItemFor() { return null; },
+        async auditFor() { return view({ entries: real.audit.entries.map((item) => ({ ...item, detail_hash: "adh_zzz" })) }); }
+      }
+    },
+    async (port) => {
+      const response = await request(port, { path: OPERATOR_AUDIT, headers: auditOperatorHeaders() });
+      assert.equal(response.status, 500);
+      assert.equal(JSON.parse(response.body).code, "INTERNAL_ERROR");
+    }
+  );
 });

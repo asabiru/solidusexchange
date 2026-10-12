@@ -11,7 +11,8 @@ export const KYC_STATUSES = Object.freeze(["unverified", "pending", "verified"])
 export const REASON_CODES = Object.freeze({
   financialCommandsDisabled: "FINANCIAL_COMMANDS_DISABLED",
   kycVerificationRequired: "KYC_VERIFICATION_REQUIRED",
-  operationNotImplemented: "OPERATION_NOT_IMPLEMENTED"
+  operationNotImplemented: "OPERATION_NOT_IMPLEMENTED",
+  operatorRoleRestricted: "OPERATOR_ROLE_RESTRICTED"
 });
 
 /** @param {string} decisionId */
@@ -24,13 +25,17 @@ export function decisionReasonCode(decisionId) {
  * @param {"read" | "onboarding" | "financial"} kind
  * @param {boolean} requiresVerifiedKyc
  * @param {string[]} decisions
+ * @param {readonly string[]} [roles]
  */
-function entry(capability, kind, requiresVerifiedKyc, decisions) {
+function entry(capability, kind, requiresVerifiedKyc, decisions, roles) {
   return Object.freeze({
     capability,
     kind,
     requiresVerifiedKyc,
-    decisions: Object.freeze(decisions)
+    decisions: Object.freeze(decisions),
+    // Operator entries may scope a capability to staff roles; an empty
+    // list means every operator role receives the tier.
+    roles: Object.freeze(roles ?? [])
   });
 }
 
@@ -325,9 +330,13 @@ export function evaluateCapabilities({ kycStatus }) {
 // Operator capability policy. Operator surfaces answer the staff audience
 // pinned by the operator token (actorType "operator"), not customers; KYC is
 // a customer concept and never applies here. Every granted entry is a `read`
-// tier without KYC — the gate is the operator audience itself. Role-scoped
-// grants stay future work: today every operator role receives the same read
-// tier, echoed back in OperatorAdminView.granted_capabilities.
+// tier without KYC — the gate is the operator audience itself. Every
+// operator role receives the same read tier except the audit action log,
+// which stays role-scoped to the audit-oversight pair (see
+// OPERATOR_AUDIT_READ_ROLES); grants echo back in
+// OperatorAdminView.granted_capabilities.
+export const OPERATOR_AUDIT_READ_ROLES = Object.freeze(["auditor", "compliance-lead"]);
+
 export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
   entry("operator.session.read", "read", false, []),
   entry("operator.capabilities.read", "read", false, []),
@@ -348,26 +357,48 @@ export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
   // covers every queue kind (kyc|aml|tickets): a queue is the same
   // read-only projection regardless of kind, so no kind gets its own
   // capability name.
-  entry("operator.queue.read", "read", false, [])
+  entry("operator.queue.read", "read", false, []),
+  // The audit action log is accountability data — which staff actor did
+  // what — so unlike its siblings the read stays role-scoped at serve
+  // time: only the audit-oversight roles (the auditor and the supervisory
+  // compliance-lead, the same pair the backoffice role matrix grants
+  // audit:read) receive it. Every other operator role gets the uniform
+  // OPERATOR_ROLE_RESTRICTED denial, so the capability echo stays honest
+  // about who can actually read the feed.
+  entry("operator.audit.read", "read", false, [], OPERATOR_AUDIT_READ_ROLES)
 ]);
 
-/** @returns {Readonly<{ granted: readonly string[], denied: readonly unknown[], commandsEnabled: boolean }>} */
-export function evaluateOperatorCapabilities() {
+/**
+ * The operator evaluation takes the caller's derived staff role: entries
+ * with an empty `roles` list grant to every operator role like before,
+ * while a role-scoped entry grants only inside its role set. A caller
+ * that presents no role evaluates the vocabulary, not a gate — only the
+ * routes pass a role, and they always pass the real one.
+ * @param {{ role?: string }} [options]
+ * @returns {Readonly<{ granted: readonly string[], denied: readonly unknown[], commandsEnabled: boolean }>}
+ */
+export function evaluateOperatorCapabilities({ role } = {}) {
   /** @type {string[]} */
   const granted = [];
   /** @type {Readonly<{ capability: string, reasons: readonly string[] }>[]} */
   const denied = [];
   for (const policy of OPERATOR_CAPABILITY_POLICY) {
-    if (policy.kind === "read" && policy.decisions.length === 0) {
+    const roleDenied =
+      role !== undefined && policy.roles.length > 0 && !policy.roles.includes(role);
+    if (policy.kind === "read" && policy.decisions.length === 0 && !roleDenied) {
       granted.push(policy.capability);
     } else {
+      /** @type {string[]} */
+      const reasons = [];
+      if (roleDenied) {
+        reasons.push(REASON_CODES.operatorRoleRestricted);
+      }
+      reasons.push(...policy.decisions.map(decisionReasonCode));
       denied.push(
         Object.freeze({
           capability: policy.capability,
           reasons: Object.freeze(
-            policy.decisions.length > 0
-              ? policy.decisions.map(decisionReasonCode)
-              : [REASON_CODES.operationNotImplemented]
+            reasons.length > 0 ? reasons : [REASON_CODES.operationNotImplemented]
           )
         })
       );

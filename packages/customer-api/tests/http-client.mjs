@@ -68,6 +68,17 @@ export function operatorToken({ subject = OPERATOR_SUBJECT, ttlSeconds = 900, ke
   });
 }
 
+// The audit feed is the one operator read gated to oversight roles; this
+// subject draws "auditor" in the deterministic role derivation.
+export const AUDIT_OPERATOR_SUBJECT = "syn_oper_0000000000000002";
+
+export function auditOperatorHeaders(overrides = {}) {
+  return operatorHeaders({
+    Authorization: `Bearer ${operatorToken({ subject: AUDIT_OPERATOR_SUBJECT })}`,
+    ...overrides
+  });
+}
+
 export function operatorHeaders(overrides = {}) {
   const base = {
     Authorization: `Bearer ${operatorToken()}`,
@@ -263,7 +274,7 @@ export function operationPathFor(requestPath) {
       return path;
     }
   }
-  return requestPath;
+  return questionMark === -1 ? requestPath : requestPath.slice(0, questionMark);
 }
 
 // The first minted operation id for a subject. The mint is subject-

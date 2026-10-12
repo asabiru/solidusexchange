@@ -367,6 +367,7 @@ describe("Backoffice BFF security headers on every route", () => {
       "/bff/api/operator/subjects": () => get("/bff/api/operator/subjects"),
       "/bff/api/operator/subjects/:id": () => get("/bff/api/operator/subjects/CUS-10482"),
       "/bff/api/operator/queue": () => get("/bff/api/operator/queue"),
+      "/bff/api/operator/audit": () => get("/bff/api/operator/audit"),
       "/bff/api/operator/queue/:kind/:id": async () => {
         // The member read has no local degrade (queue ids only exist
         // upstream), so its success path needs a stubbed configured client.
@@ -395,6 +396,8 @@ describe("Backoffice BFF security headers on every route", () => {
               }
             }
           })
+          ,
+          operatorAudit: async () => ({ status: "not-configured" })
         };
         const server = createBackofficeServer(config(), undefined, undefined, {}, client);
         const url = await listen(server);

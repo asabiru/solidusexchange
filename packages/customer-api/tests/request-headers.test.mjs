@@ -5,6 +5,7 @@ import { isUuidV7 } from "../src/request-id.mjs";
 import { createSyntheticAddressScreeningDirectory } from "../src/address-screenings.mjs";
 import { createSyntheticOperatorSubjectsDirectory } from "../src/operator.mjs";
 import {
+  auditOperatorHeaders,
   checkedRequest,
   customerHeaders,
   header,
@@ -63,7 +64,12 @@ const KNOWN_QUEUE_ITEM_ID = (
   await createSyntheticOperatorSubjectsDirectory().queueFor()
 ).queue.items[0].queue_id;
 const OPERATOR_QUEUE_ITEM = `${OPERATOR_QUEUE}/kyc/${KNOWN_QUEUE_ITEM_ID}`;
-const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM];
+const OPERATOR_AUDIT = "/api/v1/operator/audit";
+const OPERATOR_PATHS = ["/api/v1/operator/session", "/api/v1/operator/capabilities", OPERATOR_ADMIN, OPERATOR_SUBJECTS, OPERATOR_SUBJECT, OPERATOR_QUEUE, OPERATOR_QUEUE_ITEM, OPERATOR_AUDIT];
+// The audit feed is role-gated to oversight roles: header-matrix checks that
+// expect a success status need an oversight token for that one path.
+const operatorPathHeaders = (path, overrides = {}) =>
+  (path === OPERATOR_AUDIT ? auditOperatorHeaders : operatorHeaders)(overrides);
 const TRADES = "/api/v1/customer/trades";
 const MARKETS = "/api/v1/customer/markets";
 const MARKET_DEPTH = "/api/v1/customer/markets/USDT%2FRUB";
@@ -201,18 +207,18 @@ test("generated request IDs are fresh UUIDv7 values", async () => {
 test("X-Device-Id is required and must be a lowercase UUIDv4 on every operator operation", async () => {
   for (const path of OPERATOR_PATHS) {
     for (const [name, headers] of [
-      ["missing", operatorHeaders({ "X-Device-Id": null })],
-      ["empty", operatorHeaders({ "X-Device-Id": "" })],
-      ["uppercase", operatorHeaders({ "X-Device-Id": DEVICE_ID.toUpperCase() })],
-      ["uuidv7", operatorHeaders({ "X-Device-Id": REQUEST_ID })],
-      ["not a uuid", operatorHeaders({ "X-Device-Id": "not-a-device" })],
-      ["duplicated", [...operatorHeaders(), ["X-Device-Id", DEVICE_ID]]],
-      ["duplicated case", [...operatorHeaders(), ["x-device-id", DEVICE_ID]]]
+      ["missing", operatorPathHeaders(path, { "X-Device-Id": null })],
+      ["empty", operatorPathHeaders(path, { "X-Device-Id": "" })],
+      ["uppercase", operatorPathHeaders(path, { "X-Device-Id": DEVICE_ID.toUpperCase() })],
+      ["uuidv7", operatorPathHeaders(path, { "X-Device-Id": REQUEST_ID })],
+      ["not a uuid", operatorPathHeaders(path, { "X-Device-Id": "not-a-device" })],
+      ["duplicated", [...operatorPathHeaders(path), ["X-Device-Id", DEVICE_ID]]],
+      ["duplicated case", [...operatorPathHeaders(path), ["x-device-id", DEVICE_ID]]]
     ]) {
       const response = await expectStatus(path, headers, 400, "VALIDATION_FAILED");
       assert.match(JSON.parse(response.body).message, /X-Device-Id/u, name);
     }
-    const accepted = operatorHeaders().map(([name, value]) =>
+    const accepted = operatorPathHeaders(path).map(([name, value]) =>
       name === "X-Device-Id" ? ["x-device-id", value] : [name, value]
     );
     await expectStatus(path, accepted, 200);
@@ -323,8 +329,8 @@ test("header names are matched case-insensitively", async () => {
   for (const path of CUSTOMER_PATHS) {
     await expectStatus(path, headers, 200);
   }
-  const operator = operatorHeaders().map(([name, value]) => [name.toUpperCase(), value]);
   for (const path of OPERATOR_PATHS) {
+    const operator = operatorPathHeaders(path).map(([name, value]) => [name.toUpperCase(), value]);
     await expectStatus(path, operator, 200);
   }
 });

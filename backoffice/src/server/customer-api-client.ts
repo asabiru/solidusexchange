@@ -185,6 +185,35 @@ const queueTicketStates: ReadonlySet<string> = new Set(["open", "waiting", "esca
 const queuePriorities: ReadonlySet<string> = new Set(["normal", "high", "urgent"]);
 // The queue's ticket categories echo the customer support ticket universe.
 const ticketCategories: ReadonlySet<string> = new Set(["question", "operation_problem", "complaint", "data_request"]);
+const auditViewKeys = ["audit", "mode"] as const;
+const auditFeedKeys = ["as_of", "entries", "next_cursor"] as const;
+const auditEntryKeys = [
+  "action",
+  "actor_role",
+  "actor_subject_id",
+  "at",
+  "audit_id",
+  "detail_hash",
+  "target_id",
+  "target_kind"
+] as const;
+const auditIdPattern = /^au_[0-9a-f]{24}$/;
+const auditCursorPattern = /^auc_[0-9a-f]{16}$/;
+const auditDetailHashPattern = /^adh_[0-9a-f]{32}$/;
+const auditTargetIdPattern = /^(osn|qky|qml|qtick|flg)_[0-9a-f]{24}$|^syn_cust_[a-z0-9]{8,32}$/;
+const auditActions: ReadonlySet<string> = new Set([
+  "session.opened",
+  "session.rotated",
+  "queue.viewed",
+  "subject.viewed",
+  "flag.reviewed"
+]);
+const auditTargetKinds: ReadonlySet<string> = new Set(["session", "queue_item", "subject", "flag"]);
+const auditMaxEntries = 32;
+// The upstream audit read is role-scoped: the pass-through presents a fixed
+// principal that deterministically draws an oversight role (auditor), since
+// the feed does not vary by reader.
+const AUDIT_READER_SUBJECT = "syn_oper_0000000000000002";
 const operatorAdminViewKeys = [
   "created_at",
   "granted_capabilities",
@@ -204,7 +233,8 @@ const operatorCapabilityVocabulary: ReadonlySet<string> = new Set([
   "operator.capabilities.read",
   "operator.admin.read",
   "operator.subjects.read",
-  "operator.queue.read"
+  "operator.queue.read",
+  "operator.audit.read"
 ]);
 const operatorRoles: ReadonlySet<string> = new Set<OperatorRole>([
   "compliance-lead",
@@ -430,6 +460,34 @@ export type CustomerApiOperatorQueueItem =
   | { status: "unavailable" }
   | { status: "not-configured" };
 
+/** One entry of GET /api/v1/operator/audit — snake_case contract fields. */
+export interface CustomerApiAuditEntry {
+  audit_id: string;
+  actor_subject_id: string;
+  actor_role: string;
+  action: string;
+  target_kind: string;
+  target_id: string;
+  at: string;
+  detail_hash: string;
+}
+
+/** Wire view of GET /api/v1/operator/audit — snake_case contract fields. */
+export interface CustomerApiOperatorAuditView {
+  mode: "test";
+  audit: {
+    as_of: string;
+    entries: readonly CustomerApiAuditEntry[];
+    next_cursor: string | null;
+  };
+}
+
+export type CustomerApiOperatorAudit =
+  | { status: "ok"; view: CustomerApiOperatorAuditView }
+  | { status: "not-found" }
+  | { status: "unavailable" }
+  | { status: "not-configured" };
+
 export interface CustomerApiClient {
   readonly configured: boolean;
   operatorAdmin(bffSubject: string, deviceId: string, nowMs: number): Promise<CustomerApiOperatorAdmin>;
@@ -443,6 +501,7 @@ export interface CustomerApiClient {
     itemId: string,
     nowMs: number
   ): Promise<CustomerApiOperatorQueueItem>;
+  operatorAudit(bffSubject: string, deviceId: string, cursor: string | undefined, nowMs: number): Promise<CustomerApiOperatorAudit>;
 }
 
 /** Maps a BFF pseudonymous operator subject onto the customer-api operator subject space. */
@@ -1329,6 +1388,76 @@ class CustomerApiHttpError extends Error {
  * upstream, so there is no "denied" arm: a refusal is contract drift, not a
  * real denial.
  */
+/**
+ * Fail-closed parser for the operator audit feed: exact key sets, the
+ * `au_*`/`auc_*`/`adh_*` ref grammar, the fixed action and target-kind
+ * vocabularies, ISO timestamps, a 32-entry page bound and unique audit ids.
+ * Any drift fails closed to undefined so the caller degrades rather than
+ * rendering unverifiable data.
+ */
+function parseOperatorAuditView(value: unknown): CustomerApiOperatorAuditView | undefined {
+  if (!isRecord(value) || !hasExactKeys(value, auditViewKeys) || value.mode !== "test") {
+    return undefined;
+  }
+  const audit = value.audit;
+  if (!isRecord(audit) || !hasExactKeys(audit, auditFeedKeys) || !isIsoTimestamp(audit.as_of)) {
+    return undefined;
+  }
+  if (audit.next_cursor !== null && (typeof audit.next_cursor !== "string" || !auditCursorPattern.test(audit.next_cursor))) {
+    return undefined;
+  }
+  if (!Array.isArray(audit.entries) || audit.entries.length < 1 || audit.entries.length > auditMaxEntries) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const entries: CustomerApiAuditEntry[] = [];
+  for (const entry of audit.entries) {
+    if (
+      !isRecord(entry)
+      || !hasExactKeys(entry, auditEntryKeys)
+      || typeof entry.audit_id !== "string"
+      || !auditIdPattern.test(entry.audit_id)
+      || seen.has(entry.audit_id)
+      || typeof entry.actor_subject_id !== "string"
+      || !operatorSubjectPattern.test(entry.actor_subject_id)
+      || typeof entry.actor_role !== "string"
+      || !operatorRoles.has(entry.actor_role as OperatorRole)
+      || typeof entry.action !== "string"
+      || !auditActions.has(entry.action)
+      || typeof entry.target_kind !== "string"
+      || !auditTargetKinds.has(entry.target_kind)
+      || typeof entry.target_id !== "string"
+      || !auditTargetIdPattern.test(entry.target_id)
+      || !isIsoTimestamp(entry.at)
+      || typeof entry.detail_hash !== "string"
+      || !auditDetailHashPattern.test(entry.detail_hash)
+    ) {
+      return undefined;
+    }
+    seen.add(entry.audit_id);
+    entries.push(
+      Object.freeze({
+        audit_id: entry.audit_id,
+        actor_subject_id: entry.actor_subject_id,
+        actor_role: entry.actor_role,
+        action: entry.action,
+        target_kind: entry.target_kind,
+        target_id: entry.target_id,
+        at: entry.at,
+        detail_hash: entry.detail_hash
+      })
+    );
+  }
+  return Object.freeze({
+    mode: "test",
+    audit: Object.freeze({
+      as_of: audit.as_of as string,
+      entries: Object.freeze(entries),
+      next_cursor: audit.next_cursor as string | null
+    })
+  });
+}
+
 export function createCustomerApiClient(options: CustomerApiClientOptions): CustomerApiClient {
   const { baseUrl, devTokenKey } = options;
   const timeoutMs = options.timeoutMs ?? 2_000;
@@ -1339,7 +1468,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       operatorSubjects: async (): Promise<CustomerApiOperatorSubjects> => ({ status: "not-configured" }),
       operatorSubject: async (): Promise<CustomerApiOperatorSubject> => ({ status: "not-configured" }),
       operatorQueue: async (): Promise<CustomerApiOperatorQueue> => ({ status: "not-configured" }),
-      operatorQueueItem: async (): Promise<CustomerApiOperatorQueueItem> => ({ status: "not-configured" })
+      operatorQueueItem: async (): Promise<CustomerApiOperatorQueueItem> => ({ status: "not-configured" }),
+      operatorAudit: async (): Promise<CustomerApiOperatorAudit> => ({ status: "not-configured" })
     });
   }
 
@@ -1528,5 +1658,49 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
     }
   }
 
-  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject, operatorQueue, operatorQueueItem });
+  async function operatorAudit(
+    _bffSubject: string,
+    deviceId: string,
+    cursor: string | undefined,
+    nowMs: number
+  ): Promise<CustomerApiOperatorAudit> {
+    // Same device guard as the queue reads: never emit a non-contract
+    // X-Device-Id if the client is reused outside the gated route. The
+    // cursor guard mirrors the queue item ref guard: a non-contract page
+    // token is answered locally as the uniform not-found, never propagated
+    // upstream. The read itself is role-scoped upstream — only oversight
+    // roles hold operator.audit.read — so the pass-through presents a fixed
+    // oversight principal: the feed does not vary by reader, and per-user
+    // authorization stays in the BFF's own audit:read gate.
+    if (!isDeviceId(deviceId)) {
+      return { status: "unavailable" };
+    }
+    if (cursor !== undefined && !auditCursorPattern.test(cursor)) {
+      return { status: "not-found" };
+    }
+    try {
+      const token = mintSyntheticOperatorToken({
+        key: devTokenKey as string,
+        subject: AUDIT_READER_SUBJECT,
+        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+      });
+      const body = await get(
+        `/api/v1/operator/audit${cursor === undefined ? "" : `?cursor=${cursor}`}`,
+        token,
+        deviceId,
+        nowMs
+      );
+      const view = parseOperatorAuditView(body);
+      return view === undefined ? { status: "unavailable" } : { status: "ok", view };
+    } catch (error) {
+      // The upstream feed answers a well-formed but never-minted cursor
+      // with its uniform 404: a real not-found, not drift.
+      if (error instanceof CustomerApiHttpError && error.status === 404) {
+        return { status: "not-found" };
+      }
+      return { status: "unavailable" };
+    }
+  }
+
+  return Object.freeze({ configured: true, operatorAdmin, operatorSubjects, operatorSubject, operatorQueue, operatorQueueItem, operatorAudit });
 }

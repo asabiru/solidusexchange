@@ -92,10 +92,12 @@ test("path variants of served operations never match", async () => {
       path.replace("/v1/", "/v1/x/../"),
       path.replace("/v1/", "/v1/%2e%2e/v1/"),
       path.replace("/api/v1", "/api/v1/customer/.."),
-      // The queue is the one operation that declares a query parameter:
-      // `?`-family variants are its own surface, not a mismatch, and stay
-      // asserted in the operator queue tests.
-      ...(path === "/api/v1/operator/queue" ? [] : [`${path}?`, `${path}?debug=1`]),
+      // The queue and audit feed are the operations that declare a query
+      // parameter: `?`-family variants are their own surface, not a
+      // mismatch, and stay asserted in the operator queue/audit tests.
+      ...(["/api/v1/operator/queue", "/api/v1/operator/audit"].includes(path)
+        ? []
+        : [`${path}?`, `${path}?debug=1`]),
       `${path}#fragment`,
       `${path};param`,
       `${path}%00`,

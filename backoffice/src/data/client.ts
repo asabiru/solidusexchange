@@ -98,6 +98,11 @@ export interface OperatorQueueItemPayload {
   item: unknown;
 }
 
+export interface OperatorAuditPayload {
+  mode: string;
+  audit: unknown;
+}
+
 export interface ChecksPayload {
   statuses: readonly CheckStatus[];
   checks: readonly ChatCheck[];
@@ -576,6 +581,13 @@ export function getOperatorQueueItem(kind: OperatorQueueKind, itemId: string): P
     `/bff/api/operator/queue/${encodeURIComponent(kind)}/${encodeURIComponent(itemId)}`,
     `operator-queue-item:${kind}:${itemId}`
   );
+}
+
+export function getOperatorAudit(cursor?: string): Promise<OperatorAuditPayload> {
+  // Same binding as the queue's kind: the server serves the first page for
+  // an absent cursor, so the expected resource resolves the same way.
+  const query = cursor === undefined ? "" : `?cursor=${encodeURIComponent(cursor)}`;
+  return getSigned(`/bff/api/operator/audit${query}`, `operator-audit:${cursor ?? "first"}`);
 }
 
 export function getChecks(status?: CheckStatus): Promise<ChecksPayload> {

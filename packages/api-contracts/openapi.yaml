@@ -2147,6 +2147,76 @@
           }
         }
       }
+    },
+    "/api/v1/operator/audit": {
+      "get": {
+        "operationId": "getOperatorAudit",
+        "tags": [
+          "Operator"
+        ],
+        "summary": "Read the operator action log feed, newest first",
+        "security": [
+          {
+            "OperatorBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RequestId"
+          },
+          {
+            "$ref": "#/components/parameters/ClientVersion"
+          },
+          {
+            "$ref": "#/components/parameters/Platform"
+          },
+          {
+            "$ref": "#/components/parameters/DeviceId"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Opaque page token minted by the feed itself (`auc_*`); absent serves the first page. A malformed or repeated `cursor`, or any other query key, is malformed input and answers 400 VALIDATION_FAILED; a well-formed token that was never minted answers the uniform 404.",
+            "schema": {
+              "type": "string",
+              "pattern": "^auc_[0-9a-f]{16}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Operator audit feed page",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorAuditView"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthenticated"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3340,6 +3410,118 @@
           "raised_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "OperatorAuditView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mode",
+          "audit"
+        ],
+        "properties": {
+          "mode": {
+            "const": "test"
+          },
+          "audit": {
+            "$ref": "#/components/schemas/OperatorAuditFeed"
+          }
+        }
+      },
+      "OperatorAuditFeed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "as_of",
+          "entries",
+          "next_cursor"
+        ],
+        "properties": {
+          "as_of": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "entries": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/OperatorAuditEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^auc_[0-9a-f]{16}$"
+          }
+        }
+      },
+      "OperatorAuditEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "audit_id",
+          "actor_subject_id",
+          "actor_role",
+          "action",
+          "target_kind",
+          "target_id",
+          "at",
+          "detail_hash"
+        ],
+        "properties": {
+          "audit_id": {
+            "type": "string",
+            "pattern": "^au_[0-9a-f]{24}$"
+          },
+          "actor_subject_id": {
+            "type": "string",
+            "pattern": "^syn_oper_[a-z0-9]{8,32}$"
+          },
+          "actor_role": {
+            "type": "string",
+            "enum": [
+              "compliance-lead",
+              "support-l1",
+              "aml-investigator",
+              "fraud-investigator",
+              "auditor"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "session.opened",
+              "session.rotated",
+              "queue.viewed",
+              "subject.viewed",
+              "flag.reviewed"
+            ]
+          },
+          "target_kind": {
+            "type": "string",
+            "enum": [
+              "session",
+              "queue_item",
+              "subject",
+              "flag"
+            ]
+          },
+          "target_id": {
+            "type": "string",
+            "pattern": "^(osn|qky|qml|qtick|flg)_[0-9a-f]{24}$|^syn_cust_[a-z0-9]{8,32}$"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "detail_hash": {
+            "type": "string",
+            "pattern": "^adh_[0-9a-f]{32}$"
           }
         }
       },

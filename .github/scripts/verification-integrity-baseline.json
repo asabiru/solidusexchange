@@ -9,7 +9,7 @@
       "lint": "biome lint src scripts vite.config.ts",
       "typecheck": "tsc -b --pretty false && tsc -p tsconfig.server.json --noEmit --pretty false",
       "verify:migrations": "node scripts/verify-postgres-migration-source-catalog.mjs && node scripts/verify-postgres-migration-source-policy.mjs",
-      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/server-fields.test.js .test-dist/app/app-render.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/data/operator.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/oidc-audit.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/session-store.test.js .test-dist/server/session-store-audit-wave62.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js .test-dist/server/authz.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/operator-admin-upstream.test.js .test-dist/server/operator-subjects-upstream.test.js .test-dist/server/operator-subject-upstream.test.js .test-dist/server/operator-queue-upstream.test.js .test-dist/server/backoffice-upstream-audit.test.js"
+      "test": "rm -rf .test-dist && tsc -p tsconfig.test.json && node --test .test-dist/app/a11y.test.js .test-dist/app/i18n.test.js .test-dist/app/server-fields.test.js .test-dist/app/app-render.test.js .test-dist/app/checks.test.js .test-dist/app/support.test.js .test-dist/app/withdrawals.test.js .test-dist/app/subjects.test.js .test-dist/auth/access.test.js .test-dist/data/client.test.js .test-dist/data/demo.test.js .test-dist/data/operator.test.js .test-dist/server/checks.test.js .test-dist/server/support.test.js .test-dist/server/withdrawals.test.js .test-dist/server/subjects.test.js .test-dist/server/dev-server.test.js .test-dist/server/audit-store.test.js .test-dist/server/config.test.js .test-dist/server/controls.test.js .test-dist/server/oidc.test.js .test-dist/server/oidc-session.test.js .test-dist/server/oidc-audit.test.js .test-dist/server/postgres-audit-store.test.js .test-dist/server/session-store.test.js .test-dist/server/session-store-audit-wave62.test.js .test-dist/server/provider-evidence.test.js .test-dist/server/reports.test.js .test-dist/server/server.test.js .test-dist/server/signing.test.js .test-dist/server/step-up.test.js .test-dist/server/observability.test.js .test-dist/server/security-headers.test.js .test-dist/server/bff-core.test.js .test-dist/server/authz.test.js .test-dist/server/customer-api-client.test.js .test-dist/server/operator-admin-upstream.test.js .test-dist/server/operator-subjects-upstream.test.js .test-dist/server/operator-subject-upstream.test.js .test-dist/server/operator-queue-upstream.test.js .test-dist/server/operator-audit-upstream.test.js .test-dist/server/backoffice-upstream-audit.test.js"
     },
     "miniapp/package.json": {
       "dev": "node scripts/dev.mjs",
@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 638,
-      "minCases": 21
+      "minLines": 712,
+      "minCases": 23
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -549,7 +549,7 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 989,
+      "minLines": 990,
       "minCases": 31
     },
     "backoffice/src/server/dev-server.test.ts": {
@@ -573,19 +573,19 @@
       "minCases": 28
     },
     "backoffice/src/server/operator-admin-upstream.test.ts": {
-      "minLines": 234,
+      "minLines": 235,
       "minCases": 7
     },
     "backoffice/src/server/operator-queue-upstream.test.ts": {
-      "minLines": 778,
+      "minLines": 779,
       "minCases": 18
     },
     "backoffice/src/server/operator-subject-upstream.test.ts": {
-      "minLines": 374,
+      "minLines": 375,
       "minCases": 9
     },
     "backoffice/src/server/operator-subjects-upstream.test.ts": {
-      "minLines": 236,
+      "minLines": 237,
       "minCases": 6
     },
     "backoffice/src/server/postgres-audit-store.test.ts": {
@@ -605,7 +605,7 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 603,
+      "minLines": 606,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
@@ -1032,7 +1032,7 @@
       "minCases": 9
     },
     "packages/customer-api/tests/capabilities.test.mjs": {
-      "minLines": 258,
+      "minLines": 273,
       "minCases": 8
     },
     "packages/customer-api/tests/cards.test.mjs": {
@@ -1044,11 +1044,11 @@
       "minCases": 15
     },
     "packages/customer-api/tests/contract-conformance.test.mjs": {
-      "minLines": 974,
-      "minCases": 45
+      "minLines": 1036,
+      "minCases": 47
     },
     "packages/customer-api/tests/contract-coverage.test.mjs": {
-      "minLines": 295,
+      "minLines": 298,
       "minCases": 9
     },
     "packages/customer-api/tests/contract-validator.mjs": {
@@ -1084,7 +1084,7 @@
       "minCases": 18
     },
     "packages/customer-api/tests/http-client.mjs": {
-      "minLines": 251,
+      "minLines": 258,
       "minCases": 2
     },
     "packages/customer-api/tests/kyc.test.mjs": {
@@ -1120,8 +1120,8 @@
       "minCases": 6
     },
     "packages/customer-api/tests/operator.test.mjs": {
-      "minLines": 901,
-      "minCases": 26
+      "minLines": 1360,
+      "minCases": 37
     },
     "packages/customer-api/tests/payments.test.mjs": {
       "minLines": 280,
@@ -1148,15 +1148,15 @@
       "minCases": 10
     },
     "packages/customer-api/tests/request-headers.test.mjs": {
-      "minLines": 325,
+      "minLines": 329,
       "minCases": 14
     },
     "packages/customer-api/tests/routing.test.mjs": {
-      "minLines": 181,
+      "minLines": 183,
       "minCases": 10
     },
     "packages/customer-api/tests/security-headers.test.mjs": {
-      "minLines": 152,
+      "minLines": 155,
       "minCases": 6
     },
     "packages/customer-api/tests/store-config.test.mjs": {
@@ -1598,6 +1598,10 @@
     "miniapp/src/app/trades-sheet.test.ts": {
       "minLines": 164,
       "minCases": 10
+    },
+    "backoffice/src/server/operator-audit-upstream.test.ts": {
+      "minLines": 287,
+      "minCases": 8
     }
   }
 }
