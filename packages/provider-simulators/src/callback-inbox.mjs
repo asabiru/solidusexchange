@@ -70,11 +70,28 @@ import { isPositiveSequence, sha256Hex } from "./simulator-core.mjs";
  * @returns {CallbackInbox}
  */
 export function createCallbackInbox({ subjectField, initialStatus, transitions, maxSubjects = 10_000, maxEventIds = 1_024 }) {
+  if (typeof subjectField !== "string" || subjectField.length === 0) {
+    throw new TypeError("subjectField must be a non-empty string");
+  }
+  if (typeof initialStatus !== "string" || initialStatus.length === 0) {
+    throw new TypeError("initialStatus must be a non-empty string");
+  }
+  if (transitions === null || typeof transitions !== "object" || Array.isArray(transitions)) {
+    throw new TypeError("transitions must map statuses to arrays of next statuses");
+  }
   if (!Number.isSafeInteger(maxSubjects) || maxSubjects < 1) {
     throw new RangeError("maxSubjects must be a positive integer");
   }
   if (!Number.isSafeInteger(maxEventIds) || maxEventIds < 1) {
     throw new RangeError("maxEventIds must be a positive integer");
+  }
+  /** @type {Map<string, readonly string[]>} */
+  const transitionMap = new Map();
+  for (const [status, nextStatuses] of Object.entries(transitions)) {
+    if (!Array.isArray(nextStatuses) || nextStatuses.some((next) => typeof next !== "string")) {
+      throw new TypeError(`transitions for ${status} must be an array of statuses`);
+    }
+    transitionMap.set(status, Object.freeze([...nextStatuses]));
   }
   /** @type {Map<string, InboxSubject & { parked: Map<number, string>, eventIds: Set<string> }>} */
   const subjects = new Map();
@@ -85,8 +102,10 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
    * @param {InboxSubject} subject
    * @param {string} next
    */
-  const allowed = (subject, next) =>
-    Object.hasOwn(transitions, subject.status) && transitions[subject.status].includes(next);
+  const allowed = (subject, next) => {
+    const nextStatuses = transitionMap.get(subject.status);
+    return nextStatuses !== undefined && nextStatuses.includes(next);
+  };
 
   return Object.freeze({
     openSubject(subjectId, { deadline }) {
@@ -96,9 +115,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
       if (subjects.has(subjectId)) {
         throw new TypeError("subject is already open");
       }
-      if (!Number.isSafeInteger(deadline)) {
-        throw new TypeError("deadline must be integer epoch seconds");
-      }
+      assertEpochSeconds(deadline, "deadline");
       if (subjects.size >= maxSubjects) {
         throw new TypeError("inbox subject capacity reached");
       }
@@ -201,7 +218,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
       assertEpochSeconds(now, "inbox expiry time");
       const expired = [];
       for (const [subjectId, subject] of subjects) {
-        const terminal = !Object.hasOwn(transitions, subject.status) || transitions[subject.status].length === 0;
+        const terminal = (transitionMap.get(subject.status)?.length ?? 0) === 0;
         if (!subject.timedOut && !terminal && now > subject.deadline) {
           subject.timedOut = true;
           expired.push(subjectId);

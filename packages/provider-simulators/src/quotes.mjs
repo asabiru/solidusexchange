@@ -317,6 +317,9 @@ export function createQuoteVerifier(options) {
  */
 export function assessQuote(quote, { now, maxPriceAgeSeconds = 60 }) {
   assertEpochSeconds(now, "now");
+  if (!Number.isSafeInteger(maxPriceAgeSeconds) || maxPriceAgeSeconds < 0) {
+    throw new RangeError("maxPriceAgeSeconds must be a non-negative integer");
+  }
   const problem = validateSignedQuote(/** @type {Record<string, JsonValue>} */ (quote));
   if (problem !== null) {
     return { displayable: false, reason: "invalid_quote", executable: false };

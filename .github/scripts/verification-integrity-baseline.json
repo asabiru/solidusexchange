@@ -1654,6 +1654,10 @@
     "packages/provider-simulators/tests/quotes-audit-wave72.test.mjs": {
       "minLines": 86,
       "minCases": 3
+    },
+    "packages/provider-simulators/tests/sim-infra-audit-wave73.test.mjs": {
+      "minLines": 334,
+      "minCases": 17
     }
   }
 }
