@@ -473,12 +473,12 @@
       "minCases": 44
     },
     "backoffice/src/app/a11y.test.ts": {
-      "minLines": 622,
-      "minCases": 29
+      "minLines": 685,
+      "minCases": 35
     },
     "backoffice/src/app/app-render.test.ts": {
-      "minLines": 477,
-      "minCases": 27
+      "minLines": 530,
+      "minCases": 33
     },
     "backoffice/src/app/checks.test.ts": {
       "minLines": 51,
@@ -489,8 +489,8 @@
       "minCases": 38
     },
     "backoffice/src/app/server-fields.test.ts": {
-      "minLines": 245,
-      "minCases": 22
+      "minLines": 263,
+      "minCases": 26
     },
     "backoffice/src/app/subjects.test.ts": {
       "minLines": 118,
@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 728,
-      "minCases": 24
+      "minLines": 806,
+      "minCases": 26
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,

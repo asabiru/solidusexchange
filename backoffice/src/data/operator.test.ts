@@ -761,15 +761,25 @@ describe("operator queue item detail adapter", () => {
     }
   });
 
-  it("degrades a malformed kyc dossier to null instead of failing the detail", () => {
-    const parsed = parseOperatorQueueItemDetailView(
-      { ...kycDetail, item: { ...kycDetail.item, kyc: { status: "in_review" } } },
-      "kyc",
-      kycDetail.item.queueId
-    );
-    assert.equal(parsed?.kind, "kyc");
-    if (parsed?.kind !== "kyc") return;
-    assert.equal(parsed.item.kyc, null);
+  it("fails the whole detail when the kyc dossier drifts instead of claiming no dossier", () => {
+    // A malformed block is not the "no dossier" case: degrading it to null
+    // renders a false empty dossier — the sibling subject read fails closed.
+    for (const drift of [
+      { status: "in_review" },
+      { ...kycDetail.item.kyc, status: "unknown_state" },
+      { ...kycDetail.item.kyc, level: "vip" },
+      { ...kycDetail.item.kyc, sessionId: "not_a_session_ref" },
+      { ...kycDetail.item.kyc, history: [...kycDetail.item.kyc.history, { sessionId: `kys_${"z".repeat(24)}`, state: "rejected", submittedAt: "2026-09-01T08:00:00.000Z", decidedAt: null, rejectionReason: null }] },
+      "dossier",
+      7
+    ]) {
+      const parsed = parseOperatorQueueItemDetailView(
+        { ...kycDetail, item: { ...kycDetail.item, kyc: drift } },
+        "kyc",
+        kycDetail.item.queueId
+      );
+      assert.equal(parsed, undefined, JSON.stringify(drift).slice(0, 96));
+    }
   });
 });
 

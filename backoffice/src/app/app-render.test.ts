@@ -4,6 +4,7 @@ import { createElement as E, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { I18nProvider } from "./i18n-context.js";
 import {
+  AccessGate,
   AmlCaseDetail,
   AmlView,
   ApprovalPreviewPanel,
@@ -21,6 +22,7 @@ import {
   KycCaseDetail,
   KycView,
   LinkedRecords,
+  OperatorSubjectsView,
   ProviderEvidencePanel,
   ReportsView,
   SubjectsView,
@@ -523,5 +525,62 @@ describe("fail-closed regressions", () => {
     assert.match(html, /Ann/);
     assert.match(html, /—/);
     assert.doesNotMatch(html, /\[object Object\]|data-tone="constructor"/);
+  });
+
+  it("dashboard renders an empty-state row and no chart path when the queue list is empty", () => {
+    const html = render(E(DashboardView, { data: hostile({ metrics: [], queues: [] }) }));
+    assert.doesNotMatch(html, /d="[^"]*L-/, "empty queues must not emit a chart path with negative coordinates");
+    assert.doesNotMatch(html, /<path/, "an empty queue list must not paint a chart path at all");
+    assert.match(html, /<tr><td colSpan="5"><div class="empty">/, "the queues table needs an explicit empty state");
+  });
+
+  it("operator subjects table shows an empty state when the filter hides every row", () => {
+    const row = {
+      subjectId: "syn_cust_alpha001",
+      displayName: "Aibek Ermatov",
+      kycStatus: "verified",
+      flags: 0,
+      registeredAt: "2026-01-01T00:00:00.000Z",
+      lastActiveAt: "2026-01-02T00:00:00.000Z",
+      posting: "none"
+    };
+    const html = render(E(OperatorSubjectsView, { query: "zzz-no-match", subjects: hostile([row]) }));
+    assert.match(html, /colSpan="5"/, "a filtered-empty subject table must render a colSpan empty row");
+  });
+
+  it("provider evidence and approvals tables show an explicit empty state", () => {
+    const feed = render(E(ProviderEvidencePanel, { title: "x", feed: hostile({ cases: [] }) }));
+    assert.match(feed, /colSpan="6"/, "an empty evidence feed must render a colSpan empty row");
+    const approvals = render(E(ApprovalsView, { capabilities: hostile([]), data: hostile({ approvals: [] }) }));
+    assert.match(approvals, /colSpan="6"/, "an empty approvals queue must render a colSpan empty row");
+  });
+
+  it("audit integrity chip never claims a verified chain when verification failed", () => {
+    const data = {
+      chain: { verified: false, length: 1, headHash: "abcdef0123456789abcdef", durable: true, retentionDays: 30 },
+      events: []
+    };
+    const html = render(E(AuditView, { data: hostile(data), mayExport: false, operatorAudit: undefined }));
+    assert.doesNotMatch(html, /Цепочка проверена/, "unverified chain must not render the verified-chain claim");
+    assert.match(html, /Нарушена/);
+  });
+
+  it("degraded operator feed shows the shared banner and masks absent upstream fields", () => {
+    const data = {
+      chain: { verified: true, length: 1, headHash: "abcdef0123456789abcdef", durable: true, retentionDays: 30 },
+      events: [
+        { eventId: "EVT-1", sequence: 1, action: "kyc.viewed", occurredAt: "now", actor: "op-1", resource: "syn_cust_alpha001", tone: "info", outcome: "ok", evidenceDigest: "aa", previousHash: "bb", hash: "cc" }
+      ]
+    };
+    const html = render(E(AuditView, { data: hostile(data), mayExport: false, operatorAudit: undefined }));
+    assert.match(html, /safe-action/, "the feed degrade must render the shared DegradedNotice banner");
+    assert.doesNotMatch(html, /<td><\/td>/, "upstream-only cells must render the em-dash mask, not blank cells");
+  });
+
+  it("unsigned health flags only enable access affordances on a literal true", () => {
+    const state = { status: "signed-out", health: { oidcConfigured: "yes", devLoginEnabled: {}, version: "x" } };
+    const html = render(E(AccessGate, { state: hostile(state), theme: "light", onDevLogin: async () => {} }));
+    assert.doesNotMatch(html, /bff\/auth\/login/, "a truthy non-boolean flag must not expose the SSO affordance");
+    assert.doesNotMatch(html, /dev-role-select/, "a truthy non-boolean flag must not expose dev login");
   });
 });

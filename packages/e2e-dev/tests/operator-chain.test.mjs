@@ -585,7 +585,7 @@ describe("operator chain fail-closed paths", () => {
   it("rejects tampered audit input and unknown cursors at both layers", async () => {
     // `cursor` is the feed's only query parameter and must match the auc_*
     // grammar: anything else is invalid input the BFF fails closed locally.
-    await deniedGet("/bff/api/operator/audit?bogus=1", lead, 400, "operator_audit_query_invalid");
+    await deniedGet("/bff/api/operator/audit?bogus=1", lead, 400, "invalid_request");
     await deniedGet("/bff/api/operator/audit?cursor=evil", lead, 400, "operator_audit_cursor_invalid");
     await deniedGet(
       "/bff/api/operator/audit?cursor=AUC_0000000000000000",

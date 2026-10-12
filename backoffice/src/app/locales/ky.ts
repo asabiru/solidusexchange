@@ -309,6 +309,7 @@ export const ky: Messages = {
   "support.unassigned": "Аткаруучу жок",
   "support.queueNote": "Кезек окууга гана арналган; жооп берүү, дайындоо жана жабуу столдун өз куралдарында калат, бул экранда эмес.",
   "support.detailLoading": "Тикет жүктөлүүдө…",
+  "support.detailFailed": "Тикетти жүктөө мүмкүн болгон жок",
   "support.ticketSubject": "Тикеттин темасы",
   "support.lastMessageAt": "Акыркы билдирүү",
   "support.otherOpenTickets": "Башка ачык тикеттер",
@@ -443,6 +444,7 @@ export const ky: Messages = {
   "kyc.ageMs": "Курак, мс",
   "kyc.queueNote": "Кезек окууга гана арналган; дайындоолор жана тизмелер боюнча чечимдер бул экрандан эмес, макулдашуулар аркылуу аткарылат.",
   "kyc.detailLoading": "Кезек элементи жүктөлүүдө…",
+  "kyc.detailFailed": "Кезек элементин жүктөө мүмкүн болгон жок",
   "kyc.level.basic": "Негизги",
   "kyc.level.enhanced": "Кеңейтилген",
   "kyc.reason.simDocumentUnreadable": "Документ окула албайт",
@@ -470,6 +472,7 @@ export const ky: Messages = {
   "aml.unassigned": "Аткаруучу жок",
   "aml.queueNote": "Кезек окууга гана арналган; алерттерди иликтөө жана чечимдер бул экрандан эмес, макулдашуулар аркылуу аткарылат.",
   "aml.detailLoading": "Алерт жүктөлүүдө…",
+  "aml.detailFailed": "Алертти жүктөө мүмкүн болгон жок",
   "aml.flagsTitle": "Ачык флагтар",
   "aml.flagsEmpty": "Ачык флагтар жок",
   "investigations.description": "Бардык көзөмөлдөр боюнча кейстин хронологиясы · далилдерге шилтемелер · мажбурлоо чаралары жана кардарды өзгөртүү жок",
@@ -571,6 +574,8 @@ export const ky: Messages = {
   "audit.operatorFeedTitle": "Оператор аракеттеринин лентасы",
   "audit.operatorFeedDescription": "Кол коюлган апстрим окуусу · эң жаңылар башта · {asOf} бойнунча",
   "audit.operatorFeedDemo": "Демо саптар · кол коюлган лента жеткиликсиз",
+  "audit.degradedTitle": "Оператордун аракеттер лентасы жеткиликсиз",
+  "audit.degradedNote": "Жергиликтүү синтетикалык окуялар көрсөтүлүүдө; кол коюлган лента кийинки жеткиликтүү окудо кайра алынат.",
   "audit.role": "Ролу",
   "audit.target": "Максат",
   "reports.draftLabel": "Долбоор — жөнгө салуучуга тапшыруу үчүн эмес",
@@ -603,5 +608,6 @@ export const ky: Messages = {
   "access.errorBoundary": "Кирүү чегин текшерүү мүмкүн болгон жок.",
   "access.errorDevSession": "Dev-сессия четке кагылды.",
   "access.errorLogout": "Сессияны аяктоо мүмкүн болгон жок.",
-  "access.errorDetail": "Техникалык себеби: {detail}"
+  "access.errorDetail": "Техникалык себеби: {detail}",
+  "access.deviceNotApproved": "Түзмөк иштөө борборуна бекитилген эмес. Дайджестти администраторго жөнөтүңүз: {digest}"
 };

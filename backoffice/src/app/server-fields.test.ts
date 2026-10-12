@@ -267,4 +267,28 @@ describe("App.tsx hostile-data wiring", () => {
     assert.doesNotMatch(source, /(?:item|row|record|entry|detail|customer|check|alert|intent|ticket|approval|metric|report|section|step|message|note|preview|chain|command|policy|subject|selected)\.(?:digest|hash|headHash|previousHash|providerReference|at|occurredAt|createdAt|updatedAt|expiresAt|decidedAt|lastReviewedAt|detectedAt|openedAt)\.slice\(/);
     assert.doesNotMatch(source, /value\.toLocaleLowerCase\(/);
   });
+
+  it("never keys a list on raw server text alone — duplicate rows collide", () => {
+    // Bare text keys collapse two distinct hostile rows into one React identity;
+    // every list key must carry the row index or a parser-guaranteed unique id.
+    assert.doesNotMatch(source, /key=\{textOf\((?:factor|hypothesis|value|column|cell)\)\}/);
+    assert.doesNotMatch(source, /key=\{blockerLabel\(blocker\)\}/);
+    assert.doesNotMatch(source, /key=\{cells\.map/);
+  });
+
+  it("queue item panels never render a silent gap on a failed member read", () => {
+    assert.doesNotMatch(source, /detail === null \? null/);
+    assert.doesNotMatch(source, /detail !== "loading" && detail !== null/);
+  });
+
+  it("unsigned health flags are compared against the literal true only", () => {
+    assert.doesNotMatch(source, /state\.health\.oidcConfigured && \(/);
+    assert.doesNotMatch(source, /state\.health\.devLoginEnabled && \(/);
+    assert.match(source, /access\.health\.devLoginEnabled === true/);
+  });
+
+  it("the client never embeds localized prose in thrown errors", () => {
+    const client = readFileSync(new URL("../../src/data/client.ts", import.meta.url), "utf8");
+    assert.doesNotMatch(client, /[\u0400-\u04ff]/, "ApiError messages render in every locale — prose must live in the catalogs");
+  });
 });

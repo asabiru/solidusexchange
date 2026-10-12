@@ -1218,9 +1218,14 @@ export function parseOperatorQueueItemDetailView(
   ) {
     return undefined;
   }
-  // The nullable kyc dossier degrades like the sibling reads: a malformed
-  // block drops to the no-dossier state instead of failing the whole detail.
-  const kyc = item.kyc === null ? null : parseSubjectKyc(item.kyc) ?? null;
+  // The nullable kyc dossier stays fail-closed like the subject detail read:
+  // a malformed block fails the whole detail rather than painting a false
+  // "no dossier" claim; a literal null still means the subject has none.
+  const parsedKyc = item.kyc === null ? null : parseSubjectKyc(item.kyc);
+  if (parsedKyc === undefined) {
+    return undefined;
+  }
+  const kyc = parsedKyc;
   return Object.freeze({
     mode: "test",
     kind: "kyc",

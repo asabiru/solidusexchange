@@ -309,6 +309,7 @@ export const en: Messages = {
   "support.unassigned": "Unassigned",
   "support.queueNote": "The queue is read-only; replies, assignments and closures stay on the desk's own tools, not on this screen.",
   "support.detailLoading": "Loading ticket item…",
+  "support.detailFailed": "Could not load the ticket",
   "support.ticketSubject": "Ticket subject",
   "support.lastMessageAt": "Last message",
   "support.otherOpenTickets": "Other open tickets",
@@ -443,6 +444,7 @@ export const en: Messages = {
   "kyc.ageMs": "Age, ms",
   "kyc.queueNote": "The queue is read-only; assignments and item decisions happen through approvals, not from this screen.",
   "kyc.detailLoading": "Loading queue item…",
+  "kyc.detailFailed": "Could not load the queue item",
   "kyc.level.basic": "Basic",
   "kyc.level.enhanced": "Enhanced",
   "kyc.reason.simDocumentUnreadable": "Document unreadable",
@@ -470,6 +472,7 @@ export const en: Messages = {
   "aml.unassigned": "Unassigned",
   "aml.queueNote": "The queue is read-only; alert triage and decisions happen through approvals, not from this screen.",
   "aml.detailLoading": "Loading alert item…",
+  "aml.detailFailed": "Could not load the alert",
   "aml.flagsTitle": "Open flags",
   "aml.flagsEmpty": "No open flags",
   "investigations.description": "Cross-control case timeline · evidence links · no enforcement or customer mutation",
@@ -571,6 +574,8 @@ export const en: Messages = {
   "audit.operatorFeedTitle": "Operator action feed",
   "audit.operatorFeedDescription": "Signed upstream read · newest first · as of {asOf}",
   "audit.operatorFeedDemo": "Demo rows · signed feed unavailable",
+  "audit.degradedTitle": "Operator activity feed unavailable",
+  "audit.degradedNote": "Local synthetic events are shown; the signed feed is picked up again on the next available read.",
   "audit.role": "Role",
   "audit.target": "Target",
   "reports.draftLabel": "Draft — not for submission to the regulator",
@@ -603,5 +608,6 @@ export const en: Messages = {
   "access.errorBoundary": "Could not verify the access boundary.",
   "access.errorDevSession": "Dev-only session rejected.",
   "access.errorLogout": "Could not end the session.",
-  "access.errorDetail": "Technical reason: {detail}"
+  "access.errorDetail": "Technical reason: {detail}",
+  "access.deviceNotApproved": "Device is not approved for the backoffice. Share this fingerprint with an administrator: {digest}"
 };
