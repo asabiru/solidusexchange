@@ -1,2 +1,10 @@
 *
 !infra/local/scripts/*.mjs
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/.git
+**/.git/**

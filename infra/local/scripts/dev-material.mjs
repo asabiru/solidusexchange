@@ -81,7 +81,7 @@ export async function prepareDevMaterial({ directory = DEFAULT_DIRECTORY, env = 
 
   await writeAtomically(directory, FILES.customerApiTokenKey, `${tokenKey}\n`, 0o444);
   await writeAtomically(directory, FILES.auditSuperuserPassword, `${passwords.auditSuperuserPassword}\n`, 0o400);
-  await writeAtomically(directory, FILES.auditRuntimePassword, `${passwords.auditRuntimePassword}\n`, 0o444);
+  await writeAtomically(directory, FILES.auditRuntimePassword, `${passwords.auditRuntimePassword}\n`, 0o400);
   await writeAtomically(directory, FILES.auditDatabaseUrl, `${auditDatabaseUrl(passwords.auditRuntimePassword)}\n`, 0o444);
   await writeAtomically(directory, FILES.caCertificate, tls.caCertificatePem, 0o444);
   await writeAtomically(directory, FILES.serverCertificate, tls.serverCertificatePem, 0o444);
