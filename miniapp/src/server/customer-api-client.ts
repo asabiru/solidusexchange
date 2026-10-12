@@ -54,6 +54,7 @@ import {
 import {
   contractQuoteAmounts,
   contractQuotePair,
+  contractQuotePairs,
   isQuoteSide,
   quoteIdPattern,
   quoteMaxBps,
@@ -1152,6 +1153,7 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
     return undefined;
   }
   const orders: CustomerApiExchangeOrder[] = [];
+  const seen = new Set<string>();
   for (const entry of value.orders) {
     const pairDef = isRecord(entry) ? contractQuotePair(entry.pair) : undefined;
     if (
@@ -1164,6 +1166,7 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
       || !isExchangeOrderType(entry.order_type)
       || typeof entry.order_id !== "string"
       || !exchangeOrderIdPattern.test(entry.order_id)
+      || seen.has(entry.order_id)
       || typeof entry.fee_bps !== "number"
       || !Number.isSafeInteger(entry.fee_bps)
       || entry.fee_bps < 0
@@ -1206,6 +1209,9 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
     ) {
       return undefined;
     }
+    // An order id is minted once per submission: a repeat is two rows
+    // claiming one order record, which the served validator pins.
+    seen.add(entry.order_id);
     orders.push(Object.freeze({
       order_id: entry.order_id,
       pair: pairDef.pair,
@@ -1258,6 +1264,7 @@ function parseTradesView(value: unknown): readonly CustomerApiTrade[] | undefine
     return undefined;
   }
   const trades: CustomerApiTrade[] = [];
+  const seen = new Set<string>();
   for (const entry of value.trades) {
     const pairDef = isRecord(entry) ? contractQuotePair(entry.pair) : undefined;
     if (
@@ -1270,6 +1277,7 @@ function parseTradesView(value: unknown): readonly CustomerApiTrade[] | undefine
       || !isTradeLiquidity(entry.liquidity)
       || typeof entry.trade_id !== "string"
       || !tradeIdPattern.test(entry.trade_id)
+      || seen.has(entry.trade_id)
       || typeof entry.order_id !== "string"
       || !exchangeOrderIdPattern.test(entry.order_id)
       || typeof entry.fee_bps !== "number"
@@ -1306,6 +1314,9 @@ function parseTradesView(value: unknown): readonly CustomerApiTrade[] | undefine
     ) {
       return undefined;
     }
+    // A trade id is minted once per (order, fill): a repeat is two rows
+    // claiming one execution record, which the served validator pins.
+    seen.add(entry.trade_id);
     trades.push(Object.freeze({
       trade_id: entry.trade_id,
       order_id: entry.order_id,
@@ -1372,18 +1383,20 @@ function parseMarketsView(value: unknown): readonly CustomerApiMarket[] | undefi
     || !hasExactKeys(value, ["mode", "markets"])
     || value.mode !== "test"
     || !Array.isArray(value.markets)
+    // The canonical instrument sequence is pinned exactly like the served
+    // validator: every declared pair reports precisely once, in catalog order.
+    || value.markets.length !== contractQuotePairs.length
   ) {
     return undefined;
   }
   const markets: CustomerApiMarket[] = [];
-  const seen = new Set<string>();
-  for (const entry of value.markets) {
+  for (const [index, entry] of value.markets.entries()) {
     const pairDef = isRecord(entry) ? contractQuotePair(entry.instrument) : undefined;
     if (
       !isRecord(entry)
       || !hasExactKeys(entry, marketKeys)
       || pairDef === undefined
-      || seen.has(pairDef.pair)
+      || pairDef.pair !== contractQuotePairs[index]?.pair
       || entry.base_asset !== pairDef.base
       || entry.quote_asset !== pairDef.quote
       || entry.base_scale !== pairDef.baseScale
@@ -1394,7 +1407,6 @@ function parseMarketsView(value: unknown): readonly CustomerApiMarket[] | undefi
     ) {
       return undefined;
     }
-    seen.add(pairDef.pair);
     const bestBid = parseMarketLevel(entry.best_bid, pairDef);
     const bestAsk = parseMarketLevel(entry.best_ask, pairDef);
     if (bestBid === undefined || bestAsk === undefined) {
@@ -1437,6 +1449,10 @@ function parseMarketsView(value: unknown): readonly CustomerApiMarket[] | undefi
         || !isScaledDecimal(entry.last_trade.quantity, pairDef.baseScale)
         || toUnits(entry.last_trade.quantity, pairDef.baseScale) <= 0n
         || !isIsoTimestamp(entry.last_trade.executed_at)
+        // A fill can only be recorded inside the replayed session: the last
+        // trade never post-dates the snapshot close — the same bound the
+        // depth member read pins.
+        || Date.parse(entry.last_trade.executed_at) > Date.parse(entry.as_of)
       ) {
         return undefined;
       }
@@ -2324,7 +2340,15 @@ const kycStatusViewKeys = [
 const kycStatusRequiredKeys = ["can_submit", "mode", "provider", "session_kyc", "status", "updated_at"] as const;
 
 function isIsoTimestamp(value: unknown): value is string {
-  return typeof value === "string" && isoTimestampPattern.test(value) && Number.isFinite(Date.parse(value));
+  if (typeof value !== "string" || !isoTimestampPattern.test(value)) {
+    return false;
+  }
+  // Mirrors the upstream validator's canonicalizer: the stamp must
+  // reserialize to itself. Date.parse alone normalizes out-of-range
+  // components ("2026-02-31" rolls into March, "T24:00" into the next
+  // day) and would accept drift the served contract rejects.
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value;
 }
 
 function isCodeList(value: unknown, allowed: readonly string[]): boolean {

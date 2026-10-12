@@ -272,6 +272,20 @@ describe("GET /bff/operations through the customer-api seam", () => {
 });
 
 describe("GET /bff/operations/:id through the customer-api seam", () => {
+  it("rejects an undeclared query string on the member read without an upstream call", async () => {
+    const stub = operationsStub({ status: "unavailable" }, { status: "ok", operation: upstreamItem() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, `/bff/operations/${marker}?trace=1`, cookie);
+      assert.equal(response.status, 400);
+      assert.deepEqual(await response.json(), { error: "invalid_request" });
+      assert.equal(stub.detailCalls.length, 0, "an undeclared query must not reach upstream");
+    } finally {
+      await running.close();
+    }
+  });
+
   it("adapts one contract operation into the app's detail shape", async () => {
     const stub = operationsStub({ status: "unavailable" }, { status: "ok", operation: upstreamItem() });
     const running = await start(config(), stub);
