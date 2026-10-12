@@ -136,6 +136,31 @@ test("conformance pins error request_id and empty details", () => {
   assert.match(check(response(500, { ...errorEnvelope(), details: { trace: "x" } })).join(), /details/u);
 });
 
+test("conformance binds each error status to its pinned code", () => {
+  const path = "/api/v1/customer/session";
+  const check = (status, code, headers = {}) =>
+    conformanceErrors(contract, validator, {
+      method: "GET",
+      path,
+      response: response(status, errorEnvelope(code), headers)
+    });
+  // The Error enum accepts every code below; the status->code binding is
+  // what makes a valid-but-wrong code a drift.
+  assert.match(check(400, "CAPABILITY_DENIED").join(), /must carry code VALIDATION_FAILED/u);
+  assert.match(check(401, "CAPABILITY_DENIED").join(), /must carry code AUTHENTICATION_REQUIRED/u);
+  assert.match(check(404, "VALIDATION_FAILED").join(), /must carry code CAPABILITY_DENIED/u);
+  assert.match(check(500, "AUTHENTICATION_REQUIRED").join(), /must carry code INTERNAL_ERROR/u);
+  assert.match(
+    check(429, "INTERNAL_ERROR", { "retry-after": "30" }).join(),
+    /must carry code RATE_LIMITED/u
+  );
+  assert.deepEqual(check(400, "VALIDATION_FAILED"), []);
+  assert.deepEqual(check(401, "AUTHENTICATION_REQUIRED"), []);
+  assert.deepEqual(check(404, "CAPABILITY_DENIED"), []);
+  assert.deepEqual(check(500, "INTERNAL_ERROR"), []);
+  assert.deepEqual(check(429, "RATE_LIMITED", { "retry-after": "30" }), []);
+});
+
 test("Retry-After is validated as a positive integer header", () => {
   const path = "/api/v1/customer/capabilities";
   const check = (value) =>
