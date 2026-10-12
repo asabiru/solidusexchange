@@ -1,14 +1,17 @@
 import { loadServerConfig } from "./config.js";
 import { demoRepository } from "../data/demo.js";
 import { createAuditStore } from "./audit-bootstrap.js";
+import { createSessionStore } from "./session-bootstrap.js";
 import { createBackofficeServer } from "./server.js";
 
 async function main(): Promise<void> {
   const config = loadServerConfig();
   const auditStore = await createAuditStore(config.audit, demoRepository.auditSource());
-  const server = createBackofficeServer(config, auditStore);
+  const sessionStore = await createSessionStore(config.session);
+  const server = createBackofficeServer(config, auditStore, undefined, {}, undefined, sessionStore);
   server.once("close", () => {
     void auditStore.close();
+    void sessionStore.close();
   });
 
   server.listen(config.port, config.host, () => {

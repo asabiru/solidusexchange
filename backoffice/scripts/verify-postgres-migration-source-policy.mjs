@@ -1,0 +1,231 @@
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+const migrationDirectory = resolve(process.argv[2] ?? join(root, "migrations"));
+const migrationNames = readdirSync(migrationDirectory)
+  .filter((name) => name.endsWith(".sql"))
+  .sort();
+
+assert(
+  migrationNames.length > 0,
+  "PostgreSQL backoffice migration source policy requires migrations"
+);
+
+// The backoffice catalog (schema_migrations) did not exist when revision
+// 0001 was applied, so the bootstrap work — the history table, its triggers
+// and the backfilled version-1 row — lives in revision 0002.
+const historyBootstrapVersion = 2;
+
+const migrations = migrationNames.map((name) => {
+  const match = /^([0-9]{4})_[a-z0-9_]+\.sql$/.exec(name);
+  assert(match, `PostgreSQL backoffice migration filename is not canonical: ${name}`);
+  return {
+    name,
+    migrationName: name.slice(0, -4),
+    version: Number(match[1])
+  };
+});
+
+assert.deepStrictEqual(
+  migrations.map(({ version }) => version),
+  migrations.map((_, index) => index + 1),
+  "PostgreSQL backoffice migration source versions must form a contiguous sequence starting at 0001"
+);
+
+/** @param {number} version */
+function expectedHistoryRows(version) {
+  if (version === historyBootstrapVersion) {
+    // The bootstrap records the pre-catalog revision alongside its own.
+    return [
+      [1, "0001_append_only_audit"],
+      [version, migrations[version - 1].migrationName]
+    ];
+  }
+  if (version < historyBootstrapVersion) {
+    return [];
+  }
+  const { migrationName } = migrations[version - 1];
+  return [[version, migrationName]];
+}
+
+/** @param {string} source */
+function normalizeSqlSource(source) {
+  let normalized = "";
+  let index = 0;
+
+  while (index < source.length) {
+    const next = source[index];
+    const afterNext = source[index + 1];
+
+    if (next === "-" && afterNext === "-") {
+      normalized += "  ";
+      index += 2;
+      while (index < source.length && source[index] !== "\n") {
+        normalized += " ";
+        index += 1;
+      }
+      continue;
+    }
+
+    if (next === "/" && afterNext === "*") {
+      normalized += "  ";
+      index += 2;
+      let depth = 1;
+      while (index < source.length && depth > 0) {
+        if (source[index] === "/" && source[index + 1] === "*") {
+          normalized += "  ";
+          index += 2;
+          depth += 1;
+          continue;
+        }
+        if (source[index] === "*" && source[index + 1] === "/") {
+          normalized += "  ";
+          index += 2;
+          depth -= 1;
+          continue;
+        }
+        normalized += source[index] === "\n" ? "\n" : " ";
+        index += 1;
+      }
+      assert.equal(depth, 0, "PostgreSQL backoffice migration contains an unterminated block comment");
+      continue;
+    }
+
+    if (next === "'") {
+      normalized += next;
+      index += 1;
+      while (index < source.length) {
+        normalized += source[index];
+        if (source[index] === "'") {
+          if (source[index + 1] === "'") {
+            normalized += source[index + 1];
+            index += 2;
+            continue;
+          }
+          index += 1;
+          break;
+        }
+        index += 1;
+      }
+      continue;
+    }
+
+    if (next === "\"") {
+      let identifier = "";
+      let quotedIdentifier = next;
+      index += 1;
+      while (index < source.length) {
+        quotedIdentifier += source[index];
+        if (source[index] === "\"") {
+          if (source[index + 1] === "\"") {
+            identifier += "\"";
+            quotedIdentifier += source[index + 1];
+            index += 2;
+            continue;
+          }
+          index += 1;
+          break;
+        }
+        identifier += source[index];
+        index += 1;
+      }
+      normalized +=
+        identifier === "backoffice_control" || identifier === "schema_migrations"
+          ? identifier
+          : quotedIdentifier;
+      continue;
+    }
+
+    if ((next === "U" || next === "u") && afterNext === "&" && source[index + 2] === "\"") {
+      assert.fail("PostgreSQL backoffice migration source policy does not allow Unicode-escaped identifiers");
+    }
+
+    if (next === "$") {
+      const match = /^\$[A-Za-z_][A-Za-z0-9_]*\$|^\$\$/u.exec(source.slice(index));
+      if (match) {
+        const delimiter = match[0];
+        const closeIndex = source.indexOf(delimiter, index + delimiter.length);
+        assert(
+          closeIndex !== -1,
+          "PostgreSQL backoffice migration contains an unterminated dollar-quoted string"
+        );
+        const endIndex = closeIndex + delimiter.length;
+        normalized += source.slice(index, endIndex);
+        index = endIndex;
+        continue;
+      }
+    }
+
+    normalized += next;
+    index += 1;
+  }
+
+  return normalized;
+}
+
+for (const { name, version } of migrations) {
+  const source = readFileSync(join(migrationDirectory, name), "utf8");
+  const executableSource = normalizeSqlSource(source);
+  const transactionControls =
+    executableSource.match(
+      /^[ \t]*(?:BEGIN(?:\s+(?:WORK|TRANSACTION)(?:\s+[^;\n]+)?)?|START\s+TRANSACTION(?:\s+[^;\n]+)?|COMMIT(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|COMMIT\s+PREPARED\s+'[^']+'|END\s+(?:WORK|TRANSACTION)(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK(?:\s+(?:WORK|TRANSACTION))?(?:\s+AND\s+(?:NO\s+)?CHAIN)?|ROLLBACK\s+TO(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|ROLLBACK\s+PREPARED\s+'[^']+'|ABORT(?:\s+(?:WORK|TRANSACTION))?|SAVEPOINT\s+[a-z_][a-z0-9_]*|RELEASE(?:\s+SAVEPOINT)?\s+[a-z_][a-z0-9_]*|PREPARE\s+TRANSACTION\s+'[^']+')[ \t]*;[ \t]*$/gimu
+    ) ?? [];
+  const normalizedTransactionControls = transactionControls.map((statement) =>
+    statement.trim().replace(/\s+/gu, " ").toUpperCase()
+  );
+
+  assert(
+    executableSource.trimStart().startsWith("BEGIN;") &&
+      executableSource.trimEnd().endsWith("COMMIT;") &&
+      normalizedTransactionControls.length === 2 &&
+      normalizedTransactionControls[0] === "BEGIN;" &&
+      normalizedTransactionControls[1] === "COMMIT;",
+    `PostgreSQL backoffice migration must contain exactly one top-level BEGIN and COMMIT transaction boundary: ${name}`
+  );
+  assert.equal(
+    (executableSource.match(/^[ \t]*\\\S+/gmu) ?? []).length,
+    0,
+    `PostgreSQL backoffice migration must not execute psql meta-commands: ${name}`
+  );
+
+  const historyTableDefinitions =
+    executableSource.match(
+      /CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?backoffice_control\s*\.\s*schema_migrations\b/giu
+    ) ?? [];
+  assert.equal(
+    historyTableDefinitions.length,
+    version === historyBootstrapVersion ? 1 : 0,
+    `PostgreSQL backoffice migration history table must be created only by the history bootstrap migration: ${name}`
+  );
+
+  const historyWrites =
+    executableSource.match(
+      /\b(?:INSERT\s+INTO(?:\s+ONLY)?|UPDATE(?:\s+ONLY)?|DELETE\s+FROM(?:\s+ONLY)?|TRUNCATE(?:\s+TABLE)?(?:\s+ONLY)?|COPY|ALTER\s+TABLE(?:\s+ONLY)?|DROP\s+TABLE(?:\s+IF\s+EXISTS)?)\s+backoffice_control\s*\.\s*schema_migrations\b/giu
+    ) ?? [];
+  const historyRows = [
+    ...executableSource.matchAll(
+      /INSERT\s+INTO\s+backoffice_control\s*\.\s*schema_migrations\s*\(\s*version\s*,\s*migration_name\s*\)\s*VALUES\s*\(\s*([0-9]+)\s*,\s*'([a-z0-9_]+)'\s*\)\s*;/giu
+    )
+  ];
+  const historyTableAlterations =
+    executableSource.match(
+      /ALTER\s+TABLE(?:\s+ONLY)?\s+backoffice_control\s*\.\s*schema_migrations\s+ENABLE\s+ALWAYS\s+TRIGGER\s+schema_migrations_[a-z_]+\s*;/giu
+    ) ?? [];
+
+  assert.equal(
+    historyWrites.length,
+    historyRows.length +
+      (version === historyBootstrapVersion ? historyTableAlterations.length : 0),
+    `PostgreSQL backoffice migration must change history only through canonical history rows: ${name}`
+  );
+  assert.deepStrictEqual(
+    historyRows.map((row) => [Number(row[1]), row[2]]),
+    expectedHistoryRows(version),
+    `PostgreSQL backoffice migration history rows must match canonical source history: ${name}`
+  );
+}
+
+console.log("backoffice-postgres-migration-source-policy-ok");

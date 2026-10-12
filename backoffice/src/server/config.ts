@@ -19,6 +19,11 @@ export interface AuditConfig {
   databaseUrl?: string;
 }
 
+export interface SessionStorageConfig {
+  storage: "memory" | "postgresql";
+  databaseUrl?: string;
+}
+
 export interface StepUpConfig {
   provider: "synthetic-dev";
   challengeTtlSeconds: number;
@@ -44,6 +49,7 @@ export interface ServerConfig {
   allowDevLogin: boolean;
   sessionTtlSeconds: number;
   audit: AuditConfig;
+  session?: SessionStorageConfig;
   stepUp: StepUpConfig;
   signing: SigningConfig;
   deviceBinding?: DeviceBindingConfig;
@@ -213,6 +219,26 @@ function loadAuditConfig(): AuditConfig {
   return { storage, retentionDays, databaseUrl };
 }
 
+function loadSessionStorageConfig(): SessionStorageConfig {
+  const storage = process.env.BACKOFFICE_SESSION_STORE ?? "memory";
+  if (storage !== "memory" && storage !== "postgresql") {
+    throw new Error("BACKOFFICE_SESSION_STORE must be memory or postgresql");
+  }
+
+  const databaseUrl = requiredOidcValue("BACKOFFICE_SESSION_STORE_DSN");
+  if (storage === "postgresql" && !databaseUrl) {
+    throw new Error("BACKOFFICE_SESSION_STORE_DSN is required for PostgreSQL session storage");
+  }
+  if (databaseUrl) {
+    const url = new URL(databaseUrl);
+    if (!["postgres:", "postgresql:"].includes(url.protocol)) {
+      throw new Error("BACKOFFICE_SESSION_STORE_DSN must use PostgreSQL");
+    }
+  }
+
+  return { storage, databaseUrl };
+}
+
 function integerSetting(name: string, fallback: number, minimum: number, maximum: number): number {
   const value = Number(process.env[name] ?? fallback);
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
@@ -373,6 +399,7 @@ export function loadServerConfig(): ServerConfig {
     allowDevLogin: process.env.BACKOFFICE_ALLOW_DEV_LOGIN === "true",
     sessionTtlSeconds,
     audit: loadAuditConfig(),
+    session: loadSessionStorageConfig(),
     stepUp: loadStepUpConfig(),
     signing: loadSigningConfig(),
     deviceBinding: loadDeviceBindingConfig(),

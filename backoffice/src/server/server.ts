@@ -10,7 +10,15 @@ import {
   verifyIdToken
 } from "./oidc.js";
 import { createDeviceId, deviceDigest, isDeviceId } from "./device.js";
-import { ExpiringStore, type OperatorSession, type PendingLogin } from "./session.js";
+import { ExpiringStore, type PendingLogin } from "./session.js";
+import {
+  type OperatorSession,
+  type SessionStore,
+  SessionStoreError,
+  SessionStoreUnavailableError,
+  createMemorySessionStore,
+  createOperatorSessionDirectory
+} from "./session-store.js";
 import {
   EphemeralSigningKeyProvider,
   ResponseSigner
@@ -184,15 +192,31 @@ function defaultAuditStore(config: ServerConfig): AuditStore {
   return new MemoryAuditStore(demoRepository.auditSource(), config.audit.retentionDays);
 }
 
+function defaultSessionStore(config: ServerConfig): SessionStore {
+  if (config.session && config.session.storage !== "memory") {
+    throw new SessionStoreUnavailableError("PostgreSQL session storage must be initialized before BFF");
+  }
+  const store = createMemorySessionStore();
+  // The memory backend's initialize body is synchronous, so this resolves
+  // before the first request can reach a route that touches the store.
+  void store.initialize();
+  return store;
+}
+
 export function createBackofficeServer(
   config: ServerConfig,
   auditStore: AuditStore = defaultAuditStore(config),
   injectedSigningKeys?: EphemeralSigningKeyProvider,
   observability: ObservabilityOptions = {},
-  customerApiClient?: CustomerApiClient
+  customerApiClient?: CustomerApiClient,
+  sessionStore?: SessionStore
 ) {
   const pendingLogins = new ExpiringStore<PendingLogin>();
-  const sessions = new ExpiringStore<OperatorSession>();
+  const sessions = sessionStore ?? defaultSessionStore(config);
+  const sessionDirectory = createOperatorSessionDirectory({
+    store: sessions,
+    ttlMs: config.sessionTtlSeconds * 1_000
+  });
   const signingKeys = injectedSigningKeys
     ?? new EphemeralSigningKeyProvider(config.signing.retainedVerificationKeys);
   const signer = new ResponseSigner(signingKeys);
@@ -207,10 +231,10 @@ export function createBackofficeServer(
   const enforceDevices = deviceBinding.mode === "enforce";
   const approvedDevices = new Set(deviceBinding.approvedDeviceDigests);
 
-  function setSessionCookie(response: ServerResponse, session: OperatorSession): void {
+  function setSessionCookie(response: ServerResponse, token: string): void {
     const secure = config.allowedOrigins.every((origin) => origin.startsWith("https://"));
     const flags = [
-      `${sessionCookie}=${encodeURIComponent(session.id)}`,
+      `${sessionCookie}=${encodeURIComponent(token)}`,
       "HttpOnly",
       "SameSite=Strict",
       "Path=/bff",
@@ -289,32 +313,33 @@ export function createBackofficeServer(
     return undefined;
   }
 
-  function currentSession(request: IncomingMessage): OperatorSession | undefined {
-    const id = parseCookies(request)[sessionCookie];
-    const session = id ? sessions.get(id) : undefined;
-    if (!session || !enforceDevices) return session;
+  async function currentSession(request: IncomingMessage): Promise<OperatorSession | undefined> {
+    const token = parseCookies(request)[sessionCookie];
+    const session = token ? await sessionDirectory.resolve(token) : null;
+    if (!session || !enforceDevices) return session ?? undefined;
     const deviceId = requestDeviceId(request);
-    return session.deviceId === deviceId && deviceApproved(deviceId) ? session : undefined;
+    return deviceId !== undefined
+      && session.deviceDigest === deviceDigest(deviceId)
+      && deviceApproved(deviceId)
+      ? session
+      : undefined;
   }
 
-  function createSession(
+  async function createSession(
     request: IncomingMessage,
     response: ServerResponse,
-    identity: Omit<OperatorSession, "id" | "expiresAt">,
-    loginStartSessionId?: string
-  ): OperatorSession {
-    const previousId = parseCookies(request)[sessionCookie];
-    if (previousId) sessions.delete(previousId);
-    if (loginStartSessionId) sessions.delete(loginStartSessionId);
-    const { deviceId } = identity;
-    if (deviceId) sessions.deleteWhere((session) => session.deviceId === deviceId);
-    const session = {
-      ...identity,
-      id: createOpaqueValue(),
-      expiresAt: Date.now() + config.sessionTtlSeconds * 1_000
-    };
-    sessions.set(session.id, session);
-    setSessionCookie(response, session);
+    identity: Omit<OperatorSession, "id" | "expiresAt" | "deviceDigest"> & { deviceId?: string },
+    loginStartSessionToken?: string
+  ): Promise<OperatorSession> {
+    const previousToken = parseCookies(request)[sessionCookie];
+    if (previousToken) await sessionDirectory.revokeByToken(previousToken);
+    if (loginStartSessionToken) await sessionDirectory.revokeByToken(loginStartSessionToken);
+    const { deviceId, ...rest } = identity;
+    const { session, token } = await sessionDirectory.issue({
+      ...rest,
+      deviceDigest: deviceId === undefined ? null : deviceDigest(deviceId)
+    });
+    setSessionCookie(response, token);
     return session;
   }
 
@@ -322,12 +347,12 @@ export function createBackofficeServer(
     json(response, 200, signer.envelope(resource, payload, randomUUID()));
   }
 
-  function authorized(
+  async function authorized(
     request: IncomingMessage,
     response: ServerResponse,
     capability?: Capability
-  ): OperatorSession | undefined {
-    const session = currentSession(request);
+  ): Promise<OperatorSession | undefined> {
+    const session = await currentSession(request);
     if (!session) {
       json(response, 401, { error: "operator_session_required" });
       return undefined;
@@ -353,7 +378,7 @@ export function createBackofficeServer(
     timer: observability.timer
   });
   const gauges: readonly Gauge[] = Object.freeze([
-    { name: "solidchange_backoffice_sessions_active", help: "Unexpired operator sessions.", value: () => sessions.size() },
+    { name: "solidchange_backoffice_sessions_active", help: "Unexpired operator sessions.", value: () => sessionDirectory.countLive() },
     {
       name: "solidchange_backoffice_audit_events",
       help: "Events in the verified audit chain.",
@@ -407,6 +432,9 @@ export function createBackofficeServer(
           devLoginEnabled: config.allowDevLogin,
           deviceBinding: deviceBinding.mode,
           dataSource: "synthetic",
+          sessions: {
+            backend: sessions.kind
+          },
           audit: {
             backend: audit.status.backend,
             durable: audit.status.durable,
@@ -441,7 +469,7 @@ export function createBackofficeServer(
         pendingLogins.set(state, {
           nonce,
           verifier,
-          previousSessionId: parseCookies(request)[sessionCookie] || undefined,
+          previousSessionToken: parseCookies(request)[sessionCookie] || undefined,
           expiresAt: Date.now() + 5 * 60 * 1_000
         });
         setOidcTransactionCookie(response, state);
@@ -464,7 +492,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/auth/status") {
-        json(response, 200, { authenticated: Boolean(currentSession(request)) });
+        json(response, 200, { authenticated: Boolean(await currentSession(request)) });
         return;
       }
 
@@ -492,11 +520,11 @@ export function createBackofficeServer(
         if (!device) return;
         const idToken = await exchangeAuthorizationCode(config.oidc, code, pending.verifier);
         const identity = await verifyIdToken(idToken, config.oidc, pending.nonce);
-        createSession(
+        await createSession(
           request,
           response,
           { ...identity, ...device },
-          pending.previousSessionId
+          pending.previousSessionToken
         );
         redirect(response, config.allowedOrigins[0]);
         return;
@@ -524,7 +552,7 @@ export function createBackofficeServer(
         }
         const device = admittedDevice(request, response);
         if (!device) return;
-        const session = createSession(request, response, {
+        const session = await createSession(request, response, {
           subject: `dev:${profile.id}`,
           email: `${profile.id}@dev.solidchange.invalid`,
           name: profile.operator,
@@ -543,8 +571,8 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = currentSession(request);
-        if (session) sessions.delete(session.id);
+        const session = await currentSession(request);
+        if (session) await sessionDirectory.revoke(session.id);
         clearSessionCookie(response);
         json(response, 204, {});
         return;
@@ -562,7 +590,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/session") {
-        const session = authorized(request, response);
+        const session = await authorized(request, response);
         if (!session) return;
         const profile = findRole(session.role);
         if (!profile) {
@@ -585,12 +613,12 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/admin") {
-        const session = authorized(request, response);
+        const session = await authorized(request, response);
         if (!session) return;
         if (customerApi.configured) {
           // The upstream operator audience pins X-Device-Id to the session's
           // bound workstation device (in enforce mode currentSession already
-          // proved the presented device equals session.deviceId). Without a
+          // proved the presented device equals the session's device digest). Without a
           // device identity the BFF cannot form a contract-valid request and
           // rejects locally before any upstream call.
           const deviceId = requestDeviceId(request);
@@ -635,7 +663,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/subjects") {
-        const session = authorized(request, response);
+        const session = await authorized(request, response);
         if (!session) return;
         if (customerApi.configured) {
           // Same device gate as the operator admin read: the upstream
@@ -686,7 +714,7 @@ export function createBackofficeServer(
 
       const operatorSubjectMatch = path.match(/^\/bff\/api\/operator\/subjects\/([^/]+)$/);
       if (request.method === "GET" && operatorSubjectMatch) {
-        const session = authorized(request, response);
+        const session = await authorized(request, response);
         if (!session) return;
         const requestedId = decodeURIComponent(operatorSubjectMatch[1]);
         if (customerApi.configured) {
@@ -769,7 +797,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/queue") {
-        const session = authorized(request, response);
+        const session = await authorized(request, response);
         if (!session) return;
         // `kind` is the operator queue's only query parameter: absent means
         // kyc (the default upstream), anything outside the enum is invalid
@@ -920,7 +948,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/dashboard") {
-        if (!authorized(request, response, "dashboard:read")) return;
+        if (!await authorized(request, response, "dashboard:read")) return;
         signed(response, "dashboard", {
           metrics: demoRepository.metrics(),
           queues: demoRepository.queues()
@@ -929,7 +957,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/customers") {
-        if (!authorized(request, response, "customers:read")) return;
+        if (!await authorized(request, response, "customers:read")) return;
         signed(response, "customers", { customers: demoRepository.customers() });
         return;
       }
@@ -948,7 +976,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = authorized(request, response, "checks:read");
+        const session = await authorized(request, response, "checks:read");
         if (!session) return;
         if (!checkMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -999,7 +1027,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = authorized(request, response, "support:read");
+        const session = await authorized(request, response, "support:read");
         if (!session) return;
         if (!ticketMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -1050,7 +1078,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = authorized(request, response, "custody:read");
+        const session = await authorized(request, response, "custody:read");
         if (!session) return;
         if (!withdrawalMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -1101,7 +1129,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = authorized(request, response, "subjects:read");
+        const session = await authorized(request, response, "subjects:read");
         if (!session) return;
         let ref: string;
         try {
@@ -1129,7 +1157,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/kyc") {
-        if (!authorized(request, response, "kyc:read")) return;
+        if (!await authorized(request, response, "kyc:read")) return;
         signed(response, "kyc-cases", {
           cases: demoRepository.kycCases(),
           providerEvidence: await providerEvidence.kyc()
@@ -1138,7 +1166,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/aml") {
-        if (!authorized(request, response, "aml:read")) return;
+        if (!await authorized(request, response, "aml:read")) return;
         signed(response, "aml-cases", {
           cases: demoRepository.amlCases(),
           providerEvidence: await providerEvidence.kyt()
@@ -1147,7 +1175,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/investigations") {
-        if (!authorized(request, response, "investigations:read")) return;
+        if (!await authorized(request, response, "investigations:read")) return;
         signed(response, "investigations", {
           cases: demoRepository.investigationCases()
         });
@@ -1155,7 +1183,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/fraud-alerts") {
-        if (!authorized(request, response, "fraud:read")) return;
+        if (!await authorized(request, response, "fraud:read")) return;
         signed(response, "fraud-alerts", {
           alerts: demoRepository.fraudAlerts()
         });
@@ -1163,7 +1191,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/approvals") {
-        if (!authorized(request, response, "approvals:read")) return;
+        if (!await authorized(request, response, "approvals:read")) return;
         signed(response, "approvals", {
           approvals: demoRepository.approvals().map((approval) => ({
             ...approval,
@@ -1174,7 +1202,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/audit") {
-        if (!authorized(request, response, "audit:read")) return;
+        if (!await authorized(request, response, "audit:read")) return;
         const audit = await auditStore.snapshot();
         signed(response, "audit", {
           events: audit.events,
@@ -1184,7 +1212,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/audit/export") {
-        if (!authorized(request, response, "audit:export")) return;
+        if (!await authorized(request, response, "audit:export")) return;
         const audit = await auditStore.snapshot();
         signed(response, "audit-export", {
           formatVersion: 1,
@@ -1215,7 +1243,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = authorized(request, response, "reports:read");
+        const session = await authorized(request, response, "reports:read");
         if (!session) return;
         if (!reportMatch && !reportExportMatch) {
           signed(response, "reports", listReports(new Date().toISOString()));
@@ -1265,7 +1293,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = authorized(request, response, "approvals:step-up");
+        const session = await authorized(request, response, "approvals:step-up");
         if (!session) return;
         let approvalId: string;
         try {
@@ -1311,7 +1339,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = authorized(request, response, "approvals:step-up");
+        const session = await authorized(request, response, "approvals:step-up");
         if (!session) return;
         let approvalId: string;
         let challengeId: string;
@@ -1361,7 +1389,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = authorized(request, response, "approvals:preview");
+        const session = await authorized(request, response, "approvals:preview");
         if (!session) return;
         let approvalId: string;
         try {
@@ -1423,6 +1451,10 @@ export function createBackofficeServer(
         json(response, error.status, {
           error: error.status === 415 ? "unsupported_media_type" : "invalid_request"
         });
+        return;
+      }
+      if (error instanceof SessionStoreError) {
+        json(response, 503, { error: "session_store_unavailable" });
         return;
       }
       if (error instanceof AuditStoreError) {

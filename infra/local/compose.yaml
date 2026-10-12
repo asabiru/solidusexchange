@@ -236,6 +236,7 @@ services:
       - audit-db-data:/var/lib/postgresql/data
       - ./postgres/pg_hba.conf:/etc/solidchange/pg_hba.conf:ro
       - ../../backoffice/migrations/0001_append_only_audit.sql:/docker-entrypoint-initdb.d/0001_append_only_audit.sql:ro
+      - ../../backoffice/migrations/0002_operator_sessions.sql:/docker-entrypoint-initdb.d/0002_operator_sessions.sql:ro
       - ./postgres/10-backoffice-runtime.sh:/docker-entrypoint-initdb.d/10-backoffice-runtime.sh:ro
     healthcheck:
       test: ["CMD", "pg_isready", "--host=/var/run/postgresql", "--dbname=solidchange_audit"]

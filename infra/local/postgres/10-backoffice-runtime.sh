@@ -13,4 +13,11 @@ CREATE ROLE backoffice_runtime LOGIN PASSWORD :'runtime_password';
 GRANT USAGE ON SCHEMA backoffice_control TO backoffice_runtime;
 GRANT SELECT ON backoffice_control.audit_schema TO backoffice_runtime;
 GRANT SELECT, INSERT ON backoffice_control.audit_events TO backoffice_runtime;
+-- The dev-only operator-session store (BACKOFFICE_SESSION_STORE=postgresql)
+-- reads the migration catalog and owns the full session lifecycle surface;
+-- everything else in the schema stays denied by default.
+GRANT SELECT ON backoffice_control.schema_migrations TO backoffice_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON backoffice_control.operator_sessions
+  TO backoffice_runtime;
 SQL

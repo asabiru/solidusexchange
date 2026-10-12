@@ -87,6 +87,42 @@ Replace `backoffice_runtime` with the deployment role. It must not receive `UPDA
 
 `BACKOFFICE_AUDIT_RETENTION_DAYS` records a minimum retention boundary on every append. Slice 5A does not provide deletion or cleanup. The default is a development baseline, not a legal retention determination for a live deployment.
 
+## Durable operator sessions
+
+Memory mode is the explicit default and changes no behavior: operator sessions and their device bindings live in the BFF process and are lost on restart.
+
+```text
+BACKOFFICE_SESSION_STORE=memory
+```
+
+PostgreSQL mode survives BFF restarts. Apply the migrations with a migration identity, then configure the BFF:
+
+```bash
+psql "$BACKOFFICE_SESSION_STORE_DSN" \
+  -v ON_ERROR_STOP=1 \
+  -f migrations/0001_append_only_audit.sql \
+  -f migrations/0002_operator_sessions.sql
+```
+
+```text
+BACKOFFICE_SESSION_STORE=postgresql
+BACKOFFICE_SESSION_STORE_DSN=postgresql://...
+```
+
+Grant the runtime identity only:
+
+```sql
+GRANT USAGE ON SCHEMA backoffice_control TO backoffice_runtime;
+GRANT SELECT ON backoffice_control.schema_migrations TO backoffice_runtime;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON backoffice_control.operator_sessions
+  TO backoffice_runtime;
+```
+
+The store keeps sha256 digests of bearer tokens and bound devices — never raw token or device-id material — and fails closed: a missing or drifted schema, an unreachable database or a write failure rejects session operations instead of degrading. Approved device digests stay environment configuration (`BACKOFFICE_APPROVED_DEVICE_DIGESTS`); the store records which digest a bound session answered to, not the approval list itself. Missing or incompatible schema, storage errors and write failures surface as `503 {"error":"session_store_unavailable"}`.
+
+This is dev-only groundwork; production session durability, revocation semantics and operator device policy remain subject to design approval.
+
 ## Step-up and signing lifecycle
 
 The built-in provider is deliberately `synthetic-dev`. It returns the verification code in the signed challenge response, so it is not MFA and must not be used as an authentication factor. It exists to verify challenge binding, expiry, attempt limits, one-time grants and replay rejection without connecting a production identity provider.
