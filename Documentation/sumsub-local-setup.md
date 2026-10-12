@@ -1,5 +1,7 @@
 # Sumsub Local Setup
 
+> **Статус: legacy-документация.** Описывает настройку Sumsub в legacy Laravel-приложении в корне репозитория. По текущей политике репозитория (dev-only/synthetic, см. `Documentation/regulated-core/`) живые ключи Sumsub не настраиваются.
+
 ## Что уже добавлено в проект
 
 - Глобальные настройки Sumsub в админке: `Admin -> Settings -> KYC Provider Settings`
