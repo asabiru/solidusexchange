@@ -307,6 +307,7 @@ export const ru = {
   "support.unassigned": "Без исполнителя",
   "support.queueNote": "Очередь только для чтения; ответы, назначения и закрытия остаются в собственных инструментах деска, а не на этом экране.",
   "support.detailLoading": "Загрузка тикета…",
+  "support.detailFailed": "Не удалось загрузить тикет",
   "support.ticketSubject": "Тема тикета",
   "support.lastMessageAt": "Последнее сообщение",
   "support.otherOpenTickets": "Другие открытые тикеты",
@@ -441,6 +442,7 @@ export const ru = {
   "kyc.ageMs": "Возраст, мс",
   "kyc.queueNote": "Очередь только для чтения; назначение и решения по элементам выполняются через согласования, а не с этого экрана.",
   "kyc.detailLoading": "Загрузка элемента очереди…",
+  "kyc.detailFailed": "Не удалось загрузить элемент очереди",
   "kyc.level.basic": "Базовый",
   "kyc.level.enhanced": "Расширенный",
   "kyc.reason.simDocumentUnreadable": "Документ не читается",
@@ -468,6 +470,7 @@ export const ru = {
   "aml.unassigned": "Без исполнителя",
   "aml.queueNote": "Очередь только для чтения; разбор алертов и решения выполняются через согласования, а не с этого экрана.",
   "aml.detailLoading": "Загрузка алерта…",
+  "aml.detailFailed": "Не удалось загрузить алерт",
   "aml.flagsTitle": "Открытые флаги",
   "aml.flagsEmpty": "Открытых флагов нет",
   "investigations.description": "Хронология кейса по всем контролям · ссылки на доказательства · без принудительных мер и изменений клиента",
@@ -569,6 +572,8 @@ export const ru = {
   "audit.operatorFeedTitle": "Лента действий операторов",
   "audit.operatorFeedDescription": "Подписанное чтение из апстрима · сначала новые · на {asOf}",
   "audit.operatorFeedDemo": "Демо-строки · подписанная лента недоступна",
+  "audit.degradedTitle": "Лента действий операторов недоступна",
+  "audit.degradedNote": "Показаны локальные синтетические события; подписанная лента подхватится при следующем доступном чтении.",
   "audit.role": "Роль",
   "audit.target": "Цель",
   "reports.draftLabel": "Черновик — не для подачи регулятору",
@@ -601,7 +606,8 @@ export const ru = {
   "access.errorBoundary": "Не удалось проверить границу доступа.",
   "access.errorDevSession": "Dev-сессия отклонена.",
   "access.errorLogout": "Не удалось завершить сессию.",
-  "access.errorDetail": "Техническая причина: {detail}"
+  "access.errorDetail": "Техническая причина: {detail}",
+  "access.deviceNotApproved": "Устройство не одобрено для backoffice. Передайте администратору отпечаток: {digest}"
 };
 
 export type MessageKey = keyof typeof ru;

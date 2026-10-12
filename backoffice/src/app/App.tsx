@@ -201,6 +201,7 @@ function Backdrop() {
 function QueueChart({ queues }: { queues: readonly QueueRow[] }) {
   const { t } = useI18n();
   const rows = rowsOf<QueueRow>(queues);
+  if (rows.length === 0) return null;
   const width = 300;
   const height = 132;
   const pad = 14;
@@ -260,13 +261,16 @@ export function DashboardView({ data }: { data: DashboardPayload }) {
               <tbody>
                 {queues.map((row, index) => (
                   <tr key={`${textOf(row.queue)}:${index}`}>
-                    <td><button className="table-link" type="button">{textOf(row.queue)}</button></td>
+                    <td>{textOf(row.queue)}</td>
                     <td>{textOf(row.critical)}</td>
                     <td>{textOf(row.total)}</td>
                     <td>{textOf(row.oldest)}</td>
                     <td><Status tone={toneOf(row.tone)}>{textOf(row.sla)}</Status></td>
                   </tr>
                 ))}
+                {!queues.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
               </tbody>
             </table>
           </TableShell>
@@ -443,7 +447,7 @@ function DemoCustomersView({ query, data }: { query: string; data: CustomersPayl
 }
 
 /** Live mode: subject list read straight from the signed operator payload; detail is fetched lazily. */
-function OperatorSubjectsView({ query, subjects }: { query: string; subjects: readonly OperatorSubjectRow[] }) {
+export function OperatorSubjectsView({ query, subjects }: { query: string; subjects: readonly OperatorSubjectRow[] }) {
   const { t, count, date } = useI18n();
   const rows = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
@@ -452,7 +456,7 @@ function OperatorSubjectsView({ query, subjects }: { query: string; subjects: re
       `${row.subjectId} ${row.displayName} ${row.kycStatus}`.toLocaleLowerCase("ru").includes(normalized));
   }, [subjects, query]);
   const [selectedId, setSelectedId] = useState<string | null>(rows[0]?.subjectId ?? null);
-  const active = useMemo(() => rows.find((row) => row.subjectId === selectedId) ?? null, [rows, selectedId]);
+  const active = useMemo(() => rows.find((row) => row.subjectId === selectedId) ?? rows[0] ?? null, [rows, selectedId]);
   return (
     <>
       <PageHeading title={t("screen.customers")} description={t("customers.description")} />
@@ -466,15 +470,18 @@ function OperatorSubjectsView({ query, subjects }: { query: string; subjects: re
             <table>
               <thead><tr><th scope="col">{t("customers.customer")}</th><th scope="col">{t("customers.kyc")}</th><th scope="col">{t("customers.colFlags")}</th><th scope="col">{t("customers.colRegistered")}</th><th scope="col">{t("customers.colLastActive")}</th></tr></thead>
               <tbody>
-                {rows.map((row, index) => (
+                {rows.map((row) => (
                   <tr key={row.subjectId} data-selected={row.subjectId === active?.subjectId}>
-                    <td><button className="link" type="button" aria-current={index === 0 ? "page" : undefined} onClick={() => setSelectedId(row.subjectId)}><strong>{row.displayName}</strong><br /><span className="mono">{row.subjectId}</span></button></td>
+                    <td><button className="link" type="button" aria-current={row.subjectId === active?.subjectId ? "true" : undefined} onClick={() => setSelectedId(row.subjectId)}><strong>{row.displayName}</strong><br /><span className="mono">{row.subjectId}</span></button></td>
                     <td>{enumText(t, operatorKycStatusKeyOf(row.kycStatus), row.kycStatus)}</td>
                     <td>{count(row.flags)}</td>
                     <td>{date(row.registeredAt)}</td>
                     <td>{date(row.lastActiveAt)}</td>
                   </tr>
                 ))}
+                {!rows.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
               </tbody>
             </table>
           </TableShell>
@@ -640,7 +647,12 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
       </>
     );
   }
-  return <aside className="panel case-detail">{body}</aside>;
+  return (
+    <aside className="panel case-detail">
+      {body}
+      <LiveStatus message={detailState === "loading" ? t("customers.loadingDetail") : ""} />
+    </aside>
+  );
 }
 
 export function EvidenceList({ items }: { items: readonly EvidenceItem[] }) {
@@ -761,6 +773,9 @@ export function ProviderEvidencePanel<T extends KycProviderEvidence | KytProvide
                   </tr>
                 );
               })}
+              {!cases.length && (
+                <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
+              )}
             </tbody>
           </table>
         </TableShell>
@@ -848,7 +863,7 @@ function OperatorQueueScreen({
               <tbody>
                 {rows.map((item, index) => (
                   <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
-                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{item.displayName}</small></td>
+                    <td><button className="table-link" type="button" aria-current={item.queueId === active?.queueId ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{item.displayName}</small></td>
                     <td><span className="mono">{item.subjectId}</span></td>
                     <td>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</td>
                     <td><Status tone={item.priority === "urgent" ? "danger" : item.priority === "high" ? "warning" : "info"}>{enumText(t, operatorQueuePriorityKeyOf(item.priority), item.priority)}</Status></td>
@@ -874,16 +889,16 @@ function OperatorKycQueueItemPanel({ item }: { item: OperatorQueueItem }) {
   // fetches `/bff/api/operator/queue/kyc/{id}` for the dossier extension.
   // Any failure degrades to the row-only view — the same `.catch(() =>
   // undefined)` idiom the route loaders use.
-  const [detail, setDetail] = useState<OperatorKycQueueItemDetail | null | "loading">("loading");
+  const [detailState, setDetailState] = useState<OperatorKycQueueItemDetail | null | "loading">("loading");
   useEffect(() => {
     let alive = true;
-    setDetail("loading");
+    setDetailState("loading");
     getOperatorQueueItem("kyc", item.queueId)
       .catch(() => undefined)
       .then((payload) => {
         if (!alive) return;
         const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "kyc", item.queueId);
-        setDetail(view !== undefined && view.kind === "kyc" ? view.item : null);
+        setDetailState(view !== undefined && view.kind === "kyc" ? view.item : null);
       });
     return () => {
       alive = false;
@@ -903,18 +918,21 @@ function OperatorKycQueueItemPanel({ item }: { item: OperatorQueueItem }) {
         <div><dt>{t("kyc.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("kyc.unassigned") : item.assignee.subject}</dd></div>
       </dl>
-      {detail === "loading" ? (
+      {detailState === "loading" ? (
         <div className="empty"><p>{t("kyc.detailLoading")}</p></div>
-      ) : detail === null ? null : (
+      ) : detailState === null ? (
+        <div className="preview-error" role="alert">{t("kyc.detailFailed")}</div>
+      ) : (
         <div className="subject-activity">
           <h3>{t("customers.kycDossier")}</h3>
-          {detail.kyc === null ? (
+          {detailState.kyc === null ? (
             <div className="empty"><p>{t("customers.kycEmpty")}</p></div>
           ) : (
-            <OperatorSubjectKycDossier kyc={detail.kyc} />
+            <OperatorSubjectKycDossier kyc={detailState.kyc} />
           )}
         </div>
       )}
+      <LiveStatus message={detailState === "loading" ? t("kyc.detailLoading") : ""} />
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("kyc.queueNote")}</p>
@@ -1063,7 +1081,7 @@ function OperatorAmlQueueScreen({
               <tbody>
                 {rows.map((item, index) => (
                   <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
-                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{enumText(t, operatorAmlAlertTypeKeyOf(item.alertType), item.alertType)}</small></td>
+                    <td><button className="table-link" type="button" aria-current={item.queueId === active?.queueId ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button><small className="cell-note">{enumText(t, operatorAmlAlertTypeKeyOf(item.alertType), item.alertType)}</small></td>
                     <td><span className="mono">{item.subjectId}</span></td>
                     <td className="numeric">{count(item.evidenceRefs.length)}</td>
                     <td>{enumText(t, operatorQueueStateKeyOf(item.state), item.state)}</td>
@@ -1089,16 +1107,16 @@ function OperatorAmlQueueItemPanel({ item }: { item: OperatorAmlQueueItem }) {
   // Drill-down: same lazy member read as the kyc queue — the flags list
   // lands behind `/bff/api/operator/queue/aml/{id}` and any failure
   // degrades to the row-only view.
-  const [detail, setDetail] = useState<OperatorAmlQueueItemDetail | null | "loading">("loading");
+  const [detailState, setDetailState] = useState<OperatorAmlQueueItemDetail | null | "loading">("loading");
   useEffect(() => {
     let alive = true;
-    setDetail("loading");
+    setDetailState("loading");
     getOperatorQueueItem("aml", item.queueId)
       .catch(() => undefined)
       .then((payload) => {
         if (!alive) return;
         const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "aml", item.queueId);
-        setDetail(view !== undefined && view.kind === "aml" ? view.item : null);
+        setDetailState(view !== undefined && view.kind === "aml" ? view.item : null);
       });
     return () => {
       alive = false;
@@ -1119,16 +1137,18 @@ function OperatorAmlQueueItemPanel({ item }: { item: OperatorAmlQueueItem }) {
         <div><dt>{t("aml.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("aml.unassigned") : item.assignee.subject}</dd></div>
       </dl>
-      {detail === "loading" ? (
+      {detailState === "loading" ? (
         <div className="empty"><p>{t("aml.detailLoading")}</p></div>
-      ) : detail === null ? null : (
+      ) : detailState === null ? (
+        <div className="preview-error" role="alert">{t("aml.detailFailed")}</div>
+      ) : (
         <div className="subject-activity">
           <h3>{t("aml.flagsTitle")}</h3>
-          {detail.flags.length === 0 && (
+          {detailState.flags.length === 0 && (
             <div className="empty"><p>{t("aml.flagsEmpty")}</p></div>
           )}
           <div className="timeline-list">
-            {detail.flags.map((flag) => (
+            {detailState.flags.map((flag) => (
               <div key={flag.flagId}>
                 <span />
                 <div>
@@ -1143,6 +1163,7 @@ function OperatorAmlQueueItemPanel({ item }: { item: OperatorAmlQueueItem }) {
           </div>
         </div>
       )}
+      <LiveStatus message={detailState === "loading" ? t("aml.detailLoading") : ""} />
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("aml.queueNote")}</p>
@@ -1233,7 +1254,7 @@ export function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; provi
       <WorkflowChecks checks={arrayOf(item.screenings)} />
       <h3 className="detail-section-title">{t("aml.riskFactors")}</h3>
       <ul className="factor-list">
-        {arrayOf(item.riskFactors).map((factor) => <li key={textOf(factor)}>{textOf(factor)}</li>)}
+        {arrayOf(item.riskFactors).map((factor, index) => <li key={`${textOf(factor)}:${index}`}>{textOf(factor)}</li>)}
       </ul>
       <h3 className="detail-section-title">{t("common.evidence")}</h3>
       <EvidenceList items={arrayOf(item.evidenceItems)} />
@@ -1248,7 +1269,7 @@ export function AmlCaseDetail({ item, providerEvidence }: { item: AmlCase; provi
 export function LinkedRecords({ values }: { values: readonly string[] }) {
   return (
     <div className="linked-records">
-      {arrayOf(values).map((value) => <span key={textOf(value)}>{textOf(value)}</span>)}
+      {arrayOf(values).map((value, index) => <span key={`${textOf(value)}:${index}`}>{textOf(value)}</span>)}
     </div>
   );
 }
@@ -1345,7 +1366,7 @@ export function InvestigationDetail({ item }: { item: InvestigationCase }) {
       <LinkedRecords values={[...arrayOf<unknown>(item.relatedAlertIds), ...arrayOf<unknown>(item.relatedCaseIds)] as string[]} />
       <h3 className="detail-section-title">{t("investigations.hypotheses")}</h3>
       <ul className="factor-list">
-        {arrayOf(item.hypotheses).map((hypothesis) => <li key={textOf(hypothesis)}>{textOf(hypothesis)}</li>)}
+        {arrayOf(item.hypotheses).map((hypothesis, index) => <li key={`${textOf(hypothesis)}:${index}`}>{textOf(hypothesis)}</li>)}
       </ul>
       <h3 className="detail-section-title">{t("investigations.timeline")}</h3>
       <div className="timeline-list">
@@ -1607,6 +1628,9 @@ export function ApprovalsView({
                     <td><Status tone={toneOf(approval.tone)}>{textOf(approval.state)}</Status></td>
                   </tr>
                 ))}
+                {!approvals.length && (
+                  <tr><td colSpan={6}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                )}
               </tbody>
             </table>
           </TableShell>
@@ -1775,8 +1799,8 @@ export function ApprovalPreviewPanel({ preview }: { preview: ApprovalPreview }) 
         <div><dt>{t("preview.auditAnchor")}</dt><dd>#{textOf(auditAnchor.sequence)} · {truncatedOf(auditAnchor.hash, 10)}</dd></div>
       </dl>
       <ul>
-        {arrayOf(policy.blockers).map((blocker) => (
-          <li key={blockerLabel(blocker)}>{blockerLabel(blocker)}</li>
+        {arrayOf(policy.blockers).map((blocker, index) => (
+          <li key={`${blockerLabel(blocker)}:${index}`}>{blockerLabel(blocker)}</li>
         ))}
       </ul>
     </section>
@@ -1816,7 +1840,7 @@ export function AuditView({ data, mayExport, operatorAudit }: { data: AuditPaylo
       <PageHeading title={t("screen.audit")} description={t("audit.description")} />
       <section className="audit-summary">
         <article className="metric">
-          <div><span>{t("audit.integrity")}</span><i data-tone="success" /></div>
+          <div><span>{t("audit.integrity")}</span><i data-tone={chain.verified === true ? "success" : "danger"} /></div>
           <strong>{chain.verified === true ? t("audit.verified") : t("audit.invalid")}</strong>
           <small>{t("audit.eventCount", { count: safeCount(count, chain.length) })}</small>
         </article>
@@ -1835,7 +1859,7 @@ export function AuditView({ data, mayExport, operatorAudit }: { data: AuditPaylo
         <header className="panel-heading">
           <div><h2>{t("audit.eventsTitle")}</h2><p>{t("audit.eventsDescription")}</p></div>
           <div className="audit-actions">
-            <Status tone="success">{t("audit.verifiedChain")}</Status>
+            <Status tone={chain.verified === true ? "success" : "danger"}>{chain.verified === true ? t("audit.verifiedChain") : t("audit.invalid")}</Status>
             <button
               className="button"
               type="button"
@@ -1877,6 +1901,9 @@ export function AuditView({ data, mayExport, operatorAudit }: { data: AuditPaylo
                   <td className="hash-cell">{truncatedOf(event.hash, 14)}</td>
                 </tr>
               ))}
+              {!events.length && (
+                <tr><td colSpan={8}><div className="empty">{t("common.noMatches")}</div></td></tr>
+              )}
             </tbody>
           </table>
         </TableShell>
@@ -1888,7 +1915,7 @@ export function AuditView({ data, mayExport, operatorAudit }: { data: AuditPaylo
 
 /** Operator action feed: the signed upstream read, newest first, degrading to the local demo rows. */
 function OperatorAuditFeed({ upstream, events }: { upstream: ReturnType<typeof parseOperatorAuditView>; events: readonly AuditEvent[] }) {
-  const { t, date } = useI18n();
+  const { t, date, time } = useI18n();
   const feed = upstream?.audit;
   const rows = useMemo(() => {
     if (feed !== undefined) return feed.entries.slice(0, 12);
@@ -1916,6 +1943,7 @@ function OperatorAuditFeed({ upstream, events }: { upstream: ReturnType<typeof p
         </div>
         <Status tone={feed === undefined ? "warning" : "info"}>{t("common.readOnly")}</Status>
       </header>
+      {feed === undefined && <DegradedNotice title={t("audit.degradedTitle")} note={t("audit.degradedNote")} />}
       <TableShell label={t("audit.operatorFeedTitle")}>
         <table>
           <thead>
@@ -1932,9 +1960,9 @@ function OperatorAuditFeed({ upstream, events }: { upstream: ReturnType<typeof p
             {rows.map((entry, index) => (
               <tr key={`${entry.auditId}:${index}`}>
                 <td className="numeric">{index + 1}</td>
-                <td>{entry.action}<small className="cell-note">{entry.at}</small></td>
+                <td>{textOf(entry.action)}<small className="cell-note">{feed === undefined ? entry.at : `${date(entry.at)} ${time(entry.at)}`}</small></td>
                 <td><span className="mono">{entry.actorSubjectId}</span></td>
-                <td>{entry.actorRole}</td>
+                <td>{entry.actorRole === "" ? "—" : entry.actorRole}</td>
                 <td>{entry.targetKind === "" ? entry.targetId : `${entry.targetKind} · ${entry.targetId}`}</td>
                 <td className="hash-cell">{truncatedOf(entry.detailHash, 14)}</td>
               </tr>
@@ -2087,17 +2115,20 @@ export function ReportsView({ data }: { data: ReportListPayload }) {
                   <TableShell key={`${textOf(table.id)}:${tableIndex}`} label={textOf(table.title)}>
                     <table>
                       <thead>
-                        <tr>{columns.map((column) => <th scope="col" key={textOf(column)}>{textOf(column)}</th>)}</tr>
+                        <tr>{columns.map((column, columnIndex) => <th scope="col" key={`${textOf(column)}:${columnIndex}`}>{textOf(column)}</th>)}</tr>
                       </thead>
                       <tbody>
-                        {arrayOf<unknown>(recordOf(table).rows).map((row) => {
+                        {arrayOf<unknown>(recordOf(table).rows).map((row, rowIndex) => {
                           const cells = arrayOf<unknown>(row);
                           return (
-                            <tr key={cells.map((cell) => textOf(cell)).join("\u001f")}>
-                              {cells.map((cell) => <td key={textOf(cell)}>{textOf(cell)}</td>)}
+                            <tr key={`${cells.map((cell) => textOf(cell)).join("\u001f")}:${rowIndex}`}>
+                              {cells.map((cell, cellIndex) => <td key={`${textOf(cell)}:${cellIndex}`}>{textOf(cell)}</td>)}
                             </tr>
                           );
                         })}
+                        {arrayOf<unknown>(recordOf(table).rows).length === 0 && (
+                          <tr><td colSpan={Math.max(1, columns.length)}><div className="empty">{t("common.noMatches")}</div></td></tr>
+                        )}
                       </tbody>
                     </table>
                   </TableShell>
@@ -2399,7 +2430,7 @@ function OperatorTicketQueueScreen({
               <tbody>
                 {rows.map((item, index) => (
                   <tr key={item.queueId} data-selected={item.queueId === active?.queueId}>
-                    <td><button className="table-link" type="button" aria-current={index === 0 ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button></td>
+                    <td><button className="table-link" type="button" aria-current={item.queueId === active?.queueId ? "true" : undefined} onClick={() => setSelectedId(item.queueId)}>{item.queueId}</button></td>
                     <td><span className="mono">{item.subjectId}</span></td>
                     <td>{enumText(t, operatorTicketCategoryKeyOf(item.category), item.category)}</td>
                     <td>{enumText(t, operatorTicketQueueStateKeyOf(item.state), item.state)}</td>
@@ -2425,16 +2456,16 @@ function OperatorTicketQueueItemPanel({ item }: { item: OperatorTicketQueueItem 
   // Drill-down: same lazy member read as the sibling queues — the ticket
   // extension lands behind `/bff/api/operator/queue/tickets/{id}` and any
   // failure degrades to the row-only view.
-  const [detail, setDetail] = useState<OperatorTicketQueueItemDetail | null | "loading">("loading");
+  const [detailState, setDetailState] = useState<OperatorTicketQueueItemDetail | null | "loading">("loading");
   useEffect(() => {
     let alive = true;
-    setDetail("loading");
+    setDetailState("loading");
     getOperatorQueueItem("tickets", item.queueId)
       .catch(() => undefined)
       .then((payload) => {
         if (!alive) return;
         const view = payload === undefined ? undefined : parseOperatorQueueItemDetailView(payload, "tickets", item.queueId);
-        setDetail(view !== undefined && view.kind === "tickets" ? view.item : null);
+        setDetailState(view !== undefined && view.kind === "tickets" ? view.item : null);
       });
     return () => {
       alive = false;
@@ -2453,17 +2484,20 @@ function OperatorTicketQueueItemPanel({ item }: { item: OperatorTicketQueueItem 
         <div><dt>{t("common.opened")}</dt><dd>{date(item.openedAt)}</dd></div>
         <div><dt>{t("support.ageMs")}</dt><dd>{count(item.ageMs)}</dd></div>
         <div><dt>{t("common.owner")}</dt><dd className="mono">{item.assignee === null ? t("support.unassigned") : item.assignee.subject}</dd></div>
-        {detail !== "loading" && detail !== null && (
+        {detailState !== "loading" && detailState !== null && (
           <>
-            <div><dt>{t("support.ticketSubject")}</dt><dd>{detail.subject}</dd></div>
-            <div><dt>{t("support.lastMessageAt")}</dt><dd>{date(detail.lastMessageAt)}</dd></div>
-            <div><dt>{t("support.otherOpenTickets")}</dt><dd>{count(detail.otherOpenTickets)}</dd></div>
+            <div><dt>{t("support.ticketSubject")}</dt><dd>{detailState.subject}</dd></div>
+            <div><dt>{t("support.lastMessageAt")}</dt><dd>{date(detailState.lastMessageAt)}</dd></div>
+            <div><dt>{t("support.otherOpenTickets")}</dt><dd>{count(detailState.otherOpenTickets)}</dd></div>
           </>
         )}
       </dl>
-      {detail === "loading" && (
+      {detailState === "loading" ? (
         <div className="empty"><p>{t("support.detailLoading")}</p></div>
-      )}
+      ) : detailState === null ? (
+        <div className="preview-error" role="alert">{t("support.detailFailed")}</div>
+      ) : null}
+      <LiveStatus message={detailState === "loading" ? t("support.detailLoading") : ""} />
       <div className="safe-action">
         <strong>{t("common.readOnly")}</strong>
         <p>{t("support.queueNote")}</p>
@@ -3003,7 +3037,7 @@ function hasCapability(session: SessionPayload, capability: Capability): boolean
   return capabilitiesOf(session?.operator).includes(capability);
 }
 
-function AccessGate({
+export function AccessGate({
   state,
   theme,
   onDevLogin
@@ -3057,10 +3091,10 @@ function AccessGate({
           <>
             <h1 className="access-title">{t("access.signedOutTitle")}</h1>
             <p className="access-copy">{t("access.signedOutCopy")}</p>
-            {state.health.oidcConfigured && (
+            {state.health.oidcConfigured === true && (
               <a className="button primary access-action access-button" href="/bff/auth/login">{t("access.ssoLogin")}</a>
             )}
-            {state.health.devLoginEnabled && (
+            {state.health.devLoginEnabled === true && (
               <div className="dev-login">
                 <label>
                   <span>{t("access.devRole")}</span>
@@ -3084,7 +3118,7 @@ function AccessGate({
                 </button>
               </div>
             )}
-            {!state.health.oidcConfigured && !state.health.devLoginEnabled && (
+            {state.health.oidcConfigured !== true && state.health.devLoginEnabled !== true && (
               <Status tone="warning">{t("access.oidcNotConfigured")}</Status>
             )}
           </>
@@ -3185,7 +3219,12 @@ export function App() {
       setAccess({
         status: "failed",
         reason: "access.errorDevSession",
-        detail: error instanceof Error ? error.message : undefined
+        detail:
+          error instanceof ApiError && error.code === "device_not_approved" && typeof error.deviceDigest === "string"
+            ? t("access.deviceNotApproved", { digest: error.deviceDigest })
+            : error instanceof Error
+              ? error.message
+              : undefined
       });
     }
   }
@@ -3375,7 +3414,7 @@ export function App() {
             <UiIcon name={theme === "light" ? "moon" : "sun"} />
           </button>
           <span className="avatar" aria-hidden="true">{profile.initials}</span>
-          {access.health.devLoginEnabled ? (
+          {access.health.devLoginEnabled === true ? (
             <label className="role">
               <span>{profile.name}</span>
               <select

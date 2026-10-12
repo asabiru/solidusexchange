@@ -489,7 +489,83 @@ describe("backoffice markup semantics", () => {
     for (const row of selectableRows) {
       const button = appJsx.find((entry) => entry.tag === "button" && isDescendant(entry, row));
       assert.ok(button?.attributes.has("aria-current"), "selected row trigger must expose aria-current");
+      // The marker must follow the row's own selection predicate — a positional
+      // marker (the first rendered row) keeps lying once the operator picks another row.
+      const current = attributeText(button as JsxNode, "aria-current") ?? "";
+      assert.doesNotMatch(current, /index === 0/, `${row.functionName}: aria-current must not mark the first row`);
+      assert.match(
+        current,
+        /\?\s*"(?:true|page)"\s*:\s*undefined/,
+        `${row.functionName}: aria-current must bind the data-selected predicate`
+      );
     }
+  });
+
+  it("every button either activates or is honestly disabled", () => {
+    const buttons = appJsx.filter((entry) => entry.tag === "button");
+    assert.ok(buttons.length >= 20);
+    for (const entry of buttons) {
+      const line = appFile.getLineAndCharacterOfPosition(entry.node.getStart(appFile)).line + 1;
+      const operable =
+        entry.attributes.has("onClick") ||
+        entry.attributes.has("disabled") ||
+        entry.ancestors.some((ancestor) => ancestor.tag === "form");
+      assert.ok(operable, `App.tsx:${line} button is focusable but can never fire`);
+    }
+  });
+
+  it("queue item detail panels surface a failed member read instead of a silent gap", () => {
+    for (const name of ["OperatorKycQueueItemPanel", "OperatorAmlQueueItemPanel", "OperatorTicketQueueItemPanel"]) {
+      const alert = appJsx.find(
+        (entry) =>
+          entry.functionName === name &&
+          (staticAttribute(entry, "role") === "alert" || staticAttribute(entry, "className") === "preview-error")
+      );
+      assert.ok(alert, `${name} must render a denied/failed state for an unreadable member detail`);
+    }
+  });
+
+  it("live-data panels announce lazy detail loading like the demo screens do", () => {
+    for (const name of [
+      "OperatorSubjectPanel",
+      "OperatorKycQueueItemPanel",
+      "OperatorAmlQueueItemPanel",
+      "OperatorTicketQueueItemPanel"
+    ]) {
+      const live = appJsx.find((entry) => entry.functionName === name && entry.tag === "LiveStatus");
+      assert.ok(live, `${name} must announce the lazy member read through LiveStatus`);
+    }
+  });
+
+  it("every list table renders an explicit empty state instead of a blank tbody", () => {
+    // Detail tables that render only behind a non-empty guard (the subject-360
+    // balances table is wrapped in `detail.balances.length === 0 ? … :`) are
+    // exempt; every always-rendered list needs a colSpan empty row.
+    const exempt = new Set(["OperatorSubjectPanel"]);
+    const bodies = appJsx.filter((entry) => entry.tag === "tbody");
+    assert.ok(bodies.length >= 10);
+    for (const body of bodies) {
+      if (exempt.has(body.functionName)) continue;
+      const empty = appJsx.some(
+        (entry) => entry.functionName === body.functionName && entry.tag === "td" && entry.attributes.has("colSpan")
+      );
+      assert.ok(empty, `${body.functionName}: filtered-to-empty must show a colSpan empty state, not a blank table`);
+    }
+  });
+
+  it("the audit integrity chip follows chain.verified and the feed degrade uses the shared banner", () => {
+    assert.doesNotMatch(appSource, /<Status tone="success">\{t\("audit\.verifiedChain"\)\}<\/Status>/);
+    assert.match(appSource, /chain\.verified === true \? "success" : "danger"/);
+    assert.ok(
+      appJsx.some((entry) => entry.functionName === "OperatorAuditFeed" && entry.tag === "DegradedNotice"),
+      "the operator feed degrade must show the same DegradedNotice banner as the sibling screens"
+    );
+  });
+
+  it("unsigned health flags only enable affordances on a literal true", () => {
+    assert.match(appSource, /state\.health\.oidcConfigured === true/);
+    assert.match(appSource, /state\.health\.devLoginEnabled === true/);
+    assert.match(appSource, /access\.health\.devLoginEnabled === true/);
   });
 
   it("async failures are alerts and progress is announced through polite live regions", () => {

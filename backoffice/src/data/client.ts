@@ -221,7 +221,8 @@ export class ApiError extends Error {
     message: string,
     readonly code?: string,
     readonly state?: string,
-    readonly attemptsRemaining?: number
+    readonly attemptsRemaining?: number,
+    readonly deviceDigest?: string
   ) {
     super(message);
   }
@@ -725,10 +726,15 @@ export async function createDevSession(role: OperatorRole): Promise<void> {
       detail = {};
     }
     if (detail.error === "device_not_approved" && typeof detail.deviceDigest === "string") {
+      // The localized copy lives in the app catalogs; the wire detail rides
+      // along on the error so the access gate can interpolate it per locale.
       throw new ApiError(
         response.status,
-        `Устройство не одобрено для backoffice. Передайте администратору отпечаток: ${detail.deviceDigest}`,
-        detail.error
+        "Device is not approved for backoffice",
+        detail.error,
+        undefined,
+        undefined,
+        detail.deviceDigest
       );
     }
     throw new ApiError(response.status, "Dev session was rejected", detail.error);

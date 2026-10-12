@@ -451,7 +451,7 @@ describe("i18n: no hard-coded UI strings in components", () => {
     assert.equal(app.match(/"not_for_submission"/g)?.length, 1);
     assert.match(app, /status: textOf\(recordOf\(data\)\.status\),/);
     assert.match(app, /environment: textOf\(recordOf\(data\)\.environment\),/);
-    assert.match(app, /<th scope="col" key=\{textOf\(column\)\}>\{textOf\(column\)\}<\/th>/);
+    assert.match(app, /<th scope="col" key=\{`\$\{textOf\(column\)\}:\$\{columnIndex\}`\}>\{textOf\(column\)\}<\/th>/);
     assert.match(app, /<dt>\{textOf\(row\.key\)\}<\/dt>/);
     for (const value of Object.values(ru)) assert.doesNotMatch(value, /not_for_submission/);
     assert.deepEqual(navigation.map((item) => item.capability).filter(Boolean).length, navigation.filter((item) => item.capability).length);
