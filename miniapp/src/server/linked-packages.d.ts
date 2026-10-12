@@ -2,6 +2,42 @@
 // links with `file:`. Only members the BFF uses are declared.
 
 declare module "@solidchange/provider-simulators" {
+  export interface OidcIssuerConfig {
+    issuer: string;
+    clientId: string;
+    redirectUris: readonly string[];
+    defaultSubject?: string;
+    clock?: { now(): number };
+    codeTtlSeconds?: number;
+    idTokenTtlSeconds?: number;
+  }
+
+  export interface OidcRequest {
+    method: string;
+    url: string;
+    headers?: Readonly<Record<string, string | undefined>>;
+    body?: string;
+  }
+
+  export interface OidcResponse {
+    status: number;
+    headers: Readonly<Record<string, string>>;
+    body: string;
+  }
+
+  export interface OidcIssuer {
+    readonly issuer: string;
+    readonly clientId: string;
+    readonly keyId: string;
+    jwksDocument(): { keys: readonly unknown[] };
+    handle(request: OidcRequest): Promise<OidcResponse>;
+  }
+
+  export const OIDC_ISSUER_ENVIRONMENT: string;
+  export const OIDC_MAX_PENDING_CODES: number;
+  export function normalizeIssuerUrl(issuer: string): string;
+  export function createOidcIssuer(config: OidcIssuerConfig): OidcIssuer;
+
   import type { KeyObject } from "node:crypto";
 
   export type QuotePair = "USDT/RUB" | "TON/RUB" | "TON/USDT";

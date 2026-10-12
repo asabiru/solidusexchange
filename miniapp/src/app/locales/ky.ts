@@ -24,6 +24,7 @@ export const ky: Messages = {
   "launch.errorTelegramFailed": "Telegram'дын ишке киргизүү маалыматтарын текшерүү мүмкүн болгон жок.",
   "launch.errorBffUnavailable": "Dev BFF жеткиликсиз. npm run dev буйругун иштетиңиз.",
   "launch.errorDevLoginUnavailable": "Сыноо кирүүсү жеткиликсиз.",
+  "launch.errorAuthFailed": "Кирүү ишке ашкан жок. Кайра аракет кылыңыз.",
   "common.unavailable": "Сыноо версиясында жеткиликсиз",
   "common.close": "Жабуу",
   "common.cancel": "Жокко чыгаруу",

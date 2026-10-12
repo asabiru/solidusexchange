@@ -48,8 +48,20 @@ const tabs: readonly { id: Tab; label: MessageKey; icon: IconName }[] = [
 const rejectionMessages: Readonly<Record<string, MessageKey>> = {
   stale_auth_date: "launch.errorStaleAuthDate",
   invalid_hash: "launch.errorInvalidHash",
-  telegram_verification_not_configured: "launch.errorTelegramNotConfigured"
+  telegram_verification_not_configured: "launch.errorTelegramNotConfigured",
+  auth_failed: "launch.errorAuthFailed"
 };
+
+/** Reads and strips a generic `?error=` marker the BFF OIDC callback lands on. */
+function authErrorMessage(): MessageKey | undefined {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("error");
+  if (code === null) return undefined;
+  params.delete("error");
+  const query = params.toString();
+  window.history.replaceState(null, "", `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`);
+  return rejectionMessages[code] ?? "launch.errorAuthFailed";
+}
 
 function localeStorage(): LocaleStorage | undefined {
   try {
@@ -156,6 +168,7 @@ export function App() {
         if (!(error instanceof ApiError) || error.status !== 401) throw error;
       }
       const health = await api.health();
+      const authError = authErrorMessage();
       const initData = readInitData();
       if (initData) {
         try {
@@ -168,7 +181,7 @@ export function App() {
           return;
         }
       }
-      if (active) setLaunch({ state: "signed-out", health });
+      if (active) setLaunch({ state: "signed-out", health, message: authError });
     }
     start().catch(() => {
       if (active) setLaunch({ state: "signed-out", message: "launch.errorBffUnavailable" });

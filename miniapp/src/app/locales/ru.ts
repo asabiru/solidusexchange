@@ -22,6 +22,7 @@ export const ru = {
   "launch.errorTelegramFailed": "Не удалось проверить данные запуска Telegram.",
   "launch.errorBffUnavailable": "Dev BFF недоступен. Запустите npm run dev.",
   "launch.errorDevLoginUnavailable": "Тестовый вход недоступен.",
+  "launch.errorAuthFailed": "Вход не удался. Попробуйте ещё раз.",
   "common.unavailable": "Недоступно в тестовой версии",
   "common.close": "Закрыть",
   "common.cancel": "Отмена",

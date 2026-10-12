@@ -8,6 +8,7 @@ export * from "./errors.mjs";
 export * from "./interfaces.mjs";
 export * from "./kyc.mjs";
 export * from "./kyt.mjs";
+export * from "./oidc.mjs";
 export * from "./quotes.mjs";
 export * from "./signing.mjs";
 export { IdempotencyRegistry, SYNTHETIC_REFERENCE } from "./simulator-core.mjs";

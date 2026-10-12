@@ -64,6 +64,12 @@ export class ExpiringStore<T extends { expiresAt: number }> {
     return [...this.#entries].filter(([, value]) => value.expiresAt > now && match(value));
   }
 
+  take(key: string): T | undefined {
+    const value = this.get(key);
+    this.#entries.delete(key);
+    return value;
+  }
+
   delete(key: string): void {
     this.#entries.delete(key);
   }
