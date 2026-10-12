@@ -278,30 +278,30 @@ assert_history_rejected \
 verify_history
 
 assert_sequence_rejected \
-  "migration version 14 must follow installed version 12 with version 13" \
+  "migration version 15 must follow installed version 13 with version 14" \
   "INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (14, '0014_skipped_migration');"
+   VALUES (15, '0015_skipped_migration');"
 
 assert_sequence_rejected \
-  "migration name 0014_wrong_version must encode version 13" \
+  "migration name 0015_wrong_version must encode version 14" \
   "INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (13, '0014_wrong_version');"
+   VALUES (14, '0015_wrong_version');"
 
 assert_sequence_rejected \
-  "migration applied_at must be later than installed version 12" \
+  "migration applied_at must be later than installed version 13" \
   "INSERT INTO financial_core.schema_migrations (
      version,
      migration_name,
      applied_at
    )
-   SELECT 13, '0013_stale_timestamp', max(applied_at)
+   SELECT 14, '0014_stale_timestamp', max(applied_at)
    FROM financial_core.schema_migrations;"
 
 assert_sequence_rejected \
-  "migration version 14 must follow installed version 12 with version 13" \
+  "migration version 15 must follow installed version 13 with version 14" \
   "SET session_replication_role = replica;
    INSERT INTO financial_core.schema_migrations (version, migration_name)
-   VALUES (14, '0014_replica_skip');"
+   VALUES (15, '0015_replica_skip');"
 
 verify_history
 
