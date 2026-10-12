@@ -1,4 +1,33 @@
+import type { QuotePair } from "./api.js";
+import type { AssetCode } from "./assets.js";
+
 export const quoteExpiringThresholdSeconds = 5;
+
+/** Prices in the customer-api exchange contract carry this fixed decimal scale. */
+export const quotePriceScale = 8;
+
+/**
+ * The customer-api quotes contract pair set with each leg's declared decimal
+ * scale (mirrors the upstream QUOTE_PAIRS, which in turn mirror the provider
+ * simulator's SYNTHETIC_MID_PRICES and ASSET_SCALES).
+ */
+export interface ContractQuotePair {
+  pair: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  baseScale: number;
+  quoteScale: number;
+}
+
+export const contractQuotePairs: readonly ContractQuotePair[] = Object.freeze([
+  Object.freeze({ pair: "USDT/RUB", base: "USDT", quote: "RUB", baseScale: 6, quoteScale: 2 }),
+  Object.freeze({ pair: "TON/RUB", base: "TON", quote: "RUB", baseScale: 9, quoteScale: 2 }),
+  Object.freeze({ pair: "TON/USDT", base: "TON", quote: "USDT", baseScale: 9, quoteScale: 6 })
+]);
+
+export function contractQuotePair(pair: unknown): ContractQuotePair | undefined {
+  return typeof pair === "string" ? contractQuotePairs.find((entry) => entry.pair === pair) : undefined;
+}
 
 export interface QuoteTiming {
   issuedAt: number;

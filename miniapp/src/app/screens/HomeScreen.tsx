@@ -129,6 +129,14 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
+        <button type="button" className="row" onClick={() => openSheet({ kind: "trades" })}>
+          <span className="coin coin--menu" aria-hidden="true"><Icon name="bookmark-check" size="sm" /></span>
+          <span className="row__main">
+            <strong>{t("trades.title")}</strong>
+            <span>{t("trades.entryDetail")}</span>
+          </span>
+          <Icon name="chevron-right" size="sm" />
+        </button>
         <button type="button" className="row" onClick={() => openSheet({ kind: "notifications" })}>
           <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
           <span className="row__main">
