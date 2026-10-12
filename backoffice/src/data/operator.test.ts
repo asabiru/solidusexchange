@@ -166,7 +166,7 @@ describe("operator subject detail adapter", () => {
     assert.equal(kyc.history[1].rejectionReason, "SIM_DATA_MISMATCH");
   });
 
-  it("accepts a null kyc dossier and degrades a malformed one to the no-dossier state", () => {
+  it("accepts a null kyc dossier but fails closed on a malformed one", () => {
     const subjectId = subjectDetailPayload.subject.subjectId;
     // A null block is the contract's no-dossier marker.
     const absent = parseOperatorSubjectView(
@@ -175,8 +175,9 @@ describe("operator subject detail adapter", () => {
     );
     assert.ok(absent !== undefined);
     assert.equal(absent.subject.kyc, null);
-    // A malformed block degrades like the sibling reads: the rest of the
-    // detail still parses instead of failing the whole view closed.
+    // A malformed block is drift like any other axis: the whole detail
+    // view fails closed — one bad field must never silently render as the
+    // no-dossier state while the sibling blocks still serve.
     const kyc = subjectDetailPayload.subject.kyc;
     const drifts: readonly unknown[] = [
       "dossier",
@@ -197,12 +198,11 @@ describe("operator subject detail adapter", () => {
       { ...kyc, history: [kyc.history[0], { ...kyc.history[1], decidedAt: "2027-01-01T00:00:00.000Z" }] }
     ];
     for (const value of drifts) {
-      const parsed = parseOperatorSubjectView(
-        { mode: "test", subject: { ...subjectDetailPayload.subject, kyc: value } },
-        subjectId
+      assert.equal(
+        parseOperatorSubjectView({ mode: "test", subject: { ...subjectDetailPayload.subject, kyc: value } }, subjectId),
+        undefined,
+        JSON.stringify(value).slice(0, 96)
       );
-      assert.ok(parsed !== undefined, JSON.stringify(value).slice(0, 96));
-      assert.equal(parsed.subject.kyc, null, JSON.stringify(value).slice(0, 96));
     }
     // But a missing kyc key breaks the pinned detail shape like any other.
     const { kyc: _dropped, ...without } = subjectDetailPayload.subject;
@@ -265,6 +265,125 @@ describe("operator subject detail adapter", () => {
         JSON.stringify(recentActivity).slice(0, 96)
       );
     }
+  });
+
+  it("rejects cross-block drift inside the account window", () => {
+    const subject = subjectDetailPayload.subject;
+    const subjectId = subject.subjectId;
+    const [flagItem, feedItem] = subject.recentActivity;
+    // An instant before registration is impossible.
+    assert.equal(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, recentActivity: [{ ...feedItem, occurredAt: "2026-01-01T00:00:00.000Z" }] } },
+        subjectId
+      ),
+      undefined,
+      "feed item before registeredAt"
+    );
+    // A subject-side item past lastActiveAt is impossible; an
+    // operator-side one past it is fine.
+    assert.equal(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, recentActivity: [{ ...feedItem, occurredAt: "2026-10-11T00:00:00.000Z" }] } },
+        subjectId
+      ),
+      undefined,
+      "subject-side item after lastActiveAt"
+    );
+    assert.ok(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, recentActivity: [{ ...flagItem, occurredAt: "2026-10-11T00:00:00.000Z" }] } },
+        subjectId
+      ) !== undefined,
+      "operator-side flag raise after lastActiveAt"
+    );
+    // Live sessions need a device and a live account.
+    assert.equal(
+      parseOperatorSubjectView({ mode: "test", subject: { ...subject, sessions: 1, devices: [] } }, subjectId),
+      undefined,
+      "sessions on no device"
+    );
+    assert.equal(
+      parseOperatorSubjectView({ mode: "test", subject: { ...subject, accountStatus: "closed" } }, subjectId),
+      undefined,
+      "sessions on a closed account"
+    );
+    assert.ok(
+      parseOperatorSubjectView({ mode: "test", subject: { ...subject, accountStatus: "closed", sessions: 0 } }, subjectId)
+        !== undefined,
+      "closed account with no sessions is fine"
+    );
+    // flag_added rows never outnumber the roster's open flags.
+    assert.equal(
+      parseOperatorSubjectView({ mode: "test", subject: { ...subject, flags: 0 } }, subjectId),
+      undefined,
+      "flag_added with zero roster flags"
+    );
+    // Dossier submissions sit inside the account window.
+    assert.equal(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, kyc: { ...subject.kyc, history: [{ ...subject.kyc.history[0], submittedAt: "2026-01-01T00:00:00.000Z" }] } } },
+        subjectId
+      ),
+      undefined,
+      "dossier attempt before registeredAt"
+    );
+    // A pending subject's transitions only ever say submitted, and a
+    // surviving transition must equal the dossier's newest instant.
+    const pending = {
+      ...subject,
+      kycStatus: "pending",
+      kyc: {
+        ...subject.kyc,
+        status: "submitted",
+        history: [{ ...subject.kyc.history[0], state: "submitted", decidedAt: null }]
+      }
+    };
+    const submittedTransition = {
+      activityId: `opact_${"e".repeat(24)}`,
+      kind: "kyc_transition",
+      occurredAt: "2026-09-15T10:00:00.000Z",
+      summary: "submitted",
+      money: null
+    };
+    assert.ok(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...pending, recentActivity: [...subject.recentActivity, submittedTransition] } },
+        subjectId
+      ) !== undefined,
+      "transition projecting the dossier instant parses"
+    );
+    assert.equal(
+      parseOperatorSubjectView(
+        {
+          mode: "test",
+          subject: { ...pending, recentActivity: [...subject.recentActivity, { ...submittedTransition, occurredAt: "2026-09-16T10:00:00.000Z" }] }
+        },
+        subjectId
+      ),
+      undefined,
+      "transition instant diverging from the dossier"
+    );
+    assert.equal(
+      parseOperatorSubjectView(
+        {
+          mode: "test",
+          subject: { ...pending, recentActivity: [...subject.recentActivity, { ...submittedTransition, summary: "approved" }] }
+        },
+        subjectId
+      ),
+      undefined,
+      "pending subject with an approval transition"
+    );
+    // Unverified subjects mint no kyc_transition at all.
+    assert.equal(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, kycStatus: "unverified", kyc: null, recentActivity: [...subject.recentActivity, submittedTransition] } },
+        subjectId
+      ),
+      undefined,
+      "unverified subject with a transition"
+    );
   });
 });
 

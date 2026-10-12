@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 353,
-      "minCases": 14
+      "minLines": 515,
+      "minCases": 16
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -549,7 +549,7 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 775,
+      "minLines": 839,
       "minCases": 27
     },
     "backoffice/src/server/dev-server.test.ts": {
@@ -1111,6 +1111,10 @@
     "packages/customer-api/tests/operations.test.mjs": {
       "minLines": 142,
       "minCases": 5
+    },
+    "packages/customer-api/tests/operator-subject360-wave64.test.mjs": {
+      "minLines": 105,
+      "minCases": 6
     },
     "packages/customer-api/tests/operator.test.mjs": {
       "minLines": 901,
