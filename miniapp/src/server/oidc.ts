@@ -114,7 +114,9 @@ async function readBoundedJson(response: Response): Promise<unknown> {
     }
     chunks.push(value);
   }
-  return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+  const text = Buffer.concat(chunks).toString("utf8");
+  assertNoDuplicateMembers(text);
+  return JSON.parse(text) as unknown;
 }
 
 function decodeSegment(value: string): Buffer {
@@ -147,6 +149,11 @@ function assertNoDuplicateMembers(text: string): void {
       }
     }
   }
+}
+
+function canonicalBase64Url(value: string): string | undefined {
+  if (!base64UrlSegment.test(value)) return undefined;
+  return Buffer.from(value, "base64url").toString("base64url");
 }
 
 function decodeJson<T>(value: string): T {
@@ -196,6 +203,9 @@ export async function exchangeAuthorizationCode(
   const payload: unknown = await readBoundedJson(response);
   if (!isRecord(payload) || typeof payload.id_token !== "string") {
     throw new Error("OIDC token response is missing id_token");
+  }
+  if (payload.token_type !== "Bearer") {
+    throw new Error("OIDC token response is missing the Bearer token_type");
   }
   const accessToken = payload.access_token;
   if (accessToken !== undefined && typeof accessToken !== "string") {
@@ -258,10 +268,11 @@ function validateClaims(
   ) {
     throw new Error("OIDC token claims are not valid");
   }
-  // at_hash binds the id_token to the issued access_token when present: a
-  // token advertising the claim without a verifiable access token, or with a
-  // mismatched hash, fails closed.
-  if (claims.at_hash !== undefined) {
+  // at_hash binds the id_token to the issued access_token. It is required
+  // whenever an access token was issued; a token advertising the claim
+  // without a verifiable access token, or with a mismatched hash, fails
+  // closed.
+  if (accessToken !== undefined || claims.at_hash !== undefined) {
     const expected = accessToken === undefined
       ? undefined
       : createHash("sha256").update(accessToken).digest().subarray(0, 16).toString("base64url");
@@ -321,6 +332,8 @@ export async function verifyIdToken(
     || jwk.kty !== "RSA"
     || typeof jwk.n !== "string"
     || typeof jwk.e !== "string"
+    || canonicalBase64Url(jwk.n) !== jwk.n
+    || canonicalBase64Url(jwk.e) !== jwk.e
     || privateJwkMembers.some((name) => Object.hasOwn(jwk, name))
     || (jwk.use !== undefined && jwk.use !== "sig")
     || (jwk.alg !== undefined && jwk.alg !== header.alg)
@@ -339,9 +352,13 @@ export async function verifyIdToken(
     key: { kty: "RSA", n: jwk.n, e: jwk.e },
     format: "jwk"
   });
+  const exponent = publicKey.asymmetricKeyDetails?.publicExponent;
   if (
     publicKey.asymmetricKeyType !== "rsa"
     || (publicKey.asymmetricKeyDetails?.modulusLength ?? 0) < minRsaModulusBits
+    || typeof exponent !== "bigint"
+    || exponent < 3n
+    || exponent % 2n === 0n
   ) {
     throw new Error("OIDC signing key is not allowed");
   }

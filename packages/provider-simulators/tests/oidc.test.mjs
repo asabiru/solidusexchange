@@ -261,3 +261,294 @@ describe("oidc issuer", () => {
     assert.throws(() => makeIssuer({ idTokenClaims: { deep: { x: "a".repeat(5_000) } } }), TypeError);
   });
 });
+
+describe("oidc issuer adversarial pins (wave-65)", () => {
+  test("refuses absolute-form and scheme-relative URLs naming another authority", async () => {
+    const issuer = makeIssuer();
+    const { code } = codeFrom(await authorize(issuer));
+    const foreignToken = await issuer.handle({
+      method: "POST",
+      url: "http://evil.example/token",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: "v".repeat(64),
+      }).toString(),
+    });
+    assert.equal(foreignToken.status, 404);
+    const foreignAuthorize = await issuer.handle({
+      method: "GET",
+      url: `http://evil.example/authorize?${authorizeQuery()}`,
+    });
+    assert.equal(foreignAuthorize.status, 404);
+    const schemeRelativeJwks = await issuer.handle({
+      method: "GET",
+      url: "//evil.example/.well-known/jwks.json",
+    });
+    assert.equal(schemeRelativeJwks.status, 404);
+    // Same-origin absolute-form remains legal.
+    const sameOrigin = await issuer.handle({
+      method: "GET",
+      url: `${issuerBase}/.well-known/jwks.json`,
+    });
+    assert.equal(sameOrigin.status, 200);
+  });
+
+  test("serves endpoints only under the declared issuer path prefix", async () => {
+    const issuer = makeIssuer({ issuer: `${issuerBase}/base` });
+    const metadata = await issuer.handle({
+      method: "GET",
+      url: "/base/.well-known/openid-configuration",
+    });
+    assert.equal(metadata.status, 200);
+    assert.equal(
+      JSON.parse(metadata.body).authorization_endpoint,
+      `${issuerBase}/base/authorize`,
+    );
+    const granted = await issuer.handle({
+      method: "GET",
+      url: `/base/authorize?${authorizeQuery()}`,
+    });
+    assert.equal(granted.status, 302);
+    const { code } = codeFrom(granted);
+    const outside = await issuer.handle({
+      method: "GET",
+      url: `/authorize?${authorizeQuery()}`,
+    });
+    assert.equal(outside.status, 404);
+    const exchangeReply = await issuer.handle({
+      method: "POST",
+      url: "/base/token",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: "v".repeat(64),
+      }).toString(),
+    });
+    assert.equal(exchangeReply.status, 200);
+    const wrongPrefix = await issuer.handle({
+      method: "GET",
+      url: `/baseX/authorize?${authorizeQuery()}`,
+    });
+    assert.equal(wrongPrefix.status, 404);
+    const baseOnly = await issuer.handle({ method: "GET", url: "/base" });
+    assert.equal(baseOnly.status, 404);
+    const foreignPrefixed = await issuer.handle({
+      method: "GET",
+      url: `http://evil.example/base/authorize?${authorizeQuery()}`,
+    });
+    assert.equal(foreignPrefixed.status, 404);
+  });
+
+  test("rejects duplicated form parameters on /token as invalid_request", async () => {
+    const issuer = makeIssuer();
+    const { code } = codeFrom(await authorize(issuer));
+    const duplicatedGrant = await issuer.handle({
+      method: "POST",
+      url: "/token",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "grant_type=authorization_code&grant_type=password",
+    });
+    assert.equal(JSON.parse(duplicatedGrant.body).error, "invalid_request");
+    const duplicatedCode = await issuer.handle({
+      method: "POST",
+      url: "/token",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `${new URLSearchParams({
+        grant_type: "authorization_code",
+        redirect_uri: redirectUri,
+        client_id: clientId,
+        code_verifier: "v".repeat(64),
+      })}&code=${code}&code=${code}`,
+    });
+    assert.equal(JSON.parse(duplicatedCode.body).error, "invalid_request");
+  });
+
+  test("the duplicate sentinel cannot collide with a configured client id", async () => {
+    const issuer = makeIssuer({ clientId: "duplicate" });
+    const granted = await issuer.handle({
+      method: "GET",
+      url: `/authorize?${authorizeQuery({ client_id: "duplicate" })}`,
+    });
+    assert.equal(granted.status, 302);
+    const { code } = codeFrom(granted);
+    const reply = await issuer.handle({
+      method: "POST",
+      url: "/token",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: `grant_type=authorization_code&code=${code}&redirect_uri=${encodeURIComponent(redirectUri)}&client_id=duplicate&client_id=extra&code_verifier=${"v".repeat(64)}`,
+    });
+    assert.equal(JSON.parse(reply.body).error, "invalid_request");
+  });
+
+  test("requires the exact form content type, matched case-insensitively", async () => {
+    const issuer = makeIssuer();
+    const mintAndExchange = async (contentType) => {
+      const { code } = codeFrom(await authorize(issuer));
+      return issuer.handle({
+        method: "POST",
+        url: "/token",
+        headers: { "content-type": contentType },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          code,
+          redirect_uri: redirectUri,
+          client_id: clientId,
+          code_verifier: "v".repeat(64),
+        }).toString(),
+      });
+    };
+    assert.equal((await mintAndExchange("application/x-www-form-urlencodedjunk")).status, 400);
+    assert.equal((await mintAndExchange("application/x-www-form-urlencoded-x")).status, 400);
+    assert.equal((await mintAndExchange("application/x-www-form-urlencoded; charset=utf-8")).status, 200);
+    assert.equal((await mintAndExchange("APPLICATION/X-WWW-FORM-URLENCODED")).status, 200);
+  });
+
+  test("an oversized state is never reflected into the error redirect", async () => {
+    const issuer = makeIssuer();
+    const longState = "s".repeat(200);
+    const protocolError = await authorize(issuer, { response_type: "token", state: longState });
+    assert.equal(protocolError.status, 302);
+    const url = new URL(protocolError.headers.location);
+    assert.equal(url.searchParams.get("error"), "unsupported_response_type");
+    assert.equal(url.searchParams.get("state"), null);
+    assert.ok(protocolError.headers.location.length < redirectUri.length + 200);
+    const validationError = await authorize(issuer, { state: longState });
+    assert.equal(validationError.status, 302);
+    const url2 = new URL(validationError.headers.location);
+    assert.equal(url2.searchParams.get("error"), "invalid_request");
+    assert.equal(url2.searchParams.get("state"), null);
+  });
+
+  test("answers 405 with an allow header on the wrong method", async () => {
+    const issuer = makeIssuer();
+    for (const path of ["/authorize", "/.well-known/jwks.json", "/.well-known/openid-configuration"]) {
+      const reply = await issuer.handle({ method: "POST", url: path });
+      assert.equal(reply.status, 405, path);
+      assert.equal(reply.headers.allow, "GET", path);
+    }
+    const get = await issuer.handle({ method: "GET", url: "/token" });
+    assert.equal(get.status, 405);
+    assert.equal(get.headers.allow, "POST");
+  });
+
+  test("error bodies stay in the OAuth taxonomy without internals", async () => {
+    const issuer = makeIssuer();
+    const bodies = [
+      await issuer.handle({ method: "GET", url: "/unrelated" }),
+      await issuer.handle({ method: "GET", url: "/authorize" }),
+      await issuer.handle({ method: "GET", url: "/token" }),
+      await issuer.handle({ method: "POST", url: "/token" }),
+      await authorize(issuer, { client_id: "nobody" }),
+    ];
+    for (const reply of bodies) {
+      const parsed = JSON.parse(reply.body);
+      assert.ok(
+        Object.keys(parsed).every((key) => key === "error" || key === "state"),
+        reply.body,
+      );
+      assert.match(parsed.error, /^[a-z_]+$/);
+    }
+  });
+
+  test("codes stay single-use under concurrent exchange", async () => {
+    const issuer = makeIssuer();
+    const { code } = codeFrom(await authorize(issuer));
+    const [first, second] = await Promise.all([
+      exchange(issuer, { code }),
+      exchange(issuer, { code }),
+    ]);
+    assert.deepEqual([first.status, second.status].sort(), [200, 400]);
+  });
+
+  test("expired and consumed codes are indistinguishable", async () => {
+    const clock = createSimulatedClock();
+    const issuer = makeIssuer({ clock });
+    const { code: consumed } = codeFrom(await authorize(issuer));
+    await exchange(issuer, { code: consumed });
+    const replay = (await exchange(issuer, { code: consumed })).body;
+    const { code: expiring } = codeFrom(await authorize(issuer));
+    clock.advance(121);
+    const expired = (await exchange(issuer, { code: expiring })).body;
+    const unknown = (await exchange(issuer, { code: "cod_never_minted" })).body;
+    assert.equal(replay, expired);
+    assert.equal(expired, unknown);
+  });
+
+  test("the pending map sweeps expiry before capping live entries", async () => {
+    const clock = createSimulatedClock();
+    const issuer = makeIssuer({ clock });
+    const batchA = [];
+    for (let index = 0; index < 128; index += 1) {
+      batchA.push(codeFrom(await authorize(issuer, { state: `a-${index}` })).code);
+    }
+    clock.advance(121);
+    const batchB = [];
+    for (let index = 0; index < 128; index += 1) {
+      batchB.push(codeFrom(await authorize(issuer, { state: `b-${index}` })).code);
+    }
+    for (let index = 0; index < 4; index += 1) {
+      await authorize(issuer, { state: `c-${index}` });
+    }
+    // Expired batch A was swept without evicting live batch B.
+    assert.equal((await exchange(issuer, { code: batchB[0] })).status, 200);
+    const a0 = await exchange(issuer, { code: batchA[0] });
+    assert.equal(JSON.parse(a0.body).error, "invalid_grant");
+    // Beyond the cap the oldest live entries evict first.
+    const codes = [];
+    for (let index = 0; index < 300; index += 1) {
+      codes.push(codeFrom(await authorize(issuer, { state: `d-${index}` })).code);
+    }
+    const oldest = await exchange(issuer, { code: codes[0] });
+    assert.equal(JSON.parse(oldest.body).error, "invalid_grant");
+    assert.equal((await exchange(issuer, { code: codes[299] })).status, 200);
+  });
+
+  test("the code expiry boundary is exact", async () => {
+    const clock = createSimulatedClock();
+    const issuer = makeIssuer({ clock });
+    const { code: alive } = codeFrom(await authorize(issuer));
+    clock.advance(119);
+    assert.equal((await exchange(issuer, { code: alive })).status, 200);
+    const { code: boundary } = codeFrom(await authorize(issuer));
+    clock.advance(120);
+    const expired = await exchange(issuer, { code: boundary });
+    assert.equal(JSON.parse(expired.body).error, "invalid_grant");
+  });
+
+  test("login_hint outside the subject pattern falls back to the default", async () => {
+    const issuer = makeIssuer();
+    for (const hint of ["not a subject!!", "x".repeat(200), "-leading", ""] ) {
+      const granted = await authorize(issuer, { login_hint: hint });
+      assert.equal(granted.status, 302, JSON.stringify(hint));
+      const { code } = codeFrom(granted);
+      const reply = await exchange(issuer, { code });
+      const claims = JSON.parse(
+        Buffer.from(JSON.parse(reply.body).id_token.split(".")[1], "base64url").toString(),
+      );
+      assert.equal(claims.sub, "dev-customer-1", JSON.stringify(hint));
+    }
+    const hinted = await authorize(issuer, { login_hint: "dev-customer-42" });
+    const { code } = codeFrom(hinted);
+    const claims = JSON.parse(
+      Buffer.from(JSON.parse((await exchange(issuer, { code })).body).id_token.split(".")[1], "base64url").toString(),
+    );
+    assert.equal(claims.sub, "dev-customer-42");
+  });
+
+  test("a duplicated nonce is refused like a duplicated state", async () => {
+    const issuer = makeIssuer();
+    const reply = await issuer.handle({
+      method: "GET",
+      url: `/authorize?${authorizeQuery()}&nonce=second`,
+    });
+    assert.equal(reply.status, 400);
+    assert.equal(JSON.parse(reply.body).error, "invalid_request");
+  });
+});

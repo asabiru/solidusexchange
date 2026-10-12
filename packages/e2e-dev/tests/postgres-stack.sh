@@ -94,7 +94,23 @@ else
 
   # Replaying an already-applied migration must fail loudly and leave the
   # catalogs untouched — the arm is disposable, but the migrations are not
-  # allowed to be idempotent in-place.
+  # allowed to be idempotent in-place. The applied-migration count is
+  # schema-local and grows with the catalog, so the replay is checked
+  # against a pre-replay snapshot rather than a fixed count.
+  customer_migration_count="$(
+    run_psql -v ON_ERROR_STOP=1 -Atq \
+      -c "SELECT count(*) FROM customer_api.schema_migrations;" \
+      | tr -d '[:space:]'
+  )"
+  journal_migration_count="$(
+    run_psql -v ON_ERROR_STOP=1 -Atq \
+      -c "SELECT count(*) FROM matching_core.schema_migrations;" \
+      | tr -d '[:space:]'
+  )"
+  case "$customer_migration_count$journal_migration_count" in
+    ''|*[!0-9]*) echo "postgres-stack: schema_migrations counts are not numeric" >&2; exit 1 ;;
+  esac
+
   set +e
   customer_replay_output="$(
     run_psql -v ON_ERROR_STOP=1 \
@@ -129,11 +145,11 @@ else
 
   run_psql -v ON_ERROR_STOP=1 -Atq \
     -c "SELECT count(*) FROM customer_api.schema_migrations;" \
-    | grep -Fx 1 >/dev/null
+    | grep -Fx "$customer_migration_count" >/dev/null
 
   run_psql -v ON_ERROR_STOP=1 -Atq \
     -c "SELECT count(*) FROM matching_core.schema_migrations;" \
-    | grep -Fx 1 >/dev/null
+    | grep -Fx "$journal_migration_count" >/dev/null
 
   echo "postgres-stack-ok"
 fi

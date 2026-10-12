@@ -237,7 +237,7 @@ function parseCookies(request: IncomingMessage): Readonly<Record<string, string>
   const cookies: Record<string, string> = {};
   for (const part of (request.headers.cookie ?? "").split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (!name) continue;
+    if (!name || name === "__proto__" || Object.hasOwn(cookies, name)) continue;
     try {
       cookies[name] = decodeURIComponent(value.join("="));
     } catch {

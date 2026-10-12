@@ -813,8 +813,8 @@
       "minCases": 13
     },
     "miniapp/src/server/oidc.test.ts": {
-      "minLines": 347,
-      "minCases": 15
+      "minLines": 559,
+      "minCases": 25
     },
     "miniapp/src/server/operations-upstream.test.ts": {
       "minLines": 333,
@@ -1204,8 +1204,8 @@
       "minCases": 5
     },
     "packages/e2e-dev/tests/oidc.test.mjs": {
-      "minLines": 354,
-      "minCases": 7
+      "minLines": 631,
+      "minCases": 16
     },
     "packages/e2e-dev/tests/postgres-journal-helper.mjs": {
       "minLines": 45,
@@ -1556,8 +1556,8 @@
       "minCases": 16
     },
     "packages/provider-simulators/tests/oidc.test.mjs": {
-      "minLines": 236,
-      "minCases": 12
+      "minLines": 510,
+      "minCases": 26
     },
     "packages/provider-simulators/tests/quotes.test.mjs": {
       "minLines": 182,
