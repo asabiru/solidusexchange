@@ -676,7 +676,37 @@ describe("customer API operator client", () => {
       detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], decided_at: null }, ...kycFixture.history.slice(1)] } }),
       detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], rejection_reason: "SIM_DATA_MISMATCH" }, ...kycFixture.history.slice(1)] } }),
       detail({ kyc: { ...kycFixture, history: [kycFixture.history[0], { ...kycFixture.history[1], state: "approved" }] } }),
-      detail({ kyc_status: "pending", kyc: kycFixture })
+      detail({ kyc_status: "pending", kyc: kycFixture }),
+      // Wave-64 cross-block coherence: a live session needs a device and a
+      // live account; every instant stays inside the account window.
+      detail({ sessions: 1, devices: [] }),
+      detail({ account_status: "closed" }),
+      detail({ recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2026-09-04T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } }
+      ] }),
+      detail({ recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2026-09-26T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } }
+      ] }),
+      detail({ recent_activity: [
+        { activity_id: `opact_${"e".repeat(24)}`, kind: "kyc_transition", occurred_at: "2026-09-21T10:00:00.000Z", summary: "approved", money: null }
+      ] }),
+      detail({ kyc_status: "unverified", kyc: null, recent_activity: [
+        { activity_id: `opact_${"e".repeat(24)}`, kind: "kyc_transition", occurred_at: "2026-09-20T10:00:00.000Z", summary: "submitted", money: null }
+      ] }),
+      detail({
+        kyc_status: "pending",
+        kyc: { ...kycFixture, status: "submitted", history: [{ ...kycFixture.history[0], state: "submitted", decided_at: null }] },
+        recent_activity: [
+          { activity_id: `opact_${"e".repeat(24)}`, kind: "kyc_transition", occurred_at: "2026-09-15T10:00:00.000Z", summary: "approved", money: null }
+        ]
+      }),
+      detail({ recent_activity: [
+        { activity_id: `opact_${"a".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-24T00:00:00.000Z", summary: "structuring", money: null },
+        { activity_id: `opact_${"b".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-23T00:00:00.000Z", summary: "velocity", money: null },
+        { activity_id: `opact_${"c".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-22T00:00:00.000Z", summary: "geo_mismatch", money: null }
+      ] }),
+      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2026-09-04T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } }),
+      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2026-09-26T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } })
     ];
     for (const body of drifts) {
       await withFakeApi(

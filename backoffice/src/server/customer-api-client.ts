@@ -684,12 +684,22 @@ function parseSubjectActivityItem(item: unknown): CustomerApiSubjectActivityItem
 
 /**
  * The recent_activity page: a bounded newest-first list with unique ids;
- * same-instant items order by id, mirroring the upstream sort.
+ * same-instant items order by id, mirroring the upstream sort. Every
+ * instant sits inside the account window: nothing precedes registration,
+ * and the subject-side items — the subject's own `act_*` feed rows and
+ * the kyc submission transition — never postdate last_active_at (a flag
+ * raise or a kyc decision is operator-side work and legitimately can).
  */
-function parseSubjectRecentActivity(value: unknown): readonly CustomerApiSubjectActivityItem[] | undefined {
+function parseSubjectRecentActivity(
+  value: unknown,
+  registeredAt: string,
+  lastActiveAt: string
+): readonly CustomerApiSubjectActivityItem[] | undefined {
   if (!Array.isArray(value) || value.length < 1 || value.length > activityBound) {
     return undefined;
   }
+  const registeredMs = Date.parse(registeredAt);
+  const lastActiveMs = Date.parse(lastActiveAt);
   const seen = new Set<string>();
   const items: CustomerApiSubjectActivityItem[] = [];
   let previousMs = Number.POSITIVE_INFINITY;
@@ -700,6 +710,14 @@ function parseSubjectRecentActivity(value: unknown): readonly CustomerApiSubject
       return undefined;
     }
     const occurredMs = Date.parse(item.occurred_at);
+    if (occurredMs < registeredMs) {
+      return undefined;
+    }
+    const operatorSide = item.activity_id.startsWith("opact_")
+      && !(item.kind === "kyc_transition" && item.summary === "submitted");
+    if (!operatorSide && occurredMs > lastActiveMs) {
+      return undefined;
+    }
     if (
       occurredMs > previousMs
       || (occurredMs === previousMs && item.activity_id.localeCompare(previousId) <= 0)
@@ -872,11 +890,28 @@ function parseOperatorSubjectDetailView(
     // exceed the limits echo.
     || item.sessions > item.limits.max_sessions
     || item.devices.length > item.limits.max_devices
+    // A live session sits on a device in a live account: zero registered
+    // devices or a closed account means the session count must be zero.
+    || (item.sessions > 0 && (item.devices.length === 0 || item.account_status === "closed"))
   ) {
     return undefined;
   }
-  const recentActivity = parseSubjectRecentActivity(item.recent_activity);
+  const recentActivity = parseSubjectRecentActivity(item.recent_activity, item.registered_at, item.last_active_at);
   if (recentActivity === undefined) {
+    return undefined;
+  }
+  // The operator-side events cross-check against the roster within the
+  // page bound — subset discipline like the upstream validator: no
+  // transitions for unverified subjects, only submissions for pending
+  // ones, distinct transition summaries, and flag rows never outnumber
+  // the roster's open flags.
+  const transitions = recentActivity.filter((activity) => activity.kind === "kyc_transition");
+  if (
+    (item.kyc_status === "unverified" && transitions.length !== 0)
+    || (item.kyc_status === "pending" && transitions.some((activity) => activity.summary !== "submitted"))
+    || new Set(transitions.map((activity) => activity.summary)).size !== transitions.length
+    || recentActivity.filter((activity) => activity.kind === "flag_added").length > item.flags
+  ) {
     return undefined;
   }
   // The nullable kyc dossier stays fail-closed: a present block must
@@ -894,6 +929,27 @@ function parseOperatorSubjectDetailView(
         && (kyc.status === "approved" || subjectKycPendingStatuses.has(kyc.status))))
   ) {
     return undefined;
+  }
+  // Cross-block coherence: every dossier submission is subject-side work
+  // inside the account window, and a surviving transition must project
+  // the exact instant the dossier's newest attempt records.
+  if (kyc !== null) {
+    const registeredMs = Date.parse(item.registered_at);
+    const lastActiveMs = Date.parse(item.last_active_at);
+    if (kyc.history.some((attempt) => {
+      const submittedMs = Date.parse(attempt.submitted_at);
+      return submittedMs < registeredMs || submittedMs > lastActiveMs;
+    })) {
+      return undefined;
+    }
+    const submitted = transitions.find((activity) => activity.summary === "submitted");
+    const approved = transitions.find((activity) => activity.summary === "approved");
+    if (
+      (submitted !== undefined && submitted.occurred_at !== kyc.history[0].submitted_at)
+      || (approved !== undefined && approved.occurred_at !== kyc.history[0].decided_at)
+    ) {
+      return undefined;
+    }
   }
   return Object.freeze({
     mode: "test",

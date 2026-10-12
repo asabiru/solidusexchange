@@ -24,6 +24,7 @@ export const en: Messages = {
   "launch.errorTelegramFailed": "Could not verify the Telegram launch data.",
   "launch.errorBffUnavailable": "The dev BFF is unavailable. Run npm run dev.",
   "launch.errorDevLoginUnavailable": "Test sign-in is unavailable.",
+  "launch.errorAuthFailed": "Sign-in failed. Please try again.",
   "common.unavailable": "Not available in the test version",
   "common.close": "Close",
   "common.cancel": "Cancel",

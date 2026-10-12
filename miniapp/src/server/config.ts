@@ -22,8 +22,25 @@ export interface ServerConfig {
   kytScreeningTimeoutSeconds: number;
   customerApiUrl?: string;
   customerApiDevTokenKey?: string;
+  oidc?: OidcConfig;
   session?: SessionStorageConfig;
   observability?: ObservabilityConfig;
+}
+
+/**
+ * Dev-only authorization-code + PKCE login against a loopback OIDC issuer
+ * simulator. Derived endpoints are conventional paths under the issuer;
+ * `redirectUri` is the exact `/bff/auth/callback` URL on the first allowed
+ * origin — the browser must reach the BFF through that origin for the
+ * `SameSite=Lax` transaction cookie to be sent on the callback.
+ */
+export interface OidcConfig {
+  issuer: string;
+  clientId: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  jwksUri: string;
+  redirectUri: string;
 }
 
 export interface SessionStorageConfig {
@@ -133,6 +150,53 @@ function parseCustomerApi(env: Environment): { customerApiUrl?: string; customer
   return { customerApiUrl: url, customerApiDevTokenKey: key };
 }
 
+const oidcClientIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
+
+function parseOidc(env: Environment, allowedOrigins: readonly string[]): { oidc?: OidcConfig } {
+  const issuer = env.MINIAPP_OIDC_ISSUER_URL?.trim() || undefined;
+  const clientId = env.MINIAPP_OIDC_CLIENT_ID?.trim() || undefined;
+  if (issuer === undefined && clientId === undefined) return {};
+  if (issuer === undefined || clientId === undefined) {
+    throw new Error("MINIAPP_OIDC_ISSUER_URL and MINIAPP_OIDC_CLIENT_ID must be set together");
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(issuer);
+  } catch {
+    throw new Error("MINIAPP_OIDC_ISSUER_URL must be an absolute HTTP(S) URL");
+  }
+  if (
+    !["http:", "https:"].includes(parsed.protocol)
+    || parsed.username
+    || parsed.password
+    || parsed.hash
+    || parsed.search
+  ) {
+    throw new Error("MINIAPP_OIDC_ISSUER_URL must be an absolute HTTP(S) URL without credentials, query or fragment");
+  }
+  const allowLoopbackHttp = allowedOrigins.every((origin) => {
+    const url = new URL(origin);
+    return url.protocol === "http:" && isLoopbackHostname(url.hostname);
+  });
+  if (parsed.protocol !== "https:" && (!allowLoopbackHttp || !isLoopbackHostname(parsed.hostname))) {
+    throw new Error("MINIAPP_OIDC_ISSUER_URL must use HTTPS except for loopback development");
+  }
+  const normalized = `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  if (!oidcClientIdPattern.test(clientId)) {
+    throw new Error("MINIAPP_OIDC_CLIENT_ID must match ^[A-Za-z0-9._:-]{1,128}$");
+  }
+  return {
+    oidc: {
+      issuer: normalized,
+      clientId,
+      authorizationEndpoint: `${normalized}/authorize`,
+      tokenEndpoint: `${normalized}/token`,
+      jwksUri: `${normalized}/.well-known/jwks.json`,
+      redirectUri: `${allowedOrigins[0]}/bff/auth/callback`
+    }
+  };
+}
+
 function parseSessionStorage(env: Environment): { session?: SessionStorageConfig } {
   const storage = env.MINIAPP_SESSION_STORE?.trim() || "memory";
   const dsn = env.MINIAPP_SESSION_STORE_DSN?.trim() || undefined;
@@ -178,10 +242,11 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
   if (telegramBotToken !== undefined && !botTokenPattern.test(telegramBotToken)) {
     throw new Error("MINIAPP_TELEGRAM_BOT_TOKEN has an unexpected format");
   }
+  const allowedOrigins = parseOrigins(env.MINIAPP_ALLOWED_ORIGINS ?? defaultOrigins);
   return {
     host,
     port: integerSetting(env, "MINIAPP_BFF_PORT", 4184, 1, 65_535),
-    allowedOrigins: parseOrigins(env.MINIAPP_ALLOWED_ORIGINS ?? defaultOrigins),
+    allowedOrigins,
     allowDevLogin: env.MINIAPP_ALLOW_DEV_LOGIN === "true",
     telegramBotToken,
     sessionTtlSeconds: integerSetting(env, "MINIAPP_SESSION_TTL_SECONDS", 1_800, 60, 3_600),
@@ -197,6 +262,7 @@ export function loadServerConfig(env: Environment = process.env): ServerConfig {
     kytSeed: seedSetting(env, "MINIAPP_KYT_SEED", "miniapp-dev-kyt"),
     kytScreeningTimeoutSeconds: integerSetting(env, "MINIAPP_KYT_TIMEOUT_SECONDS", 900, 60, 3_600),
     ...parseCustomerApi(env),
+    ...parseOidc(env, allowedOrigins),
     ...parseSessionStorage(env),
     observability: {
       log: oneOf(env, "MINIAPP_LOG", logModes, "off"),

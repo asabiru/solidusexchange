@@ -370,6 +370,42 @@ const SUBJECT_KYC_SESSION_PATTERN = /^kys_[0-9a-f]{24}$/u;
 /** The customer feed's kind set plus the two operator-side event kinds. */
 export const OPERATOR_ACTIVITY_KINDS = Object.freeze([...ACTIVITY_KINDS, ...OPERATOR_ONLY_KINDS]);
 const SUBJECT_LIMIT_KEYS = Object.freeze(["max_devices", "max_sessions"]);
+
+/**
+ * The current dossier state the roster kyc_status bounds the draw to —
+ * shared by the row (last_active coverage) and the dossier itself so both
+ * derivations agree on whether an application exists at all.
+ * @param {string} subjectId
+ * @param {string} kycStatus
+ * @returns {string}
+ */
+function subjectDossierStatus(subjectId, kycStatus) {
+  if (kycStatus === "verified") {
+    return "approved";
+  }
+  if (kycStatus === "pending") {
+    return SUBJECT_KYC_PENDING_STATUSES[
+      Number(subjectsUnits(subjectId, "kyc-pending", BigInt(SUBJECT_KYC_PENDING_STATUSES.length)))
+    ];
+  }
+  return SUBJECT_KYC_UNVERIFIED_STATES[
+    Number(subjectsUnits(subjectId, "kyc-unverified", BigInt(SUBJECT_KYC_UNVERIFIED_STATES.length)))
+  ];
+}
+
+/**
+ * The newest submission instant the dossier, the kyc queue item and the
+ * recent_activity transition all project: one derivation, one instant.
+ * @param {string} subjectId
+ * @param {number} registeredMs
+ * @returns {number}
+ */
+function subjectKycSubmittedMs(subjectId, registeredMs) {
+  return Math.max(
+    registeredMs,
+    QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
+  );
+}
 const CONTACT_HASH_PATTERN = /^cth_[0-9a-f]{32}$/u;
 const DEVICE_REF_PATTERN = /^dev_[0-9a-f]{16}$/u;
 const SUBJECT_MAX_SESSIONS_BOUND = 8;
@@ -654,15 +690,32 @@ function subjectsUnits(subject, salt, bound) {
  */
 function buildSubjectRow(index) {
   const seed = `subject-${index}`;
+  const subjectId = `syn_cust_${subjectsDigest(seed, "id").toString("hex").slice(0, 24)}`;
   const registeredMs = BASE_MS + Number(subjectsUnits(seed, "registered", BigInt(REGISTERED_WINDOW_MS)));
-  const lastActiveMs = registeredMs + Number(subjectsUnits(seed, "active", BigInt(ACTIVE_WINDOW_MS)));
+  const kycStatus = KYC_STATUSES[Number(subjectsUnits(seed, "kyc", BigInt(KYC_STATUSES.length)))];
+  // The account window bounds every subject-side instant. `last_active_at`
+  // covers the newest one — the re-anchored feed items and the submission
+  // instant the dossier, queue and transition all project — so no block can
+  // show the subject acting after it (a flag raise or a kyc decision is
+  // operator-side work and can legitimately postdate it).
+  const dossierStatus = subjectDossierStatus(subjectId, kycStatus);
+  const feedItems = syntheticActivityItems(subjectId);
+  const lastSubjectSideMs = Math.max(
+    registeredMs,
+    ...feedItems.map((item) => registeredMs + (Date.parse(item.created_at) - BASE_MS)),
+    SUBJECT_KYC_NO_APPLICATION.includes(dossierStatus) ? 0 : subjectKycSubmittedMs(subjectId, registeredMs)
+  );
+  const lastActiveMs = Math.max(
+    lastSubjectSideMs,
+    registeredMs + Number(subjectsUnits(seed, "active", BigInt(ACTIVE_WINDOW_MS)))
+  );
   return Object.freeze({
-    subject_id: `syn_cust_${subjectsDigest(seed, "id").toString("hex").slice(0, 24)}`,
+    subject_id: subjectId,
     display_name: [
       SUBJECT_FIRST_NAMES[Number(subjectsUnits(seed, "first", BigInt(SUBJECT_FIRST_NAMES.length)))],
       SUBJECT_LAST_NAMES[Number(subjectsUnits(seed, "last", BigInt(SUBJECT_LAST_NAMES.length)))]
     ].join(" "),
-    kyc_status: KYC_STATUSES[Number(subjectsUnits(seed, "kyc", BigInt(KYC_STATUSES.length)))],
+    kyc_status: kycStatus,
     flags: Number(subjectsUnits(seed, "flags", BigInt(FLAGS_BOUND))),
     registered_at: new Date(registeredMs).toISOString(),
     last_active_at: new Date(lastActiveMs).toISOString(),
@@ -692,18 +745,22 @@ function subjectRowIndex(subjectId) {
  * @returns {{account_status: string, contact_hash: string, sessions: number, devices: readonly string[], limits: OperatorSubjectLimits}}
  */
 function deriveSubjectDetailFields(subjectId) {
+  const accountStatus =
+    SUBJECT_ACCOUNT_STATUSES[Number(subjectsUnits(subjectId, "account", BigInt(SUBJECT_ACCOUNT_STATUSES.length)))];
   const maxSessions = Number(subjectsUnits(subjectId, "max-sessions", BigInt(SUBJECT_MAX_SESSIONS_BOUND))) + 1;
-  const sessions = Number(subjectsUnits(subjectId, "sessions", BigInt(maxSessions + 1)));
   const maxDevices = Number(subjectsUnits(subjectId, "max-devices", BigInt(SUBJECT_MAX_DEVICES_BOUND))) + 1;
   const deviceCount = Number(subjectsUnits(subjectId, "devices", BigInt(maxDevices + 1)));
+  // A live session needs a device to live on and a live account to sit in:
+  // a zero-device draw or a closed account means no sessions.
+  const sessions = deviceCount === 0 || accountStatus === "closed"
+    ? 0
+    : Number(subjectsUnits(subjectId, "sessions", BigInt(maxSessions + 1)));
   const devices = [];
   for (let index = 0; index < deviceCount; index += 1) {
     devices.push(`${SUBJECT_DEVICE_DIGEST_PREFIX}${subjectsDigest(subjectId, `device-${index}`).toString("hex").slice(0, 16)}`);
   }
   return {
-    account_status: SUBJECT_ACCOUNT_STATUSES[
-      Number(subjectsUnits(subjectId, "account", BigInt(SUBJECT_ACCOUNT_STATUSES.length)))
-    ],
+    account_status: accountStatus,
     contact_hash: `cth_${subjectsDigest(subjectId, "contact").toString("hex").slice(0, 32)}`,
     sessions,
     devices: Object.freeze(devices),
@@ -735,31 +792,31 @@ function kycTransitionItem(subjectId, summary, atMs) {
 /**
  * The subject's recent_activity page: its own customer feed items
  * re-mapped onto the operator summary shape (kind kept, status becomes
- * the i18n-safe summary, created_at becomes occurred_at), merged with
- * operator-side kyc transitions and flag_added rows, re-sorted newest
- * first and bounded to the operator page size. Pure function of the
- * roster row — no cache, no stored lookup.
+ * the i18n-safe summary), merged with operator-side kyc transitions and
+ * flag_added rows, re-sorted newest first and bounded to the operator
+ * page size. The feed instants are re-anchored onto the subject's own
+ * registration — the feed recipe pins its `created_at` to the shared
+ * epoch, which can precede a late-registered account entirely; keeping
+ * the relative spacing inside the account window is the composed view's
+ * job. Pure function of the roster row — no cache, no stored lookup.
  * @param {OperatorSubjectRow} row
  * @returns {readonly OperatorSubjectActivityItem[]}
  */
 function deriveSubjectRecentActivity(row) {
   const subjectId = row.subject_id;
+  const registeredMs = Date.parse(row.registered_at);
   /** @type {OperatorSubjectActivityItem[]} */
   const items = syntheticActivityItems(subjectId).map((item) =>
     Object.freeze({
       activity_id: item.activity_id,
       kind: item.kind,
-      occurred_at: item.created_at,
+      occurred_at: new Date(registeredMs + (Date.parse(item.created_at) - BASE_MS)).toISOString(),
       summary: item.status,
       money: item.money
     }));
-  const registeredMs = Date.parse(row.registered_at);
   // kyc transitions reuse the same submitted_at the kyc queue projects.
   if (row.kyc_status !== "unverified") {
-    const submittedMs = Math.max(
-      registeredMs,
-      QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
-    );
+    const submittedMs = subjectKycSubmittedMs(subjectId, registeredMs);
     items.push(kycTransitionItem(subjectId, "submitted", submittedMs));
     if (row.kyc_status === "verified") {
       const approvedMs = Math.min(
@@ -806,27 +863,12 @@ function deriveSubjectRecentActivity(row) {
  */
 function deriveSubjectKyc(row) {
   const subjectId = row.subject_id;
-  /** @type {string | null} */
-  let status = null;
-  if (row.kyc_status === "verified") {
-    status = "approved";
-  } else if (row.kyc_status === "pending") {
-    status = SUBJECT_KYC_PENDING_STATUSES[
-      Number(subjectsUnits(subjectId, "kyc-pending", BigInt(SUBJECT_KYC_PENDING_STATUSES.length)))
-    ];
-  } else {
-    status = SUBJECT_KYC_UNVERIFIED_STATES[
-      Number(subjectsUnits(subjectId, "kyc-unverified", BigInt(SUBJECT_KYC_UNVERIFIED_STATES.length)))
-    ];
-  }
-  if (status === null || SUBJECT_KYC_NO_APPLICATION.includes(status)) {
+  const status = subjectDossierStatus(subjectId, row.kyc_status);
+  if (SUBJECT_KYC_NO_APPLICATION.includes(status)) {
     return null;
   }
   const registeredMs = Date.parse(row.registered_at);
-  const submittedMs = Math.max(
-    registeredMs,
-    QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
-  );
+  const submittedMs = subjectKycSubmittedMs(subjectId, registeredMs);
   /** @type {number | null} */
   let decidedMs = null;
   if (status === "approved") {
@@ -1200,6 +1242,8 @@ export function validOperatorSubjectDetailView(view) {
   if (!Array.isArray(activity) || activity.length < 1 || activity.length > RECENT_ACTIVITY_BOUND) {
     return false;
   }
+  const registeredActivityMs = Date.parse(subject.registered_at);
+  const lastActiveActivityMs = Date.parse(subject.last_active_at);
   const activityIds = new Set();
   let previousActivityMs = Number.POSITIVE_INFINITY;
   let previousActivityId = "";
@@ -1209,8 +1253,18 @@ export function validOperatorSubjectDetailView(view) {
     }
     activityIds.add(item.activity_id);
     const occurredMs = Date.parse(item.occurred_at);
-    // occurred_at never exceeds the roster's pinned as-of instant.
-    if (occurredMs > QUEUE_SNAPSHOT_MS) {
+    // occurred_at never exceeds the roster's pinned as-of instant and
+    // never precedes the account: nothing happens on a subject that does
+    // not exist yet.
+    if (occurredMs > QUEUE_SNAPSHOT_MS || occurredMs < registeredActivityMs) {
+      return false;
+    }
+    // Subject-side instants — the subject's own feed items and the kyc
+    // submission — can never postdate last_active_at; operator-side events
+    // (flag raises, decisions) legitimately can.
+    const operatorSide = item.activity_id.startsWith("opact_") &&
+      !(item.kind === "kyc_transition" && item.summary === "submitted");
+    if (!operatorSide && occurredMs > lastActiveActivityMs) {
       return false;
     }
     // The page is sorted newest first; same-instant items order by id.
@@ -1241,6 +1295,11 @@ export function validOperatorSubjectDetailView(view) {
   if (activity.filter((item) => item.kind === "flag_added").length > subject.flags) {
     return false;
   }
+  // A live session sits on a device in a live account: zero registered
+  // devices or a closed account means the session count must be zero.
+  if (subject.sessions > 0 && (subject.devices.length === 0 || subject.account_status === "closed")) {
+    return false;
+  }
   // The nullable kyc dossier is detail-only and derives from the same
   // roster row; the roster kyc_status bounds its current state without
   // pinning the attempt count — the same subset discipline the
@@ -1258,6 +1317,33 @@ export function validOperatorSubjectDetailView(view) {
     if (
       subject.kyc_status === "unverified" &&
       (subject.kyc.status === "approved" || SUBJECT_KYC_PENDING_STATUSES.includes(subject.kyc.status))
+    ) {
+      return false;
+    }
+    // Every attempt submission is subject-side work inside the account
+    // window, and the instant the transition projects — whenever the
+    // newest submission survives the page bound — must equal it.
+    for (const attempt of subject.kyc.history) {
+      const submittedMs = Date.parse(attempt.submitted_at);
+      if (submittedMs < registeredActivityMs || submittedMs > lastActiveActivityMs) {
+        return false;
+      }
+    }
+    const submittedTransition = activity.find(
+      (item) => item.kind === "kyc_transition" && item.summary === "submitted"
+    );
+    if (
+      submittedTransition !== undefined &&
+      submittedTransition.occurred_at !== subject.kyc.history[0].submitted_at
+    ) {
+      return false;
+    }
+    const approvedTransition = activity.find(
+      (item) => item.kind === "kyc_transition" && item.summary === "approved"
+    );
+    if (
+      approvedTransition !== undefined &&
+      approvedTransition.occurred_at !== subject.kyc.history[0].decided_at
     ) {
       return false;
     }
