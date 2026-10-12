@@ -25,6 +25,8 @@ export const NOTIFICATION_TEMPLATES = /** @type {readonly NotificationTemplate[]
   Object.freeze(Object.keys(NOTIFICATION_TEXTS))
 );
 
+const NOTIFICATION_TEXT_LOOKUP = /** @type {Readonly<Record<string, string>>} */ (NOTIFICATION_TEXTS);
+
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-notifications-v1";
 const NOTIFICATION_KEYS = Object.freeze([
   "notification_id",
@@ -185,6 +187,9 @@ export function validNotificationsView(view) {
       notification.channel !== "telegram-draft" ||
       !NOTIFICATION_TEMPLATES.includes(notification.template) ||
       notification.locale !== "ru" ||
+      // The body is a derived field, not free text: it must be exactly the
+      // dictionary entry the template names.
+      notification.text !== NOTIFICATION_TEXT_LOOKUP[notification.template] ||
       notification.text.length < 1 ||
       notification.text.length > TEXT_MAX_LENGTH ||
       notification.mode !== "test" ||
@@ -196,9 +201,16 @@ export function validNotificationsView(view) {
     return true;
   });
   // The unread counter is a derived field: it must recount the read flags.
+  // The feed is newest-first like every bounded collection: created_at is
+  // strictly decreasing across entries.
   return (
     validItems &&
-    candidate.unread === candidate.notifications.filter((notification) => !notification.read).length
+    candidate.unread === candidate.notifications.filter((notification) => !notification.read).length &&
+    candidate.notifications.every(
+      (notification, index) =>
+        index === 0 ||
+        Date.parse(candidate.notifications[index - 1].created_at) > Date.parse(notification.created_at)
+    )
   );
 }
 

@@ -18,7 +18,7 @@ const base = {
   address: "sim-wallet-1",
   tx_ref: "sim-tx-1",
   amount: "250.000000",
-  idempotency_key: "idem-kyt-0001",
+  idempotency_key: "idem-kyt-0001xxx",
 };
 
 const flow = (scenario, overrides = {}) =>

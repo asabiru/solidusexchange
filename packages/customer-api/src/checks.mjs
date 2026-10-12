@@ -42,8 +42,6 @@ const RECEIVED_CHECK_STATUSES = Object.freeze([
 export const CHECK_ASSETS = Object.freeze({ USDT: 6, TON: 9 });
 const CHECK_ASSET_ENTRIES = Object.freeze(Object.entries(CHECK_ASSETS));
 const CHECK_ASSET_SCALES = new Map(Object.entries(CHECK_ASSETS));
-const CHECK_FEE_BPS = 30n;
-const BPS_UNIT = 10_000n;
 
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-checks-v1";
 const VIEW_KEYS = Object.freeze(["mode", "checks"]);
@@ -145,7 +143,6 @@ function buildCheck(subject, index) {
   const status = pool[Number(units(subject, `status:${index}`, BigInt(pool.length)))];
   const [asset, scale] = CHECK_ASSET_ENTRIES[Number(units(subject, `asset:${index}`, BigInt(CHECK_ASSET_ENTRIES.length)))];
   const amountUnits = 1_000_000n + units(subject, `amount:${index}`, 99_000_001n);
-  const feeUnits = (amountUnits * CHECK_FEE_BPS + BPS_UNIT - 1n) / BPS_UNIT;
   const peer = `syn_peer_${digest(subject, `peer:${index}`).toString("hex").slice(0, 12)}`;
   const createdMs = BASE_MS + index * STEP_MS + Number(units(subject, `created:${index}`, BigInt(STEP_MS)));
   const expiresMs = createdMs + CHECK_TTL_MS;
@@ -165,9 +162,12 @@ function buildCheck(subject, index) {
     status,
     sender_ref: sent ? subject : peer,
     recipient_ref: sent ? peer : subject,
+    // The simulator's pinned fee rule: zero fee in this slice, exactly like
+    // the CheckView the claim/cancel commands return — the served read must
+    // quote the same terms the mutation responses carry.
     amount: decimal(amountUnits, scale),
     asset,
-    fee_amount: decimal(feeUnits, scale),
+    fee_amount: decimal(0n, scale),
     outstanding_amount: open ? decimal(amountUnits, scale) : decimal(0n, scale),
     created_at: new Date(createdMs).toISOString(),
     expires_at: new Date(expiresMs).toISOString(),
@@ -238,7 +238,10 @@ function validCheck(check) {
   if (
     !isScaledDecimal(candidate.amount, scale) ||
     parseUnits(candidate.amount) <= 0n ||
-    !isScaledDecimal(candidate.fee_amount, scale) ||
+    // The fee is a derived field, not free text: the checks domain pins
+    // fee_amount to zero in this slice (the simulator emits nothing else
+    // and its callback validator rejects a nonzero fee outright).
+    candidate.fee_amount !== decimal(0n, scale) ||
     !isScaledDecimal(candidate.outstanding_amount, scale)
   ) {
     return false;

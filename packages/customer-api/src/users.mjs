@@ -82,7 +82,11 @@ function units(subject, salt, bound) {
  */
 function buildUserView(subject) {
   const status = USER_STATUSES[Number(units(subject, "status", BigInt(USER_STATUSES.length)))];
-  const createdMs = BASE_MS + Number(units(subject, "created", BigInt(CREATED_WINDOW_MS)));
+  // The account exists before the synthetic epoch opens: registration is
+  // drawn from the elapsed span ahead of BASE_MS (like the profile record's
+  // registered_at), so a served record never reports a creation — or, via
+  // the bounded update window below, a modification — at a future instant.
+  const createdMs = BASE_MS - Number(units(subject, "created", BigInt(CREATED_WINDOW_MS)));
   // Lifecycle coherence mirrors a real account record: a pending account was
   // registered but never modified, while reaching any other lifecycle state
   // is itself a later update.

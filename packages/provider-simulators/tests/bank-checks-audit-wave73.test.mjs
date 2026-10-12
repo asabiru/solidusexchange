@@ -21,7 +21,7 @@ const baseRequest = {
   amount: "2500.00",
   currency: "RUB",
   method: "sbp",
-  idempotency_key: "idem-bank-0001",
+  idempotency_key: "idem-bank-0001xx",
 };
 
 const baseCheck = {
@@ -32,7 +32,7 @@ const baseCheck = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 
 const check = async (overrides = {}, options = {}) => {
@@ -47,7 +47,7 @@ const check = async (overrides = {}, options = {}) => {
   await simulator.issueCheck({
     check_id: created.check_id,
     member_ref: "sim-sender-1",
-    idempotency_key: "idem-issue-0001",
+    idempotency_key: "idem-issue-0001x",
   });
   return { simulator, created };
 };
@@ -56,7 +56,7 @@ const claimOf = (created, overrides = {}) => ({
   check_id: created.check_id,
   member_ref: "sim-recipient-1",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-claim-0001",
+  idempotency_key: "idem-claim-0001x",
   ...overrides,
 });
 
@@ -107,7 +107,7 @@ describe("wave73 bank audit", () => {
     const safe = await simulator2.createPaymentIntent({
       ...baseRequest,
       amount: "499999999999999999.99",
-      idempotency_key: "idem-bank-0002",
+      idempotency_key: "idem-bank-0002xx",
     });
     clock.advance(7200);
     const status = await simulator2.getPaymentStatus(safe.intent_id);
@@ -178,7 +178,7 @@ describe("wave73 bank audit", () => {
     assert.match(status.received_total, /^0\.0[01]$/);
     for (const malformed of ["-1.00", "0", "0.001", "abc", "1e2", " 1.00", "1000000000000000000.00"]) {
       await assert.rejects(
-        () => simulator.createPaymentIntent({ ...baseRequest, amount: malformed, idempotency_key: `idem-${malformed.length}-x` }),
+        () => simulator.createPaymentIntent({ ...baseRequest, amount: malformed, idempotency_key: `idem-pad-xxxxx-${malformed.length}` }),
         { code: "invalid_request" },
       );
     }
@@ -203,7 +203,7 @@ describe("wave73 checks audit", () => {
     assert.equal(status.resolved_at, status.expires_at);
     // One second earlier the same operations still resolve inside the window.
     const clock2 = createSimulatedClock();
-    const second = await check({ check_ref: "sim-check-2", idempotency_key: "idem-check-0002", claim_reference: "claimref-0000000000000002" }, { clock: clock2 });
+    const second = await check({ check_ref: "sim-check-2", idempotency_key: "idem-check-0002x", claim_reference: "claimref-0000000000000002" }, { clock: clock2 });
     clock2.advance(259199);
     const claimed = await second.simulator.claimCheck(claimOf(second.created, { claim_reference: "claimref-0000000000000002" }));
     assert.equal(claimed.status, "claimed");
@@ -235,7 +235,7 @@ describe("wave73 checks audit", () => {
     const clock = createSimulatedClock();
     const simulator = createChecksSimulator({ seed: "seed-1", key: freshKey(), clock, members, defaultScenario: "delivered" });
     const created = await simulator.createCheck(baseCheck);
-    const issued = await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001" });
+    const issued = await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001x" });
     assert.equal(issued.status, "awaiting_recipient_kyc");
     await assert.rejects(() => simulator.claimCheck(claimOf(created)), { message: "recipient is not KYC verified" });
     simulator.setMemberKyc("sim-recipient-1", true);
@@ -250,7 +250,7 @@ describe("wave73 checks audit", () => {
     const members = { "sim-sender-1": { kyc_verified: true }, "sim-recipient-1": { kyc_verified: false } };
     const simulator = createChecksSimulator({ seed: "seed-1", key: freshKey(), members, defaultScenario: "delivered" });
     const created = await simulator.createCheck(baseCheck);
-    await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001" });
+    await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001x" });
     assert.throws(() => simulator.setMemberKyc("bogus", true), { code: "invalid_request" });
     assert.throws(() => simulator.setMemberKyc("sim-recipient-1", "yes"), TypeError);
     // Un-verifying a member that was never verified leaves the check parked.
@@ -276,7 +276,7 @@ describe("wave73 checks audit", () => {
     assert.equal(claimed.outstanding_amount, "0.000000");
     assert.equal(claimed.status, "claimed");
     // The claim digest, not the reference, is stored — a second claim is impossible.
-    await assert.rejects(() => simulator.claimCheck(claimOf(created, { idempotency_key: "idem-claim-0009" })), { message: "check is claimed" });
+    await assert.rejects(() => simulator.claimCheck(claimOf(created, { idempotency_key: "idem-claim-0009x" })), { message: "check is claimed" });
   });
 });
 

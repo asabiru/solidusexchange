@@ -37,7 +37,7 @@ const CHECKS_REQUEST = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 
 const SUBJECT = "kycref_00000000000000000000000000000001";
@@ -64,7 +64,7 @@ async function checksDelivery({ key, request = CHECKS_REQUEST, issue = true } = 
     await simulator.issueCheck({
       check_id: created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0001",
+      idempotency_key: "idem-issue-0001x",
     });
   }
   clock.advance(60);
@@ -133,7 +133,7 @@ describe("bank partial-payment internals", () => {
     amount,
     currency: "RUB",
     method: "sbp",
-    idempotency_key: "idem-bank-0001",
+    idempotency_key: "idem-bank-0001xx",
   });
 
   test("a partial payment below two minor units fails closed instead of emitting an invalid callback", async () => {

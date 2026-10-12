@@ -47,7 +47,7 @@ const CHECKS_REQUEST = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 
 const SUBJECT = "kycref_00000000000000000000000000000001";
@@ -188,7 +188,7 @@ describe("shared fixtures are frozen through, not just at the surface", () => {
     const submission = await simulator.submitApplicant({
       applicant_ref: "sim-applicant-1",
       level: "basic",
-      idempotency_key: "idem-kyc-0001",
+      idempotency_key: "idem-kyc-0001xxx",
     });
     assert.ok(submission.provider_reference);
   });
@@ -256,7 +256,7 @@ describe("capacity bounds: every per-resource store fails closed", () => {
       simulator.submitApplicant({
         applicant_ref: `sim-applicant-${n}`,
         level: "basic",
-        idempotency_key: `idem-kyc-${String(n).padStart(4, "0")}`,
+        idempotency_key: `idem-kyc-${String(n).padStart(7, "0")}`,
       });
     await submit(1);
     await submit(2);
@@ -267,30 +267,30 @@ describe("capacity bounds: every per-resource store fails closed", () => {
     const first = await simulator.submitApplicant({
       applicant_ref: "sim-applicant-1",
       level: "basic",
-      idempotency_key: "idem-kyc-0001",
+      idempotency_key: "idem-kyc-0000001",
     });
     assert.equal(first.status, "submitted");
   });
 
   test("quotes, bank and checks resource stores are capped the same way", async () => {
     const quotes = createQuoteSimulator({ seed: "wave58", key: freshKey(), maxResources: 1 });
-    await quotes.requestQuote({ pair: "USDT/RUB", side: "buy", base_amount: "100.000000", idempotency_key: "idem-quote-0001" });
+    await quotes.requestQuote({ pair: "USDT/RUB", side: "buy", base_amount: "100.000000", idempotency_key: "idem-quote-0001x" });
     await assert.rejects(
-      quotes.requestQuote({ pair: "TON/RUB", side: "buy", base_amount: "1.000000000", idempotency_key: "idem-quote-0002" }),
+      quotes.requestQuote({ pair: "TON/RUB", side: "buy", base_amount: "1.000000000", idempotency_key: "idem-quote-0002x" }),
       (error) => error.code === "capacity_exceeded",
     );
 
     const bank = createBankSimulator({ seed: "wave58", key: freshKey(), defaultScenario: "payment_found", maxResources: 1 });
-    await bank.createPaymentIntent({ intent_ref: "sim-intent-1", amount: "10.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0001" });
+    await bank.createPaymentIntent({ intent_ref: "sim-intent-1", amount: "10.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0001xx" });
     await assert.rejects(
-      bank.createPaymentIntent({ intent_ref: "sim-intent-2", amount: "10.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0002" }),
+      bank.createPaymentIntent({ intent_ref: "sim-intent-2", amount: "10.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0002xx" }),
       (error) => error.code === "capacity_exceeded",
     );
 
     const checks = createChecksSimulator({ seed: "wave58", key: freshKey(), members: MEMBERS, defaultScenario: "delivered", maxResources: 1 });
     await checks.createCheck(CHECKS_REQUEST);
     await assert.rejects(
-      checks.createCheck({ ...CHECKS_REQUEST, check_ref: "sim-check-2", idempotency_key: "idem-check-0002" }),
+      checks.createCheck({ ...CHECKS_REQUEST, check_ref: "sim-check-2", idempotency_key: "idem-check-0002x" }),
       (error) => error.code === "capacity_exceeded",
     );
   });
@@ -356,7 +356,7 @@ describe("timeout options are bounded at construction", () => {
     const submission = await simulator.submitApplicant({
       applicant_ref: "sim-applicant-1",
       level: "basic",
-      idempotency_key: "idem-kyc-0001",
+      idempotency_key: "idem-kyc-0001xxx",
     });
     assert.ok(submission.review_deadline);
   });
@@ -376,7 +376,7 @@ describe("the failed-claim counter is bounded and fails closed", () => {
     await simulator.issueCheck({
       check_id: created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0001",
+      idempotency_key: "idem-issue-0001x",
     });
     let lastError;
     for (let attempt = 1; attempt <= 26; attempt += 1) {
@@ -385,7 +385,7 @@ describe("the failed-claim counter is bounded and fails closed", () => {
           check_id: created.check_id,
           member_ref: "sim-recipient-1",
           claim_reference: `wrongref-${String(attempt).padStart(11, "0")}`,
-          idempotency_key: `idem-claim-${String(attempt).padStart(4, "0")}`,
+          idempotency_key: `idem-claim-${String(attempt).padStart(5, "0")}`,
         });
       } catch (error) {
         lastError = error;

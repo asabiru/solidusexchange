@@ -110,10 +110,14 @@ export function createRequestObserver({
 
   /** @param {string} url */
   function routeOf(url) {
-    if (templates.has(url)) {
-      return url;
+    // The request target carries the query string: the two query-accepting
+    // operations (operator queue and audit) would otherwise be counted as
+    // unmatched. The path alone decides the route label.
+    const path = url.split("?")[0];
+    if (templates.has(path)) {
+      return path;
     }
-    const urlSegments = url.split("/");
+    const urlSegments = path.split("/");
     for (const templateSegments of templatedRoutes) {
       if (templateSegments.length !== urlSegments.length) {
         continue;

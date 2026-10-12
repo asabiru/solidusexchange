@@ -196,7 +196,9 @@ export function validDepositAddressesView(view) {
     return false;
   }
   const seen = new Set();
-  for (const entry of candidate.deposit_addresses) {
+  const seenIds = new Set();
+  for (const [index, entry] of candidate.deposit_addresses.entries()) {
+    const target = DEPOSIT_ADDRESS_TARGETS[index];
     if (
       entry === null ||
       typeof entry !== "object" ||
@@ -204,11 +206,14 @@ export function validDepositAddressesView(view) {
       JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify([...DEPOSIT_ADDRESS_KEYS].sort()) ||
       !Object.values(entry).every((value) => typeof value === "string") ||
       !DEPOSIT_ADDRESS_ID_PATTERN.test(entry.deposit_address_id) ||
+      seenIds.has(entry.deposit_address_id) ||
       !ASSET_PATTERN.test(entry.asset) ||
       !TESTNET_PATTERN.test(entry.network) ||
-      !DEPOSIT_ADDRESS_TARGETS.some(
-        (target) => target.asset === entry.asset && target.network === entry.network
-      ) ||
+      // The list is the allowlist in declaration order: the entry at index
+      // carries exactly that (asset, network) pair and its mint instant.
+      target === undefined ||
+      target.asset !== entry.asset ||
+      target.network !== entry.network ||
       seen.has(`${entry.asset}/${entry.network}`) ||
       !(
         (entry.network === "TON_TESTNET" && TON_TESTNET_ADDRESS_PATTERN.test(entry.address)) ||
@@ -216,10 +221,12 @@ export function validDepositAddressesView(view) {
       ) ||
       !DEPOSIT_ADDRESS_STATUSES.includes(entry.status) ||
       !isIsoTimestamp(entry.created_at) ||
+      Date.parse(entry.created_at) !== BASE_MS + index * STEP_MS ||
       entry.posting !== "none"
     ) {
       return false;
     }
+    seenIds.add(entry.deposit_address_id);
     seen.add(`${entry.asset}/${entry.network}`);
   }
   return true;

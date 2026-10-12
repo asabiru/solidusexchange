@@ -136,7 +136,7 @@ test("tokens, subjects, addresses, query strings and IPs never reach logs or met
     }
     assert.deepEqual(
       lines.slice(0, 4).map((line) => [JSON.parse(line).route, JSON.parse(line).status]),
-      [["/api/v1/customer/session", 200], ["unmatched", 404], ["unmatched", 404], ["/api/v1/customer/session", 401]]
+      [["/api/v1/customer/session", 200], ["/api/v1/customer/capabilities", 404], ["unmatched", 404], ["/api/v1/customer/session", 401]]
     );
   } finally {
     await stopServer(server);

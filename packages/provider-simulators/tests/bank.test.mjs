@@ -11,7 +11,7 @@ import {
 } from "../src/index.mjs";
 import { epochOf, freshKey, runFlow } from "./helpers.mjs";
 
-const base = { intent_ref: "sim-intent-1", amount: "1500.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0001" };
+const base = { intent_ref: "sim-intent-1", amount: "1500.00", currency: "RUB", method: "sbp", idempotency_key: "idem-bank-0001xx" };
 const GRACE = 300;
 
 const flow = (scenario, overrides = {}) =>
