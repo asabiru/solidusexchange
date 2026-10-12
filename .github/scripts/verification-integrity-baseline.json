@@ -517,8 +517,8 @@
       "minCases": 2
     },
     "backoffice/src/data/operator.test.ts": {
-      "minLines": 542,
-      "minCases": 20
+      "minLines": 638,
+      "minCases": 21
     },
     "backoffice/src/server/audit-store.test.ts": {
       "minLines": 84,
@@ -549,7 +549,7 @@
       "minCases": 6
     },
     "backoffice/src/server/customer-api-client.test.ts": {
-      "minLines": 961,
+      "minLines": 989,
       "minCases": 31
     },
     "backoffice/src/server/dev-server.test.ts": {
