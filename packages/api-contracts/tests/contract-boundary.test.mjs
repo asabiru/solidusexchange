@@ -2466,3 +2466,104 @@ assertAccepted("accepts an explicitly optional extra query parameter", (scratch)
     });
   })
 );
+
+// Wave 68: declared-parameter and tag drift that slipped through the
+// tolerance arms — unpinned canonical parameter bodies, the served-query
+// parameter surface, and per-operation namespace tags.
+
+assertRejected(
+  "rejects a widened QueueKind enum",
+  "Canonical QueueKind constraints must remain pinned",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.components.parameters.QueueKind.schema.enum.push("audit");
+  })
+);
+
+assertRejected(
+  "rejects a dropped QueueItemId pattern",
+  "Canonical QueueItemId constraints must remain pinned",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.components.parameters.QueueItemId.schema.pattern;
+  })
+);
+
+assertRejected(
+  "rejects a gutted queue kind query schema",
+  "Query parameter getOperatorQueue kind schema must remain pinned",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    const parameter = openapi.paths["/api/v1/operator/queue"].get.parameters.find(
+      (entry) => entry.name === "kind"
+    );
+    parameter.schema = { type: "string" };
+  })
+);
+
+assertRejected(
+  "rejects a loosened audit cursor pattern",
+  "Query parameter getOperatorAudit cursor schema must remain pinned",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    const parameter = openapi.paths["/api/v1/operator/audit"].get.parameters.find(
+      (entry) => entry.name === "cursor"
+    );
+    parameter.schema.pattern = "^.*$";
+  })
+);
+
+assertRejected(
+  "rejects a dropped served query parameter",
+  "getOperatorQueue must declare exactly its served query parameter kind",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    const parameters = openapi.paths["/api/v1/operator/queue"].get.parameters;
+    openapi.paths["/api/v1/operator/queue"].get.parameters = parameters.filter(
+      (entry) => entry.name !== "kind"
+    );
+  })
+);
+
+assertRejected(
+  "rejects a renamed served query parameter",
+  "getOperatorQueue query parameter must be named kind",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    const parameter = openapi.paths["/api/v1/operator/queue"].get.parameters.find(
+      (entry) => entry.name === "kind"
+    );
+    parameter.name = "section";
+  })
+);
+
+assertRejected(
+  "rejects an extra query key on a served-query operation",
+  "getOperatorQueue must declare exactly its served query parameter kind",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/operator/queue"].get.parameters.push({
+      name: "filter",
+      in: "query",
+      required: false,
+      schema: { type: "string" }
+    });
+  })
+);
+
+assertRejected(
+  "rejects an operation mistagged into the operator namespace",
+  "Operation tags must be exactly the Customer namespace tag: claimCustomerCheck",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/customer/checks/{checkId}/claim"].post.tags = ["Operator"];
+  })
+);
+
+assertRejected(
+  "rejects an operator operation tagged into the customer namespace",
+  "Operation tags must be exactly the Operator namespace tag: getOperatorAudit",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    openapi.paths["/api/v1/operator/audit"].get.tags = ["Customer"];
+  })
+);
+
+assertRejected(
+  "rejects a missing operation tag",
+  "Operation tags must be exactly the Customer namespace tag: getCustomerSession",
+  (scratch) => mutateOpenApi(scratch, (openapi) => {
+    delete openapi.paths["/api/v1/customer/session"].get.tags;
+  })
+);

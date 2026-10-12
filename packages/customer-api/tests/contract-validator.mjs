@@ -289,6 +289,22 @@ function headerValue(schema, text) {
 // for them; they must still carry the contract error envelope.
 export const CONTRACT_GAP_STATUSES = Object.freeze([400, 404]);
 
+// The status -> error-code binding is part of the served contract: every
+// declared or gap status carries exactly one canonical error code on the
+// wire. The Error schema only enums the full code set, so a response
+// asserting a valid-but-wrong code drifts past shape validation — the
+// binding is pinned here so it holds for every path probed through the
+// harness, including routes a test forgot to assert codes on.
+const STATUS_ERROR_CODES = new Map([
+  [400, "VALIDATION_FAILED"],
+  [401, "AUTHENTICATION_REQUIRED"],
+  [403, "CAPABILITY_DENIED"],
+  [404, "CAPABILITY_DENIED"],
+  [409, "IDEMPOTENCY_CONFLICT"],
+  [429, "RATE_LIMITED"],
+  [500, "INTERNAL_ERROR"]
+]);
+
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -423,6 +439,12 @@ export function conformanceErrors(contract, validator, { method, path, response 
     }
     if (canonical(parsed.value.details) !== "{}") {
       errors.push("error details must stay empty");
+    }
+    const expectedCode = STATUS_ERROR_CODES.get(response.status);
+    if (expectedCode === undefined) {
+      errors.push(`error status ${response.status} has no pinned error code`);
+    } else if (parsed.value.code !== expectedCode) {
+      errors.push(`error status ${response.status} must carry code ${expectedCode}`);
     }
   }
   return errors;

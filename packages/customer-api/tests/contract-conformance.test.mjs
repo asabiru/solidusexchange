@@ -1102,19 +1102,6 @@ test("a principal for a non-customer actor is never accepted on the wrong audien
   });
 });
 
-
-test("a principal for a non-customer actor is never accepted on the wrong audience", async () => {
-  const verifier = {
-    async verify() {
-      return { subject: "syn_operator_1", actorType: "operator", scopes: [], expiresAt: "2026-10-01T13:00:00.000Z" };
-    }
-  };
-  await withServer({ verifier, kycDirectory: createSyntheticKycDirectory() }, async (port) => {
-    const response = await observe(port, { path: SESSION, headers: customerHeaders() });
-    assert.equal(response.status, 401);
-  });
-});
-
 test("every declared status of every served operation is reachable", () => {
   for (const operation of OPERATIONS) {
     for (const status of operation.statuses) {
