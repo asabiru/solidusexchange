@@ -1,5 +1,7 @@
 # Exchange Treasury Foundation
 
+> **Статус: legacy-документация.** Описывает возможности legacy Laravel-приложения в корне репозитория. По текущей политике репозитория (dev-only/synthetic, см. `Documentation/regulated-core/`) боевые credentials провайдеров и реальный treasury-контур не настраиваются: решения по ликвидности, кастодии и payout открыты в decision-register (D-002/D-003/D-007).
+
 ## Что Уже Заложено
 
 Первый этап новой `crypto -> crypto` архитектуры уже вынесен в отдельный pipeline:
