@@ -34,13 +34,18 @@
  * @property {(events: readonly MatchingEvent[]) => void | Promise<void>} append
  *   Atomically record one emitted batch — every event an operation
  *   produced, in order. The batch must continue the recorded stream
- *   contiguously: the first `seq` must be the recorded length plus one and
- *   the rest must follow with no gaps, so a call either lands whole or
- *   fails. The memory backend appends synchronously; durable backends may
- *   return a promise settling once the batch is written — callers that
- *   cannot await treat the store's next awaited operation (`load`, a later
- *   `append`, `close`) as the durability boundary, because a backend
- *   latches its first write failure and every later operation rethrows it.
+ *   contiguously — or re-deliver an already-recorded identical prefix:
+ *   idempotent redelivery makes a retry after a lost or timed-out response
+ *   safe, while a re-delivered `seq` carrying a conflicting event rejects.
+ *   The memory backend appends synchronously and throws contract
+ *   violations inline; durable backends may return a promise settling once
+ *   the batch is written — callers that cannot await treat the store's
+ *   next awaited operation (`load`, a later `append`, `close`) as the
+ *   durability boundary, because a backend latches its first settled write
+ *   failure and every later operation rethrows it. On the postgres backend
+ *   the latched failure also throws synchronously from the next `append`,
+ *   so an engine operation surfaces it loudly instead of continuing in
+ *   memory-only silence.
  * @property {() => Promise<readonly MatchingEvent[]>} load
  *   Every recorded event in `seq` order — the raw stream restore folds
  *   through `replayMatchingEngine` before it reaches an engine.
@@ -99,8 +104,32 @@ export function validJournalStore(candidate) {
 }
 
 /**
+ * Canonical-JSON comparison for the redelivery rule: two events are the
+ * same recorded fact when their serialized documents are equal once key
+ * order and `undefined`-valued keys are normalized — the same equality
+ * jsonb applies to stored payloads on the postgres backend.
+ *
+ * @param {unknown} value
+ * @returns {string | undefined}
+ */
+function canonicalJson(value) {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const candidate = /** @type {Record<string, unknown>} */ (value);
+  const members = Object.keys(candidate)
+    .filter((key) => candidate[key] !== undefined)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(candidate[key])}`);
+  return `{${members.join(",")}}`;
+}
+
+/**
  * The default backend: today's in-process journal behind the seam. Appends
- * are synchronous and enforce the same contiguous-continuation rule the
+ * are synchronous and enforce the same continuation/redelivery rules the
  * durable backends enforce in storage, so a caller bug fails identically
  * on every backend.
  *
@@ -117,15 +146,35 @@ export function createMemoryJournalStore() {
       if (!Array.isArray(batch)) {
         throw new TypeError("journal append requires an array of events");
       }
+      let first = 0;
       for (const [index, event] of batch.entries()) {
         const seq = event === null || typeof event !== "object" ? undefined : event.seq;
-        if (seq !== events.length + index + 1) {
+        if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 1) {
+          throw new StoreError("journal append events must carry positive integer seq values");
+        }
+        if (index === 0) {
+          first = seq;
+        } else if (seq !== first + index) {
+          throw new StoreError("journal append must continue the recorded stream contiguously");
+        }
+      }
+      // Overlap with the recorded stream is a redelivery: every overlapping
+      // event must equal the recorded one — identical replays land nothing,
+      // conflicting ones are rejected.
+      const overlap = Math.min(batch.length, Math.max(0, events.length - first + 1));
+      for (let index = 0; index < overlap; index += 1) {
+        if (canonicalJson(events[first + index - 1]) !== canonicalJson(batch[index])) {
           throw new StoreError(
-            `journal append must continue the recorded stream at seq ${events.length + index + 1}`,
+            `journal append conflicts with the recorded stream at seq ${first + index}`,
           );
         }
       }
-      events.push(...batch);
+      if (first > events.length + 1) {
+        throw new StoreError(
+          `journal append must continue the recorded stream at seq ${events.length + 1}`,
+        );
+      }
+      events.push(...batch.slice(overlap));
     },
     async load() {
       return Object.freeze(events.slice());

@@ -448,7 +448,9 @@ describe("journal-store continuation parity (memory backend)", () => {
   test("a rejected batch leaves the recorded stream untouched", async () => {
     const store = createMemoryJournalStore();
     store.append(batch);
-    assert.throws(() => store.append([{ ...batch[0], seq: 1 }]), StoreError);
+    // A re-delivered seq carrying a conflicting event rejects; the
+    // identical batch would dedupe (idempotent redelivery, wave-71).
+    assert.throws(() => store.append([{ ...batch[0], quantity: "999.999" }]), StoreError);
     assert.deepEqual(await store.load(), batch);
   });
 });

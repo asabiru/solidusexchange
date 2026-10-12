@@ -4,7 +4,8 @@ import { snapshotPlainData } from "./snapshot.mjs";
 // PostgreSQL backend for the matching journal seam (`MATCHING_CORE_STORE=
 // postgres`, DSN via `MATCHING_CORE_STORE_DSN`). Dev-only groundwork so the
 // engine's append-only event journal can survive restarts; the schema it
-// requires is `migrations/0001_matching_journal.sql`, applied through the
+// requires is `migrations/0001_matching_journal.sql` plus
+// `migrations/0002_journal_event_grammar.sql`, applied through the
 // package's `verify:migrations`-governed source catalog. The store speaks
 // only to the `matching_core` schema and only for its own table.
 //
@@ -15,18 +16,30 @@ import { snapshotPlainData } from "./snapshot.mjs";
 // fails fast.
 //
 // Every `append` call is ONE statement — `append_matching_journal` takes
-// the whole emitted batch in a single advisory-locked step, enforces
-// contiguous `seq` continuation in storage, and inserts atomically — so a
-// batch either lands whole or not at all. Calls serialize through an
-// internal tail so journal order never depends on pool scheduling, and the
-// first write failure is latched: every later `append`, `load` or `close`
-// rethrows it, because an engine that cannot trust its durable journal
-// must fail closed, never silently degrade to in-memory only.
+// the whole emitted batch in a single advisory-locked step, deduplicates
+// an identical redelivery, enforces contiguous `seq` continuation in
+// storage, and inserts atomically — so a batch either lands whole or not
+// at all. Calls serialize through an internal tail so journal order never
+// depends on pool scheduling.
+//
+// Failure semantics: ANY settled rejection of a queued write latches the
+// store — a storage-side seq conflict means the recorded stream and the
+// caller's stream have already diverged, and the engine's fire-and-forget
+// append cannot hear a rejection, so every later `append`, `load` and
+// `close` rethrows the failure (fail closed, never silently degrade to
+// in-memory only). The latched failure also throws SYNCHRONOUSLY from
+// `append`: an engine's `finish` propagates it to the operation's caller,
+// which is the loudest surface a swallowed promise cannot provide.
+//
+// No write may hang: `connectionTimeoutMillis` bounds pool-acquire waits,
+// `lock_timeout` bounds a blocked statement (e.g. another session holding
+// the namespace advisory lock), and `query_timeout` bounds the client-side
+// wait for a dead or blackholed server.
 //
 // The DSN (user, password, host) is connection material: it is never
 // logged, and failure paths surface only StoreUnavailableError.
 
-const schemaVersion = 1;
+const schemaVersion = 2;
 
 const APPEND_SQL = "SELECT matching_core.append_matching_journal($1, $2::jsonb) AS next_seq;";
 
@@ -73,13 +86,20 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") {
     throw new StoreConfigError("PostgreSQL journal store DSN must use a postgres:// or postgresql:// URL");
   }
+  const connectionString = /** @type {string} */ (dsn);
   /** @type {import("pg").Pool | null} */
   let pool = null;
   /** Queued writes, in issue order; resolves after every prior write settles. */
   let tail = Promise.resolve();
-  /** First write failure; every later operation rethrows it. */
+  /** First settled write failure; every later operation rethrows it. */
   /** @type {StoreUnavailableError | null} */
   let failure = null;
+  /** Set once initialize() has verified the schema; cleared by close(). */
+  let ready = false;
+  /** Set by close() so an in-flight initialize() cannot revive the store. */
+  let closed = false;
+  /** @type {Promise<void> | null} */
+  let initializing = null;
 
   /**
    * @param {readonly import("./events.mjs").MatchingEvent[]} batch
@@ -88,52 +108,66 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
     if (pool === null) {
       throw new StoreUnavailableError("matching journal store is not initialized");
     }
+    await pool.query(APPEND_SQL, [namespace, JSON.stringify(batch)]);
+  }
+
+  async function initializeOnce() {
     try {
-      await pool.query(APPEND_SQL, [namespace, JSON.stringify(batch)]);
-    } catch (error) {
-      // SQLSTATE classes 22 (data exceptions) and 23 (integrity
-      // constraint violations) are deterministic rejections of the batch
-      // itself — a caller bug, not a durability failure. The recorded
-      // stream was not touched, so the rejection surfaces as StoreError
-      // without latching, identical to the memory backend.
-      const code =
-        error !== null && typeof error === "object"
-          ? /** @type {{ code?: unknown }} */ (error).code
-          : undefined;
-      if (typeof code === "string" && (code.startsWith("22") || code.startsWith("23"))) {
-        throw new StoreError("journal append was rejected by storage");
+      const { Pool } = await import("pg");
+      const created = new Pool({
+        connectionString,
+        max: 4,
+        connectionTimeoutMillis: 5_000,
+        idleTimeoutMillis: 30_000,
+        // A statement blocked on a lock (the per-namespace advisory lock
+        // inside append_matching_journal) fails after 5s instead of
+        // hanging the serialized tail — every later op waits on that tail.
+        lock_timeout: 5_000,
+        // Client-side bound covering a dead or blackholed server mid-query;
+        // server-side lock_timeout produces the cleaner lock error first.
+        query_timeout: 15_000,
+      });
+      pool = created;
+      const result = await created.query(SCHEMA_VERSION_SQL);
+      if (result.rows.length !== 1 || result.rows[0].version !== schemaVersion) {
+        throw new StoreUnavailableError(
+          "matching journal store schema is missing or incompatible"
+        );
       }
-      throw error;
+      if (closed) {
+        await created.end().catch(() => undefined);
+        pool = null;
+        throw new StoreUnavailableError(
+          "matching journal store was closed during initialize"
+        );
+      }
+      ready = true;
+    } catch (error) {
+      throw unavailable(error);
     }
   }
 
   return Object.freeze({
     kind: "postgresql",
-    async initialize() {
-      try {
-        if (pool === null) {
-          const { Pool } = await import("pg");
-          pool = new Pool({
-            connectionString: dsn,
-            max: 4,
-            connectionTimeoutMillis: 5_000,
-            idleTimeoutMillis: 30_000
-          });
-        }
-        const result = await pool.query(SCHEMA_VERSION_SQL);
-        if (result.rows.length !== 1 || result.rows[0].version !== schemaVersion) {
-          throw new StoreUnavailableError(
-            "matching journal store schema is missing or incompatible"
-          );
-        }
-      } catch (error) {
-        throw unavailable(error);
+    /**
+     * Single-flight startup probe: concurrent callers share one pool and
+     * one schema check — a second pool would leak if both raced.
+     *
+     * @returns {Promise<void>}
+     */
+    initialize() {
+      if (initializing === null) {
+        initializing = initializeOnce();
       }
+      return initializing;
     },
     /**
      * Records one emitted batch atomically. Resolves once the batch is
-     * durable; rejects (and latches, so every later operation rethrows)
-     * when storage fails or the batch is not the contiguous continuation.
+     * durable; rejects — and latches, so every later operation surfaces the
+     * same failure — when storage fails or the batch is not the contiguous
+     * continuation or an identical redelivery. Throws synchronously when
+     * the store is already latched or not initialized, so a caller that
+     * cannot await still hears durability loss at the call site.
      *
      * @param {readonly import("./events.mjs").MatchingEvent[]} events
      * @returns {Promise<void>}
@@ -143,7 +177,12 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
         throw new TypeError("journal append requires an array of events");
       }
       if (failure !== null) {
-        return Promise.reject(failure);
+        throw failure;
+      }
+      if (!ready) {
+        throw new StoreUnavailableError(
+          "matching journal store is not initialized or is already closed"
+        );
       }
       // Plain-data snapshot keeps the batch immutable while it queues:
       // a later mutation of the caller's array cannot rewrite history.
@@ -152,10 +191,11 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
       );
       // The local half of the continuation rule the memory backend
       // enforces inline: seqs must be positive safe integers contiguous
-      // inside the batch. The server-side half — the batch's first seq
-      // must continue the recorded tail — stays in storage. A malformed
-      // batch is a caller bug: it fails here synchronously as StoreError,
-      // never queued, never latched, identical to the memory store.
+      // inside the batch. The durable half — the batch's first seq must
+      // continue the recorded tail or identically replay it — stays in
+      // storage. A malformed batch is a caller bug: it fails here
+      // synchronously as StoreError, never queued, never latched,
+      // identical to the memory store.
       for (const [index, event] of batch.entries()) {
         const seq = event === null || typeof event !== "object" ? undefined : event.seq;
         if (typeof seq !== "number" || !Number.isSafeInteger(seq) || seq < 1) {
@@ -172,12 +212,11 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
         () => undefined
       );
       return write.catch((error) => {
-        // StoreError rejections (caller bugs, deterministic storage-side
-        // constraint violations) do not latch: only failures the store
-        // cannot attribute to the batch itself poison durability.
-        if (error instanceof StoreError) {
-          throw error;
-        }
+        // Every settled rejection latches: a storage-side constraint
+        // rejection means the recorded stream and this writer already
+        // disagree about history — a divergence the engine's
+        // fire-and-forget append cannot observe — and any other failure
+        // means durability is lost outright.
         failure = unavailable(error);
         throw failure;
       });
@@ -193,7 +232,7 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
       if (failure !== null) {
         throw failure;
       }
-      if (pool === null) {
+      if (pool === null || !ready) {
         throw new StoreUnavailableError("matching journal store is not initialized");
       }
       try {
@@ -208,9 +247,11 @@ export function createPostgresJournalStore({ dsn, namespace = "journal" }) {
       }
     },
     async close() {
+      closed = true;
       await tail;
       const ending = pool;
       pool = null;
+      ready = false;
       await ending?.end();
       if (failure !== null) {
         throw failure;
