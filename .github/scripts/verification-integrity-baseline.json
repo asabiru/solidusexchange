@@ -585,7 +585,7 @@
       "minCases": 2
     },
     "backoffice/src/server/postgres-session-store-contract.ts": {
-      "minLines": 249,
+      "minLines": 245,
       "minCases": 9
     },
     "backoffice/src/server/provider-evidence.test.ts": {

@@ -202,15 +202,11 @@ test("the store survives an idle pooled client being killed", async (t) => {
   // meet a client mid-teardown and latch, or ride a healthy one; both are
   // the same deterministic contract — after it, behavior is fixed.
   let first: Awaited<ReturnType<typeof store.issueSession>> | SessionStoreUnavailableError | null = null;
-  for (let attempt = 0; attempt < 30; attempt += 1) {
-    try {
-      first = await store.issueSession(issueCommand({ subject }));
-      break;
-    } catch (error) {
-      assert.ok(error instanceof SessionStoreUnavailableError);
-      first = error;
-      break;
-    }
+  try {
+    first = await store.issueSession(issueCommand({ subject }));
+  } catch (error) {
+    assert.ok(error instanceof SessionStoreUnavailableError);
+    first = error;
   }
   assert.ok(first !== null);
   if (first instanceof SessionStoreUnavailableError) {

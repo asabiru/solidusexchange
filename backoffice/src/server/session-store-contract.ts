@@ -28,7 +28,9 @@ export interface SessionStoreContractOptions {
   freshSubject?: () => string;
 }
 
-let counter = 1;
+// Seeded per process run so contract re-runs against a persistent test
+// database cannot collide with rows an earlier run left behind.
+let counter = Date.now() * 256;
 
 export function registerSessionStoreContract({
   name,
@@ -540,7 +542,7 @@ export function registerSessionStoreContract({
     }
   });
 
-  test(`${name}: a closed store refuses every lifecycle operation`, async (t) => {
+  test(`${name}: a closed store refuses every lifecycle operation`, async () => {
     const store = await makeStore();
     await store.close();
     const command = issueCommand();
