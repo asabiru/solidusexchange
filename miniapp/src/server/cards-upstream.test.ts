@@ -42,6 +42,7 @@ function cardsStub(
     exchangeOrders: async () => ({ status: "not-configured" }),
     trades: async () => ({ status: "not-configured" }),
     markets: async () => ({ status: "not-configured" }),
+    marketDepth: async () => ({ status: "not-configured" }),
     payments: async () => ({ status: "not-configured" }),
     cards: async (subject) => {
       calls.push(subject);

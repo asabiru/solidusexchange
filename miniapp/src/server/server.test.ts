@@ -120,7 +120,7 @@ describe("session and Origin boundary", () => {
   });
 
   it("requires a session for customer data", async () => {
-    for (const path of ["/bff/session", "/bff/wallet", "/bff/operations", "/bff/operations/op-89104", "/bff/profile", "/bff/quotes", "/bff/quotes/preview?from=RUB&to=USDT&amount=1", "/bff/exchange-orders", "/bff/trades", "/bff/markets"]) {
+    for (const path of ["/bff/session", "/bff/wallet", "/bff/operations", "/bff/operations/op-89104", "/bff/profile", "/bff/quotes", "/bff/quotes/preview?from=RUB&to=USDT&amount=1", "/bff/exchange-orders", "/bff/trades", "/bff/markets", "/bff/markets/USDT%2FRUB"]) {
       const response = await fetch(`${running.base}${path}`);
       assert.equal(response.status, 401, path);
     }
