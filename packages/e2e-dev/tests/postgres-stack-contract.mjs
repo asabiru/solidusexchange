@@ -28,10 +28,11 @@ assert.ok(journalDsn, "MATCHING_CORE_STORE_DSN is required (run tests/postgres-s
 const journalHelperEntry = fileURLToPath(new URL("./postgres-journal-helper.mjs", import.meta.url));
 const devTokenKey = randomBytes(32).toString("hex");
 const subject = `syn_cust_${randomBytes(6).toString("hex")}`;
+const tokenExpiresAt = Math.floor(Date.now() / 1_000) + 300;
 const token = mintSyntheticCustomerToken({
   key: devTokenKey,
   subject,
-  expiresAtSeconds: Math.floor(Date.now() / 1_000) + 300
+  expiresAtSeconds: tokenExpiresAt
 });
 
 function customerApiEnv(overrides) {
@@ -48,19 +49,35 @@ function customerApiEnv(overrides) {
 async function sessionStatuses(base, count) {
   const statuses = [];
   for (let index = 0; index < count; index += 1) {
+    const requestId = generateUuidV7();
     const response = await fetch(`${base}/api/v1/customer/session`, {
       headers: {
         authorization: `Bearer ${token}`,
-        "x-request-id": generateUuidV7(),
+        "x-request-id": requestId,
         "x-client-version": "e2e-dev-postgres",
         "x-platform": "web"
       }
     });
-    statuses.push({
+    const entry = {
       status: response.status,
-      retryAfter: response.headers.get("retry-after")
-    });
-    await response.arrayBuffer();
+      retryAfter: response.headers.get("retry-after"),
+      requestIdEcho: response.headers.get("x-request-id")
+    };
+    if (response.status === 200) {
+      // The 200 must carry the minted session, not a drifted stub: subject
+      // binding, actor type, granted scopes, the token's own expiry, and
+      // the echoed request id are all pinned.
+      const body = await response.json();
+      assert.equal(body.subject, subject);
+      assert.equal(body.actor_type, "customer");
+      assert.ok(Array.isArray(body.scopes) && body.scopes.length > 0);
+      assert.ok(body.scopes.every((scope) => typeof scope === "string"));
+      assert.equal(body.expires_at, new Date(tokenExpiresAt * 1_000).toISOString());
+      assert.equal(entry.requestIdEcho, requestId);
+    } else {
+      await response.arrayBuffer();
+    }
+    statuses.push(entry);
   }
   return statuses;
 }
