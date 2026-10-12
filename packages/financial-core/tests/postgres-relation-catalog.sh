@@ -13,7 +13,7 @@ workspace="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 run_psql() {
   if [[ -n "$PSQL_DOCKER_IMAGE" ]]; then
-    docker run --rm --network host \
+    docker run --rm -i --network host \
       -e PGPASSWORD="$PGPASSWORD" \
       -v "$workspace:/workspace:ro" -w /workspace \
       "$PSQL_DOCKER_IMAGE" \
@@ -24,11 +24,69 @@ run_psql() {
   fi
 }
 
-run_psql \
-  -v ON_ERROR_STOP=1 \
-  -Atq \
-  -f tests/postgres-relation-catalog.sql \
-  | node scripts/verify-postgres-relation-catalog.mjs
+verify_catalog() {
+  run_psql \
+    -v ON_ERROR_STOP=1 \
+    -Atq \
+    -f tests/postgres-relation-catalog.sql \
+    | node scripts/verify-postgres-relation-catalog.mjs
+}
+
+verify_catalog
+
+assert_catalog_rejected() {
+  local statement="$1"
+  local expected="$2"
+  local output
+  local status
+
+  set +e
+  output="$(
+    {
+      printf '%s\n' "BEGIN;" "$statement"
+      cat tests/postgres-relation-catalog.sql
+      printf '%s\n' "ROLLBACK;"
+    } | run_psql -v ON_ERROR_STOP=1 -Atq \
+      | node scripts/verify-postgres-relation-catalog.mjs 2>&1
+  )"
+  status=$?
+  set -e
+
+  printf '%s\n' "$output"
+  if [[ "$status" -eq 0 ]]; then
+    echo "Unreviewed PostgreSQL object unexpectedly matched the catalog." >&2
+    exit 1
+  fi
+  grep -F "$expected" <<<"$output"
+}
+
+assert_catalog_rejected \
+  "CREATE SEQUENCE financial_core.unreviewed_sequence;" \
+  "Unexpected PostgreSQL relation count"
+assert_catalog_rejected \
+  "CREATE MATERIALIZED VIEW financial_core.unreviewed_matview
+     AS SELECT 1 AS value;" \
+  "Unexpected PostgreSQL relation count"
+assert_catalog_rejected \
+  "CREATE PUBLICATION unreviewed_publication
+     FOR TABLE financial_core.ledger_entries;" \
+  "Unexpected PostgreSQL logical replication publications"
+assert_catalog_rejected \
+  "CREATE POLICY unreviewed_policy ON financial_core.ledger_entries
+     USING (TRUE);" \
+  "Unexpected PostgreSQL row-level security policies"
+assert_catalog_rejected \
+  "CREATE STATISTICS financial_core.unreviewed_statistics
+     ON asset_code, amount FROM financial_core.ledger_entries;" \
+  "Unexpected PostgreSQL extended statistics"
+assert_catalog_rejected \
+  "CREATE FUNCTION financial_core.unreviewed_event_function()
+     RETURNS event_trigger LANGUAGE plpgsql AS \$\$ BEGIN END \$\$;
+   CREATE EVENT TRIGGER unreviewed_event_trigger ON ddl_command_start
+     EXECUTE FUNCTION financial_core.unreviewed_event_function();" \
+  "Unexpected PostgreSQL event triggers"
+
+verify_catalog
 
 assert_replica_not_null_rejected() {
   local expected="$1"
