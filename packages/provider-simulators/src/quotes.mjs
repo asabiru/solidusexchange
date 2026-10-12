@@ -1,4 +1,5 @@
 import {
+  MAX_INTEGER_DIGITS,
   PRICE_SCALE,
   assetScale,
   divideRounded,
@@ -432,6 +433,13 @@ export function createQuoteSimulator(options) {
         const amounts = computeQuoteAmounts({ pair, side, baseAmount, mid, spreadBps, feeBps });
         if (amounts.quoteUnits === 0n || amounts.total === 0n) {
           invalidRequest("base_amount is too small to quote");
+        }
+        // Derived quote-asset amounts must stay inside the canonical decimal
+        // wall; a request that prices past it is malformed, and the fee is
+        // dominated by max(quoteUnits, total) so it needs no separate check.
+        const quoteAssetLimit = 10n ** BigInt(MAX_INTEGER_DIGITS + assetScale(quote));
+        if (amounts.quoteUnits >= quoteAssetLimit || amounts.total >= quoteAssetLimit) {
+          invalidRequest("base_amount is too large to quote");
         }
         /** @type {Quote} */
         const result = {

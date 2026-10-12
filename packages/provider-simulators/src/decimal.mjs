@@ -9,7 +9,8 @@ export const ASSET_SCALES = Object.freeze({ RUB: 2, USDT: 6, TON: 9 });
 /** Price and rate scale used by the quote simulator. */
 export const PRICE_SCALE = 8;
 
-const MAX_INTEGER_DIGITS = 18;
+/** Canonical decimal wall: at most this many integer digits, input or derived. */
+export const MAX_INTEGER_DIGITS = 18;
 
 /** @typedef {keyof typeof ASSET_SCALES} Asset */
 /** @typedef {"down" | "up" | "half_even"} RoundingMode */
