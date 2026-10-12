@@ -12,6 +12,7 @@ const sheets = read("app/sheets.tsx");
 const moneyFlow = read("app/MoneyFlowSheet.tsx");
 const exchange = read("app/screens/ExchangeScreen.tsx");
 const activity = read("app/screens/OperationsScreen.tsx");
+const tabBar = read("app/TabBar.tsx");
 const support = read("app/SupportSheet.tsx");
 const screenNames = ["Home", "Exchange", "Qr", "Operations", "Profile"];
 const sources = [app, ui, sheets, support, moneyFlow, ...screenNames.map((name) => read(`app/screens/${name}Screen.tsx`))];
@@ -176,9 +177,10 @@ describe("Mini App accessibility semantics", () => {
 
   it("exposes main and named navigation landmarks with the current page", () => {
     assert.ok(elements(app).filter((entry) => entry.tag === "main").length >= 3);
-    const nav = elements(app).find((entry) => entry.tag === "nav");
-    assert.equal(nav?.attributes.get("aria-label"), '{t("app.navLabel")}');
-    assert.match(app, /aria-current=\{tab === item.id \? "page" : undefined\}/);
+    const nav = elements(tabBar).find((entry) => entry.tag === "nav");
+    assert.equal(nav?.attributes.get("aria-label"), "{ariaLabel}");
+    assert.match(app, /ariaLabel=\{t\("app.navLabel"\)\}/);
+    assert.match(tabBar, /aria-current=\{active === item.id \? "page" : undefined\}/);
   });
 
   it("starts each screen at h1 with correctly ordered subsection headings", () => {
@@ -356,6 +358,9 @@ describe("Mini App WCAG 2.2 AA CSS", () => {
     for (const theme of themes) {
       const backgrounds = ["bg", "surface", "surface-elevated", "fill", "fill-strong", "bar"].map((name) => resolve(`var(--${name})`, theme.values).rgb);
       for (const name of ["ink", "muted", "faint"]) checkContrast(resolve(`var(--${name})`, theme.values), backgrounds, 4.5, `${theme.name} ${name}`);
+      const tabbar = resolve("var(--tabbar-bg)", theme.values).rgb;
+      const indicator = over(resolve("var(--tabbar-indicator)", theme.values), tabbar);
+      for (const name of ["tabbar-ink", "tint-text"]) checkContrast(resolve(`var(--${name})`, theme.values), [tabbar, indicator], 4.5, `${theme.name} ${name}`);
     }
   });
 
