@@ -2,7 +2,7 @@
 
 ## Status and boundary
 
-This document defines the proposed identity, authentication, authorization and privileged-access control model for the regulated SolidChange platform.
+This document defines the proposed identity, authentication, authorization and privileged-access control model for the regulated SOLID platform.
 
 It does not provision a production identity provider, grant production access, approve a VPN/ZTNA product, enable operator commands, create service credentials or satisfy D-016. All current backoffice identity, session and step-up behavior remains synthetic or local development evidence.
 

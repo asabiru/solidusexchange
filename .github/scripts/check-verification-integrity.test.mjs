@@ -10,6 +10,7 @@ import {
   validateScriptReferences,
   validateSourceText,
   validateTestFileContent,
+  validateVendorBrand,
   validateWorkflowRefs,
   validateWorkflowSurface,
 } from "./check-verification-integrity.mjs";
@@ -771,4 +772,46 @@ test("rejects reappearing legacy application paths", () => {
     ]).length,
     2,
   );
+});
+
+test("rejects the upstream vendor name outside the audit documents", () => {
+  const vendor = "coin" + "ectra";
+
+  // leaks are flagged anywhere in the kept tree, in any case
+  for (const [text, file] of [
+    [`<meta refresh to ${vendor} docs>`, "packages/x/README.md"],
+    [`site_title "${vendor}"`, "miniapp/src/app/locales/en.ts"],
+    [`APP_ROOT=/var/www/${vendor}`, "infra/local/scripts/dev.sh"],
+    [`notes on ${vendor.toUpperCase()}`, "Documentation/regulated-core/x.md"],
+    [`title = ${vendor}`, "deploy-notes.txt"],
+  ]) {
+    assert.notDeepEqual(validateVendorBrand(text, file), [], `${file}: ${text}`);
+  }
+
+  // the audit documents that record the finding may name it
+  for (const file of [
+    "Documentation/regulated-core/provider-docs-audit-wave78.md",
+    "Documentation/regulated-core/brand-sweep-wave79.md",
+  ]) {
+    assert.deepEqual(validateVendorBrand(`the ${vendor} finding`, file), [], file);
+  }
+
+  // every non-exempt path is in scope — even a reappearing legacy entry
+  // (validateLegacyRemoval flags the path, the vendor check flags the name)
+  for (const file of [
+    "SQL/install.sql",
+    "deployment/deploy.sh",
+    "database/migrations/x.php",
+    "resources/views/x.blade.php",
+    ".env.example",
+    "README.md",
+    "index.php",
+    "Documentation/safe-deploy.md",
+    "Documentation/index.html",
+  ]) {
+    assert.notDeepEqual(validateVendorBrand(`${vendor}`, file), [], file);
+  }
+
+  // binary files are skipped
+  assert.deepEqual(validateVendorBrand(`${vendor}`, "packages/x/logo.png"), []);
 });

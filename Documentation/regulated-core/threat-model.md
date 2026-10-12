@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This model defines the security boundaries that must hold while SolidChange is separated from the legacy Laravel application. It covers the canonical API contracts, backoffice BFF, financial core, custody orchestrator, migration boundary, provider-adapter boundary and their expected evidence flows.
+This model defines the security boundaries that must hold while SOLID is separated from the legacy Laravel application. It covers the canonical API contracts, backoffice BFF, financial core, custody orchestrator, migration boundary, provider-adapter boundary and their expected evidence flows.
 
 The repository currently contains synthetic contracts and control evidence. It does not contain an approved production identity plane, provider execution plane, signer gateway, HSM/MPC integration or customer-money runtime. A control marked as planned remains a stop condition, not an accepted risk.
 

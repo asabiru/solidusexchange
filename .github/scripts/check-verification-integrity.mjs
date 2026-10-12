@@ -151,6 +151,19 @@ const LEGACY_REMOVED_PATHS = new Set([
   "Documentation/sumsub-local-setup.md",
 ]);
 
+// The upstream vendor's product name must not appear in the tree that
+// survives the legacy removal: the product brand is SOLID and the
+// technical identifier family is `solidchange`. Only the audit documents
+// that record the finding may name it; the literal is spelled in
+// fragments so this checker does not trip its own rule.
+const VENDOR_BRAND_LITERAL = new RegExp("coin" + "ectra", "i");
+const VENDOR_BRAND_EXEMPT = new Set([
+  "Documentation/regulated-core/provider-docs-audit-wave78.md",
+  "Documentation/regulated-core/brand-sweep-wave79.md",
+]);
+const BINARY_FILE =
+  /\.(?:png|jpe?g|gif|webp|avif|ico|woff2?|eot|ttf|otf|pdf|zip|gz|tgz|br|wasm|mp[34]|bin|jar|class|so|dll|dylib|exe)$/i;
+
 export function normalizeCommand(text) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -653,6 +666,28 @@ export function validateLegacyRemoval(files) {
         `${file}: removed legacy entry ${JSON.stringify(entry)} must not reappear`,
       );
     }
+  }
+  return errors;
+}
+
+// The vendor-name ban covers the whole surviving tree: every text file
+// except the audit documents that record the finding. A reappearing
+// legacy entry is flagged for the name as well as for the path.
+export function vendorBrandScoped(fileName) {
+  if (VENDOR_BRAND_EXEMPT.has(fileName)) return false;
+  if (BINARY_FILE.test(fileName)) return false;
+  return true;
+}
+
+export function validateVendorBrand(text, fileName) {
+  if (!vendorBrandScoped(fileName)) return [];
+  const errors = [];
+  for (const match of text.matchAll(
+    new RegExp(VENDOR_BRAND_LITERAL.source, "gi"),
+  )) {
+    errors.push(
+      `${fileName}:${lineAt(text, match.index)}: the upstream vendor name must not appear outside the audit documents that record it`,
+    );
   }
   return errors;
 }
@@ -1346,11 +1381,19 @@ async function main() {
   for await (const file of walk(process.cwd(), nonRegular)) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
     repoFiles.push(relative);
-    if (!CODE_FILE.test(relative) && !SHELL_FILE.test(relative)) {
+    const sourceScoped =
+      CODE_FILE.test(relative) || SHELL_FILE.test(relative);
+    const vendorScoped = vendorBrandScoped(relative);
+    if (!sourceScoped && !vendorScoped) {
       continue;
     }
     const text = await readFile(file, "utf8");
-    errors.push(...validateSourceText(text, relative));
+    if (sourceScoped) {
+      errors.push(...validateSourceText(text, relative));
+    }
+    if (vendorScoped) {
+      errors.push(...validateVendorBrand(text, relative));
+    }
   }
   errors.push(...validateLegacyRemoval(repoFiles));
   errors.push(...validateRepoCompleteness(repoFiles, baseline));

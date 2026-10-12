@@ -464,8 +464,8 @@
       "minCases": 15
     },
     ".github/scripts/check-verification-integrity.test.mjs": {
-      "minLines": 680,
-      "minCases": 33
+      "minLines": 713,
+      "minCases": 34
     },
     ".github/scripts/check-workflow-policy.test.mjs": {
       "minLines": 567,

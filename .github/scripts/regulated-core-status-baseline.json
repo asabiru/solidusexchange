@@ -10,7 +10,7 @@
         {
           "heading": "## Status and boundary",
           "lines": [
-            "This document defines the proposed identity, authentication, authorization and privileged-access control model for the regulated SolidChange platform.",
+            "This document defines the proposed identity, authentication, authorization and privileged-access control model for the regulated SOLID platform.",
             "It does not provision a production identity provider, grant production access, approve a VPN/ZTNA product, enable operator commands, create service credentials or satisfy D-016. All current backoffice identity, session and step-up behavior remains synthetic or local development evidence."
           ]
         }
@@ -825,7 +825,7 @@
       "decisionRows": [],
       "datedApprovalClaims": [],
       "approvalClaims": [
-        "Legacy SolidChange is an inventory and migration source. The regulated core becomes source of truth only after signed migration journals, independent reconciliation and explicit cutover approval.",
+        "Legacy SOLID is an inventory and migration source. The regulated core becomes source of truth only after signed migration journals, independent reconciliation and explicit cutover approval.",
         "2. Produce read-only extracts in an approved environment.",
         "9. Post opening balances through a balanced, signed migration journal.",
         "11. Run parallel read-only comparison for the approved observation window.",
@@ -1319,7 +1319,7 @@
       "decisionRows": [],
       "datedApprovalClaims": [],
       "approvalClaims": [
-        "This baseline defines how SolidChange must assess, approve, monitor and exit a",
+        "This baseline defines how SOLID must assess, approve, monitor and exit a",
         "It does not select a vendor, approve an outsourcing arrangement, authorize a",
         "production integration, accept a data location, create provider credentials or",
         "7. Fail closed when required evidence, approval, authentication or service",

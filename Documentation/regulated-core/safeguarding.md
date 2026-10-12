@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This baseline defines the control evidence required before SolidChange can hold,
+This baseline defines the control evidence required before SOLID can hold,
 control, receive, transmit, exchange, reserve, settle or represent customer
 assets in a regulated product. It separates a customer-visible balance from
 the proof that assets are legally segregated, technically controlled,
@@ -235,7 +235,7 @@ Stablecoin support requires approved evidence for:
 - emergency suspension and customer communication.
 
 Issuer attestations, proof-of-reserves dashboards and market prices are inputs,
-not proof that SolidChange can meet every customer entitlement.
+not proof that SOLID can meet every customer entitlement.
 
 ## Treasury and liquidity boundary
 

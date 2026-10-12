@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This baseline defines how SolidChange must coordinate, preserve evidence and make human decisions when an event could affect regulated data, financial truth, custody, operator access, provider evidence or the software supply chain.
+This baseline defines how SOLID must coordinate, preserve evidence and make human decisions when an event could affect regulated data, financial truth, custody, operator access, provider evidence or the software supply chain.
 
 It is not a production runbook. Provider contacts, regulator timelines, customer-notification rules, infrastructure commands, production identities and emergency command paths remain undefined until their owners approve them. Missing ownership or notification guidance is a production stop condition.
 
