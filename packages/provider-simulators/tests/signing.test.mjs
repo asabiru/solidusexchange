@@ -23,7 +23,7 @@ const ALGORITHMS = ["ed25519", "hmac-sha256"];
 async function kycDelivery(key) {
   const clock = createSimulatedClock();
   const simulator = createKycSimulator({ seed: "signing", key, clock, defaultScenario: "approve" });
-  await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-signing-1" });
+  await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-signing-1xx" });
   clock.advance(3600);
   const [first] = simulator.drainCallbacks();
   return first;
@@ -248,7 +248,7 @@ describe("callback verifier input hardening", () => {
     const verify = verifierFor(key, { nonceStore: store });
     const clock = createSimulatedClock();
     const simulator = createKycSimulator({ seed: "nonce", key, clock, defaultScenario: "approve" });
-    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-nonce-1" });
+    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-nonce-1xxxx" });
     clock.advance(3600);
     const [first, second] = simulator.drainCallbacks();
     assert.equal(verify({ headers: first.headers, body: first.body, now: first.deliverAt }).ok, true);

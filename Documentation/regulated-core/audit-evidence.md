@@ -299,7 +299,7 @@ Production remains prohibited until:
 - retention, legal hold, disposal, data location and processor decisions are approved;
 - evidence storage, checkpoint key custody, backup encryption and recovery targets are approved;
 - monitoring, on-call, incident response and independent export verification are exercised;
-- applicable D-001 through D-018 decisions and domain gates are approved;
+- applicable D-001 through D-019 decisions and domain gates are approved;
 - critical/high threat-model and misuse-case findings are resolved.
 
 Approval of this baseline confirms only the audit-evidence design. It does not authorize a production audit store, operator command plane, customer data migration, financial execution, provider access, custody signing, broadcast or launch.

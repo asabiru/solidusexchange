@@ -42,6 +42,8 @@ const DATE =
 const STATUS_SECTION = /^(?:(?:current|текущий)\s+)?(?:status|state|статусы?|состояние)(?:\s[^,]*)?$/u;
 const STATUS_COLUMN = /\bstatus\b|\bstate\b|статус|состояни|approver|required human approval/u;
 const DECISION_ID = /^d-\d{3}$/u;
+const DECISION_RANGE =
+  /\bD-001\s*(?:through|to|[…–—-])\s*(?:the\s+applicable\s+)?D-(\d{3})\b/giu;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$/;
 
 function fold(text) {
@@ -341,12 +343,34 @@ export function validateRegulatedCoreDocuments(documents, baseline, irregular = 
     if (!documents.has(fileName)) errors.push(`${fileName}: pinned regulated-core document is missing`);
   }
 
+  const register = documents.get("decision-register.md");
+  const latestDecision = register
+    ? Math.max(
+        0,
+        ...snapshotDocument(register).decisionRows.map((id) => Number.parseInt(id.slice(2), 10)),
+      )
+    : 0;
+
   for (const [fileName, text] of documents) {
     if (!fileName.endsWith(".md")) {
       errors.push(`${fileName}: only Markdown (.md) documents are allowed in ${REGULATED_CORE_DIRECTORY}`);
       continue;
     }
     errors.push(...hygieneErrors(text, fileName));
+
+    if (latestDecision) {
+      for (const [index, line] of text.split("\n").entries()) {
+        for (const match of line.matchAll(DECISION_RANGE)) {
+          if (Number.parseInt(match[1], 10) !== latestDecision) {
+            errors.push(
+              `${fileName}:${index + 1}: decision range anchored at D-001 ends at D-${match[1]}, ` +
+                `but the latest entry in decision-register.md is D-${String(latestDecision).padStart(3, "0")} — ` +
+                "widen the range or cite explicit decision ids",
+            );
+          }
+        }
+      }
+    }
     const snapshot = snapshotDocument(text);
     const pinned = baseline.documents[fileName];
 

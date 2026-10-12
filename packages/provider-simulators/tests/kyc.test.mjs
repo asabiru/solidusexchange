@@ -16,7 +16,7 @@ const flow = (scenario, overrides = {}) =>
     createSimulator: createKycSimulator,
     createVerifier: createKycCallbackVerifier,
     createInbox: createKycCallbackInbox,
-    request: { method: "submitApplicant", body: { applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001", ...overrides } },
+    request: { method: "submitApplicant", body: { applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001xxx", ...overrides } },
     scenario,
     subjectOf: (response) => response.provider_reference,
     deadlineOf: (response) => epochOf(response.review_deadline),
@@ -70,7 +70,7 @@ describe("KYC simulator scenarios", () => {
   test("provider outage is a retryable provider error with no callbacks", async () => {
     const simulator = createKycSimulator({ seed: "seed-1", key: freshKey(), defaultScenario: "provider_outage" });
     await assert.rejects(
-      simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001" }),
+      simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001xxx" }),
       (error) => error instanceof ProviderError && error.code === "provider_unavailable" && error.retryable === true,
     );
     assert.equal(simulator.pendingCallbacks(), 0);
@@ -101,7 +101,7 @@ describe("KYC simulator scenarios", () => {
 });
 
 describe("KYC request and callback validation", () => {
-  const base = { applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001" };
+  const base = { applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-kyc-0001xxx" };
 
   test("idempotent replay returns the same submission; changed request conflicts", async () => {
     const simulator = createKycSimulator({ seed: "seed-1", key: freshKey(), defaultScenario: "approve" });

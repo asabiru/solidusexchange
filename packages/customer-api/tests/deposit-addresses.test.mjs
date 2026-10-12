@@ -122,13 +122,19 @@ test("validDepositAddressesView fails closed on directory drift", () => {
   }
   const full = [
     entry,
-    { ...entry, deposit_address_id: "dpa_aaaaaaaabbbbbbbbcccccccc", asset: "USDT" },
+    {
+      ...entry,
+      deposit_address_id: "dpa_aaaaaaaabbbbbbbbcccccccc",
+      asset: "USDT",
+      created_at: "2026-09-02T00:00:00.000Z"
+    },
     {
       ...entry,
       deposit_address_id: "dpa_dddddddd55555555eeeeeeee",
       asset: "USDT",
       network: "TRON_TESTNET",
-      address: "T" + "B".repeat(33)
+      address: "T" + "B".repeat(33),
+      created_at: "2026-09-03T00:00:00.000Z"
     }
   ];
   assert.equal(validDepositAddressesView({ mode: "test", deposit_addresses: full }), true);

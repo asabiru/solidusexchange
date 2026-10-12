@@ -35,7 +35,7 @@ const CHECKS_REQUEST = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 
 const KYC_EVENT = {
@@ -51,7 +51,7 @@ const QUOTE_REQUEST = {
   pair: "USDT/RUB",
   side: "buy",
   base_amount: "100.000000",
-  idempotency_key: "idem-quote-0001",
+  idempotency_key: "idem-quote-0001x",
 };
 
 function quoteNow(quote) {
@@ -222,13 +222,13 @@ describe("checks member directory validation", () => {
     const clock = createSimulatedClock();
     const simulator = createChecksSimulator({ seed: "wave73", key: freshKey(), clock, members, defaultScenario: "delivered" });
     const created = await simulator.createCheck(CHECKS_REQUEST);
-    await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001" });
+    await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0001x" });
     // The first (and only) read stored `true`: the recipient can claim.
     const claimed = await simulator.claimCheck({
       check_id: created.check_id,
       member_ref: "sim-recipient-1",
       claim_reference: CHECKS_REQUEST.claim_reference,
-      idempotency_key: "idem-claim-0001",
+      idempotency_key: "idem-claim-0001x",
     });
     assert.equal(claimed.status, "claimed");
     assert.equal(reads, 1, "the member profile must be read exactly once");
@@ -256,7 +256,7 @@ describe("callback verifier construction", () => {
     ring.set(impostor.keyId, verificationKeyOf(impostor));
     const clock = createSimulatedClock();
     const simulator = createKycSimulator({ seed: "wave73", key: impostor, clock, defaultScenario: "approve" });
-    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-1" });
+    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-1xxx" });
     clock.advance(3600);
     const [delivery] = simulator.drainCallbacks();
     assert.equal(
@@ -334,7 +334,7 @@ describe("canonical instants share the simulator epoch domain", () => {
     const key = freshKey();
     const clock = createSimulatedClock();
     const simulator = createKycSimulator({ seed: "wave73", key, clock, defaultScenario: "approve" });
-    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-2" });
+    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-2xxx" });
     clock.advance(3600);
     const [delivery] = simulator.drainCallbacks();
     const payload = JSON.parse(delivery.body.toString("utf8"));
@@ -361,7 +361,7 @@ describe("observed-clean invariants (pinned, not fixed)", () => {
     const key = freshKey();
     const clock = createSimulatedClock();
     const simulator = createKycSimulator({ seed: "wave73", key, clock, defaultScenario: "approve" });
-    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-3" });
+    await simulator.submitApplicant({ applicant_ref: "sim-applicant-1", level: "basic", idempotency_key: "idem-wave73-3xxx" });
     clock.advance(3600);
     const deliveries = simulator.drainCallbacks();
     const nonces = deliveries.map((delivery) => delivery.headers["x-sim-nonce"]);

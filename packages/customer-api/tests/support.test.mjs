@@ -41,7 +41,7 @@ function validTicket() {
     ticket_id: "tck_0123456789abcdef01234567",
     category: "question",
     topic: "Тестовый режим. Вопрос о работе сервиса.",
-    message: "Тестовый режим. Синтетическое обращение, оно никуда не отправлено.",
+    message: "Тестовый режим. Синтетический вопрос, он никуда не отправлен.",
     status: "in_review",
     timeline: [
       { status: "received", at: "2026-09-01T00:00:00.000Z" },

@@ -14,17 +14,17 @@ const SIMULATORS = {
   kyc: {
     create: createKycSimulator,
     scenarios: ["approve", "reject", "needs_more_data", "pending_timeout", "duplicate_callback", "out_of_order_callback", "late_callback"],
-    run: (simulator, index) => simulator.submitApplicant({ applicant_ref: `sim-applicant-${index}`, level: "basic", idempotency_key: `idem-det-${index}-0` }),
+    run: (simulator, index) => simulator.submitApplicant({ applicant_ref: `sim-applicant-${index}`, level: "basic", idempotency_key: `idem-det-00000-${index}` }),
   },
   kyt: {
     create: createKytSimulator,
     scenarios: ["low", "medium", "high", "severe", "sanctions_hit", "pending_timeout", "duplicate_callback", "out_of_order_callback", "late_callback"],
-    run: (simulator, index) => simulator.screenTransfer({ asset: "TON", network: "TON_TESTNET", direction: "inbound", address: `sim-wallet-${index}`, amount: "3.000000000", idempotency_key: `idem-det-${index}-0` }),
+    run: (simulator, index) => simulator.screenTransfer({ asset: "TON", network: "TON_TESTNET", direction: "inbound", address: `sim-wallet-${index}`, amount: "3.000000000", idempotency_key: `idem-det-00000-${index}` }),
   },
   bank: {
     create: createBankSimulator,
     scenarios: ["payment_found", "payment_not_found", "partial_payment", "duplicate_payment", "reversed_payment", "duplicate_callback", "out_of_order_callback", "late_callback"],
-    run: (simulator, index) => simulator.createPaymentIntent({ intent_ref: `sim-intent-${index}`, amount: "777.77", currency: "RUB", method: "sbp", idempotency_key: `idem-det-${index}-0` }),
+    run: (simulator, index) => simulator.createPaymentIntent({ intent_ref: `sim-intent-${index}`, amount: "777.77", currency: "RUB", method: "sbp", idempotency_key: `idem-det-00000-${index}` }),
   },
 };
 

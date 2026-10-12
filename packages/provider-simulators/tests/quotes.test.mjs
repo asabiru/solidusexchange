@@ -18,7 +18,7 @@ import {
 } from "../src/index.mjs";
 import { epochOf, freshKey, keyringOf, nextNonce, signRaw } from "./helpers.mjs";
 
-const request = { pair: "USDT/RUB", side: "buy", base_amount: "100.000000", idempotency_key: "idem-quote-0001" };
+const request = { pair: "USDT/RUB", side: "buy", base_amount: "100.000000", idempotency_key: "idem-quote-0001x" };
 const now = DEFAULT_EPOCH_SECONDS;
 
 describe("quote simulator", () => {
@@ -81,7 +81,7 @@ describe("quote simulator", () => {
     assert.ok(epochOf(quote.issued_at) - epochOf(quote.price_observed_at) > 60);
     assert.equal(assessQuote(quote, { now }).reason, "stale_price");
     assert.equal(assessQuote(quote, { now, maxPriceAgeSeconds: 3600 }).displayable, true);
-    assert.equal((await simulator.requestQuote({ ...request, idempotency_key: "idem-quote-0002" })).pair, "USDT/RUB");
+    assert.equal((await simulator.requestQuote({ ...request, idempotency_key: "idem-quote-0002x" })).pair, "USDT/RUB");
   });
 
   test("provider outage", async () => {
@@ -139,15 +139,15 @@ describe("quote simulator", () => {
 
   test("quote mode is buy only, exclusive with base_amount and rejects dust budgets", async () => {
     const simulator = createQuoteSimulator({ seed: "seed-1", key: freshKey() });
-    const spend = { pair: "USDT/RUB", side: "buy", quote_amount: "1000.00", idempotency_key: "idem-spend-0001" };
+    const spend = { pair: "USDT/RUB", side: "buy", quote_amount: "1000.00", idempotency_key: "idem-spend-0001x" };
     for (const candidate of [
       { ...spend, side: "sell" },
       { ...spend, base_amount: "10.000000" },
-      { pair: "USDT/RUB", side: "buy", idempotency_key: "idem-spend-0001" },
+      { pair: "USDT/RUB", side: "buy", idempotency_key: "idem-spend-0001x" },
       { ...spend, quote_amount: "1000.0" },
       { ...spend, quote_amount: 1000 },
       { ...spend, quote_amount: "0.00" },
-      { ...spend, pair: "TON/RUB", quote_amount: "0.01", idempotency_key: "idem-spend-dust" },
+      { ...spend, pair: "TON/RUB", quote_amount: "0.01", idempotency_key: "idem-spend-dustx" },
     ]) {
       await assert.rejects(simulator.requestQuote(candidate), (error) => error.code === "invalid_request", JSON.stringify(candidate));
     }
@@ -159,7 +159,7 @@ describe("quote simulator", () => {
   test("signed quote-mode quote rejects a forged budget or a base amount that is not maximal", async () => {
     const key = freshKey();
     const simulator = createQuoteSimulator({ seed: "seed-1", key });
-    const quote = await simulator.requestQuote({ pair: "USDT/RUB", side: "buy", quote_amount: "5000.00", idempotency_key: "idem-spend-sign" });
+    const quote = await simulator.requestQuote({ pair: "USDT/RUB", side: "buy", quote_amount: "5000.00", idempotency_key: "idem-spend-signx" });
     const signed = simulator.exportSignedQuote(quote.quote_id);
     const verify = createQuoteVerifier({ keyring: keyringOf(key), nonceStore: createNonceStore() });
     assert.equal(verify({ headers: signed.headers, body: signed.body, now }).ok, true);
@@ -184,9 +184,9 @@ describe("quote simulator", () => {
     assert.deepEqual(await simulator.getQuote(first.quote_id), first);
     await assert.rejects(simulator.requestQuote({ ...request, side: "sell" }), (error) => error.code === "idempotency_conflict");
     for (const overrides of [{ pair: "BTC/RUB" }, { pair: "RUB/USDT" }, { side: "short" }, { base_amount: 100 }, { base_amount: "100.00" }, { base_amount: "0.000000" }, { order_type: "market" }]) {
-      await assert.rejects(simulator.requestQuote({ ...request, idempotency_key: "idem-quote-9999", ...overrides }), (error) => error.code === "invalid_request", JSON.stringify(overrides));
+      await assert.rejects(simulator.requestQuote({ ...request, idempotency_key: "idem-quote-9999x", ...overrides }), (error) => error.code === "invalid_request", JSON.stringify(overrides));
     }
-    await assert.rejects(simulator.requestQuote({ ...request, pair: "TON/RUB", side: "sell", base_amount: "0.000000001", idempotency_key: "idem-quote-tiny" }), (error) => error.code === "invalid_request");
+    await assert.rejects(simulator.requestQuote({ ...request, pair: "TON/RUB", side: "sell", base_amount: "0.000000001", idempotency_key: "idem-quote-tinyx" }), (error) => error.code === "invalid_request");
     await assert.rejects(simulator.getQuote("quote_missing"), (error) => error.code === "not_found");
     assert.throws(() => simulator.exportSignedQuote("quote_missing"), (error) => error.code === "not_found");
     assert.throws(() => createQuoteSimulator({ seed: "seed-1", key: freshKey(), ttlSeconds: 1 }), RangeError);
