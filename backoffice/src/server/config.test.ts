@@ -12,13 +12,8 @@ const configurationEnvironment = [
   "BACKOFFICE_STEP_UP_MAX_ATTEMPTS",
   "BACKOFFICE_SIGNING_ROTATION_SECONDS",
   "BACKOFFICE_SIGNING_RETAINED_KEYS",
-  "BACKOFFICE_OIDC_ISSUER",
-  "BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT",
-  "BACKOFFICE_OIDC_TOKEN_ENDPOINT",
-  "BACKOFFICE_OIDC_JWKS_URI",
+  "BACKOFFICE_OIDC_ISSUER_URL",
   "BACKOFFICE_OIDC_CLIENT_ID",
-  "BACKOFFICE_OIDC_CLIENT_SECRET",
-  "BACKOFFICE_OIDC_REDIRECT_URI",
   "BACKOFFICE_OIDC_ROLE_CLAIM",
   "BACKOFFICE_OIDC_ROLE_MAP_JSON",
   "BACKOFFICE_DEVICE_BINDING",
@@ -38,15 +33,9 @@ afterEach(() => {
   }
 });
 
-function configureOidc(baseUrl: string, redirectOrigin: string): void {
-  process.env.BACKOFFICE_OIDC_ISSUER = baseUrl;
-  process.env.BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT = `${baseUrl}/authorize`;
-  process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT = `${baseUrl}/token`;
-  process.env.BACKOFFICE_OIDC_JWKS_URI = `${baseUrl}/jwks`;
+function configureOidc(baseUrl: string): void {
+  process.env.BACKOFFICE_OIDC_ISSUER_URL = baseUrl;
   process.env.BACKOFFICE_OIDC_CLIENT_ID = "solidchange-backoffice";
-  delete process.env.BACKOFFICE_OIDC_CLIENT_SECRET;
-  process.env.BACKOFFICE_OIDC_REDIRECT_URI =
-    `${redirectOrigin}/bff/auth/callback`;
   delete process.env.BACKOFFICE_OIDC_ROLE_CLAIM;
   process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON =
     JSON.stringify({ compliance: "compliance-lead" });
@@ -138,69 +127,77 @@ describe("audit configuration", () => {
 });
 
 describe("OIDC configuration", () => {
-  it("accepts HTTPS identity endpoints on the configured callback boundary", () => {
+  it("stays silent when the env pair is unset and requires both values together", () => {
+    delete process.env.BACKOFFICE_OIDC_ISSUER_URL;
+    delete process.env.BACKOFFICE_OIDC_CLIENT_ID;
+    assert.equal(loadServerConfig().oidc, undefined);
+
+    process.env.BACKOFFICE_OIDC_ISSUER_URL = "https://identity.example.test";
+    delete process.env.BACKOFFICE_OIDC_CLIENT_ID;
+    assert.throws(() => loadServerConfig(), /set together/);
+
+    delete process.env.BACKOFFICE_OIDC_ISSUER_URL;
+    process.env.BACKOFFICE_OIDC_CLIENT_ID = "solidchange-backoffice";
+    assert.throws(() => loadServerConfig(), /set together/);
+  });
+
+  it("derives the conventional endpoints and callback from the issuer pair", () => {
     const operatorOrigin = "https://operators.example.test";
     process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
-    configureOidc("https://identity.example.test", operatorOrigin);
+    configureOidc("https://identity.example.test/");
 
     assert.deepEqual(loadServerConfig().oidc, {
       issuer: "https://identity.example.test",
       authorizationEndpoint: "https://identity.example.test/authorize",
       tokenEndpoint: "https://identity.example.test/token",
-      jwksUri: "https://identity.example.test/jwks",
+      jwksUri: "https://identity.example.test/.well-known/jwks.json",
       clientId: "solidchange-backoffice",
-      clientSecret: "",
       redirectUri: `${operatorOrigin}/bff/auth/callback`,
       roleClaim: "groups",
       roleMap: { compliance: "compliance-lead" }
     });
   });
 
-  it("permits plaintext OIDC only inside a loopback development boundary", () => {
+  it("permits a plaintext issuer only inside a loopback development boundary", () => {
     const operatorOrigin = "http://127.0.0.1:4173";
     process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
-    configureOidc("http://localhost:5556", operatorOrigin);
+    configureOidc("http://localhost:5556");
 
     assert.equal(
       loadServerConfig().oidc?.tokenEndpoint,
       "http://localhost:5556/token"
     );
 
-    process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT =
-      "http://identity.example.test/token";
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = "https://operators.example.test";
     assert.throws(
       () => loadServerConfig(),
-      /BACKOFFICE_OIDC_TOKEN_ENDPOINT must use HTTPS/
-    );
-
-    const publicOperatorOrigin = "https://operators.example.test";
-    process.env.BACKOFFICE_ALLOWED_ORIGINS = publicOperatorOrigin;
-    configureOidc("https://identity.example.test", publicOperatorOrigin);
-    process.env.BACKOFFICE_OIDC_TOKEN_ENDPOINT = "http://localhost:5556/token";
-    assert.throws(
-      () => loadServerConfig(),
-      /BACKOFFICE_OIDC_TOKEN_ENDPOINT must use HTTPS/
+      /BACKOFFICE_OIDC_ISSUER_URL must use HTTPS/
     );
   });
 
-  it("rejects callbacks outside the configured session origin and path", () => {
-    const operatorOrigin = "https://operators.example.test";
-    process.env.BACKOFFICE_ALLOWED_ORIGINS = operatorOrigin;
-    configureOidc("https://identity.example.test", operatorOrigin);
+  it("rejects issuers with credentials, query, fragment or a bad client id", () => {
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = "https://operators.example.test";
+    for (const bad of [
+      "https://user:pw@identity.example.test",
+      "https://identity.example.test/?x=1",
+      "https://identity.example.test/#frag",
+      "not-a-url"
+    ]) {
+      configureOidc(bad);
+      assert.throws(() => loadServerConfig(), /BACKOFFICE_OIDC_ISSUER_URL/, bad);
+    }
 
-    process.env.BACKOFFICE_OIDC_REDIRECT_URI =
-      "https://untrusted.example.test/bff/auth/callback";
-    assert.throws(
-      () => loadServerConfig(),
-      /exact \/bff\/auth\/callback URL on an allowed origin/
-    );
+    configureOidc("https://identity.example.test");
+    process.env.BACKOFFICE_OIDC_CLIENT_ID = "bad client!";
+    assert.throws(() => loadServerConfig(), /BACKOFFICE_OIDC_CLIENT_ID/);
+  });
 
-    process.env.BACKOFFICE_OIDC_REDIRECT_URI =
-      `${operatorOrigin}/different/callback`;
-    assert.throws(
-      () => loadServerConfig(),
-      /exact \/bff\/auth\/callback URL on an allowed origin/
-    );
+  it("still validates the role map when the pair is configured", () => {
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = "https://operators.example.test";
+    configureOidc("https://identity.example.test");
+    process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON =
+      JSON.stringify({ compliance: "not-a-role" });
+    assert.throws(() => loadServerConfig(), /Unsupported backoffice role/);
   });
 });
 

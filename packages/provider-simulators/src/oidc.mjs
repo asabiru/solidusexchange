@@ -32,6 +32,58 @@ const MAX_FORM_BYTES = 8_192;
 const UNRESERVED = /^[A-Za-z0-9\-._~]+$/;
 const PRINTABLE_ASCII = /^[\x20-\x7e]{1,255}$/;
 const SUBJECT_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/;
+const MAX_ID_TOKEN_CLAIMS_BYTES = 4_096;
+const RESERVED_CLAIMS = new Set([
+  "iss",
+  "sub",
+  "aud",
+  "exp",
+  "iat",
+  "nbf",
+  "nonce",
+  "at_hash",
+  "azp",
+]);
+
+/**
+ * Extra `idTokenClaims` must stay JSON-serializable forever: finite numbers,
+ * plain objects/arrays, no functions or symbols — exactly what the token
+ * payload serializer would emit.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function isJsonValue(value, depth = 0) {
+  if (depth > 8) return false;
+  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (Array.isArray(value)) return value.every((entry) => isJsonValue(entry, depth + 1));
+  if (typeof value === "object") {
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== null && proto !== Object.prototype) return false;
+    return Object.values(value).every((entry) => isJsonValue(entry, depth + 1));
+  }
+  return false;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Readonly<Record<string, unknown>>}
+ */
+function parseIdTokenClaims(value) {
+  if (value === undefined) return Object.freeze({});
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new TypeError("idTokenClaims must be a JSON object");
+  }
+  if (!isJsonValue(value) || JSON.stringify(value).length > MAX_ID_TOKEN_CLAIMS_BYTES) {
+    throw new TypeError("idTokenClaims must be JSON-serializable and bounded");
+  }
+  for (const name of Object.keys(value)) {
+    if (RESERVED_CLAIMS.has(name)) {
+      throw new TypeError(`idTokenClaims must not override reserved claim ${name}`);
+    }
+  }
+  return Object.freeze({ ...value });
+}
 
 /**
  * @typedef {object} OidcIssuerConfig
@@ -39,6 +91,7 @@ const SUBJECT_PATTERN = /^[a-z0-9][a-z0-9._:-]{0,127}$/;
  * @property {string} clientId The only client this issuer serves.
  * @property {readonly string[]} redirectUris Exact registered redirect URIs; any other value is refused without a redirect.
  * @property {string} [defaultSubject] `sub` minted when /authorize carries no `login_hint` (`"dev-customer-1"`).
+ * @property {Readonly<Record<string, unknown>>} [idTokenClaims] Extra claims merged into every minted id_token (e.g. `groups`/`email`/`name` for an operator SSO client). Reserved claims (`iss`, `sub`, `aud`, `exp`, `iat`, `nbf`, `nonce`, `at_hash`, `azp`) cannot be overridden.
  * @property {SimulatedClock} [clock] Epoch-seconds clock; defaults to the shared simulator clock.
  * @property {number} [codeTtlSeconds] Authorization-code lifetime (`120`).
  * @property {number} [idTokenTtlSeconds] id_token lifetime (`300`).
@@ -191,6 +244,7 @@ export function createOidcIssuer(config) {
   if (typeof defaultSubject !== "string" || !SUBJECT_PATTERN.test(defaultSubject)) {
     throw new TypeError("defaultSubject must match ^[a-z0-9][a-z0-9._:-]{0,127}$");
   }
+  const idTokenClaims = parseIdTokenClaims(config.idTokenClaims);
   const clock = config.clock ?? createSimulatedClock();
   const codeTtlSeconds = config.codeTtlSeconds ?? 120;
   const idTokenTtlSeconds = config.idTokenTtlSeconds ?? 300;
@@ -365,6 +419,7 @@ export function createOidcIssuer(config) {
         iat: now,
         nonce: pending.nonce,
         at_hash: accessTokenHash(accessToken),
+        ...idTokenClaims,
       }),
       "utf8",
     ).toString("base64url");

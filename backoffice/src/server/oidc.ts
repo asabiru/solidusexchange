@@ -17,6 +17,7 @@ interface ValidIdTokenClaims {
   iat: number;
   nbf?: number;
   nonce: string;
+  at_hash?: string;
   email?: string;
   name?: string;
   [claim: string]: unknown;
@@ -36,6 +37,19 @@ export interface OidcIdentity {
   name: string;
   role: OperatorRole;
 }
+
+export interface OidcTokenExchange {
+  idToken: string;
+  accessToken?: string;
+}
+
+export type OidcFetch = (input: string, init?: {
+  method?: string;
+  headers?: Readonly<Record<string, string>>;
+  body?: string;
+  redirect?: "follow" | "error";
+  signal?: AbortSignal;
+}) => Promise<Response>;
 
 export function createOpaqueValue(bytes = 32): string {
   return randomBytes(bytes).toString("base64url");
@@ -65,11 +79,17 @@ export function authorizationUrl(
   return url.toString();
 }
 
+/**
+ * Public-client code exchange: `client_id` + `code_verifier`, never a secret.
+ * Returns the raw `id_token` plus the `access_token` so the caller can check
+ * `at_hash` when the token carries one; the access token is never persisted.
+ */
 export async function exchangeAuthorizationCode(
   config: OidcConfig,
   code: string,
-  verifier: string
-): Promise<string> {
+  verifier: string,
+  fetchImpl: OidcFetch = fetch
+): Promise<OidcTokenExchange> {
   const form = new URLSearchParams({
     grant_type: "authorization_code",
     code,
@@ -77,23 +97,24 @@ export async function exchangeAuthorizationCode(
     client_id: config.clientId,
     code_verifier: verifier
   });
-  if (config.clientSecret) form.set("client_secret", config.clientSecret);
 
-  const response = await fetch(config.tokenEndpoint, {
+  const response = await fetchImpl(config.tokenEndpoint, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: form,
+    body: form.toString(),
     redirect: "error",
     signal: AbortSignal.timeout(8_000)
   });
   if (!response.ok) throw new Error("OIDC token exchange failed");
   const payload: unknown = await readBoundedJson(response);
-  if (!payload || typeof payload !== "object" || !("id_token" in payload)) {
+  if (!isRecord(payload) || typeof payload.id_token !== "string") {
     throw new Error("OIDC token response is missing id_token");
   }
-  const idToken = payload.id_token;
-  if (typeof idToken !== "string") throw new Error("OIDC id_token is invalid");
-  return idToken;
+  const accessToken = payload.access_token;
+  if (accessToken !== undefined && typeof accessToken !== "string") {
+    throw new Error("OIDC token response is malformed");
+  }
+  return { idToken: payload.id_token, accessToken };
 }
 
 const maxIdTokenLength = 16_384;
@@ -176,6 +197,7 @@ function validateClaims(
   claims: Record<string, unknown>,
   config: OidcConfig,
   nonce: string,
+  accessToken: string | undefined,
   now: number
 ): asserts claims is Record<string, unknown> & ValidIdTokenClaims {
   const audience = typeof claims.aud === "string"
@@ -225,6 +247,17 @@ function validateClaims(
   ) {
     throw new Error("OIDC token claims are not valid");
   }
+  // at_hash binds the id_token to the issued access_token when present: a
+  // token advertising the claim without a verifiable access token, or with a
+  // mismatched hash, fails closed.
+  if (claims.at_hash !== undefined) {
+    const expected = accessToken === undefined
+      ? undefined
+      : createHash("sha256").update(accessToken).digest().subarray(0, 16).toString("base64url");
+    if (typeof claims.at_hash !== "string" || claims.at_hash !== expected) {
+      throw new Error("OIDC access token hash mismatch");
+    }
+  }
 }
 
 function mapRole(claims: ValidIdTokenClaims, config: OidcConfig): OperatorRole {
@@ -249,7 +282,9 @@ export async function verifyIdToken(
   idToken: string,
   config: OidcConfig,
   nonce: string,
-  suppliedJwks?: JsonWebKeySet
+  accessToken?: string,
+  suppliedJwks?: JsonWebKeySet,
+  fetchImpl: OidcFetch = fetch
 ): Promise<OidcIdentity> {
   if (idToken.length > maxIdTokenLength) throw new Error("OIDC id_token is too large");
   const parts = idToken.split(".");
@@ -273,7 +308,7 @@ export async function verifyIdToken(
   }
   if (!isRecord(claims)) throw new Error("OIDC token claims are malformed");
 
-  const jwks: JsonWebKeySet = suppliedJwks ?? await fetch(config.jwksUri, {
+  const jwks: JsonWebKeySet = suppliedJwks ?? await fetchImpl(config.jwksUri, {
       headers: { accept: "application/json" },
       redirect: "error",
       signal: AbortSignal.timeout(8_000)
@@ -326,7 +361,7 @@ export async function verifyIdToken(
   );
   if (!verified) throw new Error("OIDC id_token signature is invalid");
 
-  validateClaims(claims, config, nonce, Math.floor(Date.now() / 1000));
+  validateClaims(claims, config, nonce, accessToken, Math.floor(Date.now() / 1000));
   return {
     subject: claims.sub,
     email: typeof claims.email === "string" ? claims.email : "",

@@ -162,22 +162,35 @@ This is a dev-only control on the synthetic BFF. The device cookie is an install
 
 ## OIDC configuration
 
-Configure all required values together; partial OIDC configuration fails startup:
+Operator SSO is a dev-only authorization-code + PKCE login (public client —
+PKCE only, never a client_secret) activated by the env pair. Both values must
+be set together; a partial pair fails startup, and an unset pair leaves the
+`/bff/auth/login` and `/bff/auth/callback` routes at 404 with dev-login
+unchanged:
 
 ```text
-BACKOFFICE_OIDC_ISSUER
-BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT
-BACKOFFICE_OIDC_TOKEN_ENDPOINT
-BACKOFFICE_OIDC_JWKS_URI
+BACKOFFICE_OIDC_ISSUER_URL
 BACKOFFICE_OIDC_CLIENT_ID
-BACKOFFICE_OIDC_REDIRECT_URI
 BACKOFFICE_OIDC_ROLE_MAP_JSON
 ```
+
+`BACKOFFICE_OIDC_ISSUER_URL` must be an absolute HTTP(S) issuer URL without
+credentials, query or fragment (HTTPS required unless every allowed origin is
+loopback HTTP); the authorize/token/JWKS endpoints are derived under it and
+the callback is the exact `/bff/auth/callback` URL on the first allowed
+origin. `GET /bff/auth/login` redirects to the issuer with an S256 challenge
+plus state+nonce bound to a `Path=/bff/auth`, `HttpOnly`,
+`SameSite=Lax`, 10-minute transaction cookie (at most two outstanding flows
+per initiator, 256 globally). `GET /bff/auth/callback` verifies state, nonce
+and PKCE, exchanges the code and validates the RS256 `id_token`
+(iss/aud/azp/nonce, `at_hash` when present, 60 s skew). Every failure —
+bad state, IdP error, expired or replayed code, unmapped role, unapproved
+device — collapses to one generic `?error=auth_failed` redirect; the session
+is minted for the pseudonymized `syn_oper_*` principal, never the raw `sub`.
 
 Optional values:
 
 ```text
-BACKOFFICE_OIDC_CLIENT_SECRET
 BACKOFFICE_OIDC_ROLE_CLAIM
 BACKOFFICE_ALLOWED_ORIGINS
 BACKOFFICE_BFF_HOST

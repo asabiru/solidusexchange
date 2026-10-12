@@ -102,7 +102,6 @@ describe("OIDC re-login session rotation", () => {
         tokenEndpoint: `${identityUrl}/token`,
         jwksUri: `${identityUrl}/jwks`,
         clientId,
-        clientSecret: "",
         redirectUri: `${origin}/bff/auth/callback`,
         roleClaim: "groups",
         roleMap: { compliance: "compliance-lead" }
@@ -143,7 +142,7 @@ describe("OIDC re-login session rotation", () => {
     assert.ok(state && nonce);
     const code = `code-${state}`;
     nonces.set(code, nonce);
-    const callbackCookie = [`${transactionCookie}=${state}`, cookies.callback]
+    const callbackCookie = [`${transactionCookie}=${state}.${nonce}`, cookies.callback]
       .filter(Boolean)
       .join("; ");
     const callback = await fetch(
@@ -220,11 +219,15 @@ describe("OIDC re-login session rotation", () => {
       });
       const state = new URL(login.headers.get("location") ?? "").searchParams.get("state");
       assert.ok(state);
+      const loginTx = login.headers.getSetCookie()
+        .find((value) => value.startsWith(`${transactionCookie}=`));
+      assert.ok(loginTx);
       const rejected = await fetch(
         `${baseUrl}/bff/auth/callback?code=unknown&state=${state}`,
-        { redirect: "manual", headers: { cookie: `${transactionCookie}=${state}` } }
+        { redirect: "manual", headers: { cookie: loginTx.split(";")[0] } }
       );
-      assert.equal(rejected.status, 500);
+      assert.equal(rejected.status, 302);
+      assert.equal(rejected.headers.get("location"), `${origin}/?error=auth_failed`);
       assert.equal(await authenticated(baseUrl, previous), true);
     });
   });
@@ -242,9 +245,14 @@ describe("OIDC re-login session rotation", () => {
           nonces.set(`code-${state}`, nonce);
           const callback = await fetch(
             `${baseUrl}/bff/auth/callback?code=code-${state}&state=${state}`,
-            { redirect: "manual", headers: { cookie: `${transactionCookie}=${state}` } }
+            { redirect: "manual", headers: { cookie: `${transactionCookie}=${state}.${nonce}` } }
           );
-          assert.equal(callback.status, 500, JSON.stringify(groups));
+          assert.equal(callback.status, 302, JSON.stringify(groups));
+          assert.equal(
+            callback.headers.get("location"),
+            `${origin}/?error=auth_failed`,
+            JSON.stringify(groups)
+          );
           assert.equal(
             callback.headers.getSetCookie()
               .some((value) => value.startsWith("solidchange_bo_session=")),
