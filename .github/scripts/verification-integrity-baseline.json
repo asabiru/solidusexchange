@@ -336,7 +336,7 @@
         "run": "node .github/scripts/check-dev-stack.mjs"
       },
       {
-        "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs"
+        "run": "node --test infra/local/tests/x509.test.mjs infra/local/tests/dev-material.test.mjs infra/local/tests/loopback-edge.test.mjs infra/local/tests/healthcheck.test.mjs infra/local/tests/with-dev-material.test.mjs"
       },
       {
         "run": "docker compose -f infra/local/compose.yaml config --quiet"
@@ -457,8 +457,8 @@
   },
   "testFiles": {
     ".github/scripts/check-dev-stack.test.mjs": {
-      "minLines": 286,
-      "minCases": 30
+      "minLines": 486,
+      "minCases": 39
     },
     ".github/scripts/check-regulated-core-status.test.mjs": {
       "minLines": 228,
@@ -667,6 +667,10 @@
     "infra/local/tests/x509.test.mjs": {
       "minLines": 67,
       "minCases": 5
+    },
+    "infra/local/tests/with-dev-material.test.mjs": {
+      "minLines": 102,
+      "minCases": 6
     },
     "miniapp/src/app/a11y.test.ts": {
       "minLines": 381,

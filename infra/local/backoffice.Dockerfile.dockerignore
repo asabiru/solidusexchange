@@ -13,3 +13,11 @@ backoffice/.env
 backoffice/.env.*
 !infra/local/scripts/healthcheck.mjs
 !infra/local/scripts/with-dev-material.sh
+**/.env
+**/.env.*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/.git
+**/.git/**

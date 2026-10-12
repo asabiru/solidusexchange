@@ -58,6 +58,7 @@ const botToken = `${randomInt(100_000, 999_999_999)}:${randomBytes(30).toString(
 const allowedOrigin = "http://127.0.0.1:4183";
 const tronTestnet = "TJD46Huff79KfsBbvCHF55qYvA6HDpjpwB";
 const tronTestnetOther = "TKmJ2NCHa7qnFxj5KVNQ36Kfpri5L859h5";
+const tonTestnet = "kQBrcnmAh46VnKOqsbi_xs3U2-Lp8Pf-BQwTGiEoLzY9RCIT";
 const telegramUserId = 8_000_001;
 const devTelegramUserId = 900_000_001;
 
@@ -239,6 +240,7 @@ let devGated;
 let telegram;
 let supportRequest;
 let screeningView;
+let secondScreeningView;
 let checkReference;
 let outageScreeningView;
 
@@ -384,9 +386,28 @@ describe("miniapp chain through the live customer-api", () => {
     assert.match(devGated.cookie, /^solidchange_ma_session=smt_[0-9a-f]{64}$/);
     assert.match(telegram.cookie, /^solidchange_ma_session=smt_[0-9a-f]{64}$/);
     assert.deepEqual(await okGet("/bff/session", devVerified.cookie), devVerified.view);
-    assert.equal(devVerified.view.authenticated, true);
-    assert.equal(devVerified.view.source, "dev-synthetic");
-    assert.equal(devVerified.view.kyc, "verified");
+    // The session view is one literal shape — the same six keys on every
+    // login path, self-referential comparisons do not substitute for them.
+    for (const [view, source, kyc] of [
+      [devVerified.view, "dev-synthetic", "verified"],
+      [devGated.view, "dev-synthetic", "kyc-gated"],
+      [telegram.view, "telegram", "kyc-gated"]
+    ]) {
+      assert.deepEqual(Object.keys(view).sort(), [
+        "authenticated",
+        "customerRef",
+        "displayName",
+        "expiresAt",
+        "kyc",
+        "source"
+      ]);
+      assert.equal(view.authenticated, true);
+      assert.equal(view.source, source);
+      assert.equal(view.kyc, kyc);
+      assert.equal(view.displayName, "Тестовый клиент");
+      assert.match(view.customerRef, /^SC-DEV-[0-9A-F]{5}$/);
+      assert.ok(view.expiresAt > Date.now());
+    }
     assert.equal(telegram.view.source, "telegram");
     assert.equal(telegram.view.kyc, "kyc-gated");
 
@@ -550,9 +571,13 @@ describe("miniapp chain through the live customer-api", () => {
     assert.equal(screeningResponse.status, 202);
     assert.match(screeningView.id, /^scr_[0-9a-f]{32}$/);
     assert.equal(screeningView.mode, "test");
+    assert.equal(screeningView.asset, "USDT");
+    assert.equal(screeningView.network, "TRON_TESTNET");
     assert.equal(screeningView.status, "pending");
     assert.equal(screeningView.advisory, true);
     assert.equal(screeningView.executable, false);
+    assert.equal(typeof screeningView.submittedAt, "number");
+    assert.ok(screeningView.deadline > screeningView.submittedAt);
     assert.deepEqual(
       await okGet(`/bff/address-screening/${screeningView.id}`, devVerified.cookie),
       screeningView
@@ -561,6 +586,48 @@ describe("miniapp chain through the live customer-api", () => {
       mode: "test",
       screenings: [screeningView]
     });
+    // Identical input resubmits idempotently: same deterministic id, the
+    // stored view back, 200 not 202, and the list still holds one row.
+    const resubmit = await postMiniapp(
+      "/bff/address-screening",
+      { asset: "USDT", network: "TRON_TESTNET", address: tronTestnet },
+      { cookie: devVerified.cookie }
+    );
+    assert.equal(resubmit.status, 200);
+    assert.deepEqual(await readJson(resubmit), screeningView);
+    assert.deepEqual(await okGet("/bff/address-screening", devVerified.cookie), {
+      mode: "test",
+      screenings: [screeningView]
+    });
+    // A different target mints a different id and joins the same list.
+    const secondScreening = await postMiniapp(
+      "/bff/address-screening",
+      { asset: "USDT", network: "TON_TESTNET", address: tonTestnet },
+      { cookie: devVerified.cookie }
+    );
+    assert.equal(secondScreening.status, 202);
+    secondScreeningView = await readJson(secondScreening);
+    assert.notEqual(secondScreeningView.id, screeningView.id);
+    assert.equal(secondScreeningView.network, "TON_TESTNET");
+    assert.deepEqual(
+      (await okGet("/bff/address-screening", devVerified.cookie)).screenings.map(
+        (entry) => entry.id
+      ),
+      [screeningView.id, secondScreeningView.id]
+    );
+    // Hostile targets fail closed with their own codes, not a lumped 400.
+    for (const [body, error] of [
+      [{ asset: "BTC", network: "TRON_TESTNET", address: tronTestnet }, "invalid_target"],
+      [{ asset: "USDT", network: "BTC_TESTNET", address: tronTestnet }, "invalid_target"],
+      [{ asset: "USDT", network: "TRON_TESTNET", address: "not-an-address" }, "invalid_address"],
+      [{ asset: "USDT", network: "TRON_TESTNET", address: "" }, "invalid_address"]
+    ]) {
+      const denied = await postMiniapp("/bff/address-screening", body, {
+        cookie: devVerified.cookie
+      });
+      assert.equal(denied.status, 400);
+      assert.deepEqual(await readJson(denied), { error });
+    }
 
     // Support member reads are local-desk only: the POST creates the record,
     // the member route serves it back verbatim, and the upstream-roster
@@ -573,11 +640,56 @@ describe("miniapp chain through the live customer-api", () => {
     supportRequest = await readJson(supportResponse);
     assert.equal(supportResponse.status, 201);
     assert.match(supportRequest.id, /^sup_[0-9a-f]{24}$/);
+    // The create view echoes the request verbatim — category, topic and
+    // message come straight from the stored ticket, not a shaped stub.
+    assert.equal(supportRequest.mode, "test");
+    assert.equal(supportRequest.delivery, "disabled");
+    assert.equal(supportRequest.category, "question");
+    assert.equal(supportRequest.topic, "chain e2e");
+    assert.equal(supportRequest.message, "synthetic");
     assert.equal(supportRequest.status, "received");
+    assert.deepEqual(supportRequest.timeline.map((entry) => entry.status), ["received"]);
+    assert.equal(supportRequest.timeline[0].at, supportRequest.createdAt);
+    assert.equal(supportRequest.complaintAcknowledged, false);
+    assert.equal(supportRequest.expiresAt - supportRequest.createdAt, 86_400_000);
     assert.deepEqual(
       await okGet(`/bff/support/requests/${supportRequest.id}`, devVerified.cookie),
       supportRequest
     );
+    // A second request gets its own stored row: the member read of the
+    // second id answers the second ticket, never the first entry.
+    const secondSupport = await postMiniapp(
+      "/bff/support/requests",
+      { category: "complaint", topic: "second topic", message: "different body" },
+      { cookie: devVerified.cookie }
+    );
+    const secondSupportView = await readJson(secondSupport);
+    assert.equal(secondSupport.status, 201);
+    assert.notEqual(secondSupportView.id, supportRequest.id);
+    assert.equal(secondSupportView.category, "complaint");
+    assert.equal(secondSupportView.topic, "second topic");
+    assert.equal(secondSupportView.message, "different body");
+    assert.equal(secondSupportView.complaintAcknowledged, true);
+    assert.deepEqual(
+      await okGet(`/bff/support/requests/${secondSupportView.id}`, devVerified.cookie),
+      secondSupportView
+    );
+    // Hostile fields fail closed with their own codes.
+    for (const [body, error] of [
+      [{ category: "bogus", topic: "t", message: "m" }, "invalid_category"],
+      [{ category: "question", topic: "", message: "m" }, "invalid_topic"],
+      [{ category: "question", topic: "t", message: "" }, "invalid_message"],
+      [
+        { category: "question", topic: "t", message: "m", activityId: "act_0" },
+        "invalid_reference"
+      ]
+    ]) {
+      const denied = await postMiniapp("/bff/support/requests", body, {
+        cookie: devVerified.cookie
+      });
+      assert.equal(denied.status, 400);
+      assert.deepEqual(await readJson(denied), { error });
+    }
     // The list stays upstream-owned: the local desk row never merges in.
     assert.deepEqual(
       await okGet("/bff/support/requests", devVerified.cookie),
@@ -586,21 +698,122 @@ describe("miniapp chain through the live customer-api", () => {
     const upstreamTicket = (await expectedSupportList(devUpstreamSubject)).requests[0].id;
     await deniedGet(`/bff/support/requests/${upstreamTicket}`, devVerified.cookie, 404, "not_found");
 
-    // The checks member read resolves the served (gated) collection: the
-    // fixture reference returns the same row the list serves — identical
-    // on every stable field, with the clock-derived timestamps following
-    // the same offsets (the fixture recomputes them per call).
+    // The checks surface serves the five deterministic fixtures verbatim:
+    // every stable field is pinned literally (any drift in the fixture or
+    // the derivation — amounts, fees, statuses, the comment — is a defect),
+    // and the clock-derived anchors follow the fixture offsets exactly.
+    // Row 2's status is the gated derivation both sessions see here (the
+    // degraded collection is always the kyc-gated one in this stack).
     const checks = await okGet("/bff/checks", devVerified.cookie);
-    const checkRow = checks.checks[0];
-    const checkMember = await okGet(`/bff/checks/${checkReference}`, devVerified.cookie);
-    const stable = ({ createdAt, expiresAt, timeline, ...rest }) => rest;
-    assert.deepEqual(stable(checkMember), stable(checkRow));
-    assert.equal(checkMember.timeline.length, checkRow.timeline.length);
-    assert.equal(
-      checkMember.expiresAt - checkMember.createdAt,
-      checkRow.expiresAt - checkRow.createdAt
-    );
-    assert.equal(checkMember.timeline[0].at, checkMember.createdAt);
+    const fixtureRows = [
+      {
+        reference: "chk_7f3a9c1e5d2b4f8a0e6c1d3b",
+        mode: "test",
+        direction: "sent",
+        status: "created",
+        asset: "USDT",
+        amount: "25.000000",
+        fee: "0.075000",
+        total: "25.075000",
+        claimRule: "personal",
+        comment: "Возврат долга",
+        executable: false,
+        executionUnavailableReason: "dev_test_version"
+      },
+      {
+        reference: "chk_2b8d4f6a0c1e3b5d7f9a2c4e",
+        mode: "test",
+        direction: "received",
+        status: "awaiting_recipient_kyc",
+        asset: "USDT",
+        amount: "10.000000",
+        fee: "0.030000",
+        total: "10.030000",
+        claimRule: "personal",
+        executable: false,
+        executionUnavailableReason: "dev_test_version"
+      },
+      {
+        reference: "chk_5e7a9c2e4d6b8f0a1c3e5d7b",
+        mode: "test",
+        direction: "received",
+        status: "claimed",
+        asset: "TON",
+        amount: "4.000000000",
+        fee: "0.012000000",
+        total: "4.012000000",
+        claimRule: "personal",
+        executable: false,
+        executionUnavailableReason: "dev_test_version"
+      },
+      {
+        reference: "chk_9d1b3f5a7c9e1d3f5a7b9c1e",
+        mode: "test",
+        direction: "sent",
+        status: "cancelled",
+        asset: "USDT",
+        amount: "15.000000",
+        fee: "0.045000",
+        total: "15.045000",
+        claimRule: "personal",
+        executable: false,
+        executionUnavailableReason: "dev_test_version"
+      },
+      {
+        reference: "chk_4c6e8a0d2f4b6d8f0a2c4e6a",
+        mode: "test",
+        direction: "sent",
+        status: "expired",
+        asset: "USDT",
+        amount: "7.500000",
+        fee: "0.022500",
+        total: "7.522500",
+        claimRule: "personal",
+        executable: false,
+        executionUnavailableReason: "dev_test_version"
+      }
+    ];
+    assert.equal(checks.mode, "test");
+    assert.equal(checks.checks.length, fixtureRows.length);
+    // Fixture offsets from the shared clock: 3h, 5h, 30h, 50h, 90h ago;
+    // terminal steps land +5h, +10h, +72h after creation; every row carries
+    // the same 72h TTL.
+    const createdAgo = [3, 5, 30, 50, 90].map((hours) => hours * 3_600_000);
+    const statusAfter = [undefined, undefined, 5 * 3_600_000, 10 * 3_600_000, 72 * 3_600_000];
+    const timelineSteps = [1, 1, 2, 2, 2];
+    const terminalStatuses = [undefined, undefined, "claimed", "cancelled", "expired"];
+    for (const [index, row] of checks.checks.entries()) {
+      const { createdAt, expiresAt, timeline, ...stable } = row;
+      assert.deepEqual(stable, fixtureRows[index]);
+      assert.equal(expiresAt - createdAt, 259_200_000);
+      assert.equal(timeline.length, timelineSteps[index]);
+      assert.equal(timeline[0].status, "created");
+      assert.equal(timeline[0].at, createdAt);
+      if (index > 0) {
+        assert.equal(
+          createdAt - checks.checks[index - 1].createdAt,
+          createdAgo[index - 1] - createdAgo[index]
+        );
+      }
+      if (statusAfter[index] !== undefined) {
+        assert.equal(timeline[1].status, terminalStatuses[index]);
+        assert.equal(timeline[1].at - createdAt, statusAfter[index]);
+      }
+      // The member read serves the same fixture row recomputed on its own
+      // clock tick: stable fields identical, timestamps shifted by the
+      // inter-request drift but the offsets preserved.
+      const member = await okGet(`/bff/checks/${row.reference}`, devVerified.cookie);
+      const { createdAt: mCreated, expiresAt: mExpires, timeline: mTimeline, ...mStable } = member;
+      assert.deepEqual(mStable, stable);
+      assert.equal(mExpires - mCreated, 259_200_000);
+      assert.equal(mTimeline.length, timelineSteps[index]);
+      assert.equal(mTimeline[0].status, "created");
+      assert.equal(mTimeline[0].at, mCreated);
+      if (statusAfter[index] !== undefined) {
+        assert.equal(mTimeline[1].status, terminalStatuses[index]);
+        assert.equal(mTimeline[1].at - mCreated, statusAfter[index]);
+      }
+    }
 
     // Every other member probe answers the same uniform not_found — wrong
     // prefix, wrong shape, never-minted well-formed ids, an upstream-roster
@@ -645,13 +858,68 @@ describe("miniapp chain through the live customer-api", () => {
     assert.equal(preview.kycRequired, false);
     assert.equal(preview.executable, false);
     assert.equal(preview.executionUnavailableReason, "dev_test_version");
-    assert.equal(typeof preview.ttlSeconds, "number");
+    assert.equal(preview.ttlSeconds, 30);
+    // The preview is arithmetic, not decoration: the fee is ~30bps of the
+    // RUB leg, amountOut follows netIn through the quoted rate, the input
+    // total stays intact, and the bucket-aligned issue time precedes
+    // serverTime by less than one TTL window.
+    assert.equal(preview.feeAsset, "RUB");
+    assert.equal(preview.feeBps, 30);
+    assert.equal(preview.spreadBps, 50);
+    assert.equal(preview.total, preview.amountIn);
+    assert.match(preview.netIn, /^[0-9]+\.[0-9]{2}$/);
+    assert.match(preview.amountOut, /^[0-9]+\.[0-9]+$/);
+    assert.match(preview.rate.value, /^[0-9]+\.[0-9]+$/);
+    const feeBps = (Number(preview.fee) / Number(preview.netIn)) * 10_000;
+    assert.ok(feeBps > 28 && feeBps < 32, `fee ${preview.fee} vs netIn ${preview.netIn}`);
+    const expectedOut = Number(preview.netIn) / Number(preview.rate.value);
+    assert.ok(
+      Math.abs(Number(preview.amountOut) - expectedOut) / expectedOut < 0.05,
+      `amountOut ${preview.amountOut} vs netIn/rate ${expectedOut}`
+    );
+    assert.equal(preview.expiresAt - preview.issuedAt, preview.ttlSeconds * 1_000);
+    assert.ok(preview.serverTime >= preview.issuedAt);
+    assert.ok(preview.serverTime - preview.issuedAt < 120_000);
+    // The reverse pair must carry the same contract (a one-pair special
+    // case is a classic drift).
+    const reverse = await okGet(
+      "/bff/quotes/preview?from=USDT&to=RUB&amount=55.55",
+      devVerified.cookie
+    );
+    assert.equal(reverse.from, "USDT");
+    assert.equal(reverse.to, "RUB");
+    assert.equal(reverse.rate.base, "USDT");
+    assert.equal(reverse.rate.quote, "RUB");
+    assert.equal(reverse.feeAsset, "RUB");
+    assert.equal(reverse.total, reverse.amountIn);
+    const reverseOut = Number(reverse.amountIn) * Number(reverse.rate.value);
+    assert.ok(
+      Math.abs(Number(reverse.amountOut) - reverseOut) / reverseOut < 0.05,
+      `reverse amountOut ${reverse.amountOut} vs amountIn*rate ${reverseOut}`
+    );
     const gatedPreview = await okGet(
       "/bff/quotes/preview?from=RUB&to=USDT&amount=5000",
       devGated.cookie
     );
     assert.equal(gatedPreview.kycRequired, true);
+    assert.equal(gatedPreview.insufficientBalance, true);
     assert.equal(gatedPreview.executable, false);
+    assert.equal(gatedPreview.executionUnavailableReason, "dev_test_version");
+    // The three declared keys are all required; anything else, a hostile
+    // value, or a same-currency pair fails closed with its own code.
+    for (const [path, error] of [
+      ["/bff/quotes/preview?from=RUB&to=USDT", "invalid_amount"],
+      ["/bff/quotes/preview?from=RUB&amount=5", "invalid_pair"],
+      ["/bff/quotes/preview?to=USDT&amount=5", "invalid_pair"],
+      ["/bff/quotes/preview?from=RUB&to=RUB&amount=5", "invalid_pair"],
+      ["/bff/quotes/preview?from=rub&to=USDT&amount=5", "invalid_pair"],
+      ["/bff/quotes/preview?from=RUB&to=USDT&amount=bogus", "invalid_amount"],
+      ["/bff/quotes/preview?from=RUB&to=USDT&amount=-5", "invalid_amount"],
+      ["/bff/quotes/preview?from=RUB&to=USDT&amount=0", "invalid_amount"],
+      ["/bff/quotes/preview?from=RUB&to=USDT&amount=5&extra=1", "invalid_request"]
+    ]) {
+      await deniedGet(path, devVerified.cookie, 400, error);
+    }
     // A verified session can never re-apply for KYC.
     const reapply = await postMiniapp("/bff/kyc/applications", {}, { cookie: devVerified.cookie });
     assert.equal(reapply.status, 409);
@@ -698,6 +966,142 @@ describe("miniapp chain through the live customer-api", () => {
       400,
       "invalid_amount"
     );
+    // Both declared keys are required; hostile forms of either fail closed
+    // with their own code, and nothing extra is tolerated.
+    for (const [path, error] of [
+      ["/bff/checks/preview?asset=USDT", "invalid_amount"],
+      ["/bff/checks/preview?amount=5", "invalid_asset"],
+      ["/bff/checks/preview?asset=usdt&amount=5", "invalid_asset"],
+      ["/bff/checks/preview?asset=USDT&amount=", "invalid_amount"],
+      ["/bff/checks/preview?asset=USDT&amount=5.5.5", "invalid_amount"],
+      ["/bff/checks/preview?asset=USDT&amount=-3", "invalid_amount"],
+      ["/bff/checks/preview?asset=USDT&amount=%205", "invalid_amount"],
+      ["/bff/checks/preview?asset=USDT&amount=5&extra=1", "invalid_request"]
+    ]) {
+      await deniedGet(path, devVerified.cookie, 400, error);
+    }
+  });
+
+  it("drives the local write lifecycle: kyc submit, read-outbox, session revocation, logout", async () => {
+    // KYC onboarding on an unverified (telegram) subject: the first submit
+    // creates the application — 202 and the stored view — and an immediate
+    // resubmit returns 200 with the same view, never a second record.
+    const submit = await postMiniapp("/bff/kyc/applications", {}, { cookie: telegram.cookie });
+    const submitView = await readJson(submit);
+    assert.equal(submit.status, 202);
+    assert.equal(submitView.mode, "test");
+    assert.equal(submitView.provider, "simulator");
+    assert.equal(submitView.state, "submitted");
+    assert.equal(submitView.sessionKyc, "kyc-gated");
+    assert.equal(submitView.canSubmit, false);
+    assert.equal(typeof submitView.submittedAt, "number");
+    assert.equal(typeof submitView.reviewDeadline, "number");
+    assert.ok(submitView.reviewDeadline > submitView.submittedAt);
+    const resubmit = await postMiniapp("/bff/kyc/applications", {}, { cookie: telegram.cookie });
+    assert.equal(resubmit.status, 200);
+    assert.deepEqual(await readJson(resubmit), submitView);
+    // The upstream kyc/status read is untouched by the local submission —
+    // the surfaces are separate by contract (a gated session's status is
+    // served from the customer-api kyc directory, not the local record).
+    assert.deepEqual(
+      await okGet("/bff/kyc/status", telegram.cookie),
+      await expectedKycView(telegramUpstreamSubject)
+    );
+
+    // The dev subject's outbox has unread entries from the earlier probes;
+    // marking them by id flips unread to 0 exactly, re-marking is a 0-op,
+    // and ids that are well-formed but not this subject's mark nothing.
+    const outbox = await okGet("/bff/notifications", devVerified.cookie);
+    assert.ok(outbox.unread > 0);
+    assert.ok(outbox.notifications.every((entry) => entry.read === false));
+    const ids = outbox.notifications.map((entry) => entry.id).join(",");
+    const mark = await postMiniapp("/bff/notifications/read", { ids }, { cookie: devVerified.cookie });
+    assert.equal(mark.status, 200);
+    assert.deepEqual(await readJson(mark), { marked: outbox.unread, unread: 0 });
+    const after = await okGet("/bff/notifications", devVerified.cookie);
+    assert.equal(after.unread, 0);
+    assert.ok(after.notifications.every((entry) => entry.read === true));
+    const remark = await postMiniapp("/bff/notifications/read", { ids }, { cookie: devVerified.cookie });
+    assert.equal(remark.status, 200);
+    assert.deepEqual(await readJson(remark), { marked: 0, unread: 0 });
+    // Member-bound: the dev subject's ids under the telegram session mark
+    // nothing, and a never-minted well-formed id is the same no-op.
+    const tgBefore = await okGet("/bff/notifications", telegram.cookie);
+    const foreign = await postMiniapp("/bff/notifications/read", { ids }, { cookie: telegram.cookie });
+    assert.equal(foreign.status, 200);
+    assert.deepEqual(await readJson(foreign), { marked: 0, unread: tgBefore.unread });
+    const phantom = await postMiniapp(
+      "/bff/notifications/read",
+      { ids: `ntf_${"0".repeat(24)}` },
+      { cookie: devVerified.cookie }
+    );
+    assert.equal(phantom.status, 200);
+    assert.deepEqual(await readJson(phantom), { marked: 0, unread: 0 });
+    // Hostile id lists fail closed on the uniform body grammar.
+    for (const body of [
+      { ids: "" },
+      { ids: "not-an-id" },
+      { ids: `ntf_${"a".repeat(24)},ntf_${"a".repeat(24)}` },
+      { ids: Array.from({ length: 21 }, (_, i) => `ntf_${String(i).padStart(24, "0")}`).join(",") }
+    ]) {
+      const denied = await postMiniapp("/bff/notifications/read", body, {
+        cookie: devVerified.cookie
+      });
+      assert.equal(denied.status, 400);
+      assert.deepEqual(await readJson(denied), { error: "invalid_request" });
+    }
+
+    // Single-session revoke is unreachable on a configured stack by design:
+    // the served roster belongs to the upstream directory and its `sess_*`
+    // handles fail the local `ses_*` grammar — the route still fails closed
+    // both on the upstream-shape handle and on a well-formed local handle
+    // that binds no live record.
+    const upstreamHandle = (await okGet("/bff/sessions", devVerified.cookie)).sessions[0]
+      .handle;
+    assert.match(upstreamHandle, /^sess_[0-9a-f]{24}$/);
+    for (const handle of [upstreamHandle, `ses_${"0".repeat(32)}`]) {
+      const denied = await postMiniapp(
+        "/bff/sessions/revoke",
+        { handle },
+        { cookie: devVerified.cookie }
+      );
+      assert.equal(denied.status, handle === upstreamHandle ? 400 : 404);
+    }
+    // revoke-others is the reachable revocation on this stack: mint a
+    // sibling dev session on the same subject, evict it, and its cookie
+    // dies while the caller's lives on.
+    const sibling = await devSession("verified");
+    const revokeOthers = await postMiniapp(
+      "/bff/sessions/revoke-others",
+      {},
+      { cookie: devVerified.cookie }
+    );
+    assert.equal(revokeOthers.status, 200);
+    const dead = await bffGet("/bff/session", sibling.cookie);
+    assert.equal(dead.status, 401);
+    assert.equal((await bffGet("/bff/session", devVerified.cookie)).status, 200);
+    // Every dev login shares the one synthetic dev subject — devGated was a
+    // sibling and was evicted too; re-mint it for the remaining tests.
+    devGated = await devSession("kyc-gated");
+    assert.equal(devGated.view.kyc, "kyc-gated");
+    // The same eviction works on the telegram subject's siblings.
+    const tgSecond = await telegramSession(8_000_002);
+    const tgThird = await telegramSession(8_000_002);
+    const tgRevokeOthers = await postMiniapp(
+      "/bff/sessions/revoke-others",
+      {},
+      { cookie: tgSecond.cookie }
+    );
+    assert.equal(tgRevokeOthers.status, 200);
+    const evicted = await bffGet("/bff/session", tgThird.cookie);
+    assert.equal(evicted.status, 401);
+    // Logout kills exactly the calling session.
+    const doomed = await devSession("verified");
+    const logout = await postMiniapp("/bff/auth/logout", {}, { cookie: doomed.cookie });
+    assert.equal(logout.status, 200);
+    const loggedOut = await bffGet("/bff/session", doomed.cookie);
+    assert.equal(loggedOut.status, 401);
+    assert.equal((await bffGet("/bff/session", devVerified.cookie)).status, 200);
   });
 });
 
@@ -873,14 +1277,98 @@ describe("miniapp chain fail-closed paths", () => {
     ]) {
       await deniedGet(path, devVerified.cookie, 404, "not_found");
     }
+    // POST on a GET-only route is the mirror image: a well-formed write
+    // never reaches the read handlers, whatever the path.
+    for (const path of [
+      "/bff/session",
+      "/bff/account",
+      "/bff/profile",
+      "/bff/kyc/status",
+      "/bff/wallet",
+      "/bff/checks",
+      `/bff/checks/${checkReference}`,
+      "/bff/checks/preview?asset=USDT&amount=5",
+      "/bff/quotes/preview?from=RUB&to=USDT&amount=5",
+      "/bff/activity?limit=1",
+      "/bff/notifications",
+      "/bff/sessions",
+      "/bff/markets/USDT%2FRUB",
+      "/bff/operations",
+      "/bff/deposits"
+    ]) {
+      const response = await postMiniapp(path, { probe: "x" }, { cookie: devVerified.cookie });
+      assert.equal(response.status, 404, `POST ${path}`);
+      assert.deepEqual(await readJson(response), { error: "not_found" });
+    }
+    // PUT/DELETE are not in either method family — same never-registered
+    // 404, still before any session work.
+    for (const method of ["PUT", "DELETE", "PATCH"]) {
+      const response = await fetch(`${miniappBase}/bff/checks`, {
+        method,
+        headers: { cookie: devVerified.cookie, origin: allowedOrigin }
+      });
+      assert.equal(response.status, 404, `${method} /bff/checks`);
+      assert.deepEqual(await readJson(response), { error: "not_found" });
+    }
+    // The activity limit grammar is strict-canonical, not Number()-lax:
+    // negatives, fractions, blanks, padding and duplicates all reject.
+    for (const path of [
+      "/bff/activity?limit=-1",
+      "/bff/activity?limit=5.5",
+      "/bff/activity?limit=",
+      "/bff/activity?limit=%205",
+      "/bff/activity?limit=05",
+      "/bff/activity?limit=1e2",
+      "/bff/activity?limit=5&limit=6",
+      "/bff/activity?limit",
+      "/bff/activity?=x"
+    ]) {
+      await deniedGet(path, devVerified.cookie, 400, "invalid_request");
+    }
     // Upstream the same tampering fails the route match outright.
     for (const path of [
       "/api/v1/customer/session?bogus=1",
       "/api/v1/customer/operations?bogus=1",
       "/api/v1/customer/operations/ope_000000000000000000000000?bogus=1",
-      "/api/v1/customer/notifications?bogus=1"
+      "/api/v1/customer/notifications?bogus=1",
+      "/api/v1/customer/activity?limit=5",
+      "/api/v1/customer/activity?",
+      "/api/v1/customer/checks?kind=sent",
+      "/api/v1/customer/checks?cursor=1",
+      "/api/v1/customer/account?=x",
+      "/api/v1/customer/wallets?limit=1"
     ]) {
       assert.equal(await upstreamDenied(path), 404, path);
+    }
+    // The check command surface stays contract-only: a well-formed POST —
+    // valid token, declared headers, Idempotency-Key, JSON body — can never
+    // reach a handler, on the collection, the preview, or either member
+    // command. The same holds for any other GET-only customer operation.
+    for (const path of [
+      "/api/v1/customer/checks",
+      "/api/v1/customer/checks/preview",
+      "/api/v1/customer/checks/chk_000000000000000000000000/claim",
+      "/api/v1/customer/checks/chk_000000000000000000000000/cancel",
+      "/api/v1/customer/account",
+      "/api/v1/customer/activity",
+      "/api/v1/customer/notifications/read",
+      "/api/v1/customer/wallets"
+    ]) {
+      const requestId = generateUuidV7();
+      const response = await fetch(`${upstreamBase}${path}`, {
+        method: "POST",
+        headers: {
+          ...upstreamHeaders(mintCustomer(devUpstreamSubject)),
+          "x-request-id": requestId,
+          "idempotency-key": randomBytes(16).toString("hex"),
+          "content-type": "application/json"
+        },
+        body: "{}"
+      });
+      const body = await readJson(response);
+      assert.equal(response.status, 404, `POST ${path}`);
+      assert.equal(body.code, "CAPABILITY_DENIED");
+      assert.equal(body.request_id, requestId);
     }
   });
 
@@ -969,9 +1457,14 @@ describe("miniapp chain fail-closed paths", () => {
       "kyc_required"
     );
     const tgNotifications = await okGet("/bff/notifications", telegram.cookie);
-    assert.equal(tgNotifications.unread, 1);
-    assert.equal(tgNotifications.notifications.length, 1);
-    assert.equal(tgNotifications.notifications[0].template, "session_login");
+    // session_login from before() plus kyc_submitted from the write-lifecycle
+    // test's local onboarding submit — the outbox accrues per subject.
+    assert.equal(tgNotifications.unread, 2);
+    assert.equal(tgNotifications.notifications.length, 2);
+    assert.deepEqual(
+      tgNotifications.notifications.map((entry) => entry.template).sort(),
+      ["kyc_submitted", "session_login"]
+    );
     // Upstream binds every read to the minted token's subject.
     const tgSession = await readJson(
       await upstreamGet("/api/v1/customer/session", mintCustomer(telegramUpstreamSubject))
@@ -991,6 +1484,129 @@ describe("miniapp chain fail-closed paths", () => {
         path
       );
     }
+  });
+
+  it("keeps session issuance closed under hostile input at both entry points", async () => {
+    // dev-session origin and fetch-site rules: a missing Origin self-hides
+    // with the same never-registered 404 a bad origin already gets, and a
+    // cross-site POST is refused before origin parsing.
+    const noOrigin = await fetch(`${miniappBase}/bff/auth/dev-session`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ kyc: "verified" })
+    });
+    assert.equal(noOrigin.status, 404);
+    assert.deepEqual(await readJson(noOrigin), { error: "not_found" });
+    const crossPost = await fetch(`${miniappBase}/bff/auth/dev-session`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: allowedOrigin,
+        "sec-fetch-site": "cross-site"
+      },
+      body: JSON.stringify({ kyc: "verified" })
+    });
+    assert.equal(crossPost.status, 403);
+    assert.deepEqual(await readJson(crossPost), { error: "fetch_site_rejected" });
+
+    // dev-session body grammar: the kyc enum is closed, the key allowlist
+    // is closed, values must be strings, duplicates reject, the media type
+    // is exact, and the 4KiB bound holds — each with its own status/code.
+    const devBody = async (raw, headers = {}) =>
+      fetch(`${miniappBase}/bff/auth/dev-session`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: allowedOrigin, ...headers },
+        body: raw
+      });
+    const okEmpty = await devBody("{}");
+    assert.equal(okEmpty.status, 201);
+    assert.equal((await readJson(okEmpty)).kyc, "verified");
+    for (const [raw, status, error] of [
+      [JSON.stringify({ kyc: "bogus" }), 400, "invalid_request"],
+      [JSON.stringify({ kyc: "VERIFIED" }), 400, "invalid_request"],
+      [JSON.stringify({ kyc: "" }), 400, "invalid_request"],
+      [JSON.stringify({ kyc: "verified", extra: "1" }), 400, "invalid_request"],
+      [JSON.stringify({ kyc: 123 }), 400, "invalid_request"],
+      [JSON.stringify({ kyc: null }), 400, "invalid_request"],
+      [JSON.stringify(["verified"]), 400, "invalid_request"],
+      ["{", 400, "invalid_request"],
+      ['{"kyc":"verified","kyc":"kyc-gated"}', 400, "invalid_request"],
+      [JSON.stringify({ pad: "x".repeat(4_200) }), 400, "invalid_request"]
+    ]) {
+      const denied = await devBody(raw);
+      assert.equal(denied.status, status, raw.slice(0, 60));
+      assert.deepEqual(await readJson(denied), { error });
+    }
+    for (const contentType of [
+      "text/plain",
+      "application/json; charset=latin1",
+      "application/json; charset=utf-8; boundary=x",
+      "application/vnd.api+json"
+    ]) {
+      const denied = await devBody("{}", { "content-type": contentType });
+      assert.equal(denied.status, 415, contentType);
+      assert.deepEqual(await readJson(denied), { error: "unsupported_media_type" });
+    }
+
+    // Telegram login carries the full verify battery: every rejection
+    // class answers 401 with its own reason — a minted session can only
+    // come from a signature under the configured token.
+    const authDateNow = String(Math.floor(Date.now() / 1_000));
+    const userJson = JSON.stringify({ id: 8_000_009, first_name: "Hostile" });
+    const signed = (fields) =>
+      signInitData(new Map(fields), botToken);
+    const wrongToken = signInitData(
+      new Map([
+        ["auth_date", authDateNow],
+        ["user", userJson]
+      ]),
+      `${randomInt(100_000, 999_999_999)}:${randomBytes(30).toString("base64url")}`
+    );
+    const tampered = signed([
+      ["auth_date", authDateNow],
+      ["user", userJson]
+    ]).replace("first_name", "first_nam3");
+    const stale = signed([
+      ["auth_date", String(Math.floor(Date.now() / 1_000) - 3_600)],
+      ["user", userJson]
+    ]);
+    const future = signed([
+      ["auth_date", String(Math.floor(Date.now() / 1_000) + 3_600)],
+      ["user", userJson]
+    ]);
+    const notAnObject = signed([
+      ["auth_date", authDateNow],
+      ["user", JSON.stringify("just-a-string")]
+    ]);
+    const missingId = signed([
+      ["auth_date", authDateNow],
+      ["user", JSON.stringify({ first_name: "No Id" })]
+    ]);
+    const noUser = signed([["auth_date", authDateNow]]);
+    const noHash = `auth_date=${authDateNow}&user=${encodeURIComponent(userJson)}`;
+    const dupUser = `${signed([
+      ["auth_date", authDateNow],
+      ["user", userJson]
+    ])}&user=${encodeURIComponent(userJson)}`;
+    for (const [initData, reason] of [
+      [wrongToken, "invalid_hash"],
+      [tampered, "invalid_hash"],
+      [stale, "stale_auth_date"],
+      [future, "future_auth_date"],
+      [notAnObject, "invalid_user"],
+      [missingId, "invalid_user"],
+      [noUser, "invalid_user"],
+      [noHash, "missing_hash"],
+      [dupUser, "duplicate_key"]
+    ]) {
+      const denied = await postMiniapp("/bff/session/telegram", { initData });
+      assert.equal(denied.status, 401, reason);
+      assert.deepEqual(await readJson(denied), { error: "init_data_rejected", reason });
+    }
+    // None of the forged attempts minted a session cookie.
+    const forged = await postMiniapp("/bff/session/telegram", { initData: wrongToken });
+    assert.equal(forged.status, 401);
+    assert.equal(forged.headers.get("set-cookie"), null);
   });
 });
 
@@ -1131,11 +1747,56 @@ describe("miniapp chain degrade and recovery", () => {
     assert.equal(recovered.mode, "test");
     assert.deepEqual(
       recovered.screenings.map((entry) => entry.id).sort(),
-      [screeningView.id, outageScreeningView.id].sort()
+      [screeningView.id, secondScreeningView.id, outageScreeningView.id].sort()
     );
     assert.deepEqual(
       await okGet(`/bff/address-screening/${outageScreeningView.id}`, devVerified.cookie),
       outageScreeningView
     );
+    // Every route that answered *_unavailable during the outage recovers
+    // fully — no stale-degraded 503 survives on any of them. The gated
+    // collections return their in-place degrade views (the upstream read
+    // denies again), the previews answer full contracts, and the member
+    // reads resolve their own namespaces again.
+    for (const [path, key] of gatedCollections) {
+      assert.deepEqual(await okGet(path, devVerified.cookie), {
+        mode: "test",
+        kyc: "kyc-gated",
+        [key]: []
+      }, path);
+    }
+    const recoveredChecks = await okGet("/bff/checks", devVerified.cookie);
+    assert.equal(recoveredChecks.mode, "test");
+    assert.equal(recoveredChecks.checks.length, 5);
+    assert.equal(
+      (await okGet(`/bff/checks/${checkReference}`, devVerified.cookie)).reference,
+      checkReference
+    );
+    const recoveredNotifications = await okGet("/bff/notifications", devVerified.cookie);
+    assert.equal(recoveredNotifications.mode, "test");
+    assert.equal(typeof recoveredNotifications.unread, "number");
+    const recoveredActivity = await okGet("/bff/activity?limit=5", devVerified.cookie);
+    assert.equal(recoveredActivity.mode, "test");
+    assert.equal(recoveredActivity.executable, false);
+    const recoveredQuote = await okGet(
+      "/bff/quotes/preview?from=RUB&to=USDT&amount=5000",
+      devVerified.cookie
+    );
+    assert.equal(recoveredQuote.feeBps, 30);
+    assert.equal(recoveredQuote.insufficientBalance, true);
+    assert.equal(recoveredQuote.executable, false);
+    const recoveredCheckPreview = await okGet(
+      "/bff/checks/preview?asset=USDT&amount=10",
+      devVerified.cookie
+    );
+    assert.equal(recoveredCheckPreview.mode, "test");
+    assert.equal(recoveredCheckPreview.amount, "10.000000");
+    await deniedGet(
+      "/bff/operations/ope_000000000000000000000000",
+      devVerified.cookie,
+      404,
+      "not_found"
+    );
+    await deniedGet("/bff/markets/USDT%2FRUB", devVerified.cookie, 404, "not_found");
   });
 });
