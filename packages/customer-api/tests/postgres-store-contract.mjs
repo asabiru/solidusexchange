@@ -287,6 +287,60 @@ test("initialize rejects when the bucket primary key is dropped", async (t) => {
   }
 });
 
+test("initialize rejects when close() races the startup probe", async () => {
+  if (typeof dsn !== "string" || dsn.length === 0) {
+    throw new Error("CUSTOMER_API_STORE_DSN is required for the postgres store contract");
+  }
+  const store = createPostgresStore({ dsn, namespace: freshNamespace() });
+  const opening = store.initialize?.();
+  await store.close();
+  // Resolving on the dead store would let startup pass while every later
+  // consume can only fail — the race must reject like the auth-session
+  // store's sibling arm does.
+  await assert.rejects(opening, StoreUnavailableError);
+  await assert.rejects(() => store.consumeRateLimit(consumeCommand()), StoreUnavailableError);
+  // A clean re-open still works after the raced attempt.
+  await store.initialize?.();
+  assert.deepEqual(await store.consumeRateLimit(consumeCommand()), { allowed: true });
+  await store.close();
+});
+
+test("a bucket row locked by a stalled writer fails the consume in bounded time", async (t) => {
+  if (typeof dsn !== "string" || dsn.length === 0) {
+    throw new Error("CUSTOMER_API_STORE_DSN is required for the postgres store contract");
+  }
+  const namespace = freshNamespace();
+  const store = createPostgresStore({ dsn, namespace });
+  await store.initialize?.();
+  t.after(() => store.close().catch(() => undefined));
+  const key = `test_${crypto.randomUUID()}`;
+  assert.deepEqual(await store.consumeRateLimit(consumeCommand({ key })), { allowed: true });
+  const admin = await connectAdmin();
+  try {
+    await admin.query("BEGIN");
+    // Holding the bucket row's lock makes the consume's upsert a lock
+    // waiter; the pinned lock_timeout must fail it well inside the
+    // client-side query timeout instead of stalling the request path.
+    await admin.query(
+      "SELECT request_count FROM customer_api.rate_limit_buckets" +
+        " WHERE namespace = $1 AND bucket_key = $2 FOR UPDATE",
+      [namespace, key]
+    );
+    const started = Date.now();
+    await assert.rejects(
+      () => store.consumeRateLimit(consumeCommand({ key, now: 1_001 })),
+      StoreUnavailableError
+    );
+    assert.ok(
+      Date.now() - started < 12_000,
+      `consume blocked ${Date.now() - started}ms — expected the pinned lock timeout to fire first`
+    );
+  } finally {
+    await admin.query("ROLLBACK").catch(() => undefined);
+    await admin.end();
+  }
+});
+
 test("initialize rejects a drifted migration history row", async (t) => {
   const admin = await connectAdmin();
   try {

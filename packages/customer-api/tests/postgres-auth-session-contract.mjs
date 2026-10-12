@@ -417,3 +417,34 @@ test("a close racing in-flight writes drains them before the pool ends", async (
   // A second close joins the finished teardown instead of racing it.
   await store.close();
 });
+
+test("a peer holding the subject's advisory lock fails the write in bounded time", async (t) => {
+  requireDsn();
+  const store = createPostgresAuthSessionStore({ dsn });
+  await store.initialize?.();
+  t.after(() => store.close().catch(() => undefined));
+  const subject = freshSubject();
+  const admin = await connectAdmin();
+  try {
+    // LOCK_SUBJECT_SQL serializes writes on pg_advisory_xact_lock over the
+    // subject's hash; a session-level advisory lock on the same key blocks
+    // it, and the pinned lock_timeout must fail the write well inside the
+    // client-side query timeout instead of stalling the serialized tail
+    // behind a stalled peer.
+    await admin.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [subject]);
+    const started = Date.now();
+    await assert.rejects(
+      () => store.issueSession(issueCommand({ subject })),
+      StoreUnavailableError
+    );
+    assert.ok(
+      Date.now() - started < 12_000,
+      `write blocked ${Date.now() - started}ms — expected the pinned lock timeout to fire first`
+    );
+  } finally {
+    await admin
+      .query("SELECT pg_advisory_unlock(hashtextextended($1, 0))", [subject])
+      .catch(() => undefined);
+    await admin.end();
+  }
+});
