@@ -707,3 +707,251 @@ describe("backoffice oidc operator login", () => {
     }
   });
 });
+
+describe("backoffice hostile issuer (wave-66)", () => {
+  // Same fully attacker-controlled issuer as the miniapp arm, tuned to the
+  // backoffice OIDC wiring: operator claims need a mappable role group, the
+  // callback lands on ${boOrigin}/bff/auth/callback and the session cookie is
+  // solidchange_bo_session.
+  function makeBoEvilIssuer(tokenFor) {
+    const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const jwk = publicKey.export({ format: "jwk" });
+    const state = { nonce: "", jwksText: null, iss: "" };
+    const signClaims = (claims) => {
+      const header = Buffer.from(JSON.stringify({ alg: "RS256", typ: "JWT", kid: "evil" })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+      const signature = createSign("RSA-SHA256").update(`${header}.${payload}`).sign(privateKey, "base64url");
+      return `${header}.${payload}.${signature}`;
+    };
+    const server = createServer();
+    server.on("request", (request, response) => {
+      let body = "";
+      request.on("data", (chunk) => { body += chunk.toString("utf8"); });
+      request.on("end", () => {
+        const url = new URL(request.url ?? "/", "http://127.0.0.1");
+        if (request.method === "GET" && url.pathname === "/authorize") {
+          state.nonce = url.searchParams.get("nonce") ?? "";
+          const redirect = new URL(`${boOrigin}/bff/auth/callback`);
+          redirect.searchParams.set("code", "evil-code");
+          redirect.searchParams.set("state", url.searchParams.get("state") ?? "");
+          response.writeHead(302, { location: redirect.toString() });
+          response.end();
+          return;
+        }
+        if (request.method === "POST" && url.pathname === "/token") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(JSON.stringify(tokenFor(signClaims, state)));
+          return;
+        }
+        if (request.method === "GET" && url.pathname === "/.well-known/jwks.json") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end(state.jwksText ?? JSON.stringify({ keys: [{ kty: "RSA", kid: "evil", use: "sig", alg: "RS256", n: jwk.n, e: jwk.e }] }));
+          return;
+        }
+        response.writeHead(404);
+        response.end();
+      });
+    });
+    return { server, state, jwk };
+  }
+
+  function boClaimsFor(iss, nonce, over = {}) {
+    const now = Math.floor(Date.now() / 1_000);
+    return {
+      iss,
+      sub: boSubject,
+      aud: boClientId,
+      exp: now + 300,
+      iat: now,
+      nonce,
+      groups: ["compliance"],
+      ...over,
+    };
+  }
+
+  const atHashOf = (accessToken) =>
+    createHash("sha256").update(accessToken).digest().subarray(0, 16).toString("base64url");
+
+  // Loads a BFF config against the evil issuer through the real env pair,
+  // restoring process env afterwards.
+  async function backofficeEnv(overrides, fn) {
+    const keys = [
+      "BACKOFFICE_ALLOWED_ORIGINS",
+      "BACKOFFICE_OIDC_ISSUER_URL",
+      "BACKOFFICE_OIDC_CLIENT_ID",
+      "BACKOFFICE_OIDC_ROLE_MAP_JSON",
+      "BACKOFFICE_DEVICE_BINDING",
+      "BACKOFFICE_APPROVED_DEVICE_DIGESTS",
+    ];
+    const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    for (const key of keys) delete process.env[key];
+    for (const [key, value] of Object.entries(overrides)) process.env[key] = value;
+    try {
+      return await fn();
+    } finally {
+      for (const key of keys) {
+        if (saved[key] === undefined) delete process.env[key];
+        else process.env[key] = saved[key];
+      }
+    }
+  }
+
+  async function driveBoEvilFlow(tokenFor, { decorate, env = {}, cookieJoin = "" } = {}) {
+    const { server, state, jwk } = makeBoEvilIssuer(tokenFor);
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const evilBase = `http://127.0.0.1:${server.address().port}`;
+    state.iss = evilBase;
+    if (decorate) decorate(state, jwk, evilBase);
+    const response = await backofficeEnv({
+      BACKOFFICE_ALLOWED_ORIGINS: boOrigin,
+      BACKOFFICE_OIDC_ISSUER_URL: evilBase,
+      BACKOFFICE_OIDC_CLIENT_ID: boClientId,
+      BACKOFFICE_OIDC_ROLE_MAP_JSON: JSON.stringify({ compliance: "compliance-lead" }),
+      ...env,
+    }, async () => {
+      const bff = createBackofficeServer(loadBackofficeConfig());
+      const base = await listen(bff);
+      try {
+        const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+        const tx = setCookies(login, "solidchange_bo_oidc_transaction")[0].split(";")[0];
+        const granted = await fetch(new URL(login.headers.get("location") ?? ""), { redirect: "manual" });
+        const callback = new URL(granted.headers.get("location") ?? "");
+        return await fetch(`${base}${callback.pathname}${callback.search}`, {
+          redirect: "manual",
+          headers: { cookie: cookieJoin ? `${tx}; ${cookieJoin}` : tx },
+        });
+      } finally {
+        await closeServer(bff);
+      }
+    });
+    await closeServer(server);
+    return response;
+  }
+
+  const expectBoFailed = (response) => {
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), `${boOrigin}/?error=auth_failed`);
+    assert.equal(setCookies(response, "solidchange_bo_session").length, 0);
+  };
+
+  test("hostile token responses and JWKS fail closed on the backoffice path", async () => {
+    const cases = {
+      token_type_mac: (signClaims, state) => ({
+        access_token: "sat_evil",
+        token_type: "MAC",
+        id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+      }),
+      token_type_absent: (signClaims, state) => ({
+        access_token: "sat_evil",
+        id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+      }),
+      at_hash_absent: (signClaims, state) => ({
+        access_token: "sat_evil",
+        token_type: "Bearer",
+        id_token: signClaims(boClaimsFor(state.iss, state.nonce)),
+      }),
+      role_unmapped: (signClaims, state) => ({
+        access_token: "sat_evil",
+        token_type: "Bearer",
+        id_token: signClaims(boClaimsFor(state.iss, state.nonce, {
+          groups: ["nobody"],
+          at_hash: atHashOf("sat_evil"),
+        })),
+      }),
+    };
+    for (const [name, tokenFor] of Object.entries(cases)) {
+      try {
+        expectBoFailed(await driveBoEvilFlow(tokenFor));
+      } catch (cause) {
+        throw new Error(`${name}: ${cause}`);
+      }
+    }
+  });
+
+  test("a duplicate-member JWKS document fails closed", async () => {
+    const tokenFor = (signClaims, state) => ({
+      access_token: "sat_evil",
+      token_type: "Bearer",
+      id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+    });
+    const response = await driveBoEvilFlow(tokenFor, {
+      decorate: (state, jwk) => {
+        state.jwksText = `{"keys":[{"kty":"RSA","kid":"evil","e":"AQ","e":"${jwk.e}","n":"${jwk.n}","use":"sig"}]}`;
+      },
+    });
+    expectBoFailed(response);
+  });
+
+  test("an exponent-1 RSA key does not admit a forged signature", async () => {
+    // With e = 1 the PKCS#1 v1.5 encoded message is a valid signature:
+    // s^e mod n == s. The forged token needs no private key at all.
+    const tokenFor = (_signClaims, state) => {
+      const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "evil" })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify(
+        boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") }),
+      )).toString("base64url");
+      const digestInfo = Buffer.concat([
+        Buffer.from("3031300d060960864801650304020105000420", "hex"),
+        createHash("sha256").update(`${header}.${payload}`).digest(),
+      ]);
+      const modulusBytes = Buffer.from(state.jwkN, "base64url").byteLength;
+      const em = Buffer.concat([
+        Buffer.from([0, 1]),
+        Buffer.alloc(modulusBytes - 3 - digestInfo.length, 0xff),
+        Buffer.from([0]),
+        digestInfo,
+      ]);
+      return {
+        access_token: "sat_evil",
+        token_type: "Bearer",
+        id_token: `${header}.${payload}.${em.toString("base64url")}`,
+      };
+    };
+    const response = await driveBoEvilFlow(tokenFor, {
+      decorate: (state, jwk) => {
+        state.jwkN = jwk.n;
+        state.jwksText = `{"keys":[{"kty":"RSA","kid":"evil","e":"AQ","n":"${jwk.n}","use":"sig"}]}`;
+      },
+    });
+    expectBoFailed(response);
+  });
+
+  test("a trailing forged transaction cookie does not shadow the real one", async () => {
+    const tokenFor = (signClaims, state) => ({
+      access_token: "sat_evil",
+      token_type: "Bearer",
+      id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+    });
+    const response = await driveBoEvilFlow(tokenFor, {
+      cookieJoin: "solidchange_bo_oidc_transaction=forged.forged",
+    });
+    assert.equal(response.headers.get("location"), boOrigin);
+    assert.ok(setCookies(response, "solidchange_bo_session")[0], "session cookie expected");
+  });
+
+  test("a denied callback keeps the minted device cookie", async () => {
+    const tokenFor = (signClaims, state) => ({
+      access_token: "sat_evil",
+      token_type: "Bearer",
+      id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+    });
+    const response = await driveBoEvilFlow(tokenFor, {
+      env: { BACKOFFICE_DEVICE_BINDING: "enforce" },
+    });
+    expectBoFailed(response);
+    const device = setCookies(response, "solidchange_bo_device")[0];
+    assert.ok(device, "device cookie expected on a denied callback");
+    assert.match(device, /Path=\/bff/);
+  });
+
+  test("an honest hostile-issuer token still mints only its mapped operator", async () => {
+    const response = await driveBoEvilFlow((signClaims, state) => ({
+      access_token: "sat_evil",
+      token_type: "Bearer",
+      id_token: signClaims(boClaimsFor(state.iss, state.nonce, { at_hash: atHashOf("sat_evil") })),
+    }));
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), boOrigin);
+    assert.ok(setCookies(response, "solidchange_bo_session")[0], "session cookie expected");
+  });
+});

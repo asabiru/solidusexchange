@@ -105,11 +105,13 @@ function parseCookies(request: IncomingMessage): Readonly<Record<string, string>
   const cookies: Record<string, string> = {};
   for (const part of (request.headers.cookie ?? "").split(";")) {
     const [name, ...value] = part.trim().split("=");
-    if (!name) continue;
+    if (!name || name === "__proto__" || Object.hasOwn(cookies, name)) continue;
     try {
       cookies[name] = decodeURIComponent(value.join("="));
     } catch {
-      // A cookie pair with malformed percent-encoding is ignored, as if absent.
+      // A cookie pair with malformed percent-encoding is stored as empty, so
+      // it still counts as the first occurrence of its name.
+      cookies[name] = "";
     }
   }
   return cookies;
@@ -269,7 +271,10 @@ export function createBackofficeServer(
 
   /** Every login-path failure collapses to one generic redirect. */
   function oidcAuthFailed(response: ServerResponse): void {
-    response.setHeader("set-cookie", oidcTxCookieValue("", 0));
+    // Append rather than replace so a device cookie minted by admittedDevice
+    // survives the failure redirect and the denied browser keeps one stable
+    // device identity.
+    appendCookie(response, oidcTxCookieValue("", 0));
     redirect(response, `${config.allowedOrigins[0]}/?error=auth_failed`);
   }
 

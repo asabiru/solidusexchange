@@ -18,6 +18,7 @@ import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { ChecksSheet } from "./ChecksSheet";
 import { MarketsSheet } from "./MarketsSheet";
+import { OrdersSheet } from "./OrdersSheet";
 import { TradesSheet } from "./TradesSheet";
 import { assetNameKey, assetNetworkKey } from "./format";
 import { type MessageKey, messageKeyFor } from "./i18n";
@@ -88,6 +89,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <MarketsSheet close={close} />;
     case "trades":
       return <TradesSheet close={close} />;
+    case "orders":
+      return <OrdersSheet close={close} />;
     case "notifications":
       return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":

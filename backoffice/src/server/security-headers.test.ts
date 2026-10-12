@@ -257,7 +257,7 @@ describe("Backoffice BFF security headers on every route", () => {
         groups: ["compliance"]
       });
       const signature = sign("RSA-SHA256", Buffer.from(`${header}.${claims}`), pair.privateKey).toString("base64url");
-      response.end(JSON.stringify({ id_token: `${header}.${claims}.${signature}` }));
+      response.end(JSON.stringify({ id_token: `${header}.${claims}.${signature}`, token_type: "Bearer" }));
     });
     identityUrl = await listen(identityProvider);
     bff = createBackofficeServer(config());
