@@ -724,7 +724,25 @@ describe("miniapp chain fail-closed paths", () => {
   });
 
   it("rejects tampered query input on the routes that declare none", async () => {
+    // Every GET surface outside the declared query-input set answers any
+    // non-empty query with the member reads' 400 — the uniform pin the
+    // wave-68 route-table audit landed.
     for (const path of [
+      "/bff/session?bogus=1",
+      "/bff/account?bogus=1",
+      "/bff/profile?bogus=1",
+      "/bff/kyc/status?bogus=1",
+      "/bff/wallet?bogus=1",
+      "/bff/deposits?bogus=1",
+      "/bff/withdrawals?bogus=1",
+      "/bff/operations?bogus=1",
+      "/bff/quotes?bogus=1",
+      "/bff/exchange-orders?bogus=1",
+      "/bff/trades?bogus=1",
+      "/bff/markets?bogus=1",
+      "/bff/payments?bogus=1",
+      "/bff/cards?bogus=1",
+      "/bff/health?bogus=1",
       "/bff/notifications?bogus=1",
       "/bff/sessions?bogus=1",
       "/bff/support/requests?bogus=1",
@@ -737,9 +755,25 @@ describe("miniapp chain fail-closed paths", () => {
       `/bff/checks/${checkReference}?bogus=1`,
       "/bff/activity?limit=0",
       "/bff/activity?limit=bogus",
-      "/bff/activity?bogus=1"
+      "/bff/activity?bogus=1",
+      "/bff/quotes/preview?bogus=1",
+      "/bff/checks/preview?bogus=1",
+      "/bff/quotes/preview?from=RUB&to=USDT&amount=5000&bogus=1"
     ]) {
       await deniedGet(path, devVerified.cookie, 400, "invalid_request");
+    }
+    // GET on a POST-only route answers the same never-registered 404 as a
+    // path that does not exist at all — it never asks for a session.
+    for (const path of [
+      "/bff/auth/dev-session",
+      "/bff/auth/logout",
+      "/bff/session/telegram",
+      "/bff/sessions/revoke",
+      "/bff/sessions/revoke-others",
+      "/bff/kyc/applications",
+      "/bff/notifications/read"
+    ]) {
+      await deniedGet(path, devVerified.cookie, 404, "not_found");
     }
     // Upstream the same tampering fails the route match outright.
     for (const path of [

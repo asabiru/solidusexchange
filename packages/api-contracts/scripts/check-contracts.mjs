@@ -2010,6 +2010,28 @@ const canonicalHeaderParameters = new Map([
   ["idempotency-key", "#/components/parameters/IdempotencyKey"]
 ]);
 
+// Exactly the operations that serve a query parameter must declare it, and
+// the declared shape is the served grammar: name, location, optionality and
+// schema are pinned so a widened enum, a dropped `default`, a loosened
+// pattern or a sibling query key cannot drift through the tolerated
+// non-canonical-parameter arm.
+const pinnedQueryParameters = new Map([
+  [
+    "getOperatorQueue",
+    {
+      name: "kind",
+      schema: { type: "string", enum: ["kyc", "aml", "tickets"], default: "kyc" }
+    }
+  ],
+  [
+    "getOperatorAudit",
+    {
+      name: "cursor",
+      schema: { type: "string", pattern: "^auc_[0-9a-f]{16}$" }
+    }
+  ]
+]);
+
 function verifyUniqueParameters(pathParameters, operationParameters, sourcePath, label) {
   const seen = new Set();
   for (const parameter of [...(pathParameters ?? []), ...(operationParameters ?? [])]) {
@@ -2061,6 +2083,48 @@ function verifyCanonicalHeaderParameters(parameters, sourcePath, label) {
       );
     }
   }
+}
+
+function resolveParameters(parameters, sourcePath) {
+  return (parameters ?? []).map((parameter) =>
+    parameter?.$ref ? resolveRef(sourcePath, parameter.$ref).value : parameter
+  );
+}
+
+// The served-query operations must declare exactly their pinned parameter;
+// a missing, renamed, required or re-typed declaration, or an extra query
+// key on those operations, is drift between the documented grammar and the
+// strict single-key parser the runtime enforces.
+function verifyQueryParameters(operationId, parameters, sourcePath) {
+  const pinned = pinnedQueryParameters.get(operationId);
+  if (pinned === undefined) {
+    return;
+  }
+  const queryParameters = resolveParameters(parameters, sourcePath).filter(
+    (parameter) =>
+      parameter?.in === "query" &&
+      // A canonical header parameter forced into a query position keeps its
+      // dedicated canonical-location rejection instead of being counted
+      // against the served-query surface.
+      !canonicalHeaderParameters.has(String(parameter?.name ?? "").toLowerCase())
+  );
+  assert(
+    queryParameters.length === 1,
+    `${operationId} must declare exactly its served query parameter ${pinned.name}`
+  );
+  const declared = queryParameters[0];
+  assert(
+    declared?.name === pinned.name,
+    `${operationId} query parameter must be named ${pinned.name}`
+  );
+  assert(
+    declared?.required !== true,
+    `${operationId} query parameter ${pinned.name} must stay optional`
+  );
+  assert(
+    canonicalJson(declared?.schema) === canonicalJson(pinned.schema),
+    `Query parameter ${operationId} ${pinned.name} schema must remain pinned`
+  );
 }
 
 function verifyRequestIdResponseHeader(response, label) {
@@ -2371,6 +2435,24 @@ function checkOpenApi() {
       );
       verifyCanonicalHeaderParameters(operation.parameters, path, operation.operationId);
       verifyUniqueParameters(pathItem.parameters, operation.parameters, path, operation.operationId);
+      verifyQueryParameters(
+        operation.operationId,
+        [...(pathItem.parameters ?? []), ...(operation.parameters ?? [])],
+        path
+      );
+      // The tag is the namespace the operation is documented under; it also
+      // drives the conformance harness's header selection for unserved
+      // operations, so a mistag is more than prose drift.
+      const expectedTag =
+        pathName === "/api/v1/meta"
+          ? "Metadata"
+          : pathName.startsWith("/api/v1/operator/")
+            ? "Operator"
+            : "Customer";
+      assert(
+        canonicalJson(operation.tags) === canonicalJson([expectedTag]),
+        `Operation tags must be exactly the ${expectedTag} namespace tag: ${operation.operationId}`
+      );
       const requestHeaders = new Set([...refs(operation), ...pathParameterRefs]);
       assert(
         requestHeaders.has("#/components/parameters/RequestId"),
@@ -2635,6 +2717,28 @@ function checkOpenApi() {
       pattern: "^syn_cust_[a-z0-9]{8,32}$"
     }),
     "Canonical SubjectId constraints must remain pinned"
+  );
+  const queueKindParameter = parameters.QueueKind;
+  assert(queueKindParameter?.required === true, "QueueKind must be required when used");
+  assert(queueKindParameter?.in === "path", "QueueKind must remain a path parameter");
+  assert(queueKindParameter?.name === "kind", "QueueKind must use kind");
+  assert(
+    canonicalJson(queueKindParameter?.schema) === canonicalJson({
+      type: "string",
+      enum: ["kyc", "aml", "tickets"]
+    }),
+    "Canonical QueueKind constraints must remain pinned"
+  );
+  const queueItemIdParameter = parameters.QueueItemId;
+  assert(queueItemIdParameter?.required === true, "QueueItemId must be required when used");
+  assert(queueItemIdParameter?.in === "path", "QueueItemId must remain a path parameter");
+  assert(queueItemIdParameter?.name === "itemId", "QueueItemId must use itemId");
+  assert(
+    canonicalJson(queueItemIdParameter?.schema) === canonicalJson({
+      type: "string",
+      pattern: "^[a-z][a-z0-9_-]{2,127}$"
+    }),
+    "Canonical QueueItemId constraints must remain pinned"
   );
   for (const name of ["decimalAmount", "assetCode"]) {
     assert(
