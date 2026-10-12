@@ -8,6 +8,10 @@ const expectedSources = [
   [
     "0001_customer_api_store.sql",
     "939f72aa1fa05086c4f941f0cab72d2a03e80507a93ddbe7088c0fe3f1014262"
+  ],
+  [
+    "0002_auth_sessions.sql",
+    "8ea2ef6b88ec0aad548bd152f6ae36b468e7ad085a486075a82b28b11c861387"
   ]
 ];
 

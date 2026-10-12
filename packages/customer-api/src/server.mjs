@@ -26,7 +26,11 @@ import { createSyntheticWalletDirectory } from "./wallets.mjs";
 import { createSyntheticWithdrawalDirectory } from "./withdrawals.mjs";
 import { createStoredRateLimiter } from "./rate-limit.mjs";
 import { createMemoryStore } from "./store.mjs";
-import { createPostgresStore } from "./postgres-store.mjs";
+import { createPostgresStore, createPostgresAuthSessionStore } from "./postgres-store.mjs";
+import {
+  createMemoryAuthSessionStore,
+  createStoredAuthSessionDirectory
+} from "./auth-session-store.mjs";
 
 /**
  * @param {import("./config.mjs").CustomerApiConfig} config
@@ -55,13 +59,15 @@ import { createPostgresStore } from "./postgres-store.mjs";
  *   operatorDirectory?: import("./operator.mjs").OperatorDirectory,
  *   operatorSubjectsDirectory?: import("./operator.mjs").OperatorSubjectsDirectory,
  *   store?: import("./store.mjs").CustomerApiStore,
+ *   authSessionStore?: import("./auth-session-store.mjs").AuthSessionStore,
+ *   authSessionLifecycleDirectory?: ReturnType<typeof createStoredAuthSessionDirectory>,
  *   rateLimiter?: import("./rate-limit.mjs").RateLimiter,
  *   clock?: () => number,
  *   logSink?: (line: string) => void,
  *   timer?: () => number
  * }} [dependencies]
  */
-export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, tradeDirectory, marketDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operationDirectory, depositAddressDirectory, addressScreeningDirectory, operatorDirectory, operatorSubjectsDirectory, store: injectedStore, rateLimiter: injectedRateLimiter, clock, logSink, timer } = {}) {
+export async function startCustomerApi(config, { kycDirectory, walletDirectory, notificationDirectory, kycApplicationDirectory, profileDirectory, supportDirectory, authSessionDirectory, userDirectory, depositDirectory, withdrawalDirectory, quoteDirectory, exchangeOrderDirectory, tradeDirectory, marketDirectory, paymentDirectory, cardDirectory, checkDirectory, activityDirectory, operationDirectory, depositAddressDirectory, addressScreeningDirectory, operatorDirectory, operatorSubjectsDirectory, store: injectedStore, authSessionStore: injectedAuthSessionStore, authSessionLifecycleDirectory: injectedAuthSessionLifecycleDirectory, rateLimiter: injectedRateLimiter, clock, logSink, timer } = {}) {
   // Store selection happens once at construction: the memory backend is the
   // default and reproduces today's behavior, `postgres` requires a valid DSN
   // (validated in loadConfig) and probes its schema before the server
@@ -73,6 +79,28 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
       ? createPostgresStore({ dsn: config.store.dsn })
       : createMemoryStore());
   await store.initialize?.();
+  // The auth-session seam rides the same CUSTOMER_API_STORE selection: the
+  // memory backend reproduces today's in-process lifecycle, `postgres`
+  // probes migration 0002's schema before the server listens.
+  const ownsAuthSessionStore = injectedAuthSessionStore === undefined;
+  const authSessionStore =
+    injectedAuthSessionStore ??
+    (config.store?.mode === "postgres"
+      ? createPostgresAuthSessionStore({ dsn: config.store.dsn })
+      : createMemoryAuthSessionStore());
+  try {
+    await authSessionStore.initialize?.();
+  } catch (error) {
+    // Fail-fast the same way the rate-limit store does — and do not leave
+    // the already-initialized owned store behind on a failed probe.
+    if (ownsStore) {
+      await store.close().catch(() => undefined);
+    }
+    throw error;
+  }
+  const authSessionLifecycleDirectory =
+    injectedAuthSessionLifecycleDirectory ??
+    createStoredAuthSessionDirectory({ store: authSessionStore, clock });
   const verifier =
     config.authMode === "synthetic-dev"
       ? createSyntheticTokenVerifier({ key: config.devTokenKey, clock })
@@ -121,9 +149,14 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     })
   );
 
-  if (ownsStore) {
+  if (ownsStore || ownsAuthSessionStore) {
     server.once("close", () => {
-      void store.close().catch(() => undefined);
+      if (ownsStore) {
+        void store.close().catch(() => undefined);
+      }
+      if (ownsAuthSessionStore) {
+        void authSessionStore.close().catch(() => undefined);
+      }
     });
   }
 
@@ -132,7 +165,14 @@ export async function startCustomerApi(config, { kycDirectory, walletDirectory, 
     await new Promise((resolve) => server.close(resolve));
     throw new Error("customer-api must only listen on a loopback address");
   }
-  return { server, verifierKind: verifier.kind, address, store };
+  return {
+    server,
+    verifierKind: verifier.kind,
+    address,
+    store,
+    authSessionStore,
+    authSessionLifecycleDirectory
+  };
 }
 
 async function main() {
