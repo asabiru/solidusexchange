@@ -320,7 +320,8 @@ const pinnedResponseSchemas = {
       "sessions",
       "devices",
       "limits",
-      "recent_activity"
+      "recent_activity",
+      "kyc"
     ],
     properties: {
       subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
@@ -352,6 +353,42 @@ const pinnedResponseSchemas = {
         type: "array",
         maxItems: 8,
         items: { $ref: "#/components/schemas/OperatorSubjectActivityItem" }
+      },
+      kyc: {
+        type: ["object", "null"],
+        additionalProperties: false,
+        required: ["status", "level", "session_id", "history"],
+        properties: {
+          status: {
+            type: "string",
+            enum: ["approved", "in_review", "needs_more_data", "rejected", "submitted", "timed_out"]
+          },
+          level: { type: "string", enum: ["basic", "enhanced"] },
+          session_id: { type: "string", pattern: "^kys_[0-9a-f]{24}$" },
+          history: {
+            type: "array",
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              type: "object",
+              additionalProperties: false,
+              required: ["session_id", "state", "submitted_at", "decided_at", "rejection_reason"],
+              properties: {
+                session_id: { type: "string", pattern: "^kys_[0-9a-f]{24}$" },
+                state: {
+                  type: "string",
+                  enum: ["approved", "in_review", "needs_more_data", "rejected", "submitted", "timed_out"]
+                },
+                submitted_at: { type: "string", format: "date-time" },
+                decided_at: { type: ["string", "null"], format: "date-time" },
+                rejection_reason: {
+                  type: ["string", "null"],
+                  enum: ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH", null]
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

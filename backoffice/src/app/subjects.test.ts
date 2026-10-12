@@ -5,7 +5,13 @@ import { demoRepository, type SubjectTimelineKind } from "../data/demo.js";
 import { isSubjectRef } from "../server/subjects.js";
 import { hasMessage } from "./i18n.js";
 import { navigation } from "./navigation.js";
-import { operatorActivityKindKeyOf, operatorActivitySummaryKeyOf } from "./server-fields.js";
+import {
+  operatorActivityKindKeyOf,
+  operatorActivitySummaryKeyOf,
+  operatorSubjectKycLevelKeyOf,
+  operatorSubjectKycReasonKeyOf,
+  operatorSubjectKycStatusKeyOf
+} from "./server-fields.js";
 
 const timelineKinds = [
   "check",
@@ -110,6 +116,37 @@ describe("subject timeline wiring", () => {
     assert.equal(operatorActivityKindKeyOf("unknown-kind"), undefined);
     assert.equal(operatorActivitySummaryKeyOf("free text"), undefined);
     assert.equal(hasMessage("customers.recentActivity"), true);
+  });
+
+  it("covers every operator kyc dossier axis with a localized label", () => {
+    const statuses = [
+      "approved", "in_review", "needs_more_data", "rejected", "submitted", "timed_out"
+    ] as const;
+    for (const status of statuses) {
+      const key = operatorSubjectKycStatusKeyOf(status);
+      assert.ok(key !== undefined, status);
+      assert.equal(hasMessage(key), true, `${status} -> ${key}`);
+    }
+    const levels = ["basic", "enhanced"] as const;
+    for (const level of levels) {
+      const key = operatorSubjectKycLevelKeyOf(level);
+      assert.ok(key !== undefined, level);
+      assert.equal(hasMessage(key), true, `${level} -> ${key}`);
+    }
+    const reasons = ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"] as const;
+    for (const reason of reasons) {
+      const key = operatorSubjectKycReasonKeyOf(reason);
+      assert.ok(key !== undefined, reason);
+      assert.equal(hasMessage(key), true, `${reason} -> ${key}`);
+    }
+    assert.equal(operatorSubjectKycStatusKeyOf("drifted"), undefined);
+    assert.equal(operatorSubjectKycLevelKeyOf("premium"), undefined);
+    assert.equal(operatorSubjectKycReasonKeyOf("OTHER_REASON"), undefined);
+    assert.equal(hasMessage("customers.kycDossier"), true);
+    assert.equal(hasMessage("customers.kycEmpty"), true);
+    assert.equal(hasMessage("customers.kycDecided"), true);
+    assert.equal(hasMessage("customers.kycReason"), true);
+    assert.equal(hasMessage("kyc.submitted"), true);
   });
 
   it("returns undefined for unmatched refs and stays silent about coverage", () => {

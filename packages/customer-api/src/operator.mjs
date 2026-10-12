@@ -291,6 +291,7 @@ const SUBJECT_DETAIL_KEYS = Object.freeze([
   "devices",
   "display_name",
   "flags",
+  "kyc",
   "kyc_status",
   "last_active_at",
   "limits",
@@ -325,6 +326,47 @@ const OPERATOR_ACTIVITY_SUMMARIES = new Set([
   ...KYC_TRANSITION_SUMMARIES,
   ...AML_ALERT_TYPES
 ]);
+
+// The subject's KYC dossier rides the same detail view: a nullable block
+// carrying the current application state, the tier the newest session
+// targeted and its kys_* handle, plus a newest-first attempt history
+// bounded to the operator summary size. It is minted from the shared
+// roster row through the same sha256 recipe — no new entropy — and its
+// timestamps reuse the queue's submitted/approved instant derivations,
+// so the dossier agrees with the neighboring blocks. The block is null
+// whenever the universe draw lands the subject on a no-application state
+// (not_started|unavailable); the field itself is always present, and it
+// stays detail-only — list rows never carry it.
+const KYC_HISTORY_BOUND = 4;
+const KYC_DECISION_WINDOW_MS = 5 * 86_400_000;
+const SUBJECT_KYC_KEYS = Object.freeze(["history", "level", "session_id", "status"]);
+const SUBJECT_KYC_ATTEMPT_KEYS = Object.freeze([
+  "decided_at",
+  "rejection_reason",
+  "session_id",
+  "state",
+  "submitted_at"
+]);
+const SUBJECT_KYC_LEVELS = Object.freeze(["basic", "enhanced"]);
+const SUBJECT_KYC_STATUSES = Object.freeze([
+  "approved",
+  "in_review",
+  "needs_more_data",
+  "rejected",
+  "submitted",
+  "timed_out"
+]);
+const SUBJECT_KYC_PENDING_STATUSES = Object.freeze(["submitted", "in_review"]);
+// States a resubmission can follow: rejected, needs_more_data and
+// timed_out attempts may be retried; approved never is.
+const SUBJECT_KYC_ENDINGS = Object.freeze(["rejected", "needs_more_data", "timed_out"]);
+const SUBJECT_KYC_NO_APPLICATION = Object.freeze(["not_started", "unavailable"]);
+const SUBJECT_KYC_UNVERIFIED_STATES = Object.freeze([
+  ...SUBJECT_KYC_NO_APPLICATION,
+  ...SUBJECT_KYC_ENDINGS
+]);
+const SUBJECT_KYC_REASON_CODES = Object.freeze(["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"]);
+const SUBJECT_KYC_SESSION_PATTERN = /^kys_[0-9a-f]{24}$/u;
 /** The customer feed's kind set plus the two operator-side event kinds. */
 export const OPERATOR_ACTIVITY_KINDS = Object.freeze([...ACTIVITY_KINDS, ...OPERATOR_ONLY_KINDS]);
 const SUBJECT_LIMIT_KEYS = Object.freeze(["max_devices", "max_sessions"]);
@@ -421,6 +463,31 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  * @property {readonly string[]} devices
  * @property {OperatorSubjectLimits} limits
  * @property {readonly OperatorSubjectActivityItem[]} recent_activity
+ * @property {OperatorSubjectKyc | null} kyc
+ */
+
+/**
+ * One KYC attempt within the dossier history. `decided_at` stays null
+ * while the attempt sits inside the review window; `rejection_reason`
+ * is only ever set when the attempt ended `rejected`.
+ * @typedef {object} OperatorSubjectKycAttempt
+ * @property {string} session_id
+ * @property {string} state
+ * @property {string} submitted_at
+ * @property {string | null} decided_at
+ * @property {string | null} rejection_reason
+ */
+
+/**
+ * The subject's KYC dossier: the current application state, the tier the
+ * newest attempt targeted and its `kys_*` session handle, plus the
+ * newest-first attempt history. `status` and `session_id` echo
+ * `history[0]` — the newest attempt is always the current session.
+ * @typedef {object} OperatorSubjectKyc
+ * @property {string} status
+ * @property {string} level
+ * @property {string} session_id
+ * @property {readonly OperatorSubjectKycAttempt[]} history
  */
 
 /**
@@ -655,6 +722,105 @@ function deriveSubjectRecentActivity(row) {
 }
 
 /**
+ * The subject's KYC dossier, minted from the roster row through the same
+ * sha256 recipe. The roster kyc_status bounds the current application
+ * state: verified subjects are approved, pending ones sit inside the
+ * review window, and unverified ones draw across the terminal endings
+ * and the no-application states — a no-application draw yields a null
+ * block. The newest attempt reuses the submitted instant the kyc queue
+ * item and the recent_activity kyc_transition project (and, for verified
+ * subjects, the same approved instant), so the dossier agrees with the
+ * neighboring blocks; earlier attempts always end in a resubmittable
+ * state decided no later than the next attempt's submission. Pure
+ * function of the row — no cache, no stored lookup.
+ * @param {OperatorSubjectRow} row
+ * @returns {OperatorSubjectKyc | null}
+ */
+function deriveSubjectKyc(row) {
+  const subjectId = row.subject_id;
+  /** @type {string | null} */
+  let status = null;
+  if (row.kyc_status === "verified") {
+    status = "approved";
+  } else if (row.kyc_status === "pending") {
+    status = SUBJECT_KYC_PENDING_STATUSES[
+      Number(subjectsUnits(subjectId, "kyc-pending", BigInt(SUBJECT_KYC_PENDING_STATUSES.length)))
+    ];
+  } else {
+    status = SUBJECT_KYC_UNVERIFIED_STATES[
+      Number(subjectsUnits(subjectId, "kyc-unverified", BigInt(SUBJECT_KYC_UNVERIFIED_STATES.length)))
+    ];
+  }
+  if (status === null || SUBJECT_KYC_NO_APPLICATION.includes(status)) {
+    return null;
+  }
+  const registeredMs = Date.parse(row.registered_at);
+  const submittedMs = Math.max(
+    registeredMs,
+    QUEUE_SNAPSHOT_MS - Number(subjectsUnits(subjectId, "age", BigInt(QUEUE_AGE_WINDOW_MS)))
+  );
+  /** @type {number | null} */
+  let decidedMs = null;
+  if (status === "approved") {
+    decidedMs = Math.min(
+      submittedMs + KYC_APPROVED_BASE_MS + Number(subjectsUnits(subjectId, "kyc-approved", BigInt(KYC_APPROVED_JITTER_MS))),
+      QUEUE_SNAPSHOT_MS
+    );
+  } else if (SUBJECT_KYC_ENDINGS.includes(status)) {
+    decidedMs = Math.min(
+      submittedMs + Number(subjectsUnits(subjectId, "kyc-decision", BigInt(KYC_DECISION_WINDOW_MS))),
+      QUEUE_SNAPSHOT_MS
+    );
+  }
+  const attemptCount = 1 + Number(subjectsUnits(subjectId, "kyc-attempts", BigInt(KYC_HISTORY_BOUND)));
+  /** @type {OperatorSubjectKycAttempt[]} */
+  const history = [];
+  history.push(Object.freeze({
+    session_id: `kys_${subjectsDigest(subjectId, "kyc-session-0").toString("hex").slice(0, 24)}`,
+    state: status,
+    submitted_at: new Date(submittedMs).toISOString(),
+    decided_at: decidedMs === null ? null : new Date(decidedMs).toISOString(),
+    rejection_reason: status === "rejected"
+      ? SUBJECT_KYC_REASON_CODES[Number(subjectsUnits(subjectId, "kyc-reason-0", BigInt(SUBJECT_KYC_REASON_CODES.length)))]
+      : null
+  }));
+  let ceilingMs = submittedMs;
+  for (let index = 1; index < attemptCount; index += 1) {
+    const olderDecidedMs = registeredMs + Number(
+      subjectsUnits(subjectId, `kyc-decided-${index}`, BigInt(Math.max(1, ceilingMs - registeredMs)))
+    );
+    const olderSubmittedMs = registeredMs + Number(
+      subjectsUnits(subjectId, `kyc-submitted-${index}`, BigInt(Math.max(1, olderDecidedMs - registeredMs + 1)))
+    );
+    const state = SUBJECT_KYC_ENDINGS[
+      Number(subjectsUnits(subjectId, `kyc-state-${index}`, BigInt(SUBJECT_KYC_ENDINGS.length)))
+    ];
+    history.push(Object.freeze({
+      session_id: `kys_${subjectsDigest(subjectId, `kyc-session-${index}`).toString("hex").slice(0, 24)}`,
+      state,
+      submitted_at: new Date(olderSubmittedMs).toISOString(),
+      decided_at: new Date(olderDecidedMs).toISOString(),
+      rejection_reason: state === "rejected"
+        ? SUBJECT_KYC_REASON_CODES[Number(subjectsUnits(subjectId, `kyc-reason-${index}`, BigInt(SUBJECT_KYC_REASON_CODES.length)))]
+        : null
+    }));
+    ceilingMs = olderSubmittedMs;
+  }
+  // Newest-first by submitted_at; the stable sort keeps the current
+  // attempt first when instants tie, so history[0] is always the live
+  // session the header echoes.
+  history.sort((a, b) => b.submitted_at.localeCompare(a.submitted_at));
+  return Object.freeze({
+    status,
+    level: SUBJECT_KYC_LEVELS[
+      Number(subjectsUnits(subjectId, "kyc-level", BigInt(SUBJECT_KYC_LEVELS.length)))
+    ],
+    session_id: history[0].session_id,
+    history: Object.freeze(history)
+  });
+}
+
+/**
  * @param {OperatorSubjectRow} row
  * @returns {OperatorSubjectDetail}
  */
@@ -667,7 +833,8 @@ function buildSubjectDetail(row) {
     sessions: derived.sessions,
     devices: derived.devices,
     limits: derived.limits,
-    recent_activity: deriveSubjectRecentActivity(row)
+    recent_activity: deriveSubjectRecentActivity(row),
+    kyc: deriveSubjectKyc(row)
   });
 }
 
@@ -800,6 +967,103 @@ function validOperatorSubjectActivityItem(item) {
   return scale !== undefined && isScaledDecimal(entry.amount, scale) && parseUnits(entry.amount) > 0n;
 }
 
+/**
+ * Shape and coherence checks for one KYC dossier block: exact keys,
+ * enum/pattern membership, the review-window and resubmittable-ending
+ * rules, newest-first ordering and the header echoing history[0]. The
+ * roster cross-checks and the verbatim recompute live in the detail
+ * validator — subset discipline like recent_activity, never strict
+ * counts.
+ * @param {unknown} kyc
+ */
+export function validOperatorSubjectKyc(kyc) {
+  if (kyc === null || typeof kyc !== "object" || Array.isArray(kyc)) {
+    return false;
+  }
+  const candidate = /** @type {OperatorSubjectKyc} */ (kyc);
+  if (JSON.stringify(Object.keys(kyc).sort()) !== JSON.stringify([...SUBJECT_KYC_KEYS].sort())) {
+    return false;
+  }
+  if (
+    !SUBJECT_KYC_STATUSES.includes(candidate.status) ||
+    !SUBJECT_KYC_LEVELS.includes(candidate.level) ||
+    !SUBJECT_KYC_SESSION_PATTERN.test(candidate.session_id) ||
+    !Array.isArray(candidate.history) ||
+    candidate.history.length < 1 ||
+    candidate.history.length > KYC_HISTORY_BOUND
+  ) {
+    return false;
+  }
+  const sessionIds = new Set();
+  let previousSubmittedAt = "";
+  for (const [index, attempt] of candidate.history.entries()) {
+    if (attempt === null || typeof attempt !== "object" || Array.isArray(attempt)) {
+      return false;
+    }
+    if (JSON.stringify(Object.keys(attempt).sort()) !== JSON.stringify([...SUBJECT_KYC_ATTEMPT_KEYS].sort())) {
+      return false;
+    }
+    const item = /** @type {OperatorSubjectKycAttempt} */ (attempt);
+    if (
+      !SUBJECT_KYC_SESSION_PATTERN.test(item.session_id) ||
+      !SUBJECT_KYC_STATUSES.includes(item.state) ||
+      !isIsoTimestamp(item.submitted_at) ||
+      sessionIds.has(item.session_id)
+    ) {
+      return false;
+    }
+    sessionIds.add(item.session_id);
+    const submittedMs = Date.parse(item.submitted_at);
+    // Timestamps never exceed the roster's pinned as-of instant.
+    if (submittedMs > QUEUE_SNAPSHOT_MS) {
+      return false;
+    }
+    const inReview = SUBJECT_KYC_PENDING_STATUSES.includes(item.state);
+    if (item.decided_at === null) {
+      // Only attempts still inside the review window lack a decision.
+      if (!inReview) {
+        return false;
+      }
+    } else if (
+      typeof item.decided_at !== "string" ||
+      !isIsoTimestamp(item.decided_at) ||
+      inReview ||
+      Date.parse(item.decided_at) < submittedMs ||
+      Date.parse(item.decided_at) > QUEUE_SNAPSHOT_MS
+    ) {
+      return false;
+    }
+    // A rejection_reason is only ever carried by a rejected attempt.
+    if (
+      item.rejection_reason !== null &&
+      (item.state !== "rejected" || !SUBJECT_KYC_REASON_CODES.includes(item.rejection_reason))
+    ) {
+      return false;
+    }
+    // A resubmission only follows a resubmittable ending: non-first
+    // attempts always carry one, decided no later than the next
+    // attempt's submission.
+    if (
+      index > 0 &&
+      (!SUBJECT_KYC_ENDINGS.includes(item.state) ||
+        item.decided_at === null ||
+        item.decided_at > candidate.history[index - 1].submitted_at)
+    ) {
+      return false;
+    }
+    // The history is newest first; equal instants keep mint order.
+    if (index > 0 && item.submitted_at > previousSubmittedAt) {
+      return false;
+    }
+    previousSubmittedAt = item.submitted_at;
+  }
+  // The header echoes the newest attempt.
+  return (
+    candidate.session_id === candidate.history[0].session_id &&
+    candidate.status === candidate.history[0].state
+  );
+}
+
 /** @param {unknown} view */
 export function validOperatorSubjectDetailView(view) {
   if (view === null || typeof view !== "object" || Array.isArray(view)) {
@@ -909,6 +1173,27 @@ export function validOperatorSubjectDetailView(view) {
   if (activity.filter((item) => item.kind === "flag_added").length > subject.flags) {
     return false;
   }
+  // The nullable kyc dossier is detail-only and derives from the same
+  // roster row; the roster kyc_status bounds its current state without
+  // pinning the attempt count — the same subset discipline the
+  // recent_activity cross-checks apply.
+  if (subject.kyc !== null && !validOperatorSubjectKyc(subject.kyc)) {
+    return false;
+  }
+  if (subject.kyc !== null) {
+    if (subject.kyc_status === "verified" && subject.kyc.status !== "approved") {
+      return false;
+    }
+    if (subject.kyc_status === "pending" && !SUBJECT_KYC_PENDING_STATUSES.includes(subject.kyc.status)) {
+      return false;
+    }
+    if (
+      subject.kyc_status === "unverified" &&
+      (subject.kyc.status === "approved" || SUBJECT_KYC_PENDING_STATUSES.includes(subject.kyc.status))
+    ) {
+      return false;
+    }
+  }
   // The detail is a pure function of the shared roster: the list fields
   // must equal the row minted for the id's index, and every derived field
   // must equal the deterministic derivation for that id. Anything else is
@@ -930,7 +1215,8 @@ export function validOperatorSubjectDetailView(view) {
     subject.sessions === derived.sessions &&
     JSON.stringify(subject.devices) === JSON.stringify(derived.devices) &&
     JSON.stringify(subject.limits) === JSON.stringify(derived.limits) &&
-    JSON.stringify(subject.recent_activity) === JSON.stringify(deriveSubjectRecentActivity(row))
+    JSON.stringify(subject.recent_activity) === JSON.stringify(deriveSubjectRecentActivity(row)) &&
+    JSON.stringify(subject.kyc) === JSON.stringify(deriveSubjectKyc(row))
   );
 }
 

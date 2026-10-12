@@ -52,7 +52,28 @@ const subjectDetailPayload = {
         summary: "payment_received",
         money: { amount: "1250.00", asset: "RUB" }
       }
-    ]
+    ],
+    kyc: {
+      status: "approved",
+      level: "enhanced",
+      sessionId: `kys_${"a".repeat(24)}`,
+      history: [
+        {
+          sessionId: `kys_${"a".repeat(24)}`,
+          state: "approved",
+          submittedAt: "2026-09-15T10:00:00.000Z",
+          decidedAt: "2026-09-20T10:00:00.000Z",
+          rejectionReason: null
+        },
+        {
+          sessionId: `kys_${"b".repeat(24)}`,
+          state: "rejected",
+          submittedAt: "2026-09-10T08:00:00.000Z",
+          decidedAt: "2026-09-12T09:00:00.000Z",
+          rejectionReason: "SIM_DATA_MISMATCH"
+        }
+      ]
+    }
   }
 } as const;
 
@@ -135,6 +156,57 @@ describe("operator subject detail adapter", () => {
     assert.equal(second.activityId, `act_${"d".repeat(24)}`);
     assert.equal(second.summary, "payment_received");
     assert.deepEqual(second.money, { amount: "1250.00", asset: "RUB" });
+    // The kyc dossier parses through with the header echoing history[0].
+    const kyc = subject.kyc;
+    assert.ok(kyc !== null);
+    assert.equal(kyc.status, "approved");
+    assert.equal(kyc.level, "enhanced");
+    assert.equal(kyc.sessionId, kyc.history[0].sessionId);
+    assert.equal(kyc.history[0].state, kyc.status);
+    assert.equal(kyc.history[1].rejectionReason, "SIM_DATA_MISMATCH");
+  });
+
+  it("accepts a null kyc dossier and degrades a malformed one to the no-dossier state", () => {
+    const subjectId = subjectDetailPayload.subject.subjectId;
+    // A null block is the contract's no-dossier marker.
+    const absent = parseOperatorSubjectView(
+      { mode: "test", subject: { ...subjectDetailPayload.subject, kyc: null } },
+      subjectId
+    );
+    assert.ok(absent !== undefined);
+    assert.equal(absent.subject.kyc, null);
+    // A malformed block degrades like the sibling reads: the rest of the
+    // detail still parses instead of failing the whole view closed.
+    const kyc = subjectDetailPayload.subject.kyc;
+    const drifts: readonly unknown[] = [
+      "dossier",
+      [],
+      {},
+      { ...kyc, status: "approved", level: "premium" },
+      { ...kyc, status: "unavailable" },
+      { ...kyc, status: "rejected" }, // roster is verified: only approved coheres
+      { ...kyc, session_id: `kys_${"0".repeat(24)}` },
+      { ...kyc, sessionId: "kys_nothex" },
+      { ...kyc, history: [] },
+      { ...kyc, history: [...kyc.history].reverse() },
+      { ...kyc, history: kyc.history.map((attempt) => ({ ...attempt, sessionId: `kys_${"0".repeat(24)}` })) },
+      { ...kyc, history: [{ ...kyc.history[0], decidedAt: null }, ...kyc.history.slice(1)] },
+      { ...kyc, history: [{ ...kyc.history[0], state: "in_review" }, ...kyc.history.slice(1)] },
+      { ...kyc, history: [{ ...kyc.history[0], rejectionReason: "SIM_DATA_MISMATCH" }, ...kyc.history.slice(1)] },
+      { ...kyc, history: [kyc.history[0], { ...kyc.history[1], state: "approved" }] },
+      { ...kyc, history: [kyc.history[0], { ...kyc.history[1], decidedAt: "2027-01-01T00:00:00.000Z" }] }
+    ];
+    for (const value of drifts) {
+      const parsed = parseOperatorSubjectView(
+        { mode: "test", subject: { ...subjectDetailPayload.subject, kyc: value } },
+        subjectId
+      );
+      assert.ok(parsed !== undefined, JSON.stringify(value).slice(0, 96));
+      assert.equal(parsed.subject.kyc, null, JSON.stringify(value).slice(0, 96));
+    }
+    // But a missing kyc key breaks the pinned detail shape like any other.
+    const { kyc: _dropped, ...without } = subjectDetailPayload.subject;
+    assert.equal(parseOperatorSubjectView({ mode: "test", subject: without }, subjectId), undefined);
   });
 
   it("rejects forged envelopes and invalid detail axes", () => {

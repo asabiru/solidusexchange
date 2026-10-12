@@ -99,6 +99,27 @@ function subjectDetailView(overrides: Record<string, unknown> = {}): Record<stri
         money: { amount: "0.500000", asset: "USDT" }
       }
     ],
+    kyc: {
+      status: "approved",
+      level: "enhanced",
+      session_id: `kys_${"a".repeat(24)}`,
+      history: [
+        {
+          session_id: `kys_${"a".repeat(24)}`,
+          state: "approved",
+          submitted_at: "2026-09-15T10:00:00.000Z",
+          decided_at: "2026-09-20T10:00:00.000Z",
+          rejection_reason: null
+        },
+        {
+          session_id: `kys_${"b".repeat(24)}`,
+          state: "rejected",
+          submitted_at: "2026-09-10T08:00:00.000Z",
+          decided_at: "2026-09-12T09:00:00.000Z",
+          rejection_reason: "SIM_DATA_MISMATCH"
+        }
+      ]
+    },
     ...overrides
   };
 }
@@ -602,6 +623,7 @@ describe("customer API operator client", () => {
     const good = subjectView();
     const detail = (overrides: Record<string, unknown> = {}) => subjectView(overrides);
     const limits = (overrides: Record<string, unknown> = {}) => ({ max_sessions: 8, max_devices: 4, ...overrides });
+    const kycFixture = (subjectDetailView().kyc ?? {}) as Record<string, unknown> & { history: Record<string, unknown>[] };
     const drifts: Record<string, unknown>[] = [
       { ...good, extra: true },
       { subject: good.subject },
@@ -640,7 +662,21 @@ describe("customer API operator client", () => {
         { activity_id: `opact_${"e".repeat(24)}`, kind: "kyc_transition", occurred_at: "2026-09-20T10:00:00.000Z", summary: "approved", money: null }
       ] }),
       detail({ recent_activity: [{ activity_id: `opact_${"e".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-20T10:00:00.000Z", summary: "structuring", money: { amount: "1.00", asset: "RUB" } }] }),
-      detail({ recent_activity: [{ activity_id: `act_${"0".repeat(24)}`, kind: "deposit", occurred_at: "2026-09-20T10:00:00.000Z", summary: "approved", money: null }] })
+      detail({ recent_activity: [{ activity_id: `act_${"0".repeat(24)}`, kind: "deposit", occurred_at: "2026-09-20T10:00:00.000Z", summary: "approved", money: null }] }),
+      detail({ kyc: "dossier" }),
+      detail({ kyc: {} }),
+      detail({ kyc: { ...kycFixture, level: "premium" } }),
+      detail({ kyc: { ...kycFixture, status: "unavailable" } }),
+      detail({ kyc: { ...kycFixture, status: "rejected" } }),
+      detail({ kyc: { ...kycFixture, session_id: "kys_nothex" } }),
+      detail({ kyc: { ...kycFixture, session_id: `kys_${"0".repeat(24)}` } }),
+      detail({ kyc: { ...kycFixture, history: [] } }),
+      detail({ kyc: { ...kycFixture, history: [...kycFixture.history].reverse() } }),
+      detail({ kyc: { ...kycFixture, history: kycFixture.history.map((attempt: Record<string, unknown>) => ({ ...attempt, session_id: `kys_${"0".repeat(24)}` })) } }),
+      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], decided_at: null }, ...kycFixture.history.slice(1)] } }),
+      detail({ kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], rejection_reason: "SIM_DATA_MISMATCH" }, ...kycFixture.history.slice(1)] } }),
+      detail({ kyc: { ...kycFixture, history: [kycFixture.history[0], { ...kycFixture.history[1], state: "approved" }] } }),
+      detail({ kyc_status: "pending", kyc: kycFixture })
     ];
     for (const body of drifts) {
       await withFakeApi(

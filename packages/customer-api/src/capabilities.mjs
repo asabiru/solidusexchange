@@ -332,6 +332,11 @@ export const OPERATOR_CAPABILITY_POLICY = Object.freeze([
   entry("operator.session.read", "read", false, []),
   entry("operator.capabilities.read", "read", false, []),
   entry("operator.admin.read", "read", false, []),
+  // The subject detail's KYC dossier rides the same read tier: it is a
+  // deterministic projection of the roster row the directory read
+  // already exposes — no new subject data class, no new decision — so
+  // operator.subjects.read covers it and no dossier capability is
+  // minted.
   entry("operator.subjects.read", "read", false, []),
   // The work queue is a projection of the subject roster the directory
   // read already exposes — no new subject data — so it sits at the same

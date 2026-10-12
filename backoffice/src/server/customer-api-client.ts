@@ -31,6 +31,7 @@ const subjectDetailKeys = [
   "devices",
   "display_name",
   "flags",
+  "kyc",
   "kyc_status",
   "last_active_at",
   "limits",
@@ -40,6 +41,28 @@ const subjectDetailKeys = [
   "sessions",
   "subject_id"
 ] as const;
+const subjectKycKeys = ["history", "level", "session_id", "status"] as const;
+const subjectKycAttemptKeys = [
+  "decided_at",
+  "rejection_reason",
+  "session_id",
+  "state",
+  "submitted_at"
+] as const;
+const subjectKycStatuses: ReadonlySet<string> = new Set([
+  "approved",
+  "in_review",
+  "needs_more_data",
+  "rejected",
+  "submitted",
+  "timed_out"
+]);
+const subjectKycPendingStatuses: ReadonlySet<string> = new Set(["submitted", "in_review"]);
+const subjectKycEndings: ReadonlySet<string> = new Set(["rejected", "needs_more_data", "timed_out"]);
+const subjectKycLevels: ReadonlySet<string> = new Set(["basic", "enhanced"]);
+const subjectKycReasonCodes: ReadonlySet<string> = new Set(["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"]);
+const kycSessionPattern = /^kys_[0-9a-f]{24}$/u;
+const kycHistoryBound = 4;
 const subjectLimitKeys = ["max_devices", "max_sessions"] as const;
 const activityItemKeys = ["activity_id", "kind", "occurred_at", "summary", "money"] as const;
 const activityMoneyKeys = ["amount", "asset"] as const;
@@ -232,6 +255,23 @@ export interface CustomerApiSubjectActivityItem {
   money: { amount: string; asset: string } | null;
 }
 
+/** One KYC attempt inside the operator subject dossier history — snake_case contract fields. */
+export interface CustomerApiSubjectKycAttempt {
+  session_id: string;
+  state: string;
+  submitted_at: string;
+  decided_at: string | null;
+  rejection_reason: string | null;
+}
+
+/** The subject's KYC dossier — current application state, level and session handle plus the attempt history. */
+export interface CustomerApiSubjectKyc {
+  status: string;
+  level: string;
+  session_id: string;
+  history: readonly CustomerApiSubjectKycAttempt[];
+}
+
 /** One subject row of the operator detail read — the list fields plus the id-bound detail extension. */
 export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   account_status: string;
@@ -240,6 +280,7 @@ export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   devices: readonly string[];
   limits: CustomerApiSubjectLimits;
   recent_activity: readonly CustomerApiSubjectActivityItem[];
+  kyc: CustomerApiSubjectKyc | null;
 }
 
 /** Wire view of GET /api/v1/operator/subjects/{subjectId} — snake_case contract fields. */
@@ -613,6 +654,101 @@ function parseSubjectRecentActivity(value: unknown): readonly CustomerApiSubject
 }
 
 /**
+ * Fail-closed parser for the nullable kyc dossier block: exact key sets,
+ * status/level/reason vocabularies, the `kys_*` session grammar, the
+ * review-window and resubmittable-ending rules, unique session ids,
+ * newest-first ordering and the header echoing the newest attempt — the
+ * same axes the upstream `validOperatorSubjectKyc` validator pins.
+ */
+function parseSubjectKyc(value: unknown): CustomerApiSubjectKyc | undefined {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, subjectKycKeys)
+    || typeof value.status !== "string"
+    || !subjectKycStatuses.has(value.status)
+    || typeof value.level !== "string"
+    || !subjectKycLevels.has(value.level)
+    || typeof value.session_id !== "string"
+    || !kycSessionPattern.test(value.session_id)
+    || !Array.isArray(value.history)
+    || value.history.length < 1
+    || value.history.length > kycHistoryBound
+  ) {
+    return undefined;
+  }
+  const sessionIds = new Set<string>();
+  const history: CustomerApiSubjectKycAttempt[] = [];
+  let previousSubmittedAt = "";
+  for (const [index, raw] of value.history.entries()) {
+    if (!isRecord(raw) || !hasExactKeys(raw, subjectKycAttemptKeys)) {
+      return undefined;
+    }
+    if (
+      typeof raw.session_id !== "string"
+      || !kycSessionPattern.test(raw.session_id)
+      || sessionIds.has(raw.session_id)
+      || typeof raw.state !== "string"
+      || !subjectKycStatuses.has(raw.state)
+      || !isIsoTimestamp(raw.submitted_at)
+    ) {
+      return undefined;
+    }
+    sessionIds.add(raw.session_id);
+    const inReview = subjectKycPendingStatuses.has(raw.state);
+    if (raw.decided_at === null) {
+      // Only attempts still inside the review window lack a decision.
+      if (!inReview) {
+        return undefined;
+      }
+    } else if (
+      typeof raw.decided_at !== "string"
+      || !isIsoTimestamp(raw.decided_at)
+      || inReview
+      || Date.parse(raw.decided_at) < Date.parse(raw.submitted_at)
+    ) {
+      return undefined;
+    }
+    // A rejection_reason is only ever carried by a rejected attempt.
+    if (
+      raw.rejection_reason !== null
+      && (raw.state !== "rejected" || typeof raw.rejection_reason !== "string" || !subjectKycReasonCodes.has(raw.rejection_reason))
+    ) {
+      return undefined;
+    }
+    // A resubmission only follows a resubmittable ending decided no
+    // later than the next attempt's submission; the page is newest
+    // first and equal instants keep mint order.
+    if (
+      index > 0
+      && (!subjectKycEndings.has(raw.state)
+        || raw.decided_at === null
+        || raw.decided_at > value.history[index - 1].submitted_at
+        || raw.submitted_at > previousSubmittedAt)
+    ) {
+      return undefined;
+    }
+    previousSubmittedAt = raw.submitted_at;
+    history.push(Object.freeze({
+      session_id: raw.session_id,
+      state: raw.state,
+      submitted_at: raw.submitted_at,
+      decided_at: raw.decided_at,
+      rejection_reason: raw.rejection_reason
+    }));
+  }
+  // The header echoes the newest attempt.
+  if (value.session_id !== history[0].session_id || value.status !== history[0].state) {
+    return undefined;
+  }
+  return Object.freeze({
+    status: value.status,
+    level: value.level,
+    session_id: value.session_id,
+    history: Object.freeze(history)
+  });
+}
+
+/**
  * Fail-closed parser for the operator subject detail contract view: the list
  * row's axes (exact key sets, `syn_cust_*` ref, kyc_status enum, non-negative
  * integer flags, coherent ISO timestamps, pinned `posting: "none"`) plus the
@@ -682,6 +818,22 @@ function parseOperatorSubjectDetailView(
   if (recentActivity === undefined) {
     return undefined;
   }
+  // The nullable kyc dossier stays fail-closed: a present block must
+  // parse, and its current state stays coherent with the roster
+  // kyc_status — subset discipline like the upstream validator.
+  const kyc = item.kyc === null ? null : parseSubjectKyc(item.kyc);
+  if (kyc === undefined) {
+    return undefined;
+  }
+  if (
+    kyc !== null
+    && ((item.kyc_status === "verified" && kyc.status !== "approved")
+      || (item.kyc_status === "pending" && !subjectKycPendingStatuses.has(kyc.status))
+      || (item.kyc_status === "unverified"
+        && (kyc.status === "approved" || subjectKycPendingStatuses.has(kyc.status))))
+  ) {
+    return undefined;
+  }
   return Object.freeze({
     mode: "test",
     subject: Object.freeze({
@@ -700,7 +852,8 @@ function parseOperatorSubjectDetailView(
         max_sessions: item.limits.max_sessions,
         max_devices: item.limits.max_devices
       }),
-      recent_activity: recentActivity
+      recent_activity: recentActivity,
+      kyc
     })
   });
 }
