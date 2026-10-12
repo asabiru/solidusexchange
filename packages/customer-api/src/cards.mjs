@@ -54,6 +54,10 @@ const RUB_SCALE = 2;
 const BASE_MS = Date.parse("2026-09-01T00:00:00.000Z");
 const STEP_MS = 86_400_000;
 const YEAR_MS = 365 * 86_400_000;
+// An already-expired card's validity window: one to fourteen days after
+// issuance, so the whole window sits inside the synthetic epoch's elapsed
+// span — the expiry and its observation never land in the reader's future.
+const EXPIRED_VALIDITY_DAYS = 14n;
 
 /**
  * @typedef {object} CardView
@@ -125,11 +129,12 @@ function buildCard(subject, index) {
   const limitMinor = 500_000n + units(subject, `limit:${index}`, 4_500_001n);
   const createdMs = BASE_MS + index * STEP_MS + Number(units(subject, `created:${index}`, BigInt(STEP_MS)));
   // A card in force expires roughly three to four years after issuance; an
-  // already-expired card carries a shorter past validity window and its last
+  // already-expired card carries a shorter past validity window (a couple of
+  // weeks after issuance, fully inside the elapsed epoch) and its last
   // observation is exactly the expiry transition.
   const expiresMs =
     status === "expired"
-      ? createdMs + YEAR_MS + Number(units(subject, `expiry:${index}`, BigInt(YEAR_MS)))
+      ? createdMs + (1 + Number(units(subject, `expiry:${index}`, EXPIRED_VALIDITY_DAYS))) * 86_400_000
       : createdMs + 3 * YEAR_MS + Number(units(subject, `expiry:${index}`, BigInt(YEAR_MS)));
   // A resting unactivated card has never changed; an expired one updates
   // exactly at its expiry; every other observation is its transition

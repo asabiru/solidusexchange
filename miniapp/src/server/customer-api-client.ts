@@ -2305,9 +2305,11 @@ function parseOperationItem(value: unknown): CustomerApiOperationItem | undefine
   } else if (
     value.exchange !== null
     || legs.length !== 1
-    // A non-exchange operation is a single-leg move: withdrawals pay out,
-    // every other kind pays in.
-    || legs[0]?.direction !== (value.kind === "withdrawal" ? "out" : "in")
+    // A non-exchange operation is a single-leg move: withdrawals and QR
+    // payments (SBP rail, RUB-only like the payments domain) pay out, the
+    // remaining kinds pay in.
+    || legs[0]?.direction !== (value.kind === "withdrawal" || value.kind === "qr" ? "out" : "in")
+    || (value.kind === "qr" && legs[0]?.asset !== "RUB")
   ) {
     return undefined;
   }

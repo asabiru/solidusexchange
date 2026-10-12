@@ -1129,6 +1129,22 @@ describe("customer-api client served-view contract audit (wave 75)", () => {
         assert.equal(result.status, "ok", "a coherent non-exchange item still serves");
       }
     );
+    // A qr operation projects the subject's SBP rail payment: like upstream's
+    // payments domain the leg is RUB outbound — the corrected rule serves.
+    const qrOp = operationItem("ope_bbbbbbbbbbbbbbbbbbbbbbbb", {
+      kind: "qr",
+      status: "created",
+      exchange: null,
+      legs: [{ asset: "RUB", amount: "500.00", direction: "out" }]
+    });
+    await withFakeApi(
+      () => qrOp,
+      async (baseUrl) => {
+        const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+        const result = await client.operation(bffSubject, String(qrOp.operation_id), Date.now());
+        assert.equal(result.status, "ok", "a coherent qr RUB outbound leg still serves");
+      }
+    );
   });
 
   it("fails closed on an operations feed violating bounds, uniqueness or ordering", async () => {

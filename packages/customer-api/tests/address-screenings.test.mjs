@@ -156,7 +156,7 @@ test("validAddressScreeningsView and validAddressScreeningView fail closed on di
     advisory: true,
     executable: false,
     submitted_at: "2026-09-15T00:00:00.000Z",
-    deadline: "2026-09-15T00:30:00.000Z",
+    deadline: "2026-09-15T00:15:00.000Z",
     posting: "none"
   };
   const bad = [

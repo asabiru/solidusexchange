@@ -53,7 +53,10 @@ const TESTNET_PATTERN = /^[A-Z0-9]+_TESTNET$/u;
 const ISO_TIMESTAMP = /^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$/u;
 const BASE_MS = Date.parse("2026-09-15T00:00:00.000Z");
 const STEP_MS = 86_400_000;
-const DEADLINE_MS = 1_800_000;
+// The screening deadline mirrors the local surface's 900-second timeout —
+// the same default the miniapp's MINIAPP_KYT_TIMEOUT_SECONDS and the KYT
+// simulator's screeningTimeoutSeconds carry.
+const DEADLINE_MS = 900_000;
 /** @type {Record<string, string>} */
 const VERDICT_BY_RISK_LEVEL = Object.freeze({
   low: "clear",
@@ -192,7 +195,7 @@ function validAddressScreening(entry) {
     record.executable !== false ||
     !isIsoTimestamp(record.submitted_at) ||
     !isIsoTimestamp(record.deadline) ||
-    !(Date.parse(record.deadline) > Date.parse(record.submitted_at)) ||
+    Date.parse(record.deadline) - Date.parse(record.submitted_at) !== DEADLINE_MS ||
     record.posting !== "none"
   ) {
     return false;
