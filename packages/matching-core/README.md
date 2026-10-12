@@ -222,7 +222,11 @@ is untouched: this is data durability only, never ledger posting.
   `matching_journal` table (`namespace,seq` PK; `at`, `type`, `payload`
   jsonb self-consistent via CHECKs), append-only row triggers, contiguous
   `seq` per namespace enforced at insert, and the
-  `append_matching_journal` function. `npm run verify:migrations` runs the
+  `append_matching_journal` function. `0002_journal_event_grammar.sql`
+  pins the payload's per-type event grammar and idempotent redelivery;
+  `0003_journal_event_timestamp.sql` closes the `'T24:00:00Z'`
+  end-of-day spelling the timestamptz cast normalizes instead of
+  rejecting. `npm run verify:migrations` runs the
   source catalog and policy verifiers; `tests/postgres-journal.sh` is the
   pg arm (mirrors `customer-api/tests/postgres-store.sh`: applies
   migrations via host `psql` or `PSQL_DOCKER_IMAGE`, exports

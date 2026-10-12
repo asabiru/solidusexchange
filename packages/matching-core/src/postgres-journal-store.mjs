@@ -4,8 +4,8 @@ import { snapshotPlainData } from "./snapshot.mjs";
 // PostgreSQL backend for the matching journal seam (`MATCHING_CORE_STORE=
 // postgres`, DSN via `MATCHING_CORE_STORE_DSN`). Dev-only groundwork so the
 // engine's append-only event journal can survive restarts; the schema it
-// requires is `migrations/0001_matching_journal.sql` plus
-// `migrations/0002_journal_event_grammar.sql`, applied through the
+// requires is `migrations/0001_matching_journal.sql` through
+// `migrations/0003_journal_event_timestamp.sql`, applied through the
 // package's `verify:migrations`-governed source catalog. The store speaks
 // only to the `matching_core` schema and only for its own table.
 //
@@ -39,7 +39,7 @@ import { snapshotPlainData } from "./snapshot.mjs";
 // The DSN (user, password, host) is connection material: it is never
 // logged, and failure paths surface only StoreUnavailableError.
 
-const schemaVersion = 2;
+const schemaVersion = 3;
 
 const APPEND_SQL = "SELECT matching_core.append_matching_journal($1, $2::jsonb) AS next_seq;";
 
