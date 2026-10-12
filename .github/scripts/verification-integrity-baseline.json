@@ -43,8 +43,8 @@
     },
     "packages/e2e-dev/package.json": {
       "build": "npm --prefix ../../miniapp run build:bff && npm --prefix ../../backoffice run build:bff",
-      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs && node --check tests/postgres-stack-contract.mjs && node --check tests/postgres-journal-helper.mjs && node --check tests/oidc.test.mjs",
-      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs tests/oidc.test.mjs",
+      "lint": "node --check tests/stack.mjs && node --check tests/dev-stack.test.mjs && node --check tests/boundaries.test.mjs && node --check tests/resilience.test.mjs && node --check tests/load.test.mjs && node --check tests/postgres-stack-contract.mjs && node --check tests/postgres-journal-helper.mjs && node --check tests/oidc.test.mjs && node --check tests/operator-chain.test.mjs",
+      "test": "npm run build && node --test tests/dev-stack.test.mjs tests/boundaries.test.mjs tests/resilience.test.mjs tests/load.test.mjs tests/oidc.test.mjs tests/operator-chain.test.mjs",
       "typecheck": "npm run lint"
     },
     "packages/financial-core/package.json": {
@@ -1602,6 +1602,10 @@
     "backoffice/src/server/operator-audit-upstream.test.ts": {
       "minLines": 287,
       "minCases": 8
+    },
+    "packages/e2e-dev/tests/operator-chain.test.mjs": {
+      "minLines": 510,
+      "minCases": 10
     }
   }
 }
