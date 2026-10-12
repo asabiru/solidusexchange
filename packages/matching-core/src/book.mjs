@@ -142,22 +142,24 @@ export function createOrderBook(instrument, baseScale, priceScale) {
     },
     /**
      * Removes a resting order anywhere in the book (cancel path, O(depth)).
+     * Atomic: returns false having mutated nothing when the order is not
+     * found in its price level's queue, so a caller can never strand an
+     * order in a queue while its resting index entry is gone.
      *
      * @param {RestingOrder} order
      * @returns {boolean}
      */
     remove(order) {
-      if (resting.delete(order.order_id) !== true) {
-        return false;
-      }
       const level = levels[order.side].get(formatScaledDecimal(order.price_units, priceScale));
       if (level === undefined) {
         return false;
       }
       const at = level.queue.indexOf(order);
-      if (at !== -1) {
-        level.queue.splice(at, 1);
+      if (at === -1) {
+        return false;
       }
+      level.queue.splice(at, 1);
+      resting.delete(order.order_id);
       if (level.queue.length === 0) {
         dropLevel(order.side, level);
       }

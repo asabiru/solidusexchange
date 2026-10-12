@@ -172,19 +172,28 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
    * @returns {readonly MatchingEvent[]}
    */
   function finish(events) {
-    if (journalStore !== undefined) {
-      const outcome = journalStore.append(events);
-      if (outcome instanceof Promise) {
-        void outcome.then(
-          () => undefined,
-          () => undefined,
-        );
+    // The batch is sealed before the store sees it: a hostile or buggy
+    // backend cannot splice extra events into the in-memory journal.
+    const batch = Object.freeze(events);
+    try {
+      if (journalStore !== undefined) {
+        const outcome = journalStore.append(batch);
+        if (outcome instanceof Promise) {
+          void outcome.then(
+            () => undefined,
+            () => undefined,
+          );
+        }
       }
+    } finally {
+      // The operation closes even when a synchronous append threw, so a
+      // later operation is not mistaken for a re-entrant one.
+      operationAt = null;
     }
-    journal.push(...events);
+    journal.push(...batch);
     state.nextSeq = opSeq;
     state.nextFill = opFill;
-    return Object.freeze(events);
+    return batch;
   }
 
   /**
@@ -211,8 +220,16 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
    * engine whose journal consumed the whole safe-integer seq space also
    * fails here, so emission counters stay inside the bounds restore
    * accepts back.
+   *
+   * Operations never nest: `operationAt` stays set from the first clock
+   * read until `finish` clears it, so a re-entrant call — the only mid-
+   * operation path is a journal store's `append` calling back in — throws
+   * here before it could interleave state or emit events.
    */
   function beginOperation() {
+    if (operationAt !== null) {
+      throw new RangeError("reentrant matching operation");
+    }
     const now = timeSource.now();
     assertEpochSeconds(now, "clock time");
     if (now < state.lastAt) {
@@ -250,8 +267,15 @@ export function createMatchingEngineFromState(index, timeSource, state, journalS
    * @param {Record<string, unknown>} fields
    */
   function emit(events, type, fields) {
+    // The event envelope (seq, at, type, posting) is engine-owned: a caller
+    // field with the same name must never overwrite it.
+    const safeFields = { ...fields };
+    delete safeFields.seq;
+    delete safeFields.at;
+    delete safeFields.type;
+    delete safeFields.posting;
     const event = /** @type {MatchingEvent} */ (
-      Object.freeze({ ...stamp(), ...fields, type, posting: POSTING })
+      Object.freeze({ ...stamp(), ...safeFields, type, posting: POSTING })
     );
     events.push(event);
   }

@@ -1622,6 +1622,10 @@
     "packages/e2e-dev/tests/miniapp-chain.test.mjs": {
       "minLines": 868,
       "minCases": 9
+    },
+    "packages/matching-core/tests/orderbook-audit.test.mjs": {
+      "minLines": 572,
+      "minCases": 46
     }
   }
 }

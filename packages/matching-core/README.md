@@ -232,10 +232,9 @@ is untouched: this is data durability only, never ledger posting.
 
 Replayed and restored engines agree byte-identically with the live
 engine on `bookSnapshot` and `orderStatus` — `tests/replay.test.mjs`
-pins all three paths on one mixed limit+market scenario. One honest gap:
-`accepted` events do not carry `owner`, so a replayed engine loses owner
-tags and its self-trade policy has nothing to compare; snapshots preserve
-owners.
+pins all three paths on one mixed limit+market scenario. `accepted`
+events carry `owner`, so a replayed engine keeps owner tags and its
+self-trade policy still applies; snapshots preserve owners too.
 
 ## Determinism
 
