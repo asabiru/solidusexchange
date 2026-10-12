@@ -154,7 +154,10 @@ state, it never writes storage, does I/O, or posts anything.
   `{ kind, version, instruments, orders, resting, next_seq, next_fill,
   last_at }`: every tracked order with its state, the resting ids in
   book-insertion order, and the counters. It deep-freezes and JSON
-  round-trips.
+  round-trips. Capture is atomic: a snapshot can only land on an
+  operation boundary — calling it mid-operation (the only path is a
+  journal store's `append` calling back) throws `RangeError`, because
+  mid-operation state matches no journal prefix a tail could continue.
 - `restoreMatchingEngine(snapshot, { clock? })` validates the snapshot
   fail-closed (`TypeError` with an `invalid engine snapshot:` reason —
   wrong types, unknown keys, duplicate ids, a resting order missing from
@@ -185,13 +188,25 @@ state, it never writes storage, does I/O, or posts anything.
   leftover quantity. Anything else throws `TypeError` with
   an `invalid event stream:` reason. The replayed engine's `journal()`
   returns the folded stream.
+- The two recovery paths compose: `replayMatchingEngine({ events, base })`
+  folds the journal tail `base.next_seq..` onto a canonical snapshot, so
+  `snapshot(N)` + `replay(journal[N+1..M], base)` produces exactly the
+  engine the full replay produces — recovery cost tracks journal tail
+  length, not journal age. The fold grammar is unchanged; the snapshot
+  seeds the state the prefix would have built (tracked orders, books with
+  intra-level FIFO, `seq`/`fill_id`/`last_at` counters). The tail's first
+  seq must be `base.next_seq` — a gap or an overlap rejects like a broken
+  stream — and every earned-rejection / mid-invariant check runs against
+  the snapshot's state. `base` and `instruments` are mutually exclusive;
+  the restored journal holds the tail only.
 
 ## Journal persistence seam (dev-only)
 
 The engine can mirror every emitted event batch into a `MatchingJournalStore`
 — the dev-only durability seam, same shape as `customer-api`'s store:
-`{ kind, initialize?(), append(events), load(), close() }`. `posting: "none"`
-is untouched: this is data durability only, never ledger posting.
+`{ kind, initialize?(), append(events), load(), loadAfter?(seq), close() }`.
+`posting: "none"` is untouched: this is data durability only, never
+ledger posting.
 
 - `createMatchingEngine({ instruments?, clock?, journalStore? })` attaches a
   store; each operation mirrors its emitted batch via `append(events)`
@@ -211,12 +226,16 @@ is untouched: this is data durability only, never ledger posting.
   caller that cannot await treats the store's next awaited operation as
   the durability boundary: the first write failure is latched and every
   later `append`/`load`/`close` rethrows it.
-- `replayMatchingJournalStore(store, { instruments?, clock? })` is the only
-  engine-facing restore path: `store.load()` returns the raw recorded
+- `replayMatchingJournalStore(store, { instruments?, clock?, base? })` is the
+  only engine-facing restore path: `store.load()` returns the raw recorded
   stream and it is folded through `replayMatchingEngine`'s fail-closed
   validation — a corrupted or hostile row fails at restore and never
-  reaches an engine. The replayed engine keeps appending to the same
-  store, continuing `seq` contiguously.
+  reaches an engine. With `base`, only the tail is read: a store that
+  implements `loadAfter(seq)` serves `journal[base.next_seq..]` directly
+  (the postgres backend does it off the `(namespace, seq)` primary key);
+  one that cannot slice is `load()`ed whole and filtered to the same
+  seqs — the fold re-validates either way. The replayed engine keeps
+  appending to the same store, continuing `seq` contiguously.
 - `migrations/0001_matching_journal.sql` creates the `matching_core`
   schema: append-only `schema_migrations` history, the
   `matching_journal` table (`namespace,seq` PK; `at`, `type`, `payload`

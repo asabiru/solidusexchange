@@ -1496,8 +1496,8 @@
       "minCases": 5
     },
     "packages/matching-core/tests/journal-store-contract.mjs": {
-      "minLines": 72,
-      "minCases": 6
+      "minLines": 112,
+      "minCases": 10
     },
     "packages/matching-core/tests/journal-store.test.mjs": {
       "minLines": 171,
@@ -1512,8 +1512,8 @@
       "minCases": 19
     },
     "packages/matching-core/tests/postgres-journal-contract.mjs": {
-      "minLines": 469,
-      "minCases": 25
+      "minLines": 497,
+      "minCases": 26
     },
     "packages/matching-core/tests/postgres-journal.sh": {
       "minLines": 32,
@@ -1526,6 +1526,10 @@
     "packages/matching-core/tests/snapshot-replay-audit.test.mjs": {
       "minLines": 431,
       "minCases": 46
+    },
+    "packages/matching-core/tests/snapshot-tail-seam.test.mjs": {
+      "minLines": 632,
+      "minCases": 27
     },
     "packages/matching-core/tests/snapshot.test.mjs": {
       "minLines": 230,

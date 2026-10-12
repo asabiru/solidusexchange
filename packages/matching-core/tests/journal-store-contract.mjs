@@ -123,4 +123,31 @@ export function registerJournalStoreContract({ name, makeStore, reopenStore }) {
     t.after(() => store.close());
     assert.deepEqual(await store.load(), []);
   });
+
+  test(`${name}: loadAfter returns exactly the recorded tail`, async (t) => {
+    const store = await makeStore(freshNamespace());
+    t.after(() => store.close());
+    // Every backend registered here slices; a backend that cannot still
+    // restores tails through replayMatchingJournalStore's load()+filter
+    // fallback but does not belong in this contract.
+    assert.equal(typeof store.loadAfter, "function");
+    const batches = emittedBatches();
+    for (const batch of batches) {
+      await store.append(batch);
+    }
+    const stream = batches.flat();
+    assert.deepEqual(await store.loadAfter(0), stream);
+    assert.deepEqual(await store.loadAfter(2), stream.slice(2));
+    assert.deepEqual(await store.loadAfter(stream.length), []);
+    assert.deepEqual(await store.loadAfter(stream.length + 9), []);
+  });
+
+  test(`${name}: loadAfter rejects a malformed seq boundary`, async (t) => {
+    const store = await makeStore(freshNamespace());
+    t.after(() => store.close());
+    assert.equal(typeof store.loadAfter, "function");
+    await assert.rejects(async () => store.loadAfter(1.5), StoreError);
+    await assert.rejects(async () => store.loadAfter("tail"), StoreError);
+    await assert.rejects(async () => store.loadAfter(-1), StoreError);
+  });
 }
