@@ -90,3 +90,39 @@ test("startCustomerApi fails fast when the injected store cannot initialize", as
   const config = loadConfig({ CUSTOMER_API_PORT: "0" });
   await assert.rejects(() => startCustomerApi(config, { store }), /store is unavailable/u);
 });
+
+test("startCustomerApi initializes the auth-session store through the same seam", async (t) => {
+  const initialized = [];
+  const authSessionStore = {
+    kind: "memory",
+    async initialize() {
+      initialized.push("auth");
+    },
+    async issueSession(command) {
+      return command;
+    },
+    async close() {}
+  };
+  const config = loadConfig({ CUSTOMER_API_PORT: "0" });
+  const { server, authSessionStore: served, authSessionLifecycleDirectory } =
+    await startCustomerApi(config, { authSessionStore });
+  t.after(() => stopServer(server));
+  assert.deepEqual(initialized, ["auth"]);
+  assert.equal(served, authSessionStore);
+  assert.equal(typeof authSessionLifecycleDirectory.issue, "function");
+});
+
+test("startCustomerApi fails fast when the auth-session store cannot initialize", async () => {
+  const authSessionStore = {
+    kind: "postgresql",
+    async initialize() {
+      throw new Error("customer-api auth session store is unavailable");
+    },
+    async close() {}
+  };
+  const config = loadConfig({ CUSTOMER_API_PORT: "0" });
+  await assert.rejects(
+    () => startCustomerApi(config, { authSessionStore }),
+    /auth session store is unavailable/u
+  );
+});

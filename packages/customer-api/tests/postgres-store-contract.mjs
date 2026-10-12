@@ -300,14 +300,14 @@ test("initialize rejects a drifted migration history row", async (t) => {
     );
     await admin.query(
       "INSERT INTO customer_api.schema_migrations (version, migration_name)" +
-        " VALUES (2, '0002_drifted_probe')"
+        " VALUES (3, '0003_drifted_probe')"
     );
     const store = createPostgresStore({ dsn, namespace: freshNamespace() });
     t.after(() => store.close().catch(() => undefined));
     await assert.rejects(async () => store.initialize?.(), StoreUnavailableError);
   } finally {
     await admin
-      .query("DELETE FROM customer_api.schema_migrations WHERE version = 2")
+      .query("DELETE FROM customer_api.schema_migrations WHERE version = 3")
       .catch(() => undefined);
     await admin
       .query(
