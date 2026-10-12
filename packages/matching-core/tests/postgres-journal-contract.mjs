@@ -228,9 +228,11 @@ test("operations before initialize fail closed", async () => {
 });
 
 // Continuation parity with the memory backend: seq shape and batch-internal
-// contiguity are enforced identically before storage is touched, and
-// storage-side rejections of the batch surface as non-latching StoreError.
-// A caller bug must never poison the durable stream or the store.
+// contiguity are enforced identically before storage is touched, so a
+// caller-side bug surfaces as a synchronous StoreError without latching.
+// Storage-side rejections DO latch: the recorded stream and the writer
+// have already diverged when one lands, and the engine's fire-and-forget
+// append cannot hear a rejection — the failure must stay loud.
 
 test("a batch with a string seq is rejected identically to the memory backend", async (t) => {
   const store = await postgresStore("parity_string_seq");
@@ -267,18 +269,22 @@ test("a batch with an internal seq gap is rejected and lands nothing", async (t)
   assert.equal(rows[0].n, "0");
 });
 
-test("a mid-stream batch rejection does not latch the store", async (t) => {
+test("a conflicting re-append latches and every later op surfaces it", async (t) => {
   const store = await postgresStore("parity_mid_stream");
-  t.after(() => store.close());
+  t.after(() => store.close().catch(() => undefined));
   const engine = createMatchingEngine();
   const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
   await store.append(batch);
-  // Internally contiguous but continuing from a consumed seq: the
-  // storage-side check rejects it as a caller bug, not a write failure.
-  await assert.rejects(() => store.append(batch), StoreError);
-  const next = engine.submitOrder(order(2, { side: "buy", price: "91", quantity: "1" }));
-  await store.append(next);
-  assert.equal((await store.load()).length, batch.length + next.length);
+  // Identical redelivery resolves (idempotent); a conflicting one rejects
+  // and latches because the durable stream and the writer now disagree.
+  await store.append(batch);
+  const conflicting = batch.map((event) => ({ ...event, price: "91.00000000" }));
+  await assert.rejects(() => store.append(conflicting), StoreUnavailableError);
+  // The latched failure throws synchronously from append — loud at the
+  // call site, not a swallowed rejection.
+  assert.throws(() => store.append(batch), StoreUnavailableError);
+  await assert.rejects(() => store.load(), StoreUnavailableError);
+  await assert.rejects(() => store.close(), StoreUnavailableError);
 });
 
 test("the failure latch locks every later operation while close stays usable", async (t) => {
@@ -305,8 +311,15 @@ test("the failure latch locks every later operation while close stays usable", a
   const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
   const first = await store.append(batch).then(() => null, (e) => e);
   assert.ok(first instanceof StoreUnavailableError);
-  // First failure latches: append and load rethrow it.
-  const second = await store.append(batch).then(() => null, (e) => e);
+  // First failure latches: append throws it synchronously, load rethrows.
+  let second;
+  assert.throws(
+    () => store.append(batch),
+    (error) => {
+      second = error;
+      return true;
+    },
+  );
   assert.ok(second === first);
   const loadFailure = await store.load().then(() => null, (e) => e);
   assert.ok(loadFailure === first);
@@ -325,4 +338,194 @@ test("a replayed engine snapshots byte-identically through the durable rows", as
     JSON.stringify(replayed.snapshot()),
     JSON.stringify(engine.snapshot()),
   );
+});
+
+// Wave-71 audit findings: the recorded stream and a diverging writer must
+// fail loudly, not silently fork; redelivery must dedupe; payload grammar
+// must reject rows replay would refuse; no write may hang forever.
+
+test("a fresh engine on a recorded namespace diverges loudly, not silently", async (t) => {
+  const namespace = "divergence_loud";
+  const writer = await postgresStore(namespace);
+  t.after(() => writer.close().catch(() => undefined));
+  const first = createMatchingEngine({ journalStore: writer });
+  first.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  await writer.load();
+
+  // A second engine attached to the same namespace emits conflicting
+  // seqs: its first batch rejects (and latches) — and the NEXT operation
+  // throws synchronously out of submitOrder instead of leaving the engine
+  // running in memory-only silence.
+  const intruder = await postgresStore(namespace);
+  t.after(() => intruder.close().catch(() => undefined));
+  const second = createMatchingEngine({ journalStore: intruder });
+  second.submitOrder(order(2, { side: "buy", price: "90", quantity: "1" }));
+  await assert.rejects(() => intruder.load(), StoreUnavailableError);
+  assert.throws(
+    () => second.submitOrder(order(3, { side: "buy", price: "91", quantity: "1" })),
+    StoreUnavailableError,
+  );
+  // The durable stream still holds only the first engine's events — no
+  // coincidentally-valid interleaved history was ever recorded.
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  const { rows } = await pool.query(
+    `SELECT seq, payload ->> 'type' AS type FROM matching_core.matching_journal WHERE namespace = $1 ORDER BY seq`,
+    [namespace],
+  );
+  assert.equal(rows.length, first.journal().length);
+});
+
+test("append before initialize throws synchronously", () => {
+  const store = createPostgresJournalStore({ dsn, namespace: "uninitialized_append" });
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  assert.throws(() => store.append(batch), StoreUnavailableError);
+});
+
+test("concurrent initialize calls share one pool", async (t) => {
+  const store = createPostgresJournalStore({ dsn, namespace: "init_race" });
+  t.after(() => store.close().catch(() => undefined));
+  await Promise.all([store.initialize(), store.initialize(), store.initialize()]);
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  await store.append(batch);
+  assert.equal((await store.load()).length, batch.length);
+});
+
+test("a blocked write fails within the lock timeout instead of hanging", async (t) => {
+  const namespace = "lock_blocked";
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  const blocker = await pool.connect();
+  try {
+    // Session-level advisory lock on the namespace key: the append
+    // function's pg_advisory_xact_lock must wait on it — and the pool's
+    // lock_timeout must abort the wait instead of hanging the tail.
+    await blocker.query(`SELECT pg_advisory_lock(hashtext($1)::bigint)`, [namespace]);
+    const store = await postgresStore(namespace);
+    t.after(() => store.close().catch(() => undefined));
+    const engine = createMatchingEngine();
+    const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+    const started = Date.now();
+    await assert.rejects(() => store.append(batch), StoreUnavailableError);
+    assert.ok(
+      Date.now() - started < 60_000,
+      "blocked append must fail, not hang",
+    );
+    await assert.rejects(() => store.load(), StoreUnavailableError);
+  } finally {
+    await blocker.query(`SELECT pg_advisory_unlock(hashtext($1)::bigint)`, [namespace]);
+    blocker.release();
+  }
+});
+
+test("payloads passing column checks but violating the event grammar are rejected", async (t) => {
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  const base = {
+    seq: 1,
+    at: "2026-01-01T00:00:00Z",
+    type: "accepted",
+    posting: "none",
+    order_id: "ord_000000000000000000000001",
+    instrument: "USDT/RUB",
+    side: "buy",
+    order_type: "limit",
+    price: "90.00000000",
+    quantity: "1.000000",
+  };
+  const hostile = [
+    ["posting_wrong", { ...base, posting: "debit" }],
+    ["at_noncanonical", { ...base, at: "2026-1-1T00:00:00Z" }],
+    ["seq_string", { ...base, seq: "1" }],
+    ["order_id_bogus", { ...base, order_id: "anything" }],
+    ["extra_key", { ...base, hack: true }],
+    ["quantity_bad", { ...base, quantity: "1.2.3" }],
+    ["market_with_price", { ...base, order_type: "market" }],
+    ["limit_without_price", (({ price, ...rest }) => rest)(base)],
+    ["rejected_bad_reason", {
+      ...base, type: "rejected", reason: "weird", order_id: null, instrument: "USDT/RUB", side: null,
+      order_type: undefined, price: undefined, quantity: undefined,
+    }],
+  ];
+  for (const [label, event] of hostile) {
+    const sanitized = Object.fromEntries(
+      Object.entries(event).filter(([, value]) => value !== undefined),
+    );
+    await assert.rejects(
+      () =>
+        pool.query(`SELECT matching_core.append_matching_journal($1, $2::jsonb)`, [
+          `hostile_${label}`,
+          JSON.stringify([sanitized]),
+        ]),
+      (error) => /payload_event|violat/i.test(error.message),
+      label,
+    );
+  }
+});
+
+test("an event timestamp outside the JS-representable range is rejected", async (t) => {
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  await assert.rejects(
+    () =>
+      pool.query(`SELECT matching_core.append_matching_journal($1, $2::jsonb)`, [
+        "at_year_0001",
+        JSON.stringify([
+          {
+            seq: 1,
+            at: "0001-01-01T00:00:00Z",
+            type: "accepted",
+            posting: "none",
+            order_id: "ord_000000000000000000000001",
+            instrument: "USDT/RUB",
+            side: "buy",
+            order_type: "limit",
+            price: "90.00000000",
+            quantity: "1.000000",
+          },
+        ]),
+      ]),
+    /at_js_range|violat/i,
+  );
+});
+
+test("a payload above the size cap is rejected", async (t) => {
+  const pool = new pg.Pool({ connectionString: dsn, max: 1 });
+  t.after(() => pool.end());
+  await assert.rejects(
+    () =>
+      pool.query(`SELECT matching_core.append_matching_journal($1, $2::jsonb)`, [
+        "giant_payload",
+        JSON.stringify([
+          {
+            seq: 1,
+            at: "2026-01-01T00:00:00Z",
+            type: "accepted",
+            posting: "none",
+            order_id: "ord_000000000000000000000001",
+            instrument: `X${"Y".repeat(70_000)}`,
+            side: "buy",
+            order_type: "limit",
+            price: "90.00000000",
+            quantity: "1.000000",
+          },
+        ]),
+      ]),
+    /payload_size|violat/i,
+  );
+});
+
+test("identical redelivery after a lost response records nothing twice", async (t) => {
+  const namespace = "retry_dedupe";
+  const store = await postgresStore(namespace);
+  t.after(() => store.close().catch(() => undefined));
+  const engine = createMatchingEngine();
+  const batch = engine.submitOrder(order(1, { side: "sell", price: "90", quantity: "1" }));
+  await store.append(batch);
+  // The response may have been lost — the caller retries the same batch:
+  // resolves, no duplicate rows, stream unchanged.
+  await store.append(batch);
+  assert.deepEqual(await store.load(), batch);
 });

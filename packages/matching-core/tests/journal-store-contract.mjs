@@ -76,13 +76,35 @@ export function registerJournalStoreContract({ name, makeStore, reopenStore }) {
     await assert.rejects(async () => store.append(gap), StoreError);
   });
 
-  test(`${name}: append rejects a batch starting mid-stream`, async (t) => {
+  test(`${name}: an identical re-append dedupes instead of colliding`, async (t) => {
     const store = await makeStore(freshNamespace());
     t.after(() => store.close().catch(() => undefined));
     const batches = emittedBatches();
     await store.append(batches[0]);
-    const replayed = batches[0].map((event) => ({ ...event }));
-    await assert.rejects(async () => store.append(replayed), StoreError);
+    // A retry after a lost or timed-out response re-delivers the identical
+    // batch: it resolves and records nothing twice.
+    await store.append(batches[0].map((event) => ({ ...event })));
+    assert.deepEqual(await store.load(), batches[0]);
+    await store.append(batches[1]);
+    assert.deepEqual(await store.load(), [...batches[0], ...batches[1]]);
+  });
+
+  test(`${name}: a batch replaying a recorded prefix lands only its tail`, async (t) => {
+    const store = await makeStore(freshNamespace());
+    t.after(() => store.close().catch(() => undefined));
+    const batches = emittedBatches();
+    await store.append(batches[0]);
+    await store.append([batches[0].at(-1), ...batches[1]]);
+    assert.deepEqual(await store.load(), [...batches[0], ...batches[1]]);
+  });
+
+  test(`${name}: append rejects a re-delivered seq carrying a conflicting event`, async (t) => {
+    const store = await makeStore(freshNamespace());
+    t.after(() => store.close().catch(() => undefined));
+    const batches = emittedBatches();
+    await store.append(batches[0]);
+    const conflicting = batches[0].map((event) => ({ ...event, quantity: "999.999" }));
+    await assert.rejects(async () => store.append(conflicting), StoreError);
   });
 
   test(`${name}: namespaces isolate recorded events`, async (t) => {

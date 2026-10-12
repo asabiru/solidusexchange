@@ -8,6 +8,10 @@ const expectedSources = [
   [
     "0001_matching_journal.sql",
     "b089af61c56aa530628594ae74a9d81ba8547b306a061ad96ddf6d99232455f5"
+  ],
+  [
+    "0002_journal_event_grammar.sql",
+    "23f1cff35807f074f0387f222aa52564842f0c83729d614f2e5781b37daa215e"
   ]
 ];
 
