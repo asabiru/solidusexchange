@@ -221,6 +221,9 @@ function DepositHistory({
           })}
         </ul>
       ) : null}
+      {history !== undefined && history.total > rows.length ? (
+        <p className="sheet__note">{t("common.truncated", { shown: rows.length, total: history.total })}</p>
+      ) : null}
     </>
   );
 }
@@ -303,6 +306,9 @@ function WithdrawalHistory({
             );
           })}
         </ul>
+      ) : null}
+      {history !== undefined && history.total > rows.length ? (
+        <p className="sheet__note">{t("common.truncated", { shown: rows.length, total: history.total })}</p>
       ) : null}
     </>
   );

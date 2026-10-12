@@ -4,8 +4,7 @@ import { contractQuotePair, quotePriceScale } from "../shared/quote";
 import { api } from "./api";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { orderSideBadge, orderStatusBadge, orderTypeBadge } from "./orders";
-import { arrayOf } from "./server-fields";
+import { orderSideBadge, orderStatusBadge, orderTypeBadge, ordersHistory } from "./orders";
 import { Sheet } from "./ui";
 
 type Mode = { kind: "list" } | { kind: "detail"; order: ExchangeOrderView };
@@ -53,8 +52,10 @@ export function OrdersSheet({ close }: { close: () => void }) {
     setMode(next);
   };
 
-  const orders = arrayOf<ExchangeOrderView>(view?.orders);
-  const gated = view !== undefined && view.kyc !== "verified";
+  const history = ordersHistory(view);
+  const orders = history?.rows ?? [];
+  const gated = history !== undefined && history.kyc !== "verified";
+  const failed = listFailed || (view !== undefined && history === undefined);
 
   return (
     <Sheet title={t("orders.title")} onClose={close}>
@@ -68,14 +69,14 @@ export function OrdersSheet({ close }: { close: () => void }) {
           <h3 className="section-label" ref={heading} tabIndex={-1}>
             {t("orders.listTitle")}
           </h3>
-          {listFailed ? (
+          {failed ? (
             <p className="form-error" role="alert">
               {t("orders.loadFailed")}
             </p>
           ) : null}
-          {view === undefined && !listFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+          {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
           {gated ? <p className="sheet__note">{t("orders.gated")}</p> : null}
-          {view !== undefined && !gated && orders.length === 0 ? (
+          {history !== undefined && !gated && orders.length === 0 ? (
             <p className="sheet__note">{t("orders.empty")}</p>
           ) : null}
           {!gated && orders.length > 0 ? (
@@ -113,6 +114,9 @@ export function OrdersSheet({ close }: { close: () => void }) {
                 );
               })}
             </ul>
+          ) : null}
+          {history !== undefined && history.total > orders.length ? (
+            <p className="sheet__note">{t("common.truncated", { shown: orders.length, total: history.total })}</p>
           ) : null}
           <p className="sheet__note">{t("orders.note")}</p>
         </>

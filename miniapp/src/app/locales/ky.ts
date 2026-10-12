@@ -32,6 +32,7 @@ export const ky: Messages = {
   "common.loading": "Жүктөлүүдө…",
   "common.soon": "Жакында",
   "common.test": "Сыноо",
+  "common.truncated": "{total} жазуунун алгачкы {shown} көрсөтүлдү",
   "common.serverUnreachable": "Сыноо сервери менен байланышуу мүмкүн болгон жок.",
   "common.deposit": "Толуктоо",
   "common.withdraw": "Чыгаруу",

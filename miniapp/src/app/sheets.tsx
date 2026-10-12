@@ -38,9 +38,12 @@ import {
   kycDecisionStepOf,
   kycOutcomeOf,
   kycStateOf,
+  notificationsViewOf,
+  operationDetailOf,
   screeningBadgeOf,
   screeningNetworkKeyOf,
   sessionClientKeyOf,
+  sessionsViewOf,
   timelineStepState
 } from "./server-fields";
 import { SupportSheet } from "./SupportSheet";
@@ -232,7 +235,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
       <p className="sheet__note">{t("kyc.testNote")}</p>
       <p className="form-error" aria-live="polite">{failed ? t("common.serverUnreachable") : ""}</p>
       <div className="sheet__actions">
-        {view?.canSubmit ? (
+        {view?.canSubmit === true ? (
           <button type="button" className="cta" disabled={busy} onClick={submit}>
             <Icon name="id-card" size="sm" />
             {t(state === "unavailable" ? "kyc.retry" : "kyc.start")}
@@ -315,18 +318,27 @@ function OperationSheet({ id, close }: { id: string; close: () => void }) {
   useEffect(() => {
     let active = true;
     api.operation(id)
-      .then((value) => { if (active) setDetail(value); })
-      .catch((error: unknown) => { if (active) setFailed(error instanceof ApiError || error instanceof Error); });
+      .then((value) => {
+        // Fail closed when the member read drifts from the contract shape.
+        const adapted = operationDetailOf(value);
+        if (!active) return;
+        if (adapted === undefined || adapted.id !== id) {
+          setFailed(true);
+        } else {
+          setDetail(adapted);
+        }
+      })
+      .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, [id]);
 
   if (failed) {
-    return <Sheet title={t("operation.title")} onClose={close}><p className="sheet__note">{t("operation.loadFailed")}</p></Sheet>;
+    return <Sheet title={t("operation.title")} onClose={close}><p className="sheet__note" role="alert">{t("operation.loadFailed")}</p></Sheet>;
   }
   if (!detail) {
     return <Sheet title={t("operation.title")} onClose={close}><p className="sheet__note">{t("common.loading")}</p></Sheet>;
   }
-  const [primary, secondary] = arrayOf<OperationDetail["legs"][number]>(detail.legs);
+  const [primary, secondary] = detail.legs;
   if (!primary) {
     return (
       <Sheet title={detail.title} onClose={close}>
@@ -352,7 +364,7 @@ function OperationSheet({ id, close }: { id: string; close: () => void }) {
       </dl>
       <h3 className="section-label">{t("operation.progress")}</h3>
       <ol className="timeline">
-        {arrayOf<OperationDetail["timeline"][number]>(detail.timeline).map((step, index) => {
+        {detail.timeline.map((step, index) => {
           const state = timelineStepState(step.state);
           return (
             <li key={`${step.title}:${index}`} className={`timeline__step is-${state}`}>
@@ -457,8 +469,9 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
   };
 
   const status: AddressScreeningStatus | undefined = unavailable ? "unavailable" : result?.status;
-  // The result status is server-supplied: only declared members resolve to a badge.
-  const badge = status ? screeningBadgeOf(status) : undefined;
+  // The result status is server-supplied: only declared members resolve to a badge;
+  // a foreign value falls back to the declared unavailable badge, never a silent blank.
+  const badge = status ? (screeningBadgeOf(status) ?? screeningBadgeOf("unavailable")) : undefined;
 
   return (
     <Sheet title={t("screening.title")} onClose={close}>
@@ -535,7 +548,13 @@ function SessionsSheet({ close }: { close: () => void }) {
   useEffect(() => {
     let active = true;
     api.sessions()
-      .then((next) => { if (active) setView(next); })
+      .then((next) => {
+        // The served view is untrusted: it renders only through the fail-closed adapter.
+        const adapted = sessionsViewOf(next);
+        if (!active) return;
+        if (adapted === undefined) setFailed(true);
+        else setView(adapted);
+      })
       .catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
   }, []);
@@ -558,12 +577,19 @@ function SessionsSheet({ close }: { close: () => void }) {
   const confirm = async (target: SessionRevocation) => {
     setBusy(true);
     try {
-      setView(target.scope === "single" ? await api.revokeSession(target.session.handle) : await api.revokeOtherSessions());
-      setOutcome(target.scope === "single" ? "sessions.revokedOne" : "sessions.revokedOthers");
+      const next = sessionsViewOf(
+        target.scope === "single" ? await api.revokeSession(target.session.handle) : await api.revokeOtherSessions()
+      );
+      if (next === undefined) {
+        setOutcome("sessions.revokeFailed");
+      } else {
+        setView(next);
+        setOutcome(target.scope === "single" ? "sessions.revokedOne" : "sessions.revokedOthers");
+      }
     } catch (error) {
       const ended = error instanceof ApiError && error.status === 404;
       setOutcome(ended ? "sessions.alreadyEnded" : "sessions.revokeFailed");
-      if (ended) setView(await api.sessions().catch(() => view));
+      if (ended) setView(sessionsViewOf(await api.sessions().catch(() => view)) ?? view);
     } finally {
       setBusy(false);
       setPending(undefined);
@@ -571,7 +597,7 @@ function SessionsSheet({ close }: { close: () => void }) {
     }
   };
 
-  const sessions = arrayOf<DeviceSessionView>(view?.sessions);
+  const sessions = view?.sessions ?? [];
   const others = sessions.filter((session) => !session.current).length;
   const clientOf = (session: DeviceSessionView) => {
     const key = sessionClientKeyOf(session.client);
@@ -656,11 +682,15 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
   useEffect(() => {
     let active = true;
     async function load() {
-      const view = await api.notifications();
+      const view = notificationsViewOf(await api.notifications());
       if (!active) return;
+      if (view === undefined) {
+        setFailed(true);
+        return;
+      }
       const storage = notificationSeenStorage();
       setSeenAtOpen(loadSeenIds(storage));
-      const notifications = arrayOf<NotificationDraft>(view.notifications);
+      const notifications = view.notifications;
       setDrafts(notifications);
       // Seen state is a cosmetic per-browser marker kept in web storage.
       const seen = rememberSeenIds(storage, notifications.map((draft) => draft.id));

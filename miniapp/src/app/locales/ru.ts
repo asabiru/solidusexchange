@@ -30,6 +30,7 @@ export const ru = {
   "common.loading": "Загружаем…",
   "common.soon": "Скоро",
   "common.test": "Тест",
+  "common.truncated": "Показаны первые {shown} из {total} записей",
   "common.serverUnreachable": "Не удалось связаться с тестовым сервером.",
   "common.deposit": "Пополнить",
   "common.withdraw": "Вывести",

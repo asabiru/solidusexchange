@@ -316,6 +316,28 @@ describe("Mini App accessibility semantics", () => {
     }
   });
 
+  it("announces the support load failure and treats server flags as literal booleans", () => {
+    assert.ok(support.includes('t("support.loadFailed")'));
+    assert.match(support, /role="alert">\s*\{t\("support\.loadFailed"\)\}/);
+    // Untrusted server flags render only on a real boolean true, never on a hostile truthy value.
+    assert.ok(app.includes("launch.health?.devLogin === true"));
+    assert.ok(sheets.includes("canSubmit === true"));
+    // A foreign screening status falls back to the declared unavailable badge, not a silent blank.
+    assert.ok(sheets.includes('screeningBadgeOf("unavailable")'));
+    // The operation detail fails on any rejection, not only on Error instances.
+    assert.ok(!sheets.includes("error instanceof ApiError || error instanceof Error"));
+  });
+
+  it("maps the launch error code through a hasOwn lookup so prototype members cannot render", () => {
+    assert.ok(app.includes("messageKeyFor(rejectionMessages, code)"));
+    assert.ok(!app.includes("rejectionMessages[code]"));
+  });
+
+  it("editing one support field clears only that field's error", () => {
+    assert.ok(support.includes("delete next[field]"));
+    assert.ok(!support.includes("? {} : current"));
+  });
+
   it("hides decorative SVGs from assistive technology", () => {
     const icon = read("app/Icon.tsx");
     assert.match(icon, /aria-hidden="true"/);

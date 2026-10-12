@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import type { DeviceSessionView, NotificationDraft, OperationDetail, SupportRequestView } from "../shared/api.js";
 import { assetMetaOf } from "../shared/assets.js";
 import { createFormatter } from "./format.js";
 import { locales, type MessageKey, translate } from "./i18n.js";
 import {
+
   activityKindKeyOf,
   activitySourceKeyOf,
   arrayOf,
@@ -12,11 +14,15 @@ import {
   kycDecisionStepOf,
   kycOutcomeOf,
   kycStateOf,
+  notificationsViewOf,
+  operationDetailOf,
   operationStatusOf,
   screeningBadgeOf,
   screeningNetworkKeyOf,
   sessionClientKeyOf,
+  sessionsViewOf,
   supportCategoryKeyOf,
+  supportRequestsViewOf,
   supportStatusOf,
   timelineStepState
 } from "./server-fields.js";
@@ -327,11 +333,11 @@ describe("server fields: consumers stay on guarded lookups", () => {
     ]) {
       assert.doesNotMatch(text, pattern, String(pattern));
     }
-    for (const call of ["kycOutcomeOf(", "kycStateOf(", "kycDecisionStepOf(", "screeningBadgeOf(", "screeningNetworkKeyOf(", "sessionClientKeyOf(", "timelineStepState(", "format.epochMs("]) {
+    for (const call of ["kycOutcomeOf(", "kycStateOf(", "kycDecisionStepOf(", "screeningBadgeOf(", "screeningNetworkKeyOf(", "sessionClientKeyOf(", "timelineStepState(", "format.epochMs(", "operationDetailOf(", "sessionsViewOf(", "notificationsViewOf("]) {
       assert.ok(text.includes(call), call);
     }
-    assert.match(text, /const \[primary, secondary\] = arrayOf/);
-    assert.match(text, /arrayOf<[^>]+>\(detail\.timeline\)/);
+    assert.match(text, /const \[primary, secondary\] = detail\.legs/);
+    assert.match(text, /detail\.timeline\.map/);
   });
 
   it("SupportSheet indexes only through guarded accessors", () => {
@@ -339,7 +345,8 @@ describe("server fields: consumers stay on guarded lookups", () => {
     for (const pattern of [/statusBadges\s*\[/, /activityKindKeys\s*\[/, /supportCategoryKeys\s*\[/, isoDate]) {
       assert.doesNotMatch(text, pattern, String(pattern));
     }
-    for (const call of ["supportStatusOf(", "supportCategoryKeyOf(", "activityKindKeyOf(", "arrayOf(", "format.epochMs("]) {
+    assert.match(text, /arrayOf[(<]/);
+    for (const call of ["supportStatusOf(", "supportCategoryKeyOf(", "activityKindKeyOf(", "supportRequestsViewOf(", "format.epochMs("]) {
       assert.ok(text.includes(call), call);
     }
   });
@@ -374,7 +381,7 @@ describe("server fields: consumers stay on guarded lookups", () => {
   it("ChecksSheet and App normalize server lists and epoch dates", () => {
     const checks = source("app/ChecksSheet.tsx");
     assert.doesNotMatch(checks, isoDate);
-    for (const call of ["arrayOf(", "format.epochMs("]) {
+    for (const call of ["checksViewOf(", "checkViewOf(", "checkPreviewOf(", "format.epochMs("]) {
       assert.ok(checks.includes(call), call);
     }
     const app = source("app/App.tsx");
@@ -401,5 +408,156 @@ describe("server fields: consumers stay on guarded lookups", () => {
   it("telegram.ts validates the live colorScheme value", () => {
     const text = source("app/telegram.ts");
     assert.ok(text.includes('webApp.colorScheme === "light" || webApp.colorScheme === "dark"'));
+  });
+});
+
+describe("served view validators", () => {
+  const operation: OperationDetail = {
+    id: "op_001",
+    reference: "OP-2026-001",
+    kind: "exchange",
+    status: "completed",
+    title: "Покупка USDT",
+    channel: "miniapp",
+    createdAt: "2026-10-10T10:00:00.000Z",
+    legs: [
+      { asset: "RUB", amount: "9600.00", direction: "out" },
+      { asset: "USDT", amount: "100.000000", direction: "in" }
+    ],
+    fee: { asset: "RUB", amount: "24.00" },
+    rate: { base: "USDT", quote: "RUB", value: "96.00000000" },
+    note: "demo",
+    timeline: [{ title: "Заявка", detail: "Принята", at: "2026-10-10T10:00:00.000Z", state: "done" }]
+  };
+
+  it("adapts a valid operation detail and rejects drifted shapes (exact keys)", () => {
+    assert.equal(operationDetailOf(operation)?.id, operation.id);
+    const noOptionals = { ...operation } as Record<string, unknown>;
+    delete noOptionals.fee;
+    delete noOptionals.rate;
+    assert.equal(operationDetailOf(noOptionals)?.id, operation.id);
+    for (const corrupt of [
+      { ...operation, extra: true },
+      { ...operation, id: 42 },
+      { ...operation, kind: "gift" },
+      { ...operation, status: "settled" },
+      { ...operation, title: { text: "x" } },
+      { ...operation, channel: {} },
+      { ...operation, note: 7 },
+      { ...operation, legs: "nope" },
+      { ...operation, legs: [] },
+      { ...operation, legs: [{ ...operation.legs[0], direction: "side" }] },
+      { ...operation, legs: [{ ...operation.legs[0], asset: "BTC" }] },
+      { ...operation, legs: [{ ...operation.legs[0], amount: "abc" }] },
+      { ...operation, fee: { ...operation.fee, asset: "BTC" } },
+      { ...operation, rate: { ...operation.rate, value: "abc" } },
+      { ...operation, timeline: [{ ...operation.timeline[0], state: "winding" }] },
+      { ...operation, timeline: [{ ...operation.timeline[0], title: 9 }] }
+    ]) {
+      assert.equal(operationDetailOf(corrupt), undefined, JSON.stringify(corrupt).slice(0, 100));
+    }
+  });
+
+  const session: DeviceSessionView = {
+    handle: "sess_0123456789abcdef01234567",
+    client: "telegram",
+    createdAt: 1_775_000_000_000,
+    lastSeenAt: 1_775_000_100_000,
+    current: true
+  };
+
+  it("adapts a valid sessions view and rejects drifted shapes", () => {
+    const view = { mode: "test", sessions: [session] };
+    assert.equal(sessionsViewOf(view)?.sessions.length, 1);
+    for (const corrupt of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, sessions: "nope" },
+      { ...view, sessions: [{ ...session, extra: 1 }] },
+      { ...view, sessions: [{ ...session, handle: "weird" }] },
+      { ...view, sessions: [{ ...session, client: "web" }] },
+      { ...view, sessions: [{ ...session, current: "yes" }] },
+      { ...view, sessions: [{ ...session, createdAt: "now" }] }
+    ]) {
+      assert.equal(sessionsViewOf(corrupt), undefined, JSON.stringify(corrupt).slice(0, 100));
+    }
+  });
+
+  const draft: NotificationDraft = {
+    id: "ntf_0123456789abcdef01234567",
+    createdAt: 1_775_000_000_000,
+    channel: "telegram-draft",
+    template: "kyc_approved",
+    locale: "ru",
+    text: "demo",
+    mode: "test",
+    delivered: false,
+    read: false
+  };
+
+  it("adapts a valid notifications view and rejects drifted shapes", () => {
+    const view = { mode: "test", delivery: "disabled", unread: 1, notifications: [draft] };
+    assert.equal(notificationsViewOf(view)?.notifications.length, 1);
+    // Unknown templates stay renderable through the designed raw-text fallback.
+    assert.equal(notificationsViewOf({ ...view, notifications: [{ ...draft, template: "future_kind" }] })?.notifications.length, 1);
+    for (const corrupt of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, delivery: "enabled" },
+      { ...view, unread: -1 },
+      { ...view, unread: "1" },
+      { ...view, notifications: "nope" },
+      { ...view, notifications: [{ ...draft, extra: 1 }] },
+      { ...view, notifications: [{ ...draft, id: "sup_0123456789abcdef01234567" }] },
+      { ...view, notifications: [{ ...draft, channel: "email" }] },
+      { ...view, notifications: [{ ...draft, locale: "en" }] },
+      { ...view, notifications: [{ ...draft, text: {} }] },
+      { ...view, notifications: [{ ...draft, delivered: true }] },
+      { ...view, notifications: [{ ...draft, read: "yes" }] },
+      { ...view, notifications: [{ ...draft, mode: "live" }] },
+      { ...view, notifications: [{ ...draft, createdAt: "now" }] }
+    ]) {
+      assert.equal(notificationsViewOf(corrupt), undefined, JSON.stringify(corrupt).slice(0, 100));
+    }
+  });
+
+  const request: SupportRequestView = {
+    id: "sup_0123456789abcdef01234567",
+    mode: "test",
+    delivery: "disabled",
+    category: "question",
+    topic: "Тест",
+    message: "Тестовое сообщение",
+    status: "received",
+    timeline: [{ status: "received", at: 1_775_000_000_000 }],
+    complaintAcknowledged: false,
+    createdAt: 1_775_000_000_000,
+    expiresAt: 1_775_003_600_000
+  };
+
+  it("adapts a valid support-requests view and rejects drifted shapes", () => {
+    const view = { mode: "test", delivery: "disabled", requests: [request] };
+    assert.equal(supportRequestsViewOf(view)?.rows.length, 1);
+    assert.equal(supportRequestsViewOf(view)?.total, 1);
+    const withRef = { ...request, activityRef: { id: "act_1", kind: "session_login" } };
+    assert.equal(supportRequestsViewOf({ ...view, requests: [withRef] })?.rows.length, 1);
+    for (const corrupt of [
+      { ...view, extra: true },
+      { ...view, mode: "live" },
+      { ...view, delivery: "enabled" },
+      { ...view, requests: "nope" },
+      { ...view, requests: [{ ...request, extra: 1 }] },
+      { ...view, requests: [{ ...request, id: "ntf_0123456789abcdef01234567" }] },
+      { ...view, requests: [{ ...request, category: "sales" }] },
+      { ...view, requests: [{ ...request, status: "escalated" }] },
+      { ...view, requests: [{ ...request, topic: {} }] },
+      { ...view, requests: [{ ...request, complaintAcknowledged: "yes" }] },
+      { ...view, requests: [{ ...request, timeline: [{ status: "escalated", at: 1 }] }] },
+      { ...view, requests: [{ ...request, activityRef: "x" }] },
+      { ...view, requests: [{ ...request, activityRef: { id: 1, kind: "session_login" } }] },
+      { ...view, requests: [{ ...request, createdAt: "now" }] }
+    ]) {
+      assert.equal(supportRequestsViewOf(corrupt), undefined, JSON.stringify(corrupt).slice(0, 100));
+    }
   });
 });

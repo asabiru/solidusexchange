@@ -190,6 +190,8 @@ function isWithdrawalRow(value: unknown): value is WithdrawalView {
 export interface MoneyHistory<T> {
   kyc: KycStatus;
   rows: readonly T[];
+  /** Row count before the served cap applied — drives the truncation note. */
+  total: number;
 }
 
 function isKycFlag(value: unknown): value is KycStatus {
@@ -214,7 +216,8 @@ export function depositHistory(view: unknown): MoneyHistory<DepositView> | undef
   }
   return {
     kyc: view.kyc,
-    rows: (view.deposits as readonly DepositView[]).slice(0, moneyHistoryLimit)
+    rows: (view.deposits as readonly DepositView[]).slice(0, moneyHistoryLimit),
+    total: view.deposits.length
   };
 }
 
@@ -231,6 +234,7 @@ export function withdrawalHistory(view: unknown): MoneyHistory<WithdrawalView> |
   }
   return {
     kyc: view.kyc,
-    rows: (view.withdrawals as readonly WithdrawalView[]).slice(0, moneyHistoryLimit)
+    rows: (view.withdrawals as readonly WithdrawalView[]).slice(0, moneyHistoryLimit),
+    total: view.withdrawals.length
   };
 }

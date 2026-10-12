@@ -69,6 +69,10 @@ const depositsView = { mode: "test", kyc: "verified", deposits: [depositRow] } a
 const withdrawalsView = { mode: "test", kyc: "verified", withdrawals: [withdrawalRow] } as const;
 
 describe("money flow sheet", () => {
+  it("surfaces served-history truncation instead of silently dropping rows", () => {
+    assert.ok(sheetSource.includes('t("common.truncated"'));
+  });
+
   it("requests the collections through the served BFF endpoints", async () => {
     const requested: string[] = [];
     const restore = stubFetch((path) => {
@@ -110,6 +114,7 @@ describe("money flow sheet", () => {
   it("adapts a valid deposits view, keeping the kyc flag and contract rows", () => {
     const history = depositHistory(depositsView);
     assert.equal(history?.kyc, "verified");
+    assert.equal(history?.total, 1);
     assert.equal(history?.rows.length, 1);
     assert.equal(history?.rows[0]?.id, depositRow.id);
     assert.equal(history?.rows[0]?.paymentReference, depositRow.paymentReference);
@@ -186,6 +191,7 @@ describe("money flow sheet", () => {
     }));
     const history = depositHistory({ mode: "test", kyc: "verified", deposits: many });
     assert.equal(history?.rows.length, moneyHistoryLimit);
+    assert.equal(history?.total, moneyHistoryLimit + 10);
     assert.equal(many.length, moneyHistoryLimit + 10);
   });
 

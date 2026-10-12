@@ -66,8 +66,16 @@ export function createFormatter(locale: Locale, supported: IntlSupport = intlSup
     minute: "2-digit",
     timeZone: "Asia/Bishkek"
   });
-  const decimal = (value: string, options: Omit<FormatOptions, "separators">) =>
-    formatDecimal(value, { ...options, separators });
+  // fractionDigits reaches formatDecimal from server-supplied scales — bound it like any untrusted input.
+  const fractionDigitsSafe = (value: unknown): value is number =>
+    Number.isSafeInteger(value) && (value as number) >= 0 && (value as number) <= 30;
+  const decimal = (value: string, options: Omit<FormatOptions, "separators">) => {
+    const digits = "fractionDigits" in options ? options.fractionDigits : undefined;
+    if (digits !== undefined && !fractionDigitsSafe(digits)) return unreadable;
+    // Untrusted text can arrive as a non-string; it must render as a dash, never coerce or throw.
+    if (typeof value !== "string") return unreadable;
+    return formattedOrDash(value, options, separators);
+  };
 
   const amount = (asset: string, value: string, precise = false) => {
     const meta = assetMetaOf(asset);

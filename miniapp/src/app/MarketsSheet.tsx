@@ -1,17 +1,16 @@
 import { type RefObject, useEffect, useRef, useState } from "react";
-import type { MarketDepthView, MarketView } from "../shared/api";
+import type { MarketDepthView } from "../shared/api";
 import { ApiError, api } from "./api";
 import { type MessageKey } from "./i18n";
 import { useI18n } from "./i18n-context";
 import { Icon } from "./Icon";
-import { depthTruncated } from "./markets-depth";
-import { arrayOf } from "./server-fields";
+import { depthTruncated, marketDepthOf, marketsViewOf } from "./markets-depth";
 import { Sheet } from "./ui";
 
 type Mode = { kind: "list" } | { kind: "detail"; instrument: string };
 
 export function MarketsSheet({ close }: { close: () => void }) {
-  const [markets, setMarkets] = useState<readonly MarketView[] | undefined>();
+  const [view, setView] = useState<unknown>();
   const [listFailed, setListFailed] = useState(false);
   const [mode, setMode] = useState<Mode>({ kind: "list" });
   const [announcement, setAnnouncement] = useState("");
@@ -22,7 +21,7 @@ export function MarketsSheet({ close }: { close: () => void }) {
   useEffect(() => {
     let active = true;
     api.markets()
-      .then((view) => { if (active) setMarkets(arrayOf<MarketView>(view.markets)); })
+      .then((view) => { if (active) setView(view); })
       .catch(() => { if (active) setListFailed(true); });
     return () => { active = false; };
   }, []);
@@ -37,6 +36,11 @@ export function MarketsSheet({ close }: { close: () => void }) {
     setMode(next);
   };
 
+  // The served collection renders only through the fail-closed adapter.
+  const marketsView = marketsViewOf(view);
+  const rows = marketsView?.rows;
+  const fetchFailed = listFailed || (view !== undefined && marketsView === undefined);
+
   return (
     <Sheet title={t("markets.title")} onClose={close}>
       <p className="visually-hidden" aria-live="polite" aria-atomic="true">{announcement}</p>
@@ -45,13 +49,13 @@ export function MarketsSheet({ close }: { close: () => void }) {
       ) : (
         <>
           <h3 className="section-label" ref={heading} tabIndex={-1}>{t("markets.listTitle")}</h3>
-          {listFailed ? <p className="form-error" role="alert">{t("markets.loadFailed")}</p> : null}
-          {markets === undefined && !listFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
-          {markets?.length === 0 ? <p className="sheet__note">{t("markets.empty")}</p> : null}
-          {markets && markets.length > 0 ? (
+          {fetchFailed ? <p className="form-error" role="alert">{t("markets.loadFailed")}</p> : null}
+          {rows === undefined && !fetchFailed ? <p className="sheet__note">{t("common.loading")}</p> : null}
+          {rows?.length === 0 ? <p className="sheet__note">{t("markets.empty")}</p> : null}
+          {rows && rows.length > 0 ? (
             <ul className="list" aria-label={t("markets.listLabel")}>
-              {markets.map((market) => (
-                <li key={market.instrument}>
+              {rows.map((market, index) => (
+                <li key={`${market.instrument}:${index}`}>
                   <button type="button" className="row" onClick={() => show({ kind: "detail", instrument: market.instrument })}>
                     <span className="row__main">
                       <strong>{market.instrument}</strong>
@@ -66,6 +70,9 @@ export function MarketsSheet({ close }: { close: () => void }) {
                 </li>
               ))}
             </ul>
+          ) : null}
+          {marketsView !== undefined && marketsView.total > marketsView.rows.length ? (
+            <p className="sheet__note">{t("common.truncated", { shown: marketsView.rows.length, total: marketsView.total })}</p>
           ) : null}
           <p className="sheet__note">{t("markets.note")}</p>
         </>
@@ -90,7 +97,16 @@ function MarketDepth({
   useEffect(() => {
     let active = true;
     api.marketDepth(instrument)
-      .then((value) => { if (active) setDepth(value); })
+      .then((value) => {
+        // Fail closed when the member read drifts or echoes a foreign instrument.
+        const adapted = marketDepthOf(value);
+        if (!active) return;
+        if (adapted === undefined || adapted.instrument !== instrument) {
+          setFailed("markets.notFound");
+        } else {
+          setDepth(adapted);
+        }
+      })
       .catch((caught: unknown) => {
         if (active) {
           setFailed(caught instanceof ApiError && caught.status === 404 ? "markets.notFound" : "common.serverUnreachable");
@@ -166,8 +182,8 @@ function DepthSide({
             <td colSpan={3}>{t("markets.sideEmpty")}</td>
           </tr>
         ) : (
-          levels.map((level) => (
-            <tr key={level.price}>
+          levels.map((level, index) => (
+            <tr key={`${level.price}:${index}`}>
               <td className="num">{format.decimal(level.price, { fractionDigits: depth.priceScale })}</td>
               <td className="num">{format.decimal(level.quantity, { fractionDigits: depth.baseScale })}</td>
               <td className="num">{level.orderCount}</td>
