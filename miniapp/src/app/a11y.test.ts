@@ -9,11 +9,12 @@ const read = (path: string) => readFileSync(new URL(`src/${path}`, root), "utf8"
 const app = read("app/App.tsx");
 const ui = read("app/ui.tsx");
 const sheets = read("app/sheets.tsx");
+const moneyFlow = read("app/MoneyFlowSheet.tsx");
 const exchange = read("app/screens/ExchangeScreen.tsx");
 const activity = read("app/screens/OperationsScreen.tsx");
 const support = read("app/SupportSheet.tsx");
 const screenNames = ["Home", "Exchange", "Qr", "Operations", "Profile"];
-const sources = [app, ui, sheets, support, ...screenNames.map((name) => read(`app/screens/${name}Screen.tsx`))];
+const sources = [app, ui, sheets, support, moneyFlow, ...screenNames.map((name) => read(`app/screens/${name}Screen.tsx`))];
 const css = read("styles.css");
 
 interface CssRule {

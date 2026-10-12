@@ -18,6 +18,7 @@ import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { ChecksSheet } from "./ChecksSheet";
 import { MarketsSheet } from "./MarketsSheet";
+import { MoneyFlowSheet } from "./MoneyFlowSheet";
 import { OrdersSheet } from "./OrdersSheet";
 import { QuotesSheet } from "./QuotesSheet";
 import { TradesSheet } from "./TradesSheet";
@@ -43,7 +44,7 @@ import {
   timelineStepState
 } from "./server-fields";
 import { SupportSheet } from "./SupportSheet";
-import { Coin, DisabledCta, Sheet, StatusPill, Unavailable } from "./ui";
+import { Sheet, StatusPill, Unavailable } from "./ui";
 
 interface Props {
   sheet: SheetRequest;
@@ -139,74 +140,6 @@ function AssetSheet({ asset, wallet, close, open }: { asset: AssetCode; wallet: 
           <Icon name="up" size="sm" />{t("common.withdraw")}
         </button>
       </div>
-    </Sheet>
-  );
-}
-
-interface MoneyFlow {
-  title: MessageKey;
-  note: MessageKey;
-  options: readonly { asset: AssetCode; title: MessageKey; detail: MessageKey }[];
-  cta: MessageKey;
-  unavailable: MessageKey;
-}
-
-const flows: Readonly<Record<"deposit" | "withdraw", MoneyFlow>> = {
-  deposit: {
-    title: "common.deposit",
-    note: "deposit.note",
-    options: [
-      { asset: "RUB", title: "deposit.RUB.title", detail: "deposit.RUB.detail" },
-      { asset: "USDT", title: "deposit.USDT.title", detail: "deposit.USDT.detail" },
-      { asset: "TON", title: "deposit.TON.title", detail: "deposit.TON.detail" }
-    ],
-    cta: "deposit.cta",
-    unavailable: "deposit.unavailable"
-  },
-  withdraw: {
-    title: "withdraw.title",
-    note: "withdraw.note",
-    options: [
-      { asset: "RUB", title: "withdraw.RUB.title", detail: "withdraw.RUB.detail" },
-      { asset: "USDT", title: "withdraw.USDT.title", detail: "withdraw.USDT.detail" },
-      { asset: "TON", title: "withdraw.TON.title", detail: "withdraw.TON.detail" }
-    ],
-    cta: "withdraw.cta",
-    unavailable: "withdraw.unavailable"
-  }
-};
-
-function MoneyFlowSheet({ mode, initial, close }: { mode: "deposit" | "withdraw"; initial?: AssetCode; close: () => void }) {
-  const flow = flows[mode];
-  const [selected, setSelected] = useState<AssetCode | undefined>(initial);
-  const { t } = useI18n();
-  return (
-    <Sheet title={t(flow.title)} onClose={close}>
-      <p className="sheet__note">{t(flow.note)}</p>
-      <fieldset className="options" aria-label={t("flow.methodLabel")}>
-        {flow.options.map((option) => (
-          <button
-            type="button"
-            key={option.asset}
-            className="option"
-            aria-pressed={selected === option.asset}
-            onClick={() => setSelected(option.asset)}
-          >
-            <Coin asset={option.asset} />
-            <span className="row__main">
-              <strong>{t(option.title)}</strong>
-              <span>{t(option.detail)}</span>
-            </span>
-            {selected === option.asset ? <Icon name="check" size="sm" /> : null}
-          </button>
-        ))}
-      </fieldset>
-      {selected ? (
-        <>
-          <Unavailable>{t(flow.unavailable)}</Unavailable>
-          <DisabledCta label={t(flow.cta)} />
-        </>
-      ) : null}
     </Sheet>
   );
 }
