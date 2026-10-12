@@ -184,7 +184,15 @@ describe("Mini App BFF with a failing customer-api", () => {
   // router — never a successful default body.
   function validBody(request, extra = {}) {
     if (request.url.endsWith("/session")) {
-      return { subject: subjectOf(request), actor_type: "customer", scopes: [], expires_at: expiresAtOf(request), ...extra };
+      // The real customer-api echoes the verified principal's CUSTOMER_SCOPES
+      // pair verbatim; the BFF access probe pins exactly this ordered list.
+      return {
+        subject: subjectOf(request),
+        actor_type: "customer",
+        scopes: ["customer.session.read", "customer.capabilities.read"],
+        expires_at: expiresAtOf(request),
+        ...extra
+      };
     }
     if (request.url.endsWith("/capabilities")) {
       return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
