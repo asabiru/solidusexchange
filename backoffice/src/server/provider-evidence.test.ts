@@ -329,7 +329,10 @@ describe("provider evidence BFF routes", () => {
           headers: { cookie, origin, "content-type": "application/json" },
           body: JSON.stringify({ decision: "approve" })
         });
-        assert.equal(response.status, 404, `${method} ${path}`);
+        // The uniform method pin answers a write to a read view 405 + Allow:
+        // GET — a provider evidence write route still resolves nowhere.
+        assert.equal(response.status, 405, `${method} ${path}`);
+        assert.equal(response.headers.get("allow"), "GET", `${method} ${path}`);
       }
     }
   });

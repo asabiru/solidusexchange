@@ -73,6 +73,60 @@ const validRoles = new Set<OperatorRole>([
   "auditor"
 ]);
 
+// Registered GET views: the literal paths plus the member templates. A
+// non-GET method on one answers 405 + Allow: GET — the uniform contract
+// the audit-appending read family already pins. POST-only paths (the
+// step-up arms, dev-session, logout), the OIDC-gated login arms while
+// unconfigured, the metrics scrape's own ordering and never-registered
+// paths keep the final 404 instead.
+const literalGetViews: ReadonlySet<string> = new Set([
+  "/bff/healthz",
+  "/bff/auth/device",
+  "/bff/auth/status",
+  "/bff/api/signing-key",
+  "/bff/api/signing-keys",
+  "/bff/api/session",
+  "/bff/api/operator/admin",
+  "/bff/api/operator/subjects",
+  "/bff/api/operator/queue",
+  "/bff/api/operator/audit",
+  "/bff/api/dashboard",
+  "/bff/api/customers",
+  "/bff/api/checks",
+  "/bff/api/support",
+  "/bff/api/withdrawals",
+  "/bff/api/kyc",
+  "/bff/api/aml",
+  "/bff/api/investigations",
+  "/bff/api/fraud-alerts",
+  "/bff/api/approvals",
+  "/bff/api/audit",
+  "/bff/api/audit/export",
+  "/bff/api/reports"
+]);
+const memberGetViewArms: readonly RegExp[] = [
+  /^\/bff\/api\/operator\/subjects\/[^/]+$/,
+  /^\/bff\/api\/operator\/queue\/[^/]+\/[^/]+$/,
+  /^\/bff\/api\/checks\/[^/]+$/,
+  /^\/bff\/api\/support\/[^/]+$/,
+  /^\/bff\/api\/withdrawals\/[^/]+$/,
+  /^\/bff\/api\/subjects\/[^/]+\/timeline$/,
+  /^\/bff\/api\/reports\/[^/]+$/,
+  /^\/bff\/api\/reports\/[^/]+\/export$/
+];
+
+// GET surfaces that take query input, mapped to the exact key sets they
+// declare — the same strict allowlist upstream pins for the operator
+// reads. Every other authed GET answers any non-empty query 400: a
+// silently ignored parameter reads as applied input.
+const queryInputGetRoutes: ReadonlyMap<string, ReadonlySet<string>> = new Map([
+  ["/bff/api/operator/queue", new Set(["kind"])],
+  ["/bff/api/operator/audit", new Set(["cursor"])],
+  ["/bff/api/checks", new Set(["status"])],
+  ["/bff/api/support", new Set(["status"])],
+  ["/bff/api/withdrawals", new Set(["status"])]
+]);
+
 function securityHeaders(response: ServerResponse): void {
   for (const [name, value] of Object.entries(apiSecurityHeaders)) response.setHeader(name, value);
 }
@@ -352,6 +406,7 @@ export function createBackofficeServer(
   async function authorized(
     request: IncomingMessage,
     response: ServerResponse,
+    url: URL,
     capability?: Capability
   ): Promise<OperatorSession | undefined> {
     const session = await currentSession(request);
@@ -362,6 +417,19 @@ export function createBackofficeServer(
     if (capability && !can(session.role, capability)) {
       json(response, 403, { error: "capability_denied" });
       return undefined;
+    }
+    // One query pin for every authed GET surface: routes outside
+    // queryInputGetRoutes declare no input, and inside them every key
+    // must be declared — the member reads' reject-unknown-input
+    // contract applied uniformly. The pin runs only on GET so the POST
+    // arms through this funnel keep ignoring query like the
+    // unauthenticated write paths do.
+    if (request.method === "GET" && url.search !== "") {
+      const declared = queryInputGetRoutes.get(url.pathname);
+      if (!declared || ![...url.searchParams.keys()].every((key) => declared.has(key))) {
+        json(response, 400, { error: "invalid_request" });
+        return undefined;
+      }
     }
     return session;
   }
@@ -426,7 +494,26 @@ export function createBackofficeServer(
         return;
       }
 
+      // Uniform method pin: a non-GET method on a registered GET view
+      // answers 405 + Allow: GET — the contract the audit-appending read
+      // family already pins — so POST on /bff/api/customers resolves
+      // exactly like POST on /bff/api/checks.
+      if (
+        request.method !== "GET"
+        && (literalGetViews.has(path) || memberGetViewArms.some((arm) => arm.test(path)))
+      ) {
+        response.setHeader("allow", "GET");
+        json(response, 405, { error: "method_not_allowed" });
+        return;
+      }
+
       if (request.method === "GET" && path === "/bff/healthz") {
+        // The health probe declares no query input either — it rejects
+        // inline like every public GET, before the session tier below.
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
         const audit = await auditStore.snapshot();
         json(response, 200, {
           mode: "dev-dry-run",
@@ -461,8 +548,14 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/auth/login") {
+        // The hidden-route check stays first: unconfigured, even a
+        // query-bearing request answers 404 rather than the revealing 400.
         if (!config.oidc) {
           json(response, 404, { error: "not_found" });
+          return;
+        }
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
           return;
         }
         const presented = parseCookies(request)[oidcTransactionCookie];
@@ -500,6 +593,10 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/auth/device") {
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
         if (!enforceDevices) {
           json(response, 200, { binding: "off" });
           return;
@@ -514,6 +611,10 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/auth/status") {
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
         json(response, 200, { authenticated: Boolean(await currentSession(request)) });
         return;
       }
@@ -630,18 +731,26 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/signing-key") {
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
         const key = signer.currentPublicKey();
         json(response, 200, { keyId: key.keyId, publicJwk: key.publicJwk });
         return;
       }
 
       if (request.method === "GET" && path === "/bff/api/signing-keys") {
+        if (url.search !== "") {
+          json(response, 400, { error: "invalid_request" });
+          return;
+        }
         json(response, 200, signer.publicKeyset());
         return;
       }
 
       if (request.method === "GET" && path === "/bff/api/session") {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
         const profile = findRole(session.role);
         if (!profile) {
@@ -664,7 +773,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/admin") {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
         if (customerApi.configured) {
           // The upstream operator audience pins X-Device-Id to the session's
@@ -714,7 +823,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/subjects") {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
         if (customerApi.configured) {
           // Same device gate as the operator admin read: the upstream
@@ -765,9 +874,15 @@ export function createBackofficeServer(
 
       const operatorSubjectMatch = path.match(/^\/bff\/api\/operator\/subjects\/([^/]+)$/);
       if (request.method === "GET" && operatorSubjectMatch) {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
-        const requestedId = decodeURIComponent(operatorSubjectMatch[1]);
+        let requestedId: string;
+        try {
+          requestedId = decodeURIComponent(operatorSubjectMatch[1]);
+        } catch {
+          json(response, 404, { error: "operator_subject_not_found" });
+          return;
+        }
         if (customerApi.configured) {
           // Same device gate as the other operator reads: the upstream
           // audience requires X-Device-Id, so the BFF rejects locally before
@@ -870,13 +985,20 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/operator/queue") {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
         // `kind` is the operator queue's only query parameter: absent means
-        // kyc (the default upstream), anything outside the enum is invalid
-        // input and fails closed locally rather than propagating upstream.
-        const kindParam = url.searchParams.get("kind");
-        const kind = kindParam === null ? "kyc" : kindParam;
+        // kyc (the default upstream); an out-of-enum value or a repeated
+        // parameter is invalid input and fails closed locally rather than
+        // propagating upstream — the same strict allowlist upstream pins.
+        // Undeclared keys never reach this arm: the uniform query pin
+        // inside the gate rejects them first.
+        const kindParams = url.searchParams.getAll("kind");
+        if (kindParams.length > 1) {
+          json(response, 400, { error: "operator_queue_query_invalid" });
+          return;
+        }
+        const kind = kindParams.length === 0 ? "kyc" : kindParams[0];
         if (kind !== "kyc" && kind !== "aml" && kind !== "tickets") {
           json(response, 400, { error: "operator_queue_kind_invalid" });
           return;
@@ -1022,10 +1144,17 @@ export function createBackofficeServer(
 
       const operatorQueueItemMatch = path.match(/^\/bff\/api\/operator\/queue\/([^/]+)\/([^/]+)$/);
       if (request.method === "GET" && operatorQueueItemMatch) {
-        const session = await authorized(request, response);
+        const session = await authorized(request, response, url);
         if (!session) return;
-        const kind = decodeURIComponent(operatorQueueItemMatch[1]);
-        const itemId = decodeURIComponent(operatorQueueItemMatch[2]);
+        let kind: string;
+        let itemId: string;
+        try {
+          kind = decodeURIComponent(operatorQueueItemMatch[1]);
+          itemId = decodeURIComponent(operatorQueueItemMatch[2]);
+        } catch {
+          json(response, 404, { error: "operator_queue_item_not_found" });
+          return;
+        }
         // Unknown kind shares the member read's uniform 404 — same as
         // upstream, a kind outside the enum never reveals which ids exist.
         if (kind !== "kyc" && kind !== "aml" && kind !== "tickets") {
@@ -1125,20 +1254,16 @@ export function createBackofficeServer(
         // behind audit:read (the oversight roles in the backoffice role
         // matrix), mirroring the upstream role-scoped operator.audit.read
         // grant.
-        const session = await authorized(request, response, "audit:read");
+        const session = await authorized(request, response, url, "audit:read");
         if (!session) return;
         // `cursor` is the audit feed's only query parameter: absent means
         // the first page, anything outside the auc_* grammar is invalid
         // input and fails closed locally rather than propagating upstream.
         // Multiplicity is part of the same strict allowlist upstream
         // pins — a repeated cursor is malformed input, never first-wins.
+        // Undeclared keys never reach this arm: the uniform query pin
+        // inside the gate rejects them first.
         const cursorParams = url.searchParams.getAll("cursor");
-        for (const key of url.searchParams.keys()) {
-          if (key !== "cursor") {
-            json(response, 400, { error: "operator_audit_query_invalid" });
-            return;
-          }
-        }
         if (cursorParams.length > 1) {
           json(response, 400, { error: "operator_audit_query_invalid" });
           return;
@@ -1221,7 +1346,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/dashboard") {
-        if (!await authorized(request, response, "dashboard:read")) return;
+        if (!await authorized(request, response, url, "dashboard:read")) return;
         signed(response, "dashboard", {
           metrics: demoRepository.metrics(),
           queues: demoRepository.queues()
@@ -1230,18 +1355,13 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/customers") {
-        if (!await authorized(request, response, "customers:read")) return;
+        if (!await authorized(request, response, url, "customers:read")) return;
         signed(response, "customers", { customers: demoRepository.customers() });
         return;
       }
 
       const checkMatch = path.match(/^\/bff\/api\/checks\/([^/]+)$/);
       if (path === "/bff/api/checks" || checkMatch) {
-        if (request.method !== "GET") {
-          response.setHeader("allow", "GET");
-          json(response, 405, { error: "method_not_allowed" });
-          return;
-        }
         // Check views append audit events; SameSite=Strict still admits
         // same-site subresource requests (e.g. other loopback ports).
         const fetchSite = request.headers["sec-fetch-site"];
@@ -1249,7 +1369,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = await authorized(request, response, "checks:read");
+        const session = await authorized(request, response, url, "checks:read");
         if (!session) return;
         if (!checkMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -1288,11 +1408,6 @@ export function createBackofficeServer(
 
       const ticketMatch = path.match(/^\/bff\/api\/support\/([^/]+)$/);
       if (path === "/bff/api/support" || ticketMatch) {
-        if (request.method !== "GET") {
-          response.setHeader("allow", "GET");
-          json(response, 405, { error: "method_not_allowed" });
-          return;
-        }
         // Ticket views append audit events; SameSite=Strict still admits
         // same-site subresource requests (e.g. other loopback ports).
         const fetchSite = request.headers["sec-fetch-site"];
@@ -1300,7 +1415,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = await authorized(request, response, "support:read");
+        const session = await authorized(request, response, url, "support:read");
         if (!session) return;
         if (!ticketMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -1339,11 +1454,6 @@ export function createBackofficeServer(
 
       const withdrawalMatch = path.match(/^\/bff\/api\/withdrawals\/([^/]+)$/);
       if (path === "/bff/api/withdrawals" || withdrawalMatch) {
-        if (request.method !== "GET") {
-          response.setHeader("allow", "GET");
-          json(response, 405, { error: "method_not_allowed" });
-          return;
-        }
         // Withdrawal intent views append audit events; SameSite=Strict still admits
         // same-site subresource requests (e.g. other loopback ports).
         const fetchSite = request.headers["sec-fetch-site"];
@@ -1351,7 +1461,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = await authorized(request, response, "custody:read");
+        const session = await authorized(request, response, url, "custody:read");
         if (!session) return;
         if (!withdrawalMatch) {
           const statusFilters = url.searchParams.getAll("status");
@@ -1390,11 +1500,6 @@ export function createBackofficeServer(
 
       const subjectMatch = path.match(/^\/bff\/api\/subjects\/([^/]+)\/timeline$/);
       if (subjectMatch) {
-        if (request.method !== "GET") {
-          response.setHeader("allow", "GET");
-          json(response, 405, { error: "method_not_allowed" });
-          return;
-        }
         // Timeline lookups append audit events; SameSite=Strict still admits
         // same-site subresource requests (e.g. other loopback ports).
         const fetchSite = request.headers["sec-fetch-site"];
@@ -1402,7 +1507,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = await authorized(request, response, "subjects:read");
+        const session = await authorized(request, response, url, "subjects:read");
         if (!session) return;
         let ref: string;
         try {
@@ -1430,7 +1535,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/kyc") {
-        if (!await authorized(request, response, "kyc:read")) return;
+        if (!await authorized(request, response, url, "kyc:read")) return;
         signed(response, "kyc-cases", {
           cases: demoRepository.kycCases(),
           providerEvidence: await providerEvidence.kyc()
@@ -1439,7 +1544,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/aml") {
-        if (!await authorized(request, response, "aml:read")) return;
+        if (!await authorized(request, response, url, "aml:read")) return;
         signed(response, "aml-cases", {
           cases: demoRepository.amlCases(),
           providerEvidence: await providerEvidence.kyt()
@@ -1448,7 +1553,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/investigations") {
-        if (!await authorized(request, response, "investigations:read")) return;
+        if (!await authorized(request, response, url, "investigations:read")) return;
         signed(response, "investigations", {
           cases: demoRepository.investigationCases()
         });
@@ -1456,7 +1561,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/fraud-alerts") {
-        if (!await authorized(request, response, "fraud:read")) return;
+        if (!await authorized(request, response, url, "fraud:read")) return;
         signed(response, "fraud-alerts", {
           alerts: demoRepository.fraudAlerts()
         });
@@ -1464,7 +1569,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/approvals") {
-        if (!await authorized(request, response, "approvals:read")) return;
+        if (!await authorized(request, response, url, "approvals:read")) return;
         signed(response, "approvals", {
           approvals: demoRepository.approvals().map((approval) => ({
             ...approval,
@@ -1475,7 +1580,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/audit") {
-        if (!await authorized(request, response, "audit:read")) return;
+        if (!await authorized(request, response, url, "audit:read")) return;
         const audit = await auditStore.snapshot();
         signed(response, "audit", {
           events: audit.events,
@@ -1485,7 +1590,7 @@ export function createBackofficeServer(
       }
 
       if (request.method === "GET" && path === "/bff/api/audit/export") {
-        if (!await authorized(request, response, "audit:export")) return;
+        if (!await authorized(request, response, url, "audit:export")) return;
         const audit = await auditStore.snapshot();
         signed(response, "audit-export", {
           formatVersion: 1,
@@ -1504,11 +1609,6 @@ export function createBackofficeServer(
       const reportMatch = path.match(/^\/bff\/api\/reports\/([^/]+)$/);
       const reportExportMatch = path.match(/^\/bff\/api\/reports\/([^/]+)\/export$/);
       if (path === "/bff/api/reports" || reportMatch || reportExportMatch) {
-        if (request.method !== "GET") {
-          response.setHeader("allow", "GET");
-          json(response, 405, { error: "method_not_allowed" });
-          return;
-        }
         // Report reads append audit events; SameSite=Strict still admits
         // same-site subresource requests (e.g. other loopback ports).
         const fetchSite = request.headers["sec-fetch-site"];
@@ -1516,7 +1616,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "fetch_site_rejected" });
           return;
         }
-        const session = await authorized(request, response, "reports:read");
+        const session = await authorized(request, response, url, "reports:read");
         if (!session) return;
         if (!reportMatch && !reportExportMatch) {
           signed(response, "reports", listReports(new Date().toISOString()));
@@ -1566,7 +1666,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = await authorized(request, response, "approvals:step-up");
+        const session = await authorized(request, response, url, "approvals:step-up");
         if (!session) return;
         let approvalId: string;
         try {
@@ -1612,7 +1712,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = await authorized(request, response, "approvals:step-up");
+        const session = await authorized(request, response, url, "approvals:step-up");
         if (!session) return;
         let approvalId: string;
         let challengeId: string;
@@ -1662,7 +1762,7 @@ export function createBackofficeServer(
           json(response, 403, { error: "origin_rejected" });
           return;
         }
-        const session = await authorized(request, response, "approvals:preview");
+        const session = await authorized(request, response, url, "approvals:preview");
         if (!session) return;
         let approvalId: string;
         try {
