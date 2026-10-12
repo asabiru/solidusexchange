@@ -6,6 +6,8 @@ import { loadServerConfig, type ServerConfig } from "./config.js";
 import type {
   CustomerApiClient,
   CustomerApiMarket,
+  CustomerApiMarketDepth,
+  CustomerApiMarketDepthView,
   CustomerApiMarkets
 } from "./customer-api-client.js";
 import { marketsView } from "./markets.js";
@@ -30,12 +32,17 @@ interface Running {
 interface MarketsStub {
   client: CustomerApiClient;
   calls: string[];
+  depthCalls: string[];
 }
 
 function marketsStub(
-  result: CustomerApiMarkets | (() => Promise<CustomerApiMarkets>)
+  result: CustomerApiMarkets | (() => Promise<CustomerApiMarkets>),
+  depth: CustomerApiMarketDepth | ((instrument: string) => Promise<CustomerApiMarketDepth>) = {
+    status: "not-found"
+  }
 ): MarketsStub {
   const calls: string[] = [];
+  const depthCalls: string[] = [];
   const client: CustomerApiClient = {
     configured: true,
     access: async () => ({ status: "unavailable" }),
@@ -48,6 +55,10 @@ function marketsStub(
     markets: async (subject) => {
       calls.push(subject);
       return typeof result === "function" ? result() : result;
+    },
+    marketDepth: async (subject, instrument) => {
+      depthCalls.push(`${subject}|${instrument}`);
+      return typeof depth === "function" ? depth(instrument) : depth;
     },
     payments: async () => ({ status: "not-configured" }),
     cards: async () => ({ status: "not-configured" }),
@@ -65,7 +76,7 @@ function marketsStub(
     operation: async () => ({ status: "not-configured" }),
     users: async () => ({ status: "not-configured" })
   };
-  return { client, calls };
+  return { client, calls, depthCalls };
 }
 
 async function start(serverConfig: ServerConfig, stub?: MarketsStub): Promise<Running> {
@@ -117,6 +128,36 @@ function upstreamMarket(overrides: Partial<CustomerApiMarket> = {}): CustomerApi
     },
     // (90.01 - 89.99) * 20_000 / (90.01 + 89.99) = 2.22... -> 2 bps.
     spread_bps: 2,
+    base_scale: 6,
+    quote_scale: 2,
+    price_scale: 8,
+    as_of: "2026-10-02T14:10:00.000Z",
+    posting: "none",
+    ...overrides
+  };
+}
+
+function upstreamDepth(
+  overrides: Partial<CustomerApiMarketDepthView> = {}
+): CustomerApiMarketDepthView {
+  return {
+    instrument: "USDT/RUB",
+    base_asset: "USDT",
+    quote_asset: "RUB",
+    bids: [
+      { price: "89.99000000", quantity: "25.000000", order_count: 2 },
+      { price: "89.97000000", quantity: "40.000000", order_count: 1 }
+    ],
+    asks: [
+      { price: "90.01000000", quantity: "18.000000", order_count: 1 },
+      { price: "90.05000000", quantity: "12.000000", order_count: 3 }
+    ],
+    last_trade: {
+      price: "90.00000000",
+      quantity: "10.000000",
+      executed_at: "2026-10-02T14:05:00.000Z"
+    },
+    depth_levels: 2,
     base_scale: 6,
     quote_scale: 2,
     price_scale: 8,
@@ -270,6 +311,135 @@ describe("GET /bff/markets through the customer-api seam", () => {
       } finally {
         await running.close();
       }
+    }
+  });
+});
+
+describe("GET /bff/markets/{instrument} through the customer-api seam", () => {
+  it("requires a session", async () => {
+    const running = await start(config());
+    try {
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB");
+      assert.equal(response.status, 401);
+      assert.deepEqual(await response.json(), { error: "unauthenticated" });
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("keeps the local 404 for a gated session without consulting upstream", async () => {
+    const stub = marketsStub({ status: "unavailable" }, { status: "ok", depth: upstreamDepth() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "kyc-gated");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB", cookie);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+      assert.equal(stub.depthCalls.length, 0, "gated sessions must not reach upstream");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("keeps the local 404 on the standalone unconfigured BFF", async () => {
+    const running = await start(config());
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB", cookie);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("maps a malformed or multi-segment instrument to the local 404 without an upstream call", async () => {
+    const stub = marketsStub({ status: "unavailable" }, { status: "ok", depth: upstreamDepth() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      for (const path of [
+        "/bff/markets/USDT/RUB",
+        "/bff/markets/usdt%2Frub",
+        "/bff/markets/NOT-A-PAIR",
+        "/bff/markets/%ZZ",
+        "/bff/markets/"
+      ]) {
+        const response = await get(running.base, path, cookie);
+        assert.equal(response.status, 404, path);
+        assert.deepEqual(await response.json(), { error: "not_found" });
+      }
+      assert.equal(stub.depthCalls.length, 0, "malformed segments must not reach upstream");
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("decodes the instrument once and maps upstream not-found/denied to the local 404", async () => {
+    const stub = marketsStub({ status: "unavailable" }, async (instrument) => {
+      assert.equal(instrument, "USDT/RUB", "the decoded instrument reaches upstream");
+      return { status: "not-found" };
+    });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB", cookie);
+      assert.equal(response.status, 404);
+      assert.deepEqual(await response.json(), { error: "not_found" });
+      assert.equal(stub.depthCalls.length, 1);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("adapts the upstream ladder into the depth view", async () => {
+    const stub = marketsStub({ status: "unavailable" }, { status: "ok", depth: upstreamDepth() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB", cookie);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), {
+        mode: "test",
+        instrument: "USDT/RUB",
+        base: "USDT",
+        quote: "RUB",
+        bids: [
+          { price: "89.99000000", quantity: "25.000000", orderCount: 2 },
+          { price: "89.97000000", quantity: "40.000000", orderCount: 1 }
+        ],
+        asks: [
+          { price: "90.01000000", quantity: "18.000000", orderCount: 1 },
+          { price: "90.05000000", quantity: "12.000000", orderCount: 3 }
+        ],
+        lastTrade: {
+          price: "90.00000000",
+          quantity: "10.000000",
+          executedAt: Date.parse("2026-10-02T14:05:00.000Z")
+        },
+        depthLevels: 2,
+        baseScale: 6,
+        quoteScale: 2,
+        priceScale: 8,
+        asOf: Date.parse("2026-10-02T14:10:00.000Z"),
+        posting: "none"
+      });
+      assert.equal(stub.depthCalls.length, 1);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("any other upstream failure answers 503 markets_unavailable", async () => {
+    const stub = marketsStub({ status: "unavailable" }, { status: "unavailable" });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const response = await get(running.base, "/bff/markets/USDT%2FRUB", cookie);
+      assert.equal(response.status, 503);
+      assert.deepEqual(await response.json(), { error: "markets_unavailable" });
+    } finally {
+      await running.close();
     }
   });
 });

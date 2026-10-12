@@ -143,6 +143,7 @@ describe("miniapp BFF core hardening", () => {
       "/bff/wallet",
       "/bff/operations",
       "/bff/operations/op-0001",
+      "/bff/markets/USDT%2FRUB",
       "/bff/profile",
       "/bff/kyc/status",
       "/bff/quotes/preview?from=RUB&to=USDT&amount=100"

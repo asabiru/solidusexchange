@@ -591,6 +591,28 @@ export interface MarketsView {
   markets: readonly MarketView[];
 }
 
+/**
+ * Mirrors the customer-api market-depth contract: one instrument's order
+ * book ladder (bids best-first descending, asks best-first ascending),
+ * plus the instrument's last fill and the pre-truncation depth count.
+ */
+export interface MarketDepthView {
+  mode: "test";
+  instrument: QuotePair;
+  base: AssetCode;
+  quote: AssetCode;
+  bids: readonly MarketLevelView[];
+  asks: readonly MarketLevelView[];
+  lastTrade: MarketLastTradeView | null;
+  /** Book level count on the deeper side before the served cap applied. */
+  depthLevels: number;
+  baseScale: number;
+  quoteScale: number;
+  priceScale: number;
+  asOf: number;
+  posting: "none";
+}
+
 /** Mirrors the customer-api payments contract outbound status set exactly. */
 export type PaymentStatus =
   | "created"
