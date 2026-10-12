@@ -175,7 +175,9 @@ describe("Mini App BFF with a failing customer-api", () => {
       { title: "Review", detail: "Awaiting confirmation", at: "2026-10-08T09:16:00.000Z", state: "current" },
       { title: "Settled", detail: "Legs settle", at: null, state: "pending" }
     ],
-    created_at: "2026-10-08T09:15:00.000Z",
+    // Upstream mints created_at at the latest recorded step instant — no
+    // timeline entry may sit past it.
+    created_at: "2026-10-08T09:16:00.000Z",
     posting: "none"
   };
 
@@ -198,10 +200,13 @@ describe("Mini App BFF with a failing customer-api", () => {
       return { capabilities: ["customer.session.read"], commands_enabled: false, ...extra };
     }
     if (request.url.endsWith("/wallets")) {
+      // Upstream mints exactly one wallet per asset in the fixed asset table
+      // (RUB, USDT, TON) — a subset, an extra row or a duplicate is drift.
       return {
         wallets: [
           { wallet_id: "syn_wal_rub00001", asset: "RUB", available: "84200.00", hold: "0.00" },
-          { wallet_id: "syn_wal_usdt0001", asset: "USDT", available: "10.000000", hold: "0.000000" }
+          { wallet_id: "syn_wal_usdt0001", asset: "USDT", available: "10.000000", hold: "0.000000" },
+          { wallet_id: "syn_wal_ton000001", asset: "TON", available: "5.000000000", hold: "0.500000000" }
         ],
         ...extra
       };
@@ -528,16 +533,37 @@ describe("Mini App BFF with a failing customer-api", () => {
       };
     }
     if (request.url.endsWith("/deposit-addresses")) {
+      // The address set is a fixed catalog: upstream mints exactly one entry
+      // per custody-dev-v1 (asset, network) target in DEPOSIT_ADDRESS_TARGETS
+      // order — a subset or an emptied list is drift, never "empty but live".
       return {
         mode: "test",
         deposit_addresses: [
           {
             deposit_address_id: "dpa_0123456789abcdef01234567",
-            asset: "USDT",
+            asset: "TON",
             network: "TON_TESTNET",
             address: `kQ${"A".repeat(46)}`,
             status: "active",
+            created_at: "2026-09-01T00:00:00.000Z",
+            posting: "none"
+          },
+          {
+            deposit_address_id: "dpa_fedcba9876543210fedcba98",
+            asset: "USDT",
+            network: "TON_TESTNET",
+            address: `kQ${"B".repeat(46)}`,
+            status: "active",
             created_at: "2026-09-02T00:00:00.000Z",
+            posting: "none"
+          },
+          {
+            deposit_address_id: "dpa_89abcdef0123456789abcdef",
+            asset: "USDT",
+            network: "TRON_TESTNET",
+            address: tronTestnet,
+            status: "active",
+            created_at: "2026-09-03T00:00:00.000Z",
             posting: "none"
           }
         ],
@@ -562,17 +588,49 @@ describe("Mini App BFF with a failing customer-api", () => {
       };
     }
     if (request.url.endsWith("/address-screenings")) {
+      // The screening set is the fixed custody-dev-v1 target catalog: one
+      // advisory outbound entry per (asset, network) pair — a subset or an
+      // emptied list is drift, and each entry's verdict mirrors its
+      // terminal risk level.
       return {
         mode: "test",
         screenings: [
           {
-            screening_id: "scr_0123456789abcdef0123456789abcdef",
-            asset: "USDT",
+            screening_id: "scr_aaaabbbbccccddddeeeeffff00001111",
+            asset: "TON",
             network: "TON_TESTNET",
             direction: "outbound",
             status: "low",
             verdict: "clear",
             risk_level: "low",
+            advisory: true,
+            executable: false,
+            submitted_at: "2026-10-01T10:00:00.000Z",
+            deadline: "2026-10-01T11:00:00.000Z",
+            posting: "none"
+          },
+          {
+            screening_id: "scr_0123456789abcdef0123456789abcdef",
+            asset: "USDT",
+            network: "TON_TESTNET",
+            direction: "outbound",
+            status: "medium",
+            verdict: "review",
+            risk_level: "medium",
+            advisory: true,
+            executable: false,
+            submitted_at: "2026-10-01T10:00:00.000Z",
+            deadline: "2026-10-01T11:00:00.000Z",
+            posting: "none"
+          },
+          {
+            screening_id: "scr_00112233445566778899aabbccddeeff",
+            asset: "USDT",
+            network: "TRON_TESTNET",
+            direction: "outbound",
+            status: "high",
+            verdict: "flagged",
+            risk_level: "high",
             advisory: true,
             executable: false,
             submitted_at: "2026-10-01T10:00:00.000Z",
@@ -590,9 +648,9 @@ describe("Mini App BFF with a failing customer-api", () => {
           {
             activity_id: "act_0123456789abcdef01234567",
             kind: "deposit",
-            status: "confirmed",
-            title: "Deposit · confirmed",
-            detail: "dep_0123456789abcdef01234567 confirmed",
+            status: "payment_received",
+            title: "Deposit · payment received",
+            detail: "dep_0123456789abcdef01234567 payment received",
             money: { amount: "10.000000", asset: "USDT" },
             created_at: "2026-10-08T09:15:00.000Z",
             posting: "none"
@@ -1451,11 +1509,12 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(wallet.kyc, "verified");
     assert.deepEqual(wallet.assets, [
       { code: "RUB", available: "84200.00", hold: "0.00", valueRub: "84200.00" },
-      { code: "USDT", available: "10.000000", hold: "0.000000", valueRub: "924.00" }
+      { code: "USDT", available: "10.000000", hold: "0.000000", valueRub: "924.00" },
+      { code: "TON", available: "5.000000000", hold: "0.500000000", valueRub: "1568.05" }
     ]);
-    assert.equal(wallet.availableRub, "85124.00");
-    assert.equal(wallet.holdRub, "0.00");
-    assert.equal(wallet.totalRub, "85124.00");
+    assert.equal(wallet.availableRub, "86549.50");
+    assert.equal(wallet.holdRub, "142.55");
+    assert.equal(wallet.totalRub, "86692.05");
     // The depositAddresses section is upstream-served only: the local wallet
     // view has no address data of its own, so the verified view must carry
     // the served contract records — adapted, never the raw snake_case body.
@@ -1463,11 +1522,29 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.deepEqual(wallet.depositAddresses, [
       {
         id: "dpa_0123456789abcdef01234567",
-        asset: "USDT",
+        asset: "TON",
         network: "TON_TESTNET",
         address: `kQ${"A".repeat(46)}`,
         status: "active",
+        createdAt: Date.parse("2026-09-01T00:00:00.000Z"),
+        posting: "none"
+      },
+      {
+        id: "dpa_fedcba9876543210fedcba98",
+        asset: "USDT",
+        network: "TON_TESTNET",
+        address: `kQ${"B".repeat(46)}`,
+        status: "active",
         createdAt: Date.parse("2026-09-02T00:00:00.000Z"),
+        posting: "none"
+      },
+      {
+        id: "dpa_89abcdef0123456789abcdef",
+        asset: "USDT",
+        network: "TRON_TESTNET",
+        address: tronTestnet,
+        status: "active",
+        createdAt: Date.parse("2026-09-03T00:00:00.000Z"),
         posting: "none"
       }
     ]);
@@ -1835,9 +1912,9 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(activity.items[0].kind, "contract");
     assert.equal(activity.items[0].id, "act_0123456789abcdef01234567");
     assert.equal(activity.items[0].contract, "deposit");
-    assert.equal(activity.items[0].status, "confirmed");
-    assert.equal(activity.items[0].title, "Deposit · confirmed");
-    assert.equal(activity.items[0].detail, "dep_0123456789abcdef01234567 confirmed");
+    assert.equal(activity.items[0].status, "payment_received");
+    assert.equal(activity.items[0].title, "Deposit · payment received");
+    assert.equal(activity.items[0].detail, "dep_0123456789abcdef01234567 payment received");
     assert.equal(activity.items[0].amount, "10.000000");
     assert.equal(activity.items[0].asset, "USDT");
     assert.equal(activity.items[0].at, Date.parse("2026-10-08T09:15:00.000Z"));
@@ -2207,7 +2284,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     const wallet = await getJson(app, "/bff/wallet", verifiedCookie);
     assert.equal(wallet.kyc, "verified");
     assert.deepEqual(wallet.depositAddresses, []);
-    assert.equal(wallet.availableRub, "85124.00");
+    assert.equal(wallet.availableRub, "86549.50");
     assert.deepEqual(wallet.assets[0], { code: "RUB", available: "84200.00", hold: "0.00", valueRub: "84200.00" });
     // The refusal stays scoped: sibling reads keep serving live data.
     assert.equal((await getJson(app, "/bff/deposits", verifiedCookie)).deposits[0].id, "dep_0123456789abcdef01234567");
@@ -2287,10 +2364,13 @@ describe("Mini App BFF with a failing customer-api", () => {
     // Verified sessions get 200-with-empty on the upstream-owned collections —
     // distinguishable from both the gated fixture (5 local checks entries) and
     // a 503: "empty but live" is not a degrade.
-    const wallet = await getJson(app, "/bff/wallet", verifiedCookie);
-    assert.equal(wallet.kyc, "verified");
-    assert.deepEqual(wallet.assets, []);
-    assert.deepEqual(wallet.depositAddresses, []);
+    // The wallet read shares the fixed-catalog class: the wallets list is
+    // the asset table and deposit-addresses the custody target set, so an
+    // emptied body is drift — the whole route fails closed like
+    // markets/sessions, never degrades to "empty but live".
+    const wallet = await call(app.base, "/bff/wallet", { cookie: verifiedCookie });
+    assert.equal(wallet.status, 503);
+    assert.deepEqual(await readJson(wallet), { error: "wallet_unavailable" });
     for (const [path, member] of [
       ["/bff/deposits", "deposits"],
       ["/bff/withdrawals", "withdrawals"],
@@ -2299,12 +2379,23 @@ describe("Mini App BFF with a failing customer-api", () => {
       ["/bff/trades", "trades"],
       ["/bff/payments", "payments"],
       ["/bff/cards", "cards"],
-      ["/bff/operations", "operations"],
       ["/bff/notifications", "notifications"],
       ["/bff/support/requests", "requests"]
     ]) {
       const body = await getJson(app, path, verifiedCookie);
       assert.deepEqual(body[member], [], path);
+    }
+    // The min-one-entry feeds and the screening catalog answer the same
+    // contract: emptied is drift, so the routes fail closed alongside
+    // markets and sessions rather than serving an impossible list.
+    for (const [path, error] of [
+      ["/bff/activity", "activity_unavailable"],
+      ["/bff/operations", "operations_unavailable"],
+      ["/bff/address-screening", "screening_unavailable"]
+    ]) {
+      const response = await call(app.base, path, { cookie: verifiedCookie });
+      assert.equal(response.status, 503, path);
+      assert.deepEqual(await readJson(response), { error }, path);
     }
     // The sessions collection shares the markets rule: the contract requires
     // exactly one current session — the caller's own — so an empty directory
@@ -2312,9 +2403,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     const sessions = await call(app.base, "/bff/sessions", { cookie: verifiedCookie });
     assert.equal(sessions.status, 503);
     assert.deepEqual(await readJson(sessions), { error: "sessions_unavailable" });
-    assert.deepEqual((await getJson(app, "/bff/activity", verifiedCookie)).items, []);
     assert.deepEqual((await getJson(app, "/bff/checks", verifiedCookie)).checks, []);
-    assert.deepEqual((await getJson(app, "/bff/address-screening", verifiedCookie)).screenings, []);
     // The checks member read resolves through the (now empty) live list: the
     // upstream reference is absent — not_found, never the local fixture.
     const check = await call(app.base, "/bff/checks/chk_0123456789abcdef01234567", { cookie: verifiedCookie });

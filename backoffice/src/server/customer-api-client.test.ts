@@ -759,7 +759,22 @@ describe("customer API operator client", () => {
         { asset: "RUB", asset_scale: 2, available: "0.00", hold: "0.00" },
         { asset: "TON", asset_scale: 9, available: "0.000000001", hold: "0.000000000" },
         { asset: "USDT", asset_scale: 6, available: "0.000000", hold: "0.000000" }
-      ] })
+      ] }),
+      // Wave-76 snapshot horizon: the roster's pinned as-of instant bounds
+      // every timestamp — an instant past it is drift even when it still
+      // sits inside the account window.
+      detail({ last_active_at: "2027-03-01T00:00:00.000Z", recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2027-02-01T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } }
+      ] }),
+      detail({ last_active_at: "2027-03-01T00:00:00.000Z", recent_activity: [
+        { activity_id: `opact_${"e".repeat(24)}`, kind: "flag_added", occurred_at: "2027-02-01T10:00:00.000Z", summary: "structuring", money: null }
+      ] }),
+      detail({ last_active_at: "2027-03-01T00:00:00.000Z", recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2026-09-19T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } }
+      ], kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], submitted_at: "2027-02-01T10:00:00.000Z", decided_at: "2027-02-10T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } }),
+      detail({ last_active_at: "2027-03-01T00:00:00.000Z", recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2026-09-19T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } }
+      ], kyc: { ...kycFixture, history: [{ ...kycFixture.history[0], decided_at: "2027-02-10T10:00:00.000Z" }, ...kycFixture.history.slice(1)] } })
     ];
     for (const body of drifts) {
       await withFakeApi(
@@ -931,6 +946,104 @@ describe("operatorQueue", () => {
       }
     );
   });
+
+  it("fails closed on items breaking the kind's pinned order or the age arithmetic", async () => {
+    const key = randomBytes(32).toString("hex");
+    const snapshotMs = Date.parse("2027-01-29T00:00:00.000Z");
+    const kycRow = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qky_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      display_name: "Alina Mironova",
+      submitted_at: "2026-09-20T00:00:00.000Z",
+      sla_due_at: "2026-09-23T00:00:00.000Z",
+      state: "pending",
+      priority: "normal",
+      assignee: null,
+      age_ms: snapshotMs - Date.parse("2026-09-20T00:00:00.000Z"),
+      ...overrides
+    });
+    const amlRow = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qml_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      alert_type: "velocity",
+      evidence_refs: ["evd_00112233445566778899aabb"],
+      sla_due_at: "2026-09-23T00:00:00.000Z",
+      state: "pending",
+      priority: "normal",
+      assignee: null,
+      age_ms: 1_000_000,
+      ...overrides
+    });
+    const ticketRow = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qtick_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      category: "complaint",
+      opened_at: "2026-09-19T00:00:00.000Z",
+      state: "open",
+      priority: "normal",
+      assignee: null,
+      age_ms: snapshotMs - Date.parse("2026-09-19T00:00:00.000Z"),
+      ...overrides
+    });
+    const queueView = (kind: string, items: Record<string, unknown>[], byState: Record<string, number>) => ({
+      mode: "test",
+      queue: {
+        kind,
+        items,
+        summary: { count: items.length, by_state: byState },
+        posting: "none"
+      }
+    });
+    const pending2 = { pending: 2, in_review: 0, escalated: 0 };
+    const open2 = { open: 2, waiting: 0, escalated: 0 };
+    const cases: [string, string, unknown][] = [
+      ["kyc items out of sla order", "kyc", queueView("kyc", [
+        kycRow({ queue_id: "qky_ccdd2233445566778899aabb", submitted_at: "2026-09-22T00:00:00.000Z", sla_due_at: "2026-09-25T00:00:00.000Z", age_ms: snapshotMs - Date.parse("2026-09-22T00:00:00.000Z") }),
+        kycRow()
+      ], pending2)],
+      ["kyc equal instants with descending queue_id", "kyc", queueView("kyc", [
+        kycRow({ queue_id: "qky_ff112233445566778899aabb" }),
+        kycRow({ queue_id: "qky_00112233445566778899aabb" })
+      ], pending2)],
+      ["kyc age_ms not the snapshot minus submitted_at", "kyc", queueView("kyc", [
+        kycRow({ age_ms: 1 }),
+        kycRow({ queue_id: "qky_ccdd2233445566778899aabb", submitted_at: "2026-09-22T00:00:00.000Z", sla_due_at: "2026-09-25T00:00:00.000Z", age_ms: snapshotMs - Date.parse("2026-09-22T00:00:00.000Z") })
+      ], pending2)],
+      ["aml items out of sla order", "aml", queueView("aml", [
+        amlRow({ queue_id: "qml_ccdd2233445566778899aabb", sla_due_at: "2026-09-25T00:00:00.000Z" }),
+        amlRow()
+      ], pending2)],
+      ["aml equal instants with descending queue_id", "aml", queueView("aml", [
+        amlRow({ queue_id: "qml_ff112233445566778899aabb" }),
+        amlRow({ queue_id: "qml_00112233445566778899aabb" })
+      ], pending2)],
+      ["tickets out of opened_at order", "tickets", queueView("tickets", [
+        ticketRow({ queue_id: "qtick_cc2233445566778899aabbcc", opened_at: "2026-09-20T00:00:00.000Z", age_ms: snapshotMs - Date.parse("2026-09-20T00:00:00.000Z") }),
+        ticketRow()
+      ], open2)],
+      ["tickets equal instants with descending queue_id", "tickets", queueView("tickets", [
+        ticketRow({ queue_id: "qtick_ff112233445566778899aabb" }),
+        ticketRow({ queue_id: "qtick_00112233445566778899aabb" })
+      ], open2)],
+      ["tickets age_ms not the snapshot minus opened_at", "tickets", queueView("tickets", [
+        ticketRow({ age_ms: 1 }),
+        ticketRow({ queue_id: "qtick_cc2233445566778899aabbcc", opened_at: "2026-09-20T00:00:00.000Z", age_ms: snapshotMs - Date.parse("2026-09-20T00:00:00.000Z") })
+      ], open2)]
+    ];
+    for (const [name, kind, view] of cases) {
+      await withFakeApi(
+        () => view,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.operatorQueue("dev:auditor", testDeviceId, kind as "kyc" | "aml" | "tickets", Date.now()),
+            { status: "unavailable" },
+            name
+          );
+        }
+      );
+    }
+  });
 });
 
 describe("operatorQueueItem", () => {
@@ -1085,6 +1198,110 @@ describe("operatorQueueItem", () => {
         );
       }
     );
+  });
+
+  it("binds the member row to the requested id and fails closed on detail drift", async () => {
+    const key = randomBytes(32).toString("hex");
+    const snapshotMs = Date.parse("2027-01-29T00:00:00.000Z");
+    const kycItem = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qky_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      display_name: "Alina Mironova",
+      submitted_at: "2026-09-20T00:00:00.000Z",
+      sla_due_at: "2026-09-23T00:00:00.000Z",
+      state: "pending",
+      priority: "normal",
+      assignee: null,
+      age_ms: snapshotMs - Date.parse("2026-09-20T00:00:00.000Z"),
+      kyc: null,
+      ...overrides
+    });
+    const amlItem = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qml_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      alert_type: "velocity",
+      evidence_refs: ["evd_00112233445566778899aabb"],
+      sla_due_at: "2026-09-23T00:00:00.000Z",
+      state: "pending",
+      priority: "normal",
+      assignee: null,
+      age_ms: 1_000_000,
+      flags: [],
+      ...overrides
+    });
+    const ticketItem = (overrides: Record<string, unknown> = {}) => ({
+      queue_id: "qtick_00112233445566778899aabb",
+      subject_id: "syn_cust_00112233445566778899aabb",
+      category: "complaint",
+      opened_at: "2026-09-19T00:00:00.000Z",
+      state: "open",
+      priority: "normal",
+      assignee: null,
+      age_ms: snapshotMs - Date.parse("2026-09-19T00:00:00.000Z"),
+      subject: "i need help with my deposit",
+      last_message_at: "2026-09-20T00:00:00.000Z",
+      other_open_tickets: 0,
+      ...overrides
+    });
+    const flag = (overrides: Record<string, unknown> = {}) => ({
+      flag_id: "flg_00112233445566778899aabb",
+      alert_type: "velocity",
+      raised_at: "2026-09-20T00:00:00.000Z",
+      ...overrides
+    });
+    const view = (kind: string, item: Record<string, unknown>) => ({ mode: "test", kind, item });
+    const cases: [string, string, string, unknown][] = [
+      ["aml member answers a different queue_id", "aml", "qml_ccdd2233445566778899aabb",
+        view("aml", amlItem())],
+      ["kyc member answers a different queue_id", "kyc", "qky_ccdd2233445566778899aabb",
+        view("kyc", kycItem())],
+      ["tickets member answers a different queue_id", "tickets", "qtick_cc2233445566778899aabbcc",
+        view("tickets", ticketItem())],
+      ["aml flags out of raised_at order", "aml", "qml_00112233445566778899aabb",
+        view("aml", amlItem({ flags: [
+          flag({ flag_id: "flg_bb112233445566778899aabb", raised_at: "2026-09-21T00:00:00.000Z" }),
+          flag()
+        ] }))],
+      ["aml equal instants with descending flag_id", "aml", "qml_00112233445566778899aabb",
+        view("aml", amlItem({ flags: [
+          flag({ flag_id: "flg_ff112233445566778899aabb" }),
+          flag({ flag_id: "flg_00112233445566778899aabb" })
+        ] }))],
+      ["aml flag raised past the snapshot instant", "aml", "qml_00112233445566778899aabb",
+        view("aml", amlItem({ flags: [flag({ raised_at: "2027-01-30T00:00:00.000Z" })] }))],
+      ["kyc age_ms not the snapshot minus submitted_at", "kyc", "qky_00112233445566778899aabb",
+        view("kyc", kycItem({ age_ms: 1 }))],
+      ["tickets age_ms not the snapshot minus opened_at", "tickets", "qtick_00112233445566778899aabb",
+        view("tickets", ticketItem({ age_ms: 1 }))],
+      ["tickets last_message_at past the snapshot instant", "tickets", "qtick_00112233445566778899aabb",
+        view("tickets", ticketItem({ last_message_at: "2027-01-30T00:00:00.000Z" }))],
+      ["kyc dossier instants past the snapshot instant", "kyc", "qky_00112233445566778899aabb",
+        view("kyc", kycItem({ kyc: {
+          status: "approved",
+          level: "enhanced",
+          session_id: `kys_${"a".repeat(24)}`,
+          history: [{
+            session_id: `kys_${"a".repeat(24)}`,
+            state: "approved",
+            submitted_at: "2027-02-01T10:00:00.000Z",
+            decided_at: "2027-02-10T10:00:00.000Z",
+            rejection_reason: null
+          }]
+        } }))]
+    ];
+    for (const [name, kind, itemId, body] of cases) {
+      await withFakeApi(
+        () => body,
+        async (baseUrl) => {
+          const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
+          assert.deepEqual(
+            await client.operatorQueueItem("dev:auditor", testDeviceId, kind as "kyc" | "aml" | "tickets", itemId, Date.now()),
+            { status: "unavailable" },
+            name
+          );
+        }
+      );
+    }
   });
 });
 
@@ -1255,6 +1472,29 @@ describe("operatorAudit", () => {
       ["cross-record extra member", auditContractView([{ ...first, session_note: "x" }])],
       ["action/target_kind mismatch allowed by grammar", auditContractView([
         { ...first, action: "flag.reviewed", target_kind: "queue_item", target_id: "qml_00112233445566778899aabb" },
+        second
+      ])],
+      // Wave-76: the feed's as_of is the pinned roster instant, and each
+      // target kind pins its own ref grammar — the union pattern alone
+      // admits cross-kind refs upstream never mints.
+      ["as_of drifted off the pinned instant", {
+        mode: "test",
+        audit: { as_of: "2027-01-30T00:00:00.000Z", entries: [first, second], next_cursor: null }
+      }],
+      ["queue_item target wearing a session ref", auditContractView([
+        { ...first, action: "queue.viewed", target_kind: "queue_item", target_id: `osn_${"1".repeat(24)}` },
+        second
+      ])],
+      ["subject target wearing a flag ref", auditContractView([
+        { ...first, target_id: `flg_${"1".repeat(24)}` },
+        second
+      ])],
+      ["session target wearing a queue ref", auditContractView([
+        { ...first, action: "session.rotated", target_kind: "session", target_id: `qky_${"1".repeat(24)}` },
+        second
+      ])],
+      ["flag target wearing a subject ref", auditContractView([
+        { ...first, action: "flag.reviewed", target_kind: "flag", target_id: `syn_cust_${"1".repeat(24)}` },
         second
       ])]
     ] as [string, unknown][]) {
