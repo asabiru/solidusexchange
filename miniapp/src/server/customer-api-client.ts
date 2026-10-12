@@ -22,7 +22,7 @@ import type { ScreeningNetwork } from "../shared/address-screening.js";
 import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
 import { checkReferencePattern } from "../shared/checks.js";
 import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
-import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus } from "../shared/support.js";
+import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus, supportStatuses } from "../shared/support.js";
 import {
   cardIdPattern,
   cardLast4Pattern,
@@ -72,7 +72,51 @@ import {
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
 export const customerApiPlatform = "telegram-mini-app";
 const tokenTtlSeconds = 300;
-const capabilityPattern = /^customer\.[a-z-]+(?:\.[a-z-]+)*$/;
+// The granted-capability echo is bound to the declared customer half of the
+// upstream CAPABILITY_POLICY catalog: a name outside the vocabulary is
+// contract drift, and a duplicated grant is a doubled echo — both fail closed.
+const customerCapabilityVocabulary = new Set<string>([
+  "customer.activity.read",
+  "customer.address-screenings.read",
+  "customer.auth.read",
+  "customer.capabilities.read",
+  "customer.cards.issue",
+  "customer.cards.read",
+  "customer.checks.cancel",
+  "customer.checks.claim",
+  "customer.checks.preview",
+  "customer.checks.read",
+  "customer.deposit-addresses.read",
+  "customer.deposits.create",
+  "customer.deposits.read",
+  "customer.exchange-orders.cancel",
+  "customer.exchange-orders.create",
+  "customer.exchange-orders.read",
+  "customer.kyc.read",
+  "customer.kyc.submit",
+  "customer.markets.read",
+  "customer.notifications.read",
+  "customer.operations.read",
+  "customer.payments.create",
+  "customer.payments.read",
+  "customer.profile.read",
+  "customer.quotes.accept",
+  "customer.quotes.preview",
+  "customer.quotes.read",
+  "customer.session.read",
+  "customer.support.read",
+  "customer.trades.read",
+  "customer.users.read",
+  "customer.wallets.read",
+  "customer.withdrawals.create",
+  "customer.withdrawals.read"
+]);
+// Mirrors upstream CUSTOMER_SCOPES: the session view is the dev token's own
+// echo, so the served scopes are exactly this ordered pair.
+const customerSessionScopes: readonly string[] = [
+  "customer.session.read",
+  "customer.capabilities.read"
+];
 export const maxCustomerApiResponseBytes = 16_384;
 
 export interface CustomerApiClientOptions {
@@ -2028,6 +2072,7 @@ function parseNotificationsView(
     return undefined;
   }
   const notifications: CustomerApiNotification[] = [];
+  const seenIds = new Set<string>();
   for (const entry of value.notifications) {
     if (
       !isRecord(entry)
@@ -2057,9 +2102,11 @@ function parseNotificationsView(
       || entry.mode !== "test"
       || entry.delivered !== false
       || typeof entry.read !== "boolean"
+      || seenIds.has(entry.notification_id)
     ) {
       return undefined;
     }
+    seenIds.add(entry.notification_id);
     notifications.push(Object.freeze({
       notification_id: entry.notification_id,
       created_at: entry.created_at,
@@ -2071,6 +2118,11 @@ function parseNotificationsView(
       delivered: entry.delivered,
       read: entry.read
     }));
+  }
+  // unread is a derived counter upstream: it must equal the recount of the
+  // served flags, not a value the feed asserts on its own.
+  if (value.unread !== notifications.filter((entry) => !entry.read).length) {
+    return undefined;
   }
   return Object.freeze({ unread: value.unread, notifications: Object.freeze(notifications) });
 }
@@ -2089,6 +2141,16 @@ const kycApplicationStatuses: readonly KycVerificationState[] = [
 const kycReasonCodes: readonly CustomerApiKycReasonCode[] = ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"];
 const kycRequestedItems: readonly CustomerApiKycRequestedItem[] = ["proof_of_address", "selfie_retake"];
 const kycApplicationIdPattern = /^kyc_[0-9a-f]{24}$/;
+// Mirrors the upstream kyc validator's status coherence sets.
+const kycNoApplicationStatuses = new Set<KycVerificationState>(["not_started", "unavailable"]);
+const kycResubmittableStatuses = new Set<KycVerificationState>([
+  "not_started",
+  "rejected",
+  "needs_more_data",
+  "timed_out",
+  "unavailable"
+]);
+const kycInReviewStatuses = new Set<KycVerificationState>(["submitted", "in_review"]);
 const kycStatusViewKeys = [
   "application_id",
   "can_submit",
@@ -2192,22 +2254,36 @@ function parseSupportView(value: unknown): CustomerApiSupportTicketsView | undef
       || typeof entry.complaint_acknowledged !== "boolean"
       || !isIsoTimestamp(entry.created_at)
       || !isIsoTimestamp(entry.expires_at)
+      // The ack flag mirrors the complaint category and the ticket always
+      // expires strictly after creation — the upstream TTL is fixed.
+      || entry.complaint_acknowledged !== (entry.category === "complaint")
+      || !(Date.parse(entry.expires_at) > Date.parse(entry.created_at))
     ) {
       return undefined;
     }
     const timeline: CustomerApiTicketTimelineEntry[] = [];
-    for (const step of entry.timeline) {
+    for (const [index, step] of entry.timeline.entries()) {
       if (
         !isRecord(step)
         || !hasExactKeys(step, supportTimelineKeys)
-        || !isSupportStatus(step.status)
+        // The lifecycle walks the status order: the timeline is a strict
+        // prefix of received → in_review → answered → closed.
+        || step.status !== supportStatuses[index]
         || !isIsoTimestamp(step.at)
       ) {
         return undefined;
       }
-      timeline.push(Object.freeze({ status: step.status, at: step.at }));
+      timeline.push(Object.freeze({ status: step.status as SupportStatus, at: step.at }));
     }
     if (timeline.at(-1)?.status !== entry.status) return undefined;
+    // The first observation is the creation instant; later steps strictly
+    // increase (upstream mints them on a fixed hourly step).
+    if (Date.parse(timeline[0]?.at as string) !== Date.parse(entry.created_at)) return undefined;
+    for (let index = 1; index < timeline.length; index += 1) {
+      if (!(Date.parse(timeline[index]?.at as string) > Date.parse(timeline[index - 1]?.at as string))) {
+        return undefined;
+      }
+    }
     tickets.push(Object.freeze({
       ticket_id: entry.ticket_id,
       category: entry.category,
@@ -2239,18 +2315,34 @@ function parseKycStatusView(value: unknown): CustomerApiKycStatusView | undefine
   ) {
     return undefined;
   }
-  const applicationFields = ["application_id", "submitted_at", "review_deadline", "reason_codes", "requested_items"];
+  // The session's KYC state bounds which application status the view may
+  // report: verified only ever maps to approved, pending to a status inside
+  // the review window, and unverified never to a submitted or approved record.
+  const status = value.status as KycVerificationState;
   if (
-    applicationFields.some((field) => Object.hasOwn(value, field))
-    && !(typeof value.application_id === "string"
-      && kycApplicationIdPattern.test(value.application_id)
-      && isIsoTimestamp(value.submitted_at))
+    (value.session_kyc === "verified" && status !== "approved")
+    || (value.session_kyc === "pending" && !kycInReviewStatuses.has(status))
+    || (value.session_kyc === "unverified" && (status === "approved" || kycInReviewStatuses.has(status)))
+    // can_submit is a pure function of the resubmittable status set.
+    || value.can_submit !== kycResubmittableStatuses.has(status)
   ) {
     return undefined;
   }
+  // Each optional field pair exists exactly when its status demands it.
+  const hasApplication = !kycNoApplicationStatuses.has(status);
   if (
-    (Object.hasOwn(value, "review_deadline") && !isIsoTimestamp(value.review_deadline))
+    Object.hasOwn(value, "application_id") !== hasApplication
+    || Object.hasOwn(value, "submitted_at") !== hasApplication
+    || (hasApplication
+      && !(typeof value.application_id === "string"
+        && kycApplicationIdPattern.test(value.application_id)
+        && isIsoTimestamp(value.submitted_at)
+        && Date.parse(value.submitted_at) <= Date.parse(value.updated_at)))
+    || Object.hasOwn(value, "review_deadline") !== kycInReviewStatuses.has(status)
+    || (Object.hasOwn(value, "review_deadline") && !isIsoTimestamp(value.review_deadline))
+    || Object.hasOwn(value, "reason_codes") !== (status === "rejected")
     || (Object.hasOwn(value, "reason_codes") && !isCodeList(value.reason_codes, kycReasonCodes))
+    || Object.hasOwn(value, "requested_items") !== (status === "needs_more_data")
     || (Object.hasOwn(value, "requested_items") && !isCodeList(value.requested_items, kycRequestedItems))
   ) {
     return undefined;
@@ -2259,7 +2351,7 @@ function parseKycStatusView(value: unknown): CustomerApiKycStatusView | undefine
     mode: "test",
     provider: "simulator",
     session_kyc: value.session_kyc as CustomerApiSessionKyc,
-    status: value.status as KycVerificationState,
+    status,
     updated_at: value.updated_at,
     can_submit: value.can_submit
   };
@@ -2670,10 +2762,11 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
   async function access(bffSubject: string, nowMs: number): Promise<CustomerApiAccess> {
     const subject = customerApiSubject(bffSubject);
     try {
+      const expiresAtSeconds = Math.floor(nowMs / 1_000) + tokenTtlSeconds;
       const token = mintSyntheticCustomerToken({
         key: devTokenKey as string,
         subject,
-        expiresAtSeconds: Math.floor(nowMs / 1_000) + tokenTtlSeconds
+        expiresAtSeconds
       });
       const session = await get("/api/v1/customer/session", token, nowMs);
       if (
@@ -2681,6 +2774,13 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
         || !hasExactKeys(session, ["actor_type", "expires_at", "scopes", "subject"])
         || session.subject !== subject
         || session.actor_type !== "customer"
+        // The session view is the token's own echo: it must report the exact
+        // expiry this request's token was minted with and the fixed customer
+        // scope pair — anything else is a view signed over another principal.
+        || session.expires_at !== new Date(expiresAtSeconds * 1_000).toISOString()
+        || !Array.isArray(session.scopes)
+        || session.scopes.length !== customerSessionScopes.length
+        || !session.scopes.every((scope, index) => scope === customerSessionScopes[index])
       ) {
         return { status: "unavailable" };
       }
@@ -2690,7 +2790,8 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
         || !hasExactKeys(capabilities, ["capabilities", "commands_enabled"])
         || capabilities.commands_enabled !== false
         || !Array.isArray(capabilities.capabilities)
-        || !capabilities.capabilities.every((entry) => typeof entry === "string" && capabilityPattern.test(entry))
+        || !capabilities.capabilities.every((entry) => typeof entry === "string" && customerCapabilityVocabulary.has(entry))
+        || new Set(capabilities.capabilities).size !== capabilities.capabilities.length
       ) {
         return { status: "unavailable" };
       }
@@ -2950,7 +3051,9 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       });
       const body = await get(`/api/v1/customer/address-screenings/${encodeURIComponent(screeningId)}`, token, nowMs);
       const view = parseAddressScreeningRecord(body);
-      return view === undefined ? { status: "unavailable" } : { status: "ok", screening: view };
+      // The member read is bound to the requested id: a well-formed view
+      // signed over another screening is drift, not an answer.
+      return view === undefined || view.screening_id !== screeningId ? { status: "unavailable" } : { status: "ok", screening: view };
     } catch (error) {
       if (error instanceof CustomerApiHttpError) {
         if (error.status === 404) {
@@ -3021,7 +3124,9 @@ export function createCustomerApiClient(options: CustomerApiClientOptions): Cust
       });
       const body = await get(`/api/v1/customer/operations/${encodeURIComponent(operationId)}`, token, nowMs);
       const item = parseOperationItem(body);
-      return item === undefined ? { status: "unavailable" } : { status: "ok", operation: item };
+      // The member read is bound to the requested id: a well-formed view
+      // signed over another operation is drift, not an answer.
+      return item === undefined || item.operation_id !== operationId ? { status: "unavailable" } : { status: "ok", operation: item };
     } catch (error) {
       if (error instanceof CustomerApiHttpError && error.status === 403) {
         return { status: "denied" };
