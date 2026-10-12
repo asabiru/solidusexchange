@@ -17,9 +17,9 @@ import {
   backofficeEntry,
   cookieOf,
   customerApiEntry,
-  freePort,
   readJson,
   startService,
+  startServiceOnFreePort,
   stopService,
   verifyEnvelope
 } from "./stack.mjs";
@@ -62,30 +62,39 @@ let keyset;
 const subjectsDirectory = createSyntheticOperatorSubjectsDirectory();
 const operatorDirectory = createSyntheticOperatorDirectory();
 
+const customerApiEnv = {
+  CUSTOMER_API_HOST: "127.0.0.1",
+  // The kernel assigns the port and the ready match reports it back — no
+  // probe-release-bind window a sibling test file could steal. On the
+  // degrade restart the same port is rebound explicitly because the BFF's
+  // configured upstream URL points at it.
+  CUSTOMER_API_PORT: "0",
+  CUSTOMER_API_DEV_AUTH: "synthetic",
+  CUSTOMER_API_DEV_TOKEN_KEY: devTokenKey,
+  // The BFF's own upstream traffic and this file's direct probes share the
+  // loopback-IP rate bucket; pinning the window explicitly keeps the margin
+  // honest instead of borrowing it from the route-count coincidence.
+  CUSTOMER_API_RATE_LIMIT_PER_MINUTE: "5000"
+};
+
 function startCustomerApi() {
   return startService(
     customerApiEntry,
-    {
-      CUSTOMER_API_HOST: "127.0.0.1",
-      CUSTOMER_API_PORT: String(customerApiPort),
-      CUSTOMER_API_DEV_AUTH: "synthetic",
-      CUSTOMER_API_DEV_TOKEN_KEY: devTokenKey
-    },
+    customerApiEnv,
     /listening on http:\/\/127\.0\.0\.1:(\d+) auth=synthetic/
   );
 }
 
 before(async () => {
-  customerApiPort = await freePort();
   customerApi = await startCustomerApi();
+  customerApiPort = customerApi.match[1];
   customerApiBase = `http://127.0.0.1:${customerApiPort}`;
 
-  const backofficePort = await freePort();
-  backoffice = await startService(
+  backoffice = await startServiceOnFreePort(
     backofficeEntry,
     {
       BACKOFFICE_BFF_HOST: "127.0.0.1",
-      BACKOFFICE_BFF_PORT: String(backofficePort),
+      BACKOFFICE_BFF_PORT: "",
       BACKOFFICE_ALLOWED_ORIGINS: backofficeOrigin,
       BACKOFFICE_ALLOW_DEV_LOGIN: "true",
       BACKOFFICE_CUSTOMER_API_URL: customerApiBase,
@@ -93,13 +102,26 @@ before(async () => {
       BACKOFFICE_DEVICE_BINDING: "enforce",
       BACKOFFICE_APPROVED_DEVICE_DIGESTS: approvedDeviceDigest
     },
-    /Backoffice BFF listening on http:\/\/127\.0\.0\.1:(\d+)/
+    /Backoffice BFF listening on http:\/\/127\.0\.0\.1:(\d+)/,
+    "BACKOFFICE_BFF_PORT"
   );
   backofficeBase = `http://127.0.0.1:${backoffice.match[1]}`;
 
   const response = await fetch(`${backofficeBase}/bff/api/signing-keys`);
   assert.equal(response.status, 200);
   keyset = await readJson(response);
+  // The published keyset is the contract the envelopes verify against: pin
+  // its advertised shape too, not only that envelopes happen to match it.
+  assert.equal(keyset.formatVersion, 1);
+  assert.equal(keyset.backend, "ephemeral-dev");
+  assert.ok(
+    keyset.keys.some(
+      (key) =>
+        key.keyId === keyset.activeKeyId &&
+        key.status === "active" &&
+        key.algorithm === "Ed25519"
+    )
+  );
 });
 
 after(async () => {
@@ -135,6 +157,11 @@ async function signedGet(path, cookie, resource) {
   assert.equal(response.status, 200, path);
   const envelope = await readJson(response);
   assert.equal(envelope.resource, resource, path);
+  // No key rotation is configured in this chain: every envelope must be
+  // signed under the advertised active key. `verifyEnvelope` enforces the
+  // full consumer-side contract (requestId non-empty, canonical issuedAt and
+  // signature, canonical payload) — not merely the Ed25519 check.
+  assert.equal(envelope.keyId, keyset.activeKeyId, path);
   assert.equal(verifyEnvelope(envelope, keyset), true, `${path} signature`);
   return envelope.payload;
 }
@@ -385,33 +412,45 @@ describe("operator chain through the live customer-api", () => {
     assert.ok(detail.subject.devices.every((device) => /^dev_[0-9a-f]{16}$/.test(device)));
   });
 
-  it("serves every queue kind and the member detail for a kyc item", async () => {
+  it("serves every queue kind's collection and member detail behind signed envelopes", async () => {
+    // One member read per kind: the detail adapter's kind-specific block
+    // (aml flags, tickets subject/otherOpenTickets, kyc dossier) is only
+    // exercised here — a wrong or dropped block fails the verbatim compare.
+    const idPatterns = {
+      kyc: /^qky_[0-9a-f]{24}$/,
+      aml: /^qml_[0-9a-f]{24}$/,
+      tickets: /^qtick_[0-9a-f]{24}$/
+    };
+    // `kind` absent defaults to kyc at both the route and the signed
+    // resource — the default is part of the contract, not convenience.
+    const defaulted = await signedGet("/bff/api/operator/queue", lead, "operator-queue:kyc");
+    assert.equal(defaulted.queue.kind, "kyc");
+
     for (const kind of ["kyc", "aml", "tickets"]) {
       const upstream = await subjectsDirectory.queueFor(kind);
       const list = await signedGet(`/bff/api/operator/queue?kind=${kind}`, lead, `operator-queue:${kind}`);
       assert.deepEqual(list, { mode: "test", queue: queueOf(upstream, kind) });
       assert.equal(list.queue.summary.count, list.queue.items.length);
-    }
 
-    const kycQueue = await subjectsDirectory.queueFor("kyc");
-    const item = kycQueue.queue.items[0];
-    assert.match(item.queue_id, /^qky_[0-9a-f]{24}$/);
-    const detail = await signedGet(
-      `/bff/api/operator/queue/kyc/${item.queue_id}`,
-      lead,
-      `operator-queue-item:kyc:${item.queue_id}`
-    );
-    const expectedDetail = await subjectsDirectory.queueItemFor("kyc", item.queue_id);
-    assert.deepEqual(detail, {
-      mode: "test",
-      kind: "kyc",
-      item: queueItemDetailOf(expectedDetail)
-    });
-    // Member coherence like the subject read: the detail's shared axes must
-    // equal the collection row verbatim.
-    const collectionRow = queueItemOf(item, "kyc");
-    for (const key of Object.keys(collectionRow)) {
-      assert.deepEqual(detail.item[key], collectionRow[key], `queue item ${key}`);
+      const item = upstream.queue.items[0];
+      assert.match(item.queue_id, idPatterns[kind]);
+      const detail = await signedGet(
+        `/bff/api/operator/queue/${kind}/${item.queue_id}`,
+        lead,
+        `operator-queue-item:${kind}:${item.queue_id}`
+      );
+      const expectedDetail = await subjectsDirectory.queueItemFor(kind, item.queue_id);
+      assert.deepEqual(detail, {
+        mode: "test",
+        kind,
+        item: queueItemDetailOf(expectedDetail)
+      });
+      // Member coherence like the subject read: every collection-axis field
+      // must equal the collection row verbatim.
+      const collectionRow = queueItemOf(item, kind);
+      for (const key of Object.keys(collectionRow)) {
+        assert.deepEqual(detail.item[key], collectionRow[key], `${kind} queue item ${key}`);
+      }
     }
   });
 
@@ -435,6 +474,65 @@ describe("operator chain through the live customer-api", () => {
     for (const entry of second.audit.entries) {
       assert.equal(seen.has(entry.auditId), false);
     }
+
+    // Walk the cursor chain to exhaustion: the tail page is exactly the
+    // remaining entries, disjoint from both earlier pages, and mints no
+    // further cursor — a replayed, re-derived or short last page fails here.
+    const third = await signedGet(
+      `/bff/api/operator/audit?cursor=${second.audit.nextCursor}`,
+      lead,
+      `operator-audit:${second.audit.nextCursor}`
+    );
+    const upstreamThird = await subjectsDirectory.auditFor(second.audit.nextCursor);
+    assert.deepEqual(third, { mode: "test", audit: auditFeedOf(upstreamThird) });
+    assert.equal(third.audit.entries.length, 8);
+    assert.equal(third.audit.nextCursor, null);
+    for (const entry of second.audit.entries) {
+      seen.add(entry.auditId);
+    }
+    for (const entry of third.audit.entries) {
+      assert.equal(seen.has(entry.auditId), false);
+    }
+  });
+
+  it("serves the signed session view bound to the dev-session profile", async () => {
+    // `/bff/api/session` is the one signed read every session-scoped check
+    // depends on: the operator profile it signs must equal the dev-session
+    // contract verbatim, including the full capability echo.
+    const session = await signedGet("/bff/api/session", lead, "session");
+    assert.deepEqual(session, {
+      operator: {
+        subject: "dev:compliance-lead",
+        email: "compliance-lead@dev.solidchange.invalid",
+        name: "Мария Коваль",
+        role: "compliance-lead",
+        label: "Compliance lead",
+        initials: "МК",
+        capabilities: [
+          "dashboard:read",
+          "customers:read",
+          "checks:read",
+          "custody:read",
+          "support:read",
+          "kyc:read",
+          "aml:read",
+          "investigations:read",
+          "fraud:read",
+          "subjects:read",
+          "approvals:read",
+          "approvals:review",
+          "approvals:preview",
+          "approvals:step-up",
+          "audit:read",
+          "audit:export",
+          "reports:read"
+        ]
+      },
+      expiresAt: session.expiresAt
+    });
+    assert.match(session.expiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    const expiresAt = Date.parse(session.expiresAt);
+    assert.ok(expiresAt > Date.now());
   });
 });
 
@@ -562,6 +660,44 @@ describe("operator chain fail-closed paths", () => {
     assert.equal(direct.headers.get("www-authenticate"), "Bearer");
     assert.equal((await readJson(direct)).code, "AUTHENTICATION_REQUIRED");
 
+    // Signature and lifetime are the whole synthetic-token contract: an
+    // expired token, a beyond-TTL token and a well-formed token signed under
+    // a different key all fail as unauthenticated with the Bearer challenge.
+    const subject = customerApiSubject("dev:compliance-lead");
+    const now = Math.floor(Date.now() / 1_000);
+    for (const token of [
+      mintSyntheticOperatorToken({ key: devTokenKey, subject, expiresAtSeconds: now - 1 }),
+      mintSyntheticOperatorToken({ key: devTokenKey, subject, expiresAtSeconds: now + 7_200 }),
+      mintSyntheticOperatorToken({ key: randomBytes(32).toString("hex"), subject, expiresAtSeconds: now + 300 })
+    ]) {
+      const response = await upstreamGet("/api/v1/operator/subjects", token);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("www-authenticate"), "Bearer");
+      assert.equal((await readJson(response)).code, "AUTHENTICATION_REQUIRED");
+    }
+
+    // The declared request headers are part of the contract: absent or
+    // malformed x-request-id / x-client-version / x-platform fail closed as
+    // VALIDATION_FAILED before authn — they are not tolerated decoration.
+    for (const [name, value] of [
+      ["x-request-id", null],
+      ["x-request-id", "not-a-uuidv7"],
+      ["x-client-version", null],
+      ["x-client-version", ""],
+      ["x-platform", null],
+      ["x-platform", "not-a-platform"]
+    ]) {
+      const headers = upstreamHeaders(mintOperator(subject));
+      if (value === null) {
+        delete headers[name];
+      } else {
+        headers[name] = value;
+      }
+      const response = await fetch(`${customerApiBase}/api/v1/operator/subjects`, { headers });
+      assert.equal(response.status, 400, name);
+      assert.equal((await readJson(response)).code, "VALIDATION_FAILED", name);
+    }
+
     // An operator token without the bound workstation device fails closed:
     // X-Device-Id is mandatory on every operator operation.
     const operatorToken = mintOperator(customerApiSubject("dev:compliance-lead"));
@@ -587,6 +723,12 @@ describe("operator chain fail-closed paths", () => {
       401,
       "operator_session_required"
     );
+
+    // A forged session bearer — exactly the store's sbt_<64hex> shape but
+    // never minted — denies identically to an absent one: the store resolves
+    // the token digest, not the bearer shape.
+    const forged = `${sessionCookieName}=sbt_${"0".repeat(64)}`;
+    await deniedGet("/bff/api/operator/subjects", `${forged}; ${foreignDevice}`, 401, "operator_session_required");
 
     // And an unapproved device cannot even mint a session: the login itself
     // is denied and only the opaque digest comes back.
@@ -621,6 +763,7 @@ describe("operator chain degrade and recovery", () => {
 
     // Recovery: the same session and device bind pick the restarted upstream
     // up without a fresh login — the chain serves live rows again.
+    customerApiEnv.CUSTOMER_API_PORT = customerApiPort;
     customerApi = await startCustomerApi();
     const recovered = await signedGet("/bff/api/operator/subjects", lead, "operator-subjects");
     assert.deepEqual(recovered, live);
