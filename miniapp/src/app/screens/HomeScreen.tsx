@@ -145,6 +145,14 @@ export function HomeScreen({ session, wallet, operations, unreadNotifications, o
           </span>
           <Icon name="chevron-right" size="sm" />
         </button>
+        <button type="button" className="row" onClick={() => openSheet({ kind: "quotes" })}>
+          <span className="coin coin--menu" aria-hidden="true"><Icon name="percent" size="sm" /></span>
+          <span className="row__main">
+            <strong>{t("quotes.title")}</strong>
+            <span>{t("quotes.entryDetail")}</span>
+          </span>
+          <Icon name="chevron-right" size="sm" />
+        </button>
         <button type="button" className="row" onClick={() => openSheet({ kind: "notifications" })}>
           <span className="coin coin--menu" aria-hidden="true"><Icon name="bell" size="sm" /></span>
           <span className="row__main">

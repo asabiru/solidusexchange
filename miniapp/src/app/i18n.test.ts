@@ -109,7 +109,10 @@ describe("i18n: catalog parity", () => {
       "orders.detailTitle",
       "orders.market",
       "orders.limit",
-      "orders.orderId"
+      "orders.orderId",
+      "quotes.detailTitle",
+      "quotes.spread",
+      "quotes.quoteId"
     ];
     const copied = Object.keys(ru).filter((key) => cyrillicOnly.test(ru[key as keyof typeof ru]) && ky[key as keyof typeof ru] === ru[key as keyof typeof ru]);
     assert.deepEqual(copied, sharedLoanwords);
