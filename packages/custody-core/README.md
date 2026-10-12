@@ -19,7 +19,7 @@ This package cannot sign or broadcast transactions. It only validates and seals 
 
 - a reference-only withdrawal command;
 - an asset/network pair from the synthetic testnet allowlist;
-- a short-lived canonical UTC validity window;
+- a short-lived canonical UTC validity window (policy TTL ceilings cannot exceed one day);
 - at least two distinct human approvals;
 - distinct maker and checker roles;
 - step-up grant references;
@@ -41,7 +41,7 @@ Raw destination addresses are replaced by `destination_reference`; exact address
 
 `createCustodyIntentPreparedEvent` projects a verified envelope into the canonical additive domain event contract. Aggregate, correlation and idempotency values are derived from the sealed command; causation is derived from a verified canonical `WithdrawalApproved` event, while only the new UUIDv7 event ID and timestamp are supplied by the outbox boundary. The approval event must preserve withdrawal aggregate/correlation, summarize the exact approval evidence digest and occur after the individual approvals, and its causation may not name the prepared event itself. The custody event excludes destination references, individual approvals and all signing material.
 
-`createCustodyProjectionRegistry` provides a synchronous dev-only replay boundary around that projection. An exact canonical replay returns the original immutable event. Reuse of an idempotency key with changed evidence, or reuse of an event, approval event, withdrawal, custody intent, approval-set, per-approval, step-up grant or approval evidence digest identity under another projection, fails closed. This in-memory evidence does not replace a future durable production outbox.
+`createCustodyProjectionRegistry` provides a synchronous dev-only replay boundary around that projection. An exact canonical replay returns the original immutable event. Reuse of an idempotency key with changed evidence, or reuse of an event, approval event, withdrawal, custody intent, approval-set, per-approval, step-up grant or approval evidence digest identity under another projection, fails closed. Prepared and approval event identities share one consumed namespace, as do approval-set and per-approval identities. The registry holds at most `maxEntries` projections (default 10,000) and replays consume no capacity. This in-memory evidence does not replace a future durable production outbox.
 
 `migrations/0001_custody_projection_outbox.sql` adds PostgreSQL evidence for the same contract. The append-only outbox accepts only the exact unsigned testnet event shape, recognizes exact concurrent replays, rejects changed idempotency evidence and enforces unique event, approval-source, withdrawal and custody-intent identities. It is still a dev-only reference migration: production role provisioning, infrastructure and operational authorization are intentionally absent.
 

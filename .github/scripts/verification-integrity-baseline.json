@@ -1003,6 +1003,10 @@
       "minLines": 295,
       "minCases": 13
     },
+    "packages/custody-core/tests/unsigned-intent-wave69.test.mjs": {
+      "minLines": 342,
+      "minCases": 11
+    },
     "packages/customer-api/tests/activity.test.mjs": {
       "minLines": 120,
       "minCases": 4
