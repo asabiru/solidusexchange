@@ -522,3 +522,216 @@ test("posting commands must be plain data without hidden array fields", () => {
   Object.freeze(frozenCommand.entries);
   assert.equal(ledger.post(frozenCommand).command_digest, commandDigestVector.expected_digest);
 });
+
+test("timestamps denote only instants inside the persisted range", () => {
+  const ledger = createLedger();
+  for (const effectiveAt of [
+    "9999-12-31T23:59:59.9999995-14:00",
+    "9999-12-31T23:59:59.999999999-14:00",
+    "9999-12-31T23:59:60Z",
+    "0000-12-31T23:59:59Z"
+  ]) {
+    expectLedgerError(
+      () => ledger.post(command({ effective_at: effectiveAt })),
+      "LEDGER_VALIDATION_FAILED"
+    );
+  }
+  for (const [index, effectiveAt] of [
+    "9999-12-31T23:59:59.999999-14:00",
+    "9999-12-31T23:59:59.999999999+13:59",
+    "0001-01-01T00:00:00+14:00",
+    "9999-12-31T23:59:59.123456789-14:00"
+  ].entries()) {
+    const dated = command({ effective_at: effectiveAt });
+    dated.journal_id = `a1000000-0000-4000-8000-00000000001${index}`;
+    dated.idempotency_key = `bounded-instant-${index}-xxxxxxx`;
+    dated.correlation_id = `b2000000-0000-4000-8000-00000000002${index}`;
+    dated.entries = dated.entries.map((entry, leg) => ({
+      ...entry,
+      entry_id: `c3000000-0000-4000-8000-0000000000${index}${leg}`
+    }));
+    assert.equal(ledger.post(dated).effective_at, effectiveAt);
+  }
+
+  const beyondClock = createInMemoryLedger({
+    accounts,
+    assets,
+    chart,
+    postingRules,
+    clock: () => "9999-12-31T23:59:59.9999999-14:00"
+  });
+  expectLedgerError(() => beyondClock.post(command()), "LEDGER_VALIDATION_FAILED");
+
+  const staleAccounts = accounts.map((account, index) =>
+    index === 0
+      ? { ...account, created_at: "9999-12-31T23:59:59.9999999-14:00" }
+      : account
+  );
+  expectLedgerError(
+    () =>
+      createInMemoryLedger({
+        accounts: staleAccounts,
+        assets,
+        chart,
+        postingRules,
+        clock: () => "2026-09-25T10:15:01.000Z"
+      }),
+    "LEDGER_VALIDATION_FAILED"
+  );
+});
+
+test("journal capacity is bounded and replays never exhaust it", () => {
+  for (const maxJournals of [0, -1, 1.5, "2", Number.NaN, 2 ** 53]) {
+    expectLedgerError(
+      () =>
+        createInMemoryLedger({
+          accounts,
+          assets,
+          chart,
+          postingRules,
+          clock: () => "2026-09-25T10:15:01.000Z",
+          maxJournals
+        }),
+      "LEDGER_CONFIGURATION_INVALID"
+    );
+  }
+
+  const ledger = createInMemoryLedger({
+    accounts,
+    assets,
+    chart,
+    postingRules,
+    clock: () => "2026-09-25T10:15:01.000Z",
+    maxJournals: 1
+  });
+  const first = ledger.post(command());
+  assert.equal(ledger.listJournals().length, 1);
+  expectLedgerError(
+    () =>
+      ledger.post(
+        command({
+          journal_id: "71000000-0000-4000-8000-000000000071",
+          idempotency_key: "second-journal-demo-xx",
+          correlation_id: "81000000-0000-4000-8000-000000000081",
+          entries: [
+            { ...command().entries[0], entry_id: "91000000-0000-4000-8000-000000000091" },
+            { ...command().entries[1], entry_id: "a0000000-0000-4000-8000-0000000000aa" }
+          ]
+        })
+      ),
+    "LEDGER_CAPACITY_EXCEEDED"
+  );
+  // An idempotent replay is not a new journal: it still resolves at capacity.
+  assert.deepEqual(ledger.post(command()), first);
+  // A rejected new post consumes no capacity either.
+  const fresh = createInMemoryLedger({
+    accounts,
+    assets,
+    chart,
+    postingRules,
+    clock: () => "2026-09-25T10:15:01.000Z",
+    maxJournals: 1
+  });
+  expectLedgerError(
+    () => fresh.post(command({ entries: [command().entries[0]] })),
+    "LEDGER_VALIDATION_FAILED"
+  );
+  assert.equal(fresh.post(command()).journal_id, commandDigestVector.command.journal_id);
+});
+
+test("trial balance rows sort in canonical byte order", () => {
+  const orderedAccounts = [
+    {
+      account_id: "a0000000-0000-4000-8000-0000000000a1",
+      definition_code: "TREASURY_ASSET",
+      legal_entity_id: "entity-A2",
+      asset_code: vectorAssetCode,
+      owner_reference: "treasury-a2-demo",
+      created_at: "2026-09-25T10:00:00.000Z"
+    },
+    {
+      account_id: "b0000000-0000-4000-8000-0000000000b2",
+      definition_code: "PROVIDER_PAYABLE_LIABILITY",
+      legal_entity_id: "entity-A2",
+      asset_code: vectorAssetCode,
+      owner_reference: "provider-a2-demo",
+      created_at: "2026-09-25T10:00:00.000Z"
+    },
+    {
+      account_id: "c0000000-0000-4000-8000-0000000000c3",
+      definition_code: "TREASURY_ASSET",
+      legal_entity_id: "entity-a",
+      asset_code: vectorAssetCode,
+      owner_reference: "treasury-a-demo",
+      created_at: "2026-09-25T10:00:00.000Z"
+    },
+    {
+      account_id: "d0000000-0000-4000-8000-0000000000d4",
+      definition_code: "PROVIDER_PAYABLE_LIABILITY",
+      legal_entity_id: "entity-a",
+      asset_code: vectorAssetCode,
+      owner_reference: "provider-a-demo",
+      created_at: "2026-09-25T10:00:00.000Z"
+    }
+  ];
+  const ledger = createInMemoryLedger({
+    accounts: orderedAccounts,
+    assets,
+    chart,
+    postingRules,
+    clock: () => "2026-09-25T10:15:01.000Z"
+  });
+  const postFor = (entity, journalId, key, correlationId, firstEntryId, secondEntryId) =>
+    ledger.post(
+      command({
+        journal_id: journalId,
+        legal_entity_id: entity,
+        idempotency_key: key,
+        correlation_id: correlationId,
+        entries: [
+          {
+            ...commandDigestVector.command.entries[0],
+            entry_id: firstEntryId,
+            account_id: orderedAccounts.find(
+              (account) =>
+                account.legal_entity_id === entity &&
+                account.definition_code === "TREASURY_ASSET"
+            ).account_id
+          },
+          {
+            ...commandDigestVector.command.entries[1],
+            entry_id: secondEntryId,
+            account_id: orderedAccounts.find(
+              (account) =>
+                account.legal_entity_id === entity &&
+                account.definition_code === "PROVIDER_PAYABLE_LIABILITY"
+            ).account_id
+          }
+        ]
+      })
+    );
+  // Post the collation-later entity first; output order must stay canonical.
+  postFor(
+    "entity-a",
+    "e1000000-0000-4000-8000-0000000000e1",
+    "entity-a-position-xxxx",
+    "f1000000-0000-4000-8000-0000000000f1",
+    "a2000000-0000-4000-8000-0000000000a2",
+    "b2000000-0000-4000-8000-0000000000b2"
+  );
+  postFor(
+    "entity-A2",
+    "e2000000-0000-4000-8000-0000000000e2",
+    "entity-A2-position-xxxx",
+    "f2000000-0000-4000-8000-0000000000f2",
+    "c2000000-0000-4000-8000-0000000000c2",
+    "d2000000-0000-4000-8000-0000000000d2"
+  );
+
+  assert.deepEqual(
+    ledger.getTrialBalance().map((row) => row.legal_entity_id),
+    ["entity-A2", "entity-a"]
+  );
+  const snapshot = ledger.rebuildProjectionSnapshot();
+  assert.match(snapshot.snapshot_digest, /^[0-9a-f]{64}$/);
+});
