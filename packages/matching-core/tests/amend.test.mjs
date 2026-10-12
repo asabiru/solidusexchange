@@ -588,7 +588,7 @@ describe("amend stream validation", () => {
       },
       ...journal.slice(pairStart + 1),
     ].map((event, index) => ({ ...event, seq: index + 1 }));
-    assertStreamRejected(stream, /fill pair/);
+    assertStreamRejected(stream, /in flight/);
   });
 
   test("rejects a stream ending right after a re-queueing amend", () => {

@@ -159,6 +159,16 @@ export function replayMatchingEngine(options = {}) {
   let expectedSeq = 1;
   let lastAt = -1;
   let lastFill = 0n;
+  // The order inside an unfinished operation — accepted or re-queued by an
+  // amendment and not yet resolved by `resting`, a terminal `rejected`, or
+  // the taker event of its final fill. `null` on an operation boundary.
+  /** @type {string | null} */
+  let inFlight = null;
+  // The live engine stamps every event of one operation with a single
+  // `now` read (beginOperation), so all events inside an operation share
+  // `at`; each boundary resets it. `null` before the first event.
+  /** @type {number | null} */
+  let opAt = null;
 
   /**
    * @param {string} instrument
@@ -248,6 +258,9 @@ export function replayMatchingEngine(options = {}) {
     if (maker === undefined || taker === undefined) {
       invalid(`event seq ${event.seq}: fill references an order the stream never accepted`);
     }
+    if (event.taker_order_id !== inFlight) {
+      invalid(`event seq ${event.seq}: fill pair taker is not the in-flight order`);
+    }
     if (maker.instrument !== event.instrument || taker.instrument !== event.instrument) {
       invalid(`event seq ${event.seq}: fill instrument does not match its orders`);
     }
@@ -326,6 +339,9 @@ export function replayMatchingEngine(options = {}) {
       if (inBook.delete(entry.order_id)) {
         bookFor(entry.instrument).remove(/** @type {RestingOrder} */ (entry));
       }
+      if (entry === taker) {
+        inFlight = null;
+      }
     }
   }
 
@@ -349,6 +365,14 @@ export function replayMatchingEngine(options = {}) {
       invalid("event timestamps must not go backwards");
     }
     lastAt = /** @type {number} */ (at);
+    // Operation atomicity: on a boundary this event opens a new operation
+    // and owns its stamp; mid-operation the stamp must be the operation's
+    // — the live engine reads `now` once per operation.
+    if (inFlight === null && pendingMaker === null) {
+      opAt = at;
+    } else if (at !== opAt) {
+      invalid(`event seq ${event.seq}: timestamp changes inside an operation`);
+    }
     if (typeof event.type !== "string" || !EVENT_TYPES.includes(/** @type {never} */ (event.type))) {
       invalid(`event seq ${event.seq}: unknown event type`);
     }
@@ -357,6 +381,26 @@ export function replayMatchingEngine(options = {}) {
     }
     const type = /** @type {MatchingEvent["type"]} */ (event.type);
     checkKeys(event, type);
+
+    // While an order is in flight the stream must stay inside that
+    // order's operation: the only admissible events are its fill pairs
+    // (taker_order_id pins it in foldFill) and the event resolving it —
+    // its `resting`, its terminal `rejected`, or the taker event of its
+    // last fill. Anything else interleaves operations the live engine
+    // emits atomically, so the stream is not a prefix it could produce.
+    if (inFlight !== null) {
+      const inFlightEvent =
+        type === "filled" ||
+        type === "partially_filled" ||
+        (type === "resting" && event.order_id === inFlight) ||
+        (type === "rejected" &&
+          event.order_id === inFlight &&
+          (event.reason === "self_trade" ||
+            event.reason === "insufficient_liquidity"));
+      if (!inFlightEvent) {
+        invalid(`event seq ${event.seq}: interleaved event while an order is in flight`);
+      }
+    }
 
     switch (type) {
       case "accepted": {
@@ -415,6 +459,7 @@ export function replayMatchingEngine(options = {}) {
           remaining_units: quantityUnits,
           state: "resting",
         });
+        inFlight = event.order_id;
         break;
       }
       case "resting": {
@@ -435,8 +480,22 @@ export function replayMatchingEngine(options = {}) {
         if (unitsOf(event.quantity, "resting quantity", definition.base_scale) !== entry.remaining_units) {
           invalid(`event seq ${event.seq}: resting quantity is not the tracked remainder`);
         }
+        // A taker rests only after its sweep found nothing matchable: a
+        // resting event that would cross the current opposite head is one
+        // the live engine could never emit — the order would have filled.
+        const opposite = entry.side === "buy" ? "sell" : "buy";
+        const head = bookFor(entry.instrument).bestHead(opposite);
+        if (
+          head !== undefined &&
+          (entry.side === "buy"
+            ? /** @type {bigint} */ (entry.price_units) >= head.price_units
+            : /** @type {bigint} */ (entry.price_units) <= head.price_units)
+        ) {
+          invalid(`event seq ${event.seq}: resting order would cross the book`);
+        }
         inBook.add(entry.order_id);
         bookFor(entry.instrument).addResting(/** @type {RestingOrder} */ (entry));
+        inFlight = null;
         break;
       }
       case "filled":
@@ -511,6 +570,11 @@ export function replayMatchingEngine(options = {}) {
         entry.quantity_units = totalUnits;
         entry.quantity = formatScaledDecimal(totalUnits, definition.base_scale);
         entry.remaining_units = totalUnits - executedUnits;
+        if (!keepsPriority) {
+          // Re-queued like a fresh taker: in flight until the stream
+          // resolves it, exactly as the live re-match emits.
+          inFlight = entry.order_id;
+        }
         break;
       }
       case "rejected": {
@@ -537,13 +601,129 @@ export function replayMatchingEngine(options = {}) {
           if (entry.state !== "resting" || inBook.has(entry.order_id)) {
             invalid(`event seq ${event.seq}: ${event.reason} order is not in flight`);
           }
+          // A terminal rejection must be earned where it lands: the live
+          // engine emits it only under the exact trigger below, so a
+          // stream cannot reject a taker that would have matched or
+          // rested.
+          const opposite = entry.side === "buy" ? "sell" : "buy";
+          const head = bookFor(entry.instrument).bestHead(opposite);
+          if (event.reason === "self_trade") {
+            // The live policy rejects the taker only when the head of the
+            // best opposite level is matchable AND carries its owner.
+            if (
+              head === undefined ||
+              entry.owner === undefined ||
+              head.owner !== entry.owner ||
+              (entry.order_type === "limit" &&
+                (entry.side === "buy"
+                  ? /** @type {bigint} */ (entry.price_units) < head.price_units
+                  : /** @type {bigint} */ (entry.price_units) > head.price_units))
+            ) {
+              invalid(`event seq ${event.seq}: self_trade rejection is not earned`);
+            }
+          } else if (head !== undefined) {
+            // A market taker is liquidity-rejected only once no opposite
+            // order remains for it to match.
+            invalid(`event seq ${event.seq}: insufficient_liquidity rejection is not earned`);
+          }
           const definition = /** @type {InstrumentDefinition} */ (index.get(entry.instrument));
           if (unitsOf(event.quantity, "rejected quantity", definition.base_scale) !== entry.remaining_units) {
             invalid(`event seq ${event.seq}: rejected quantity is not the tracked remainder`);
           }
           entry.state = "rejected";
+          inFlight = null;
         } else if (event.quantity !== undefined) {
           invalid(`event seq ${event.seq}: only self_trade and insufficient_liquidity rejections carry a quantity`);
+        } else {
+          // A validation rejection must be earnable too: each reason pins
+          // which echo fields the failed submission could have carried,
+          // so the stream cannot record a rejection the engine never
+          // emitted.
+          const echoed =
+            event.order_id === null
+              ? undefined
+              : tracked.get(/** @type {string} */ (event.order_id));
+          if (event.reason === "no_change" || event.reason === "quantity_below_filled") {
+            // Amend-path reasons: the target must be a resting order in
+            // the book, echoed with its own instrument and side — and a
+            // below-filled rejection needs something filled already.
+            if (
+              echoed === undefined ||
+              !inBook.has(echoed.order_id) ||
+              echoed.instrument !== event.instrument ||
+              echoed.side !== event.side ||
+              (event.reason === "quantity_below_filled" &&
+                echoed.remaining_units === echoed.quantity_units)
+            ) {
+              invalid(`event seq ${event.seq}: ${event.reason} rejection is not earned`);
+            }
+          } else if (event.reason === "duplicate_order_id") {
+            if (echoed === undefined) {
+              invalid(`event seq ${event.seq}: duplicate_order_id rejection is not earned`);
+            }
+          } else if (event.reason === "order_not_resting") {
+            // The id that reached the resting check was already a valid
+            // pattern, and an in-book order would have cancelled instead.
+            if (
+              !isOrderId(event.order_id) ||
+              (echoed !== undefined && echoed.state === "resting")
+            ) {
+              invalid(`event seq ${event.seq}: order_not_resting rejection is not earned`);
+            }
+            // The cancel echo carries the submitted (known) instrument;
+            // the amend echo carries the tracked order's instrument and
+            // side. Any other combination is not emittable.
+            if (event.side === null) {
+              if (event.instrument !== null && !index.has(event.instrument)) {
+                invalid(`event seq ${event.seq}: order_not_resting rejection is not earned`);
+              }
+            } else if (
+              echoed === undefined ||
+              echoed.instrument !== event.instrument ||
+              echoed.side !== event.side
+            ) {
+              invalid(`event seq ${event.seq}: order_not_resting rejection is not earned`);
+            }
+          } else if (event.reason === "invalid_instrument") {
+            if (event.instrument !== null) {
+              invalid(`event seq ${event.seq}: invalid_instrument rejection is not earned`);
+            }
+          } else if (event.reason === "unknown_instrument") {
+            if (typeof event.instrument !== "string" || index.has(event.instrument)) {
+              invalid(`event seq ${event.seq}: unknown_instrument rejection is not earned`);
+            }
+          } else if (event.reason === "invalid_order_id") {
+            if (event.order_id !== null && isOrderId(event.order_id)) {
+              invalid(`event seq ${event.seq}: invalid_order_id rejection is not earned`);
+            }
+          } else if (event.reason === "invalid_side") {
+            // The failed submission echoed whatever side it carried; its
+            // order id and instrument were validated before side fired.
+            if (
+              !isOrderId(event.order_id) ||
+              typeof event.instrument !== "string" ||
+              !index.has(event.instrument)
+            ) {
+              invalid(`event seq ${event.seq}: invalid_side rejection is not earned`);
+            }
+          } else if (event.reason !== "invalid_order") {
+            // invalid_owner, invalid_type, invalid_price,
+            // non_positive_price, invalid_quantity,
+            // non_positive_quantity: either path reached these checks
+            // only after order id, instrument and side passed — the echo
+            // is a valid-pattern id on a known instrument with a side.
+            if (
+              !isOrderId(event.order_id) ||
+              typeof event.instrument !== "string" ||
+              !index.has(event.instrument) ||
+              !isSide(event.side)
+            ) {
+              invalid(`event seq ${event.seq}: ${event.reason} rejection is not earned`);
+            }
+          }
+          // invalid_order echoes whatever string fields the raw input
+          // carried — every string-or-null combination is emittable, so
+          // no further pin applies.
         }
         break;
       }
@@ -553,6 +733,9 @@ export function replayMatchingEngine(options = {}) {
 
   if (pendingMaker !== null) {
     invalid("stream ends inside a fill pair");
+  }
+  if (inFlight !== null) {
+    invalid("stream ends mid-operation");
   }
 
   const resting = [...tracked.keys()].filter((orderId) => inBook.has(orderId));

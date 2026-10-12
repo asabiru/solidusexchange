@@ -1504,12 +1504,12 @@
       "minCases": 5
     },
     "packages/matching-core/tests/market.test.mjs": {
-      "minLines": 350,
+      "minLines": 361,
       "minCases": 19
     },
     "packages/matching-core/tests/postgres-journal-contract.mjs": {
-      "minLines": 269,
-      "minCases": 15
+      "minLines": 469,
+      "minCases": 25
     },
     "packages/matching-core/tests/postgres-journal.sh": {
       "minLines": 32,
@@ -1678,6 +1678,10 @@
     "miniapp/src/server/synthetic-oracles.test.ts": {
       "minLines": 76,
       "minCases": 3
+    },
+    "packages/matching-core/tests/replay-recovery-audit.test.mjs": {
+      "minLines": 383,
+      "minCases": 23
     }
   },
   "uses": {
