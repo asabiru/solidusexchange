@@ -2414,8 +2414,10 @@ function expectedAuditEntries() {
         Object.freeze({
           audit_id: `au_${subjectsDigest(subjectId, `audit-id-${slot}`).toString("hex").slice(0, 24)}`,
           actor_subject_id: actor,
-          actor_role:
-            OPERATOR_ROLES[Number(subjectsUnits(actor, "role", BigInt(OPERATOR_ROLES.length)))],
+          // The actor is a staff subject, so the role an entry attributes
+          // to it is the admin view's own draw — the same one the route's
+          // role gate consults — never the customer-roster's domain.
+          actor_role: operatorRoleFor(actor),
           action,
           target_kind: targetKind,
           target_id: targetId,

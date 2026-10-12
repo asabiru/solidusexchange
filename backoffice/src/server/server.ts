@@ -1123,11 +1123,18 @@ export function createBackofficeServer(
         // `cursor` is the audit feed's only query parameter: absent means
         // the first page, anything outside the auc_* grammar is invalid
         // input and fails closed locally rather than propagating upstream.
+        // Multiplicity is part of the same strict allowlist upstream
+        // pins — a repeated cursor is malformed input, never first-wins.
+        const cursorParams = url.searchParams.getAll("cursor");
         for (const key of url.searchParams.keys()) {
           if (key !== "cursor") {
             json(response, 400, { error: "operator_audit_query_invalid" });
             return;
           }
+        }
+        if (cursorParams.length > 1) {
+          json(response, 400, { error: "operator_audit_query_invalid" });
+          return;
         }
         const cursorParam = url.searchParams.get("cursor");
         const cursor = cursorParam === null ? undefined : cursorParam;
@@ -1177,7 +1184,14 @@ export function createBackofficeServer(
         }
         // Unconfigured: the matching local audit source is the demo event
         // ledger — the upstream-only fields (synthetic refs, staff role,
-        // detail digests) stay null rather than invented.
+        // detail digests) stay null rather than invented. The local feed
+        // is a single page that mints no tokens, so any well-formed cursor
+        // is beyond the end and answers the same uniform not-found the
+        // configured path reports for a never-minted token.
+        if (cursor !== undefined) {
+          json(response, 404, { error: "operator_audit_not_found" });
+          return;
+        }
         const localEvents = demoRepository.auditSource().slice(0, 32).map((event) => ({
           auditId: null,
           actorSubjectId: null,

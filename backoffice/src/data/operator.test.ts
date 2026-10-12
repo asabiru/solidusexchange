@@ -773,4 +773,26 @@ describe("operator audit adapter", () => {
       assert.equal(parseOperatorAuditView(payload), undefined, JSON.stringify(payload)?.slice(0, 96));
     }
   });
+
+  it("fails closed on a misordered page like every sibling feed parser", () => {
+    const [first, second] = auditPayload.audit.entries;
+    const feed = (entries: unknown) => ({ mode: "test", audit: { ...auditPayload.audit, entries } });
+    // Reversed newest-first order.
+    assert.equal(parseOperatorAuditView(feed([second, first])), undefined);
+    // Equal instants must tie-break on the descending audit id.
+    const tied = [
+      { ...first, at: second.at },
+      second
+    ];
+    assert.equal(parseOperatorAuditView(feed(tied)), undefined, "ascending id under equal instants");
+    const tiedOk = [second, { ...first, at: second.at }];
+    // first's id (au_0011…) sorts below second's (au_bbcc…): putting the
+    // smaller id after the larger under one instant is a valid desc order.
+    assert.notEqual(parseOperatorAuditView(feed(tiedOk)), undefined);
+    // An entry instant beyond the feed's own as_of horizon is drift.
+    assert.equal(
+      parseOperatorAuditView(feed([{ ...first, at: "2027-01-30T00:00:00.000Z" }, second])),
+      undefined
+    );
+  });
 });

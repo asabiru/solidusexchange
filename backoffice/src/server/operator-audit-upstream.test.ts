@@ -249,6 +249,31 @@ describe("operator audit BFF surface", () => {
     assert.equal(body.error, "operator_audit_query_invalid");
   });
 
+  it("rejects a repeated cursor param like the upstream strict allowlist", async () => {
+    const { client, seen } = stubClient(contractView());
+    const baseUrl = await listen(createBackofficeServer(
+      config({ deviceBinding: { mode: "enforce", approvedDeviceDigests: [deviceDigest(testDeviceId)] } }),
+      undefined,
+      undefined,
+      {},
+      client
+    ));
+    const session = await devSession(baseUrl, "compliance-lead", testDeviceId);
+    const cookie = `${session}; solidchange_bo_device=${testDeviceId}`;
+    // Upstream answers 400 for any `cursor` multiplicity: a first-wins read
+    // here would silently pick one of two equally-valid spellings.
+    for (const query of [
+      `?cursor=${mintedCursor}&cursor=${mintedCursor}`,
+      `?cursor=${mintedCursor}&cursor=auc_ffeeddccbbaa9988`,
+      `?cursor=${mintedCursor}&cursor=bogus`
+    ]) {
+      const { response, body } = await operatorAuditEnvelope(baseUrl, cookie, query);
+      assert.equal(response.status, 400, query);
+      assert.equal(body.error, "operator_audit_query_invalid");
+    }
+    assert.equal(seen.length, 0);
+  });
+
   it("fails closed without a bound device and never reaches upstream", async () => {
     const { client, seen } = stubClient(contractView());
     const baseUrl = await listen(createBackofficeServer(config(), undefined, undefined, {}, client));
@@ -306,5 +331,17 @@ describe("operator audit BFF surface", () => {
       assert.equal(typeof entry.targetId, "string");
       assert.equal(typeof entry.detailHash, "string");
     }
+  });
+
+  it("answers the uniform not-found for any cursor while unconfigured", async () => {
+    // The local demo feed has exactly one page and mints no tokens, so a
+    // well-formed cursor is beyond the end — the same 404 the configured
+    // path answers for a never-minted token. Serving page 1 under a
+    // `operator-audit:<cursor>` binding would mislabel the read.
+    const baseUrl = await listen(createBackofficeServer(config()));
+    const cookie = await devSession(baseUrl, "compliance-lead");
+    const { response, body } = await operatorAuditEnvelope(baseUrl, cookie, `?cursor=${mintedCursor}`);
+    assert.equal(response.status, 404);
+    assert.equal(body.error, "operator_audit_not_found");
   });
 });

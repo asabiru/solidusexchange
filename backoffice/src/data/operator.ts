@@ -1201,14 +1201,26 @@ const auditActions: ReadonlySet<string> = new Set([
   "flag.reviewed"
 ]);
 const auditTargetKinds: ReadonlySet<string> = new Set(["session", "queue_item", "subject", "flag"]);
+// The feed pairs each action with exactly one target kind — a mismatched
+// pair is drift the upstream never emits.
+const auditActionTargetKinds: ReadonlyMap<string, string> = new Map([
+  ["session.opened", "session"],
+  ["session.rotated", "session"],
+  ["queue.viewed", "queue_item"],
+  ["subject.viewed", "subject"],
+  ["flag.reviewed", "flag"]
+]);
 const auditMaxEntries = 32;
 
 /**
  * Fail-closed parser for the operator audit feed: exact key sets, the
  * `au_*`/`auc_*`/`adh_*` ref grammar, the fixed action and target-kind
- * vocabularies, ISO timestamps, a 32-entry page bound and unique audit ids.
- * Any drift fails closed to undefined so the screen degrades to its local
- * demo rows instead of rendering unverifiable data.
+ * vocabularies (paired exactly as the feed derives them), ISO timestamps,
+ * a 32-entry page bound, unique audit ids and the feed's own
+ * newest-first order with the descending audit-id tie-break the upstream
+ * validator pins — no entry may postdate the feed's own asOf. Any drift fails closed to undefined
+ * so the screen degrades to its local demo rows instead of rendering
+ * unverifiable data.
  */
 export function parseOperatorAuditView(value: unknown): OperatorAuditView | undefined {
   if (!isRecord(value) || !hasExactKeys(value, auditViewKeys) || value.mode !== "test") {
@@ -1218,6 +1230,7 @@ export function parseOperatorAuditView(value: unknown): OperatorAuditView | unde
   if (!isRecord(audit) || !hasExactKeys(audit, auditFeedKeys) || !isIsoTimestamp(audit.asOf)) {
     return undefined;
   }
+  const asOfMs = Date.parse(audit.asOf);
   if (audit.nextCursor !== null && (typeof audit.nextCursor !== "string" || !auditCursorPattern.test(audit.nextCursor))) {
     return undefined;
   }
@@ -1226,6 +1239,8 @@ export function parseOperatorAuditView(value: unknown): OperatorAuditView | unde
   }
   const seen = new Set<string>();
   const entries: OperatorAuditEntry[] = [];
+  let previousMs = Number.POSITIVE_INFINITY;
+  let previousId = "";
   for (const entry of audit.entries) {
     if (
       !isRecord(entry)
@@ -1241,6 +1256,7 @@ export function parseOperatorAuditView(value: unknown): OperatorAuditView | unde
       || !auditActions.has(entry.action)
       || typeof entry.targetKind !== "string"
       || !auditTargetKinds.has(entry.targetKind)
+      || auditActionTargetKinds.get(entry.action) !== entry.targetKind
       || typeof entry.targetId !== "string"
       || !auditTargetIdPattern.test(entry.targetId)
       || !isIsoTimestamp(entry.at)
@@ -1249,7 +1265,17 @@ export function parseOperatorAuditView(value: unknown): OperatorAuditView | unde
     ) {
       return undefined;
     }
+    const occurredMs = Date.parse(entry.at);
+    if (
+      occurredMs > asOfMs
+      || occurredMs > previousMs
+      || (occurredMs === previousMs && entry.auditId.localeCompare(previousId) >= 0)
+    ) {
+      return undefined;
+    }
     seen.add(entry.auditId);
+    previousMs = occurredMs;
+    previousId = entry.auditId;
     entries.push(
       Object.freeze({
         auditId: entry.auditId,
