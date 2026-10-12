@@ -297,6 +297,9 @@ function unpinnedDocumentErrors(snapshot, fileName) {
   const errors = [];
   const fail = (message) => errors.push(`${fileName}: ${message}`);
 
+  if (!snapshot.statusLines.some((line) => /^- Status: (?:Proposed|Draft)$/.test(line))) {
+    fail(`new documents must declare "- Status: Proposed" or "- Status: Draft"`);
+  }
   if (hasApprovalVocabulary(snapshot.title)) fail(`title claims approval: ${snapshot.title}`);
   for (const line of snapshot.statusLines) {
     if (!/^- Status: (?:Proposed|Draft)$|^- Production effect: none$/.test(line)) {
@@ -391,6 +394,42 @@ async function markdownDocuments(root) {
   };
 }
 
+export function validateStatusBaseline(baseline) {
+  const errors = [];
+  const plain = (value) =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  if (!plain(baseline)) {
+    return [`${BASELINE_FILE}: baseline must be a JSON object`];
+  }
+  if (
+    !plain(baseline.documents) ||
+    Object.keys(baseline.documents).length === 0
+  ) {
+    errors.push(
+      `${BASELINE_FILE}: "documents" must pin at least one document`,
+    );
+  }
+  const phrases = baseline.requiredPhrases;
+  if (!plain(phrases) || Object.keys(phrases).length === 0) {
+    errors.push(
+      `${BASELINE_FILE}: "requiredPhrases" must pin at least one document`,
+    );
+  } else {
+    for (const [file, list] of Object.entries(phrases)) {
+      if (
+        !Array.isArray(list) ||
+        list.length === 0 ||
+        !list.every((phrase) => typeof phrase === "string")
+      ) {
+        errors.push(
+          `${BASELINE_FILE}: "requiredPhrases.${file}" must be a non-empty list of phrases`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
 export async function loadRegulatedCore(root = path.resolve(REGULATED_CORE_DIRECTORY)) {
   const { documents, irregular } = await markdownDocuments(root);
   return {
@@ -401,8 +440,19 @@ export async function loadRegulatedCore(root = path.resolve(REGULATED_CORE_DIREC
 }
 
 async function main() {
-  const { documents, baseline, irregular } = await loadRegulatedCore();
-  const errors = validateRegulatedCoreDocuments(documents, baseline, irregular);
+  let loaded;
+  try {
+    loaded = await loadRegulatedCore();
+  } catch (error) {
+    console.error(`cannot load regulated core state: ${error.message}`);
+    process.exitCode = 1;
+    return;
+  }
+  const { documents, baseline, irregular } = loaded;
+  const errors = [
+    ...validateStatusBaseline(baseline),
+    ...validateRegulatedCoreDocuments(documents, baseline, irregular),
+  ];
 
   if (errors.length > 0) {
     console.error(errors.join("\n"));

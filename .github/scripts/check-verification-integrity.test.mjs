@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  validateBaselineShape,
   validatePackageScripts,
+  validateRepoCompleteness,
   validateRunSteps,
   validateScriptReferences,
   validateSourceText,
   validateTestFileContent,
+  validateWorkflowRefs,
   validateWorkflowSurface,
 } from "./check-verification-integrity.mjs";
 
@@ -19,6 +22,115 @@ const PROCESS = "pro" + "cess";
 const EXIT_CODE = "exit" + "Code";
 const GLOBAL = "global" + "This";
 const IMPORT = "im" + "port";
+
+const baselineFixture = {
+  scripts: { "pkg/package.json": { test: "npm test" } },
+  runSteps: { ".github/workflows/ci.yml": [{ run: "npm test" }] },
+  testFiles: { "pkg/tests/a.test.mjs": { minLines: 2, minCases: 1 } },
+  uses: { ".github/workflows/ci.yml": ["actions/checkout@abc123"] },
+  containerImages: { ".github/workflows/ci.yml": ["img@sha256:x"] },
+  triggerPaths: {
+    ".github/workflows/ci.yml": { pull_request: ["pkg/**"] },
+  },
+  unpinnedTestFiles: ["pkg/tests/helper.mjs"],
+};
+
+test("rejects malformed or empty baselines", () => {
+  assert.match(
+    validateBaselineShape([]).join("\n"),
+    /baseline must be a JSON object/,
+  );
+  assert.match(
+    validateBaselineShape({}).join("\n"),
+    /missing "scripts" section/,
+  );
+  assert.match(
+    validateBaselineShape({ ...baselineFixture, testFiles: {} }).join("\n"),
+    /"testFiles" must pin at least one test file/,
+  );
+  assert.match(
+    validateBaselineShape({ ...baselineFixture, scripts: {} }).join("\n"),
+    /"scripts" must pin at least one package manifest/,
+  );
+  assert.match(
+    validateBaselineShape({
+      ...baselineFixture,
+      testFiles: { "a.test.mjs": { minLines: "two", minCases: 1 } },
+    }).join("\n"),
+    /must pin integer minLines/,
+  );
+  assert.match(
+    validateBaselineShape({
+      ...baselineFixture,
+      unpinnedTestFiles: ["a.mjs", "a.mjs"],
+    }).join("\n"),
+    /must list unique file paths/,
+  );
+});
+
+test("rejects unpinned or swapped workflow action and image references", () => {
+  const workflowText = `on:\n  pull_request:\n    paths:\n      - "pkg/**"\njobs:\n  verify:\n    steps:\n      - uses: actions/checkout@abc123\n      - uses: actions/setup-node@def456\n`;
+  assert.match(
+    validateWorkflowRefs(
+      workflowText,
+      { uses: {}, containerImages: {}, triggerPaths: {} },
+      "ci.yml",
+    ).join("\n"),
+    /"uses" references must be pinned in the baseline/,
+  );
+  const pinned = {
+    uses: { "ci.yml": ["actions/checkout@abc123"] },
+    containerImages: {},
+    triggerPaths: { "ci.yml": { pull_request: ["pkg/**"] } },
+  };
+  assert.match(
+    validateWorkflowRefs(workflowText, pinned, "ci.yml").join("\n"),
+    /"uses" references must match the baseline exactly/,
+  );
+});
+
+test("rejects trigger path filter drift in workflows", () => {
+  const workflowText = `on:\n  pull_request:\n    paths:\n      - "pkg/**"\n  push:\n    branches:\n      - main\n    paths:\n      - "pkg/**"\n      - "shared/**"\njobs:\n  verify:\n    steps: []\n`;
+  const baseline = {
+    uses: {},
+    containerImages: {},
+    triggerPaths: { "ci.yml": { pull_request: ["pkg/**"] } },
+  };
+  assert.match(
+    validateWorkflowRefs(workflowText, baseline, "ci.yml").join("\n"),
+    /push path filter must be pinned in the baseline/,
+  );
+  const drifted = {
+    ...baseline,
+    triggerPaths: {
+      "ci.yml": { pull_request: ["pkg/**"], push: ["pkg/**"] },
+    },
+  };
+  assert.match(
+    validateWorkflowRefs(workflowText, drifted, "ci.yml").join("\n"),
+    /push path filter must match the baseline exactly/,
+  );
+});
+
+test("rejects unpinned test surface, manifests and stale waivers", () => {
+  const files = [
+    "pkg/package.json",
+    "pkg/tests/a.test.mjs",
+    "pkg/tests/helper.mjs",
+    "pkg/tests/new.test.mjs",
+    ".github/workflows/ci.yml",
+    ".github/workflows/new-ci.yml",
+    "other/package.json",
+  ];
+  const errors = validateRepoCompleteness(files, baselineFixture).join("\n");
+  assert.match(errors, /new\.test\.mjs: test surface file must be pinned/);
+  assert.match(errors, /new-ci\.yml: workflow must be pinned/);
+  assert.match(errors, /other\/package\.json: package manifest must be pinned/);
+  assert.match(
+    validateRepoCompleteness(["pkg/package.json"], baselineFixture).join("\n"),
+    /helper\.mjs: stale unpinnedTestFiles entry/,
+  );
+});
 const TEST_FLAG = "--test-" + "skip-pattern";
 const NODE_ENV_OPTIONS = "NODE_" + "OPTIONS";
 
@@ -34,6 +146,14 @@ function manifest(overrides) {
 
 test("accepts scripts matching the pin exactly", () => {
   assert.deepEqual(validatePackageScripts(manifest(), pinnedScripts, "pkg"), []);
+});
+
+test("rejects scripts that are not pinned in the baseline", () => {
+  const added = manifest({ postinstall: "node hooks/install.mjs" });
+  assert.match(
+    validatePackageScripts(added, pinnedScripts, "pkg").join("\n"),
+    /script "postinstall" is not pinned in the baseline/,
+  );
 });
 
 test("rejects neutered script commands", () => {
@@ -121,12 +241,15 @@ test("rejects deleted or rewritten workflow run steps", () => {
   }
 });
 
-test("accepts added workflow run steps", () => {
+test("rejects added workflow run steps", () => {
   const extended = workflow.replace(
     "        run: npm test\n",
     "        run: npm test\n      - name: Build\n        run: npm run build\n",
   );
-  assert.deepEqual(validateRunSteps(extended, pinnedSteps, "ci.yml"), []);
+  assert.match(
+    validateRunSteps(extended, pinnedSteps, "ci.yml").join("\n"),
+    /run step is not pinned in the baseline: "npm run build"/,
+  );
 });
 
 test("rejects env mutations on pinned run steps", () => {

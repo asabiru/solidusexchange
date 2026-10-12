@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -145,6 +146,12 @@ export function validatePackageScripts(packageText, pinned, fileName) {
     }
   }
 
+  for (const name of Object.keys(scripts)) {
+    if (!(name in pinned)) {
+      errors.push(`${fileName}: script "${name}" is not pinned in the baseline`);
+    }
+  }
+
   return errors;
 }
 
@@ -191,6 +198,23 @@ export function validateRunSteps(workflowText, pinnedSteps, fileName) {
       errors.push(
         `${fileName}: defaults.run.working-directory must match the baseline: ${JSON.stringify(step.run)}`,
       );
+    }
+  }
+
+  const remaining = new Map();
+  for (const pinned of pinnedSteps) {
+    const key = JSON.stringify([pinned.run, normalizeCommand(pinned.env ?? "")]);
+    remaining.set(key, (remaining.get(key) ?? 0) + 1);
+  }
+  for (const step of actual) {
+    const key = JSON.stringify([step.run, step.env]);
+    const left = remaining.get(key) ?? 0;
+    if (left === 0) {
+      errors.push(
+        `${fileName}: run step is not pinned in the baseline: ${JSON.stringify(step.run)}`,
+      );
+    } else {
+      remaining.set(key, left - 1);
     }
   }
 
@@ -851,9 +875,370 @@ async function* walk(directory, problems = []) {
   }
 }
 
-async function main() {
-  const baseline = JSON.parse(await readFile(BASELINE_FILE, "utf8"));
+const plainObject = (value) =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+
+function sameMultiset(actual, expected) {
+  if (actual.length !== expected.length) {
+    return false;
+  }
+  const remaining = new Map();
+  for (const value of expected) {
+    remaining.set(value, (remaining.get(value) ?? 0) + 1);
+  }
+  for (const value of actual) {
+    const left = remaining.get(value) ?? 0;
+    if (left === 0) {
+      return false;
+    }
+    remaining.set(value, left - 1);
+  }
+  return true;
+}
+
+export function validateBaselineShape(baseline) {
   const errors = [];
+  if (!plainObject(baseline)) {
+    return [`${BASELINE_FILE}: baseline must be a JSON object`];
+  }
+  for (const section of [
+    "scripts",
+    "runSteps",
+    "testFiles",
+    "uses",
+    "containerImages",
+    "triggerPaths",
+    "unpinnedTestFiles",
+  ]) {
+    if (!(section in baseline)) {
+      errors.push(`${BASELINE_FILE}: missing "${section}" section`);
+    }
+  }
+
+  const scripts = baseline.scripts;
+  if (plainObject(scripts)) {
+    if (Object.keys(scripts).length === 0) {
+      errors.push(
+        `${BASELINE_FILE}: "scripts" must pin at least one package manifest`,
+      );
+    }
+    for (const [file, pinned] of Object.entries(scripts)) {
+      if (
+        !plainObject(pinned) ||
+        Object.keys(pinned).length === 0 ||
+        !Object.values(pinned).every((value) => typeof value === "string")
+      ) {
+        errors.push(
+          `${BASELINE_FILE}: "scripts.${file}" must be a non-empty map of script names to commands`,
+        );
+      }
+    }
+  } else if ("scripts" in baseline) {
+    errors.push(`${BASELINE_FILE}: "scripts" must be an object`);
+  }
+
+  const runSteps = baseline.runSteps;
+  if (plainObject(runSteps)) {
+    if (Object.keys(runSteps).length === 0) {
+      errors.push(
+        `${BASELINE_FILE}: "runSteps" must pin at least one workflow`,
+      );
+    }
+    for (const [file, steps] of Object.entries(runSteps)) {
+      if (
+        !Array.isArray(steps) ||
+        !steps.every(
+          (step) =>
+            plainObject(step) &&
+            typeof step.run === "string" &&
+            (step.env === undefined || typeof step.env === "string"),
+        )
+      ) {
+        errors.push(
+          `${BASELINE_FILE}: "runSteps.${file}" must be a list of {run, env?} steps (an empty list forbids run steps)`,
+        );
+      }
+    }
+  } else if ("runSteps" in baseline) {
+    errors.push(`${BASELINE_FILE}: "runSteps" must be an object`);
+  }
+
+  const testFiles = baseline.testFiles;
+  if (plainObject(testFiles)) {
+    if (Object.keys(testFiles).length === 0) {
+      errors.push(
+        `${BASELINE_FILE}: "testFiles" must pin at least one test file`,
+      );
+    }
+    for (const [file, pin] of Object.entries(testFiles)) {
+      if (
+        !plainObject(pin) ||
+        !Number.isInteger(pin.minLines) ||
+        pin.minLines < 1 ||
+        (pin.minCases !== undefined &&
+          (!Number.isInteger(pin.minCases) || pin.minCases < 0))
+      ) {
+        errors.push(
+          `${BASELINE_FILE}: "testFiles.${file}" must pin integer minLines >= 1 and optional minCases >= 0`,
+        );
+      }
+    }
+  } else if ("testFiles" in baseline) {
+    errors.push(`${BASELINE_FILE}: "testFiles" must be an object`);
+  }
+
+  for (const section of ["uses", "containerImages"]) {
+    const references = baseline[section];
+    if (plainObject(references)) {
+      if (Object.keys(references).length === 0) {
+        errors.push(
+          `${BASELINE_FILE}: "${section}" must pin at least one workflow`,
+        );
+      }
+      for (const [file, list] of Object.entries(references)) {
+        if (
+          !Array.isArray(list) ||
+          list.length === 0 ||
+          !list.every((value) => typeof value === "string")
+        ) {
+          errors.push(
+            `${BASELINE_FILE}: "${section}.${file}" must be a non-empty list of references`,
+          );
+        }
+      }
+    } else if (section in baseline) {
+      errors.push(`${BASELINE_FILE}: "${section}" must be an object`);
+    }
+  }
+
+  const triggerPaths = baseline.triggerPaths;
+  if (plainObject(triggerPaths)) {
+    for (const [file, events] of Object.entries(triggerPaths)) {
+      if (!plainObject(events) || Object.keys(events).length === 0) {
+        errors.push(
+          `${BASELINE_FILE}: "triggerPaths.${file}" must be a non-empty map`,
+        );
+        continue;
+      }
+      for (const [event, list] of Object.entries(events)) {
+        if (
+          !["pull_request", "push"].includes(event) ||
+          !Array.isArray(list) ||
+          list.length === 0 ||
+          !list.every((value) => typeof value === "string")
+        ) {
+          errors.push(
+            `${BASELINE_FILE}: "triggerPaths.${file}.${event}" must be a non-empty list of path filters for pull_request or push`,
+          );
+        }
+      }
+    }
+  } else if ("triggerPaths" in baseline) {
+    errors.push(`${BASELINE_FILE}: "triggerPaths" must be an object`);
+  }
+
+  const unpinnedTestFiles = baseline.unpinnedTestFiles;
+  if (Array.isArray(unpinnedTestFiles)) {
+    if (
+      !unpinnedTestFiles.every((value) => typeof value === "string") ||
+      new Set(unpinnedTestFiles).size !== unpinnedTestFiles.length
+    ) {
+      errors.push(
+        `${BASELINE_FILE}: "unpinnedTestFiles" must list unique file paths`,
+      );
+    }
+  } else if ("unpinnedTestFiles" in baseline) {
+    errors.push(`${BASELINE_FILE}: "unpinnedTestFiles" must be an array`);
+  }
+
+  return errors;
+}
+
+function collectWorkflowRefs(workflowText) {
+  const uses = [];
+  const images = [];
+  const triggerPaths = {};
+  let event = null;
+  let inPaths = false;
+  for (const line of workflowText.split(/\r?\n/)) {
+    const trimmed = line.replace(/\s+#.*$/, "").trim();
+    if (!trimmed) {
+      continue;
+    }
+    const indent = indentation(line);
+    if (indent <= 2) {
+      event = null;
+      inPaths = false;
+    }
+    const eventMatch =
+      indent === 2 ? trimmed.match(/^(pull_request|push):$/) : null;
+    if (eventMatch) {
+      event = eventMatch[1];
+      continue;
+    }
+    if (event && indent === 4 && trimmed === "paths:") {
+      inPaths = true;
+      triggerPaths[event] ??= [];
+      continue;
+    }
+    if (event && inPaths && indent >= 6 && trimmed.startsWith("- ")) {
+      triggerPaths[event].push(trimmed.slice(2).replace(/^["']|["']$/g, ""));
+      continue;
+    }
+    if (inPaths && indent <= 4) {
+      inPaths = false;
+    }
+    const body = trimmed.replace(/^-\s+/, "");
+    const usesMatch = body.match(/^uses:\s+(\S+)$/);
+    if (usesMatch) {
+      uses.push(usesMatch[1]);
+    }
+    const imageMatch = body.match(/^(?:image|container):\s+(\S+)$/);
+    if (imageMatch) {
+      images.push(imageMatch[1]);
+    }
+  }
+  return { uses, images, triggerPaths };
+}
+
+export function validateWorkflowRefs(workflowText, baseline, fileName) {
+  const errors = [];
+  const refs = collectWorkflowRefs(workflowText);
+  for (const [section, actual] of [
+    ["uses", refs.uses],
+    ["containerImages", refs.images],
+  ]) {
+    const pinned = baseline[section]?.[fileName];
+    if (actual.length === 0) {
+      if (pinned !== undefined) {
+        errors.push(
+          `${fileName}: stale "${section}" baseline entry (no references remain)`,
+        );
+      }
+      continue;
+    }
+    if (pinned === undefined) {
+      errors.push(
+        `${fileName}: "${section}" references must be pinned in the baseline`,
+      );
+      continue;
+    }
+    if (Array.isArray(pinned) && !sameMultiset(actual, pinned)) {
+      errors.push(
+        `${fileName}: "${section}" references must match the baseline exactly`,
+      );
+    }
+  }
+
+  const pinnedPaths = baseline.triggerPaths?.[fileName];
+  const actualEvents = Object.keys(refs.triggerPaths);
+  if (actualEvents.length === 0) {
+    if (pinnedPaths !== undefined) {
+      errors.push(
+        `${fileName}: stale "triggerPaths" baseline entry (no path filters remain)`,
+      );
+    }
+  } else if (pinnedPaths === undefined) {
+    errors.push(
+      `${fileName}: trigger path filters must be pinned in the baseline`,
+    );
+  } else if (plainObject(pinnedPaths)) {
+    for (const event of actualEvents) {
+      const list = pinnedPaths[event];
+      if (list === undefined) {
+        errors.push(
+          `${fileName}: ${event} path filter must be pinned in the baseline`,
+        );
+      } else if (
+        Array.isArray(list) &&
+        !sameMultiset(refs.triggerPaths[event], list)
+      ) {
+        errors.push(
+          `${fileName}: ${event} path filter must match the baseline exactly`,
+        );
+      }
+    }
+    for (const event of Object.keys(pinnedPaths)) {
+      if (!actualEvents.includes(event)) {
+        errors.push(
+          `${fileName}: stale "triggerPaths" baseline entry for ${event}`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+export function validateRepoCompleteness(files, baseline) {
+  const errors = [];
+  const present = new Set(files);
+  const pinnedManifests = new Set(Object.keys(baseline.scripts ?? {}));
+  const pinnedWorkflows = new Set(Object.keys(baseline.runSteps ?? {}));
+  const pinnedTests = new Set(Object.keys(baseline.testFiles ?? {}));
+  const waived = new Set(baseline.unpinnedTestFiles ?? []);
+
+  for (const file of files) {
+    if (path.posix.basename(file) === "package.json" && !pinnedManifests.has(file)) {
+      errors.push(
+        `${file}: package manifest must be pinned in the baseline (scripts)`,
+      );
+    }
+    if (/^\.github\/workflows\/[^/]+\.ya?ml$/.test(file) && !pinnedWorkflows.has(file)) {
+      errors.push(`${file}: workflow must be pinned in the baseline (runSteps)`);
+    }
+    if (TEST_PATH.test(file) && !pinnedTests.has(file) && !waived.has(file)) {
+      errors.push(
+        `${file}: test surface file must be pinned (testFiles) or waived (unpinnedTestFiles) in the baseline`,
+      );
+    }
+  }
+  for (const file of waived) {
+    if (!present.has(file)) {
+      errors.push(`${file}: stale unpinnedTestFiles entry (file is missing)`);
+    } else if (!TEST_PATH.test(file)) {
+      errors.push(
+        `${file}: unpinnedTestFiles entries must cover test surface files`,
+      );
+    }
+  }
+  return errors;
+}
+
+function trackedSkippedFiles() {
+  let listing;
+  try {
+    listing = execFileSync("git", ["ls-files", "-z"], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
+  } catch (error) {
+    return [
+      `git ls-files failed while checking for tracked files under skipped directories: ${error.message}`,
+    ];
+  }
+  return listing
+    .split("\0")
+    .filter((file) =>
+      file.split("/").some((part) => SKIPPED_DIRECTORY.has(part)),
+    )
+    .map(
+      (file) =>
+        `${file}: tracked files are not allowed under skipped directories (they escape the integrity walk)`,
+    );
+}
+
+async function main() {
+  let baseline;
+  try {
+    baseline = JSON.parse(await readFile(BASELINE_FILE, "utf8"));
+  } catch (error) {
+    console.error(
+      `${BASELINE_FILE}: baseline must be readable JSON (${error.message})`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  const errors = validateBaselineShape(baseline);
 
   for (const [file, pinned] of Object.entries(baseline.scripts ?? {})) {
     let text;
@@ -877,6 +1262,7 @@ async function main() {
     }
     errors.push(...validateRunSteps(text, steps, file));
     errors.push(...validateWorkflowSurface(text, file));
+    errors.push(...validateWorkflowRefs(text, baseline, file));
   }
 
   for (const [file, pinned] of Object.entries(baseline.testFiles ?? {})) {
@@ -891,8 +1277,10 @@ async function main() {
   }
 
   const nonRegular = [];
+  const repoFiles = [];
   for await (const file of walk(process.cwd(), nonRegular)) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
+    repoFiles.push(relative);
     if (!CODE_FILE.test(relative) && !SHELL_FILE.test(relative)) {
       continue;
     }
@@ -900,6 +1288,8 @@ async function main() {
       ...validateSourceText(await readFile(file, "utf8"), relative),
     );
   }
+  errors.push(...validateRepoCompleteness(repoFiles, baseline));
+  errors.push(...trackedSkippedFiles());
   for (const file of nonRegular) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
     errors.push(
