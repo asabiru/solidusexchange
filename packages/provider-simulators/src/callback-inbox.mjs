@@ -93,7 +93,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
     }
     transitionMap.set(status, Object.freeze([...nextStatuses]));
   }
-  /** @type {Map<string, InboxSubject & { parked: Map<number, string>, eventIds: Set<string> }>} */
+  /** @type {Map<string, InboxSubject & { parked: Map<number, string>, applied: Map<number, string>, eventIds: Set<string> }>} */
   const subjects = new Map();
   /** @type {Map<string, string>} */
   const events = new Map();
@@ -128,6 +128,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
         reviewEvents: 0,
         buffered: 0,
         parked: new Map(),
+        applied: new Map(),
         eventIds: new Set(),
       });
     },
@@ -180,7 +181,19 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
         return result("late");
       }
       const sequence = /** @type {number} */ (rawSequence);
-      if (sequence <= subject.sequence || subject.parked.has(sequence)) {
+      // A claim about an already-resolved sequence: the same status is a
+      // benign re-notification (stale), but a different status is a
+      // conflicting history and is held for review instead of being silently
+      // dropped.
+      const prior =
+        sequence <= subject.sequence
+          ? subject.applied.get(sequence)
+          : subject.parked.get(sequence);
+      if (prior !== undefined || sequence <= subject.sequence) {
+        if (prior !== next) {
+          subject.reviewEvents += 1;
+          return result("invalid_transition");
+        }
         return result("stale");
       }
       if (sequence > subject.sequence + 1) {
@@ -198,6 +211,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
       for (;;) {
         subject.status = status;
         subject.sequence += 1;
+        subject.applied.set(subject.sequence, status);
         applied.push(status);
         const parked = subject.parked.get(subject.sequence + 1);
         if (parked === undefined) {
@@ -232,7 +246,7 @@ export function createCallbackInbox({ subjectField, initialStatus, transitions, 
       if (!subject) {
         return undefined;
       }
-      const { parked: _parked, eventIds: _eventIds, ...view } = subject;
+      const { parked: _parked, applied: _applied, eventIds: _eventIds, ...view } = subject;
       return Object.freeze(view);
     },
 

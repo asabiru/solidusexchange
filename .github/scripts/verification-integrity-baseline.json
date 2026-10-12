@@ -1655,6 +1655,10 @@
       "minLines": 86,
       "minCases": 3
     },
+    "packages/provider-simulators/tests/bank-checks-audit-wave73.test.mjs": {
+      "minLines": 287,
+      "minCases": 11
+    },
     "packages/provider-simulators/tests/sim-infra-audit-wave73.test.mjs": {
       "minLines": 334,
       "minCases": 17
