@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, type KeyObject, sign } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { afterEach, describe, it } from "node:test";
 import {
@@ -1128,5 +1128,237 @@ describe("oidc login routes", () => {
     });
     assert.equal(oldest.status, 302);
     assert.equal(oldest.headers.get("location"), `${origin}/?error=auth_failed`);
+  });
+});
+
+describe("OIDC wave-66 backoffice port regressions", () => {
+  const verifierPair = generateKeyPairSync("rsa", { modulusLength: 2048 });
+  const verifierJwk = verifierPair.publicKey.export({ format: "jwk" });
+
+  async function listen(server: Server): Promise<string> {
+    servers.push(server);
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  function validToken(kid = "k1"): string {
+    const header = encode({ alg: "RS256", kid });
+    const claims = hardeningClaims("nonce-1");
+    return signedToken(header, claims, verifierPair.privateKey);
+  }
+
+  it("rejects a non-Bearer or missing token_type on the token response", async () => {
+    const tokenServer = createServer((request, response) => {
+      response.setHeader("content-type", "application/json");
+      if (request.url === "/mac") {
+        response.end(JSON.stringify({ id_token: "tok", token_type: "MAC" }));
+      } else {
+        response.end(JSON.stringify({ id_token: "tok" }));
+      }
+    });
+    const base = await listen(tokenServer);
+    for (const tokenEndpoint of [`${base}/mac`, `${base}/absent`]) {
+      await assert.rejects(
+        exchangeAuthorizationCode({ ...config, tokenEndpoint }, "code-x", "v".repeat(64)),
+        /token_type/
+      );
+    }
+  });
+
+  it("rejects duplicate JSON members in fetched token responses", async () => {
+    const tokenServer = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      // Last-wins parse would silently keep "real-token"; the duplicate must
+      // fail closed instead.
+      response.end('{"id_token":"bogus","id_token":"real-token","access_token":"a","token_type":"Bearer"}');
+    });
+    const base = await listen(tokenServer);
+    await assert.rejects(
+      exchangeAuthorizationCode({ ...config, tokenEndpoint: `${base}/token` }, "code-x", "v".repeat(64)),
+      /duplicate JSON members/
+    );
+  });
+
+  it("rejects duplicate JSON members in a fetched JWKS document", async () => {
+    const jwksServer = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      // Last-wins parse resolves kid to "k1" and the token verifies; the
+      // duplicated member must fail closed instead.
+      response.end(`{"keys":[{"kty":"RSA","kid":"decoy","kid":"k1","n":"${verifierJwk.n}","e":"${verifierJwk.e}"}]}`);
+    });
+    const jwksUri = await listen(jwksServer);
+    await assert.rejects(
+      verifyIdToken(validToken(), { ...config, jwksUri }, "nonce-1"),
+      /duplicate JSON members/
+    );
+  });
+
+  it("requires at_hash whenever an access token was issued", async () => {
+    const jwks = { keys: [{ kty: "RSA", kid: "k1", n: verifierJwk.n, e: verifierJwk.e }] };
+    const token = validToken(); // carries no at_hash claim
+    await assert.rejects(
+      verifyIdToken(token, config, "nonce-1", "acc-1", jwks),
+      /access token hash/
+    );
+    // No access token issued → at_hash is not required; the identity maps.
+    const identity = await verifyIdToken(token, config, "nonce-1", undefined, jwks);
+    assert.equal(identity.subject, "operator-60");
+  });
+
+  it("rejects signing keys with a weak or even RSA exponent", async () => {
+    const token = validToken();
+    const weakJwks = (e: string) => ({ keys: [{ kty: "RSA", kid: "k1", n: verifierJwk.n, e }] });
+    // e = 1 and e = 2: trivially forgeable / non-standard exponents must fail.
+    await assert.rejects(
+      verifyIdToken(token, config, "nonce-1", undefined, weakJwks("AQ")),
+      /signing key is not allowed/
+    );
+    await assert.rejects(
+      verifyIdToken(token, config, "nonce-1", undefined, weakJwks("Ag")),
+      /signing key is not allowed/
+    );
+  });
+
+  it("forges an RS256 signature under an admitted exponent-1 key", async () => {
+    // With e = 1 the PKCS#1 v1.5 encoded message IS a valid signature
+    // (s^e mod n == s). An admitted weak key therefore verifies a forged
+    // token end to end.
+    const header = encode({ alg: "RS256", kid: "k1" });
+    const claims = hardeningClaims("nonce-1");
+    const digestInfo = Buffer.concat([
+      Buffer.from("3031300d060960864801650304020105000420", "hex"),
+      createHash("sha256").update(`${header}.${claims}`).digest()
+    ]);
+    assert.ok(verifierJwk.n && verifierJwk.e);
+    const modulusBytes = Buffer.from(verifierJwk.n, "base64url").byteLength;
+    const em = Buffer.concat([
+      Buffer.from([0, 1]),
+      Buffer.alloc(modulusBytes - 3 - digestInfo.length, 0xff),
+      Buffer.from([0]),
+      digestInfo
+    ]);
+    const forged = `${header}.${claims}.${em.toString("base64url")}`;
+    const jwks = { keys: [{ kty: "RSA", kid: "k1", n: verifierJwk.n, e: "AQ" }] };
+    await assert.rejects(
+      verifyIdToken(forged, config, "nonce-1", undefined, jwks),
+      /signing key is not allowed/
+    );
+  });
+
+  it("rejects non-canonical base64url spelling on JWK n and e", async () => {
+    const token = validToken();
+    const jwksWith = (member: Record<string, string>) => ({
+      keys: [{ kty: "RSA", kid: "k1", n: verifierJwk.n, e: verifierJwk.e, ...member }]
+    });
+    await assert.rejects(
+      verifyIdToken(token, config, "nonce-1", undefined, jwksWith({ e: `${verifierJwk.e}=` })),
+      /signing key is not allowed/
+    );
+    await assert.rejects(
+      verifyIdToken(token, config, "nonce-1", undefined, jwksWith({ n: `${verifierJwk.n} ` })),
+      /signing key is not allowed/
+    );
+  });
+});
+
+describe("OIDC wave-66 backoffice cookie and gate regressions", () => {
+  const txCookieName = "solidchange_bo_oidc_transaction";
+
+  async function authorizeFor(base: string, login: Response): Promise<URL> {
+    const authorize = new URL(login.headers.get("location") ?? "");
+    const grant = await fetch(authorize, { redirect: "manual" });
+    return new URL(grant.headers.get("location") ?? "");
+  }
+
+  async function authenticated(base: string, cookie: string): Promise<boolean> {
+    const status = await fetch(`${base}/bff/auth/status`, { headers: { cookie } });
+    return ((await status.json()) as { authenticated: boolean }).authenticated;
+  }
+
+  it("lets the first same-name cookie win on the callback transaction cookie", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const callbackUrl = await authorizeFor(base, login);
+    // A broad-path cookie injected after the scoped transaction cookie must
+    // not shadow it.
+    const callback = await fetch(`${base}${callbackUrl.pathname}${callbackUrl.search}`, {
+      redirect: "manual",
+      headers: { cookie: `${tx}; ${txCookieName}=forged.forged` }
+    });
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get("location"), origin);
+    assert.ok(sessionCookieOf(callback));
+  });
+
+  it("lets the first same-name cookie win on the session cookie", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const callbackUrl = await authorizeFor(base, login);
+    const callback = await fetch(`${base}${callbackUrl.pathname}${callbackUrl.search}`, {
+      redirect: "manual",
+      headers: { cookie: tx }
+    });
+    const session = sessionCookieOf(callback);
+    assert.ok(session);
+    const pair = session.split(";")[0];
+
+    // A trailing forged cookie must not shadow the real session.
+    assert.equal(await authenticated(base, `${pair}; solidchange_bo_session=forged`), true);
+    // A malformed first value decodes as empty and shadows a later valid one.
+    assert.equal(await authenticated(base, `solidchange_bo_session=%FF; ${pair}`), false);
+    // A `__proto__` cookie name is ignored rather than mutating the prototype.
+    assert.equal(await authenticated(base, `__proto__=x; ${pair}`), true);
+  });
+
+  it("keeps the minted device cookie on a denied callback", async () => {
+    const { issuerBase } = await startIssuer();
+    const cfg = oidcConfigFor(issuerBase);
+    cfg.deviceBinding = { mode: "enforce", approvedDeviceDigests: [] };
+    const { base } = await startBff(cfg);
+
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const callbackUrl = await authorizeFor(base, login);
+    const denied = await fetch(`${base}${callbackUrl.pathname}${callbackUrl.search}`, {
+      redirect: "manual",
+      headers: { cookie: tx }
+    });
+    assert.equal(denied.status, 302);
+    assert.equal(denied.headers.get("location"), `${origin}/?error=auth_failed`);
+    // The freshly minted device cookie must survive the failure redirect so
+    // the denied browser keeps one stable device identity to approve.
+    const device = denied.headers.getSetCookie()
+      .find((value) => value.startsWith("solidchange_bo_device="));
+    assert.ok(device);
+    assert.match(device, /Path=\/bff/);
+  });
+
+  it("consumes a pending login exactly once under parallel callbacks", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+    const tx = (txCookieOf(login) ?? "").split(";")[0];
+    const callbackUrl = await authorizeFor(base, login);
+    const [first, second] = await Promise.all([
+      fetch(`${base}${callbackUrl.pathname}${callbackUrl.search}`, {
+        redirect: "manual",
+        headers: { cookie: tx }
+      }),
+      fetch(`${base}${callbackUrl.pathname}${callbackUrl.search}`, {
+        redirect: "manual",
+        headers: { cookie: tx }
+      })
+    ]);
+    const locations = [first.headers.get("location"), second.headers.get("location")].sort();
+    assert.deepEqual(locations, [origin, `${origin}/?error=auth_failed`]);
+    const sessions = [first, second].filter((response) => sessionCookieOf(response));
+    assert.equal(sessions.length, 1);
   });
 });
