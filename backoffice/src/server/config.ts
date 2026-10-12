@@ -1,13 +1,22 @@
 import type { OperatorRole } from "../auth/access.js";
 import { type ObservabilityConfig, logModes, metricsModes } from "./observability.js";
 
+/**
+ * Dev-only authorization-code + PKCE login for operator SSO, mirroring the
+ * Mini App flow: the env pair `BACKOFFICE_OIDC_ISSUER_URL` +
+ * `BACKOFFICE_OIDC_CLIENT_ID` activates it, endpoints are conventional paths
+ * under the issuer, and `redirectUri` is the exact `/bff/auth/callback` URL
+ * on the first allowed origin — the browser must reach the BFF through that
+ * origin for the `SameSite=Lax` transaction cookie to be sent on the
+ * callback. The token endpoint is a public client — PKCE only, never a
+ * client_secret.
+ */
 export interface OidcConfig {
   issuer: string;
   authorizationEndpoint: string;
   tokenEndpoint: string;
   jwksUri: string;
   clientId: string;
-  clientSecret: string;
   redirectUri: string;
   roleClaim: string;
   roleMap: Readonly<Record<string, OperatorRole>>;
@@ -119,24 +128,14 @@ function parseOidcUrl(
   return url;
 }
 
-function loadOidcConfig(allowedOrigins: readonly string[]): OidcConfig | undefined {
-  const values = {
-    issuer: requiredOidcValue("BACKOFFICE_OIDC_ISSUER"),
-    authorizationEndpoint: requiredOidcValue("BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT"),
-    tokenEndpoint: requiredOidcValue("BACKOFFICE_OIDC_TOKEN_ENDPOINT"),
-    jwksUri: requiredOidcValue("BACKOFFICE_OIDC_JWKS_URI"),
-    clientId: requiredOidcValue("BACKOFFICE_OIDC_CLIENT_ID"),
-    clientSecret: requiredOidcValue("BACKOFFICE_OIDC_CLIENT_SECRET") ?? "",
-    redirectUri: requiredOidcValue("BACKOFFICE_OIDC_REDIRECT_URI"),
-    roleClaim: requiredOidcValue("BACKOFFICE_OIDC_ROLE_CLAIM") ?? "groups"
-  };
-  const configured = Object.entries(values)
-    .filter(([key]) => key !== "clientSecret" && key !== "roleClaim")
-    .filter(([, value]) => Boolean(value));
+const oidcClientIdPattern = /^[A-Za-z0-9._:-]{1,128}$/;
 
-  if (configured.length === 0) return undefined;
-  if (configured.length !== 6) {
-    throw new Error("OIDC configuration is incomplete");
+function loadOidcConfig(allowedOrigins: readonly string[]): OidcConfig | undefined {
+  const issuerValue = requiredOidcValue("BACKOFFICE_OIDC_ISSUER_URL");
+  const clientId = requiredOidcValue("BACKOFFICE_OIDC_CLIENT_ID");
+  if (issuerValue === undefined && clientId === undefined) return undefined;
+  if (issuerValue === undefined || clientId === undefined) {
+    throw new Error("BACKOFFICE_OIDC_ISSUER_URL and BACKOFFICE_OIDC_CLIENT_ID must be set together");
   }
 
   const allowLoopbackHttp = allowedOrigins.every((origin) => {
@@ -144,52 +143,26 @@ function loadOidcConfig(allowedOrigins: readonly string[]): OidcConfig | undefin
     return url.protocol === "http:" && isLoopbackHostname(url.hostname);
   });
   const issuer = parseOidcUrl(
-    "BACKOFFICE_OIDC_ISSUER",
-    values.issuer as string,
-    allowLoopbackHttp
-  );
-  parseOidcUrl(
-    "BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT",
-    values.authorizationEndpoint as string,
-    allowLoopbackHttp
-  );
-  parseOidcUrl(
-    "BACKOFFICE_OIDC_TOKEN_ENDPOINT",
-    values.tokenEndpoint as string,
-    allowLoopbackHttp
-  );
-  parseOidcUrl(
-    "BACKOFFICE_OIDC_JWKS_URI",
-    values.jwksUri as string,
-    allowLoopbackHttp
-  );
-  const redirectUri = parseOidcUrl(
-    "BACKOFFICE_OIDC_REDIRECT_URI",
-    values.redirectUri as string,
+    "BACKOFFICE_OIDC_ISSUER_URL",
+    issuerValue,
     allowLoopbackHttp
   );
   if (issuer.search) {
-    throw new Error("BACKOFFICE_OIDC_ISSUER must not contain a query");
+    throw new Error("BACKOFFICE_OIDC_ISSUER_URL must not contain a query");
   }
-  if (
-    !allowedOrigins.includes(redirectUri.origin)
-    || redirectUri.pathname !== "/bff/auth/callback"
-    || redirectUri.search
-  ) {
-    throw new Error(
-      "BACKOFFICE_OIDC_REDIRECT_URI must be the exact /bff/auth/callback URL on an allowed origin"
-    );
+  if (!oidcClientIdPattern.test(clientId)) {
+    throw new Error("BACKOFFICE_OIDC_CLIENT_ID must match ^[A-Za-z0-9._:-]{1,128}$");
   }
+  const normalized = `${issuer.origin}${issuer.pathname.replace(/\/+$/, "")}`;
 
   return {
-    issuer: values.issuer as string,
-    authorizationEndpoint: values.authorizationEndpoint as string,
-    tokenEndpoint: values.tokenEndpoint as string,
-    jwksUri: values.jwksUri as string,
-    clientId: values.clientId as string,
-    clientSecret: values.clientSecret,
-    redirectUri: values.redirectUri as string,
-    roleClaim: values.roleClaim,
+    issuer: normalized,
+    authorizationEndpoint: `${normalized}/authorize`,
+    tokenEndpoint: `${normalized}/token`,
+    jwksUri: `${normalized}/.well-known/jwks.json`,
+    clientId,
+    redirectUri: `${allowedOrigins[0]}/bff/auth/callback`,
+    roleClaim: requiredOidcValue("BACKOFFICE_OIDC_ROLE_CLAIM") ?? "groups",
     roleMap: parseRoleMap(process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON)
   };
 }

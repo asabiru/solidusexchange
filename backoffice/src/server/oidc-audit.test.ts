@@ -31,7 +31,6 @@ function configFor(overrides: Partial<OidcConfig> = {}): OidcConfig {
     tokenEndpoint: `${issuer}/token`,
     jwksUri: `${issuer}/jwks`,
     clientId,
-    clientSecret: "client-secret-value",
     redirectUri: `${origin}/bff/auth/callback`,
     roleClaim: "groups",
     roleMap: { compliance: "compliance-lead" },
@@ -180,7 +179,7 @@ describe("OIDC audit wave 52 — defect regressions", () => {
     for (const sub of ["op\nerator", "op\u0007er", "op\u001fb", "op\u007fer", "op\u0000x"]) {
       const idToken = signedClaims(pair, validClaims({ sub }));
       await assert.rejects(
-        verifyIdToken(idToken, configFor(), "nonce-expected", jwks),
+        verifyIdToken(idToken, configFor(), "nonce-expected", undefined, jwks),
         /malformed/
       );
     }
@@ -194,7 +193,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
   const config = configFor();
 
   async function expectRejected(token: string, expected: RegExp): Promise<void> {
-    await assert.rejects(verifyIdToken(token, config, "nonce-expected", jwks), expected);
+    await assert.rejects(verifyIdToken(token, config, "nonce-expected", undefined, jwks), expected);
   }
 
   it("PINNED: the nonce must equal the stored authorization request exactly", async () => {
@@ -206,7 +205,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
       signedClaims(pair, validClaims()),
       config,
       "nonce-expected",
-      jwks
+      undefined, jwks
     );
     assert.equal(identity.subject, "operator-52");
   });
@@ -221,7 +220,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
       signedClaims(pair, validClaims({ iat: now + 30, nbf: now + 30 })),
       config,
       "nonce-expected",
-      jwks
+      undefined, jwks
     );
   });
 
@@ -235,7 +234,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
       signedClaims(pair, validClaims({ aud: [clientId, "other"], azp: clientId })),
       config,
       "nonce-expected",
-      jwks
+      undefined, jwks
     );
     assert.equal(identity.subject, "operator-52");
   });
@@ -272,7 +271,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
       /not found/
     );
     const duplicated = { keys: [jwks.keys[0], jwks.keys[0]] };
-    await assert.rejects(verifyIdToken(good, config, "nonce-expected", duplicated), /ambiguous/);
+    await assert.rejects(verifyIdToken(good, config, "nonce-expected", undefined, duplicated), /ambiguous/);
   });
 
   it("PINNED: token structure and canonical base64url encoding are enforced", async () => {
@@ -322,7 +321,7 @@ describe("OIDC audit wave 52 — verified clean classes", () => {
         signedClaims(pair, validClaims({ sub })),
         config,
         "nonce-expected",
-        jwks
+        undefined, jwks
       );
       assert.equal(identity.subject, sub);
     }
@@ -421,7 +420,6 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
         tokenEndpoint: `${identityUrl}/token`,
         jwksUri: `${identityUrl}/jwks`,
         clientId,
-        clientSecret: "",
         redirectUri: `${origin}/bff/auth/callback`,
         roleClaim: "groups",
         roleMap: { compliance: "compliance-lead" }
@@ -451,7 +449,16 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
     assert.ok(state && nonce);
     const code = `code-${state}`;
     nonces.set(code, nonce);
-    return { state, code, cookie: `${transactionCookie}=${state}` };
+    return { state, code, cookie: `${transactionCookie}=${state}.${nonce}` };
+  }
+
+  function assertAuthFailed(response: Response): void {
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), `${origin}/?error=auth_failed`);
+    assert.equal(
+      response.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`)),
+      false
+    );
   }
 
   it("PINNED: a replayed callback is rejected and never issues a second session", async () => {
@@ -464,11 +471,7 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
         first.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`))
       );
       const second = await fetch(url, { redirect: "manual", headers: { cookie } });
-      assert.equal(second.status, 400);
-      assert.equal(
-        second.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`)),
-        false
-      );
+      assertAuthFailed(second);
     });
   });
 
@@ -478,16 +481,12 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
         `${baseUrl}/bff/auth/callback?error=access_denied&state=x`,
         { redirect: "manual" }
       );
-      assert.equal(denied.status, 400);
+      assertAuthFailed(denied);
       const unknown = await fetch(
         `${baseUrl}/bff/auth/callback?code=c&state=unknown-state`,
         { redirect: "manual", headers: { cookie: `${transactionCookie}=unknown-state` } }
       );
-      assert.equal(unknown.status, 400);
-      assert.equal(
-        unknown.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`)),
-        false
-      );
+      assertAuthFailed(unknown);
     });
   });
 
@@ -532,14 +531,10 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
         `${baseUrl}/bff/auth/callback?code=unregistered-code&state=${state}`,
         { redirect: "manual", headers: { cookie } }
       );
-      assert.equal(callback.status, 500);
-      assert.equal(
-        callback.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`)),
-        false
-      );
-      const body = await callback.text();
-      assert.ok(!body.includes("unregistered-code"));
-      assert.ok(!body.includes("id_token"));
+      assertAuthFailed(callback);
+      const location = callback.headers.get("location") ?? "";
+      assert.ok(!location.includes("unregistered-code"));
+      assert.ok(!location.includes("id_token"));
     });
   });
 
@@ -552,11 +547,7 @@ describe("OIDC audit wave 52 — callback and session issuance", () => {
           `${baseUrl}/bff/auth/callback?code=${code}&state=${state}`,
           { redirect: "manual", headers: { cookie } }
         );
-        assert.equal(callback.status, 403);
-        assert.equal(
-          callback.headers.getSetCookie().some((value) => value.startsWith(`${sessionCookie}=`)),
-          false
-        );
+        assertAuthFailed(callback);
       }
     );
   });

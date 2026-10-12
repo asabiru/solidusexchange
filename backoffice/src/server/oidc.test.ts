@@ -1,8 +1,21 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, type KeyObject, sign } from "node:crypto";
-import { describe, it } from "node:test";
-import type { OidcConfig } from "./config.js";
-import { authorizationUrl, createCodeChallenge, verifyIdToken } from "./oidc.js";
+import { createServer, type Server } from "node:http";
+import { afterEach, describe, it } from "node:test";
+import {
+  type OidcIssuer,
+  type OidcRequest,
+  createOidcIssuer
+} from "@solidchange/provider-simulators";
+import type { OidcConfig, ServerConfig } from "./config.js";
+import {
+  authorizationUrl,
+  createCodeChallenge,
+  exchangeAuthorizationCode,
+  verifyIdToken
+} from "./oidc.js";
+import { customerApiSubject } from "./customer-api-client.js";
+import { createBackofficeServer } from "./server.js";
 
 const config: OidcConfig = {
   issuer: "https://identity.example.test",
@@ -10,13 +23,124 @@ const config: OidcConfig = {
   tokenEndpoint: "https://identity.example.test/token",
   jwksUri: "https://identity.example.test/jwks",
   clientId: "solidchange-backoffice",
-  clientSecret: "",
   redirectUri: "https://operators.example.test/bff/auth/callback",
   roleClaim: "groups",
   roleMap: {
     compliance: "compliance-lead"
   }
 };
+
+const origin = "http://127.0.0.1:4173";
+const clientId = "solidchange-backoffice";
+const servers: Server[] = [];
+
+afterEach(async () => {
+  while (servers.length) {
+    const server = servers.pop();
+    if (server) {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => (error ? reject(error) : resolve()));
+      });
+    }
+  }
+});
+
+function oidcConfigFor(issuerBase: string): ServerConfig & { oidc: OidcConfig } {
+  return {
+    host: "127.0.0.1",
+    port: 0,
+    allowedOrigins: [origin],
+    allowDevLogin: false,
+    sessionTtlSeconds: 900,
+    audit: { storage: "memory", retentionDays: 30 },
+    stepUp: {
+      provider: "synthetic-dev",
+      challengeTtlSeconds: 300,
+      grantTtlSeconds: 60,
+      maxAttempts: 3
+    },
+    signing: { backend: "ephemeral-dev", rotationSeconds: 900, retainedVerificationKeys: 2 },
+    oidc: {
+      issuer: issuerBase,
+      authorizationEndpoint: `${issuerBase}/authorize`,
+      tokenEndpoint: `${issuerBase}/token`,
+      jwksUri: `${issuerBase}/.well-known/jwks.json`,
+      clientId,
+      redirectUri: `${origin}/bff/auth/callback`,
+      roleClaim: "groups",
+      roleMap: { compliance: "compliance-lead" }
+    }
+  };
+}
+
+async function startIssuer(
+  issuerConfig: Partial<Parameters<typeof createOidcIssuer>[0]> = {}
+): Promise<{ issuer: OidcIssuer; issuerBase: string; clock: { value: number; now(): number } }> {
+  // The BFF verifies exp/iat against wall time, so the issuer clock anchors
+  // on real time too (tests move it only for TTL checks).
+  const clock = { value: Math.floor(Date.now() / 1_000), now() { return this.value; } };
+  const probe = createServer();
+  servers.push(probe);
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const address = probe.address();
+  if (!address || typeof address === "string") throw new Error("issuer port unavailable");
+  const issuerBase = `http://127.0.0.1:${address.port}`;
+  const issuer = createOidcIssuer({
+    issuer: issuerBase,
+    clientId,
+    redirectUris: [`${origin}/bff/auth/callback`],
+    defaultSubject: "operator-42",
+    idTokenClaims: {
+      groups: ["compliance"],
+      email: "operator@example.test",
+      name: "Dev Operator"
+    },
+    clock,
+    ...issuerConfig
+  });
+  probe.on("request", (request, response) => {
+    let body = "";
+    request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
+    request.on("end", () => {
+      const query: OidcRequest = {
+        method: request.method ?? "GET",
+        url: request.url ?? "/",
+        headers: request.headers as Record<string, string | undefined>,
+        body: body || undefined
+      };
+      void issuer.handle(query).then((reply) => {
+        response.writeHead(reply.status, { ...reply.headers });
+        response.end(reply.body);
+      });
+    });
+  });
+  return { issuer, issuerBase, clock };
+}
+
+async function startBff(serverConfig: ServerConfig): Promise<{ base: string }> {
+  const server = createBackofficeServer(serverConfig);
+  servers.push(server);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Test server address unavailable");
+  return { base: `http://127.0.0.1:${address.port}` };
+}
+
+function headerCookies(response: Response, name: string): string[] {
+  const getter = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie;
+  const list = typeof getter === "function"
+    ? getter.call(response.headers)
+    : (response.headers.get("set-cookie") ?? "").split(/,(?=solidchange_)/);
+  return list.filter((cookie) => cookie.startsWith(`${name}=`));
+}
+
+function sessionCookieOf(response: Response): string | undefined {
+  return headerCookies(response, "solidchange_bo_session")[0];
+}
+
+function txCookieOf(response: Response): string | undefined {
+  return headerCookies(response, "solidchange_bo_oidc_transaction")[0];
+}
 
 function encode(value: unknown): string {
   return Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -86,7 +210,7 @@ describe("OIDC boundary", () => {
       `${header}.${claims}.${signature}`,
       config,
       "nonce-1",
-      {
+      undefined, {
         keys: [
           {
             ...pair.publicKey.export({ format: "jwk" }),
@@ -129,7 +253,7 @@ describe("OIDC boundary", () => {
           `${header}.${claims}.${signature}`,
           config,
           "nonce-subject",
-          {
+          undefined, {
             keys: [
               {
                 ...pair.publicKey.export({ format: "jwk" }),
@@ -174,7 +298,7 @@ describe("OIDC boundary", () => {
 
     for (const keys of [[signerJwk, otherJwk], [otherJwk, signerJwk]]) {
       await assert.rejects(
-        verifyIdToken(idToken, config, "nonce-duplicate", { keys }),
+        verifyIdToken(idToken, config, "nonce-duplicate", undefined, { keys }),
         /signing key is ambiguous/
       );
     }
@@ -209,7 +333,7 @@ describe("OIDC boundary", () => {
         `${header}.${claims}.${signature}`,
         config,
         "nonce-critical",
-        { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "critical-key" }] }
+        undefined, { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "critical-key" }] }
       ),
       /critical protected header parameters are not supported/
     );
@@ -235,7 +359,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-2", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-2", undefined, {
         keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
       }),
       /no mapped backoffice role/
@@ -276,7 +400,7 @@ describe("OIDC boundary", () => {
       ).toString("base64url");
 
       await assert.rejects(
-        verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-inherited", {
+        verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-inherited", undefined, {
           keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
         }),
         /no mapped backoffice role/,
@@ -302,7 +426,7 @@ describe("OIDC boundary", () => {
       `${header}.${claims}.${signature}`,
       config,
       "nonce-inherited",
-      { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
+      undefined, { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
     );
     assert.equal(identity.role, "compliance-lead");
   });
@@ -337,7 +461,7 @@ describe("OIDC boundary", () => {
           }
         },
         "nonce-ambiguous",
-        { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
+        undefined, { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
       ),
       /ambiguous backoffice roles/
     );
@@ -363,7 +487,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-3", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-3", undefined, {
         keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
       }),
       /authorized party mismatch/
@@ -395,7 +519,7 @@ describe("OIDC boundary", () => {
         `${header}.${claims}.${signature}`,
         config,
         "nonce-azp-mismatch",
-        { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
+        undefined, { keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }] }
       ),
       /authorized party mismatch/
     );
@@ -422,7 +546,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-4", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-4", undefined, {
         keys: [{ ...pair.publicKey.export({ format: "jwk" }), kid: "test-key" }]
       }),
       /token claims are not valid/
@@ -476,7 +600,7 @@ describe("OIDC boundary", () => {
           `${header}.${claims}.${signature}`,
           config,
           entry.nonce,
-          {
+          undefined, {
             keys: [
               {
                 ...pair.publicKey.export({ format: "jwk" }),
@@ -510,7 +634,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-5", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-5", undefined, {
         keys: [
           {
             ...pair.publicKey.export({ format: "jwk" }),
@@ -543,7 +667,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-6", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-6", undefined, {
         keys: [
           {
             ...pair.publicKey.export({ format: "jwk" }),
@@ -576,7 +700,7 @@ describe("OIDC boundary", () => {
     ).toString("base64url");
 
     await assert.rejects(
-      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-7", {
+      verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-7", undefined, {
         keys: [
           {
             ...pair.publicKey.export({ format: "jwk" }),
@@ -600,14 +724,14 @@ describe("OIDC boundary", () => {
       const jwk = { ...pair.publicKey.export({ format: "jwk" }), kid: "ec-key" };
       for (const candidate of [jwk, { ...jwk, alg: "RS256", use: "sig" }, { ...jwk, kty: "RSA" }]) {
         await assert.rejects(
-          verifyIdToken(token, config, "nonce-kty", { keys: [candidate] }),
+          verifyIdToken(token, config, "nonce-kty", undefined, { keys: [candidate] }),
           /signing key is not allowed/
         );
       }
     }
     const ed25519 = generateKeyPairSync("ed25519");
     await assert.rejects(
-      verifyIdToken(signedToken(header, claims, ed25519.privateKey, null), config, "nonce-kty", {
+      verifyIdToken(signedToken(header, claims, ed25519.privateKey, null), config, "nonce-kty", undefined, {
         keys: [{ ...ed25519.publicKey.export({ format: "jwk" }), kid: "ec-key" }]
       }),
       /signing key is not allowed/
@@ -620,7 +744,7 @@ describe("OIDC boundary", () => {
     for (const modulusLength of [512, 1024, 2040]) {
       const weak = generateKeyPairSync("rsa", { modulusLength });
       await assert.rejects(
-        verifyIdToken(signedToken(header, claims, weak.privateKey), config, "nonce-rsa", {
+        verifyIdToken(signedToken(header, claims, weak.privateKey), config, "nonce-rsa", undefined, {
           keys: [{ ...weak.publicKey.export({ format: "jwk" }), kid: "rsa-key" }]
         }),
         /signing key is not allowed/
@@ -635,17 +759,17 @@ describe("OIDC boundary", () => {
       { ...publicJwk, key_ops: ["verify", "verify"] }
     ]) {
       await assert.rejects(
-        verifyIdToken(token, config, "nonce-rsa", { keys: [jwk] }),
+        verifyIdToken(token, config, "nonce-rsa", undefined, { keys: [jwk] }),
         /signing key is not allowed/
       );
     }
     for (const jwks of [{}, { keys: "rsa-key" }, { keys: [null] }]) {
       await assert.rejects(
-        verifyIdToken(token, config, "nonce-rsa", jwks as never),
+        verifyIdToken(token, config, "nonce-rsa", undefined, jwks as never),
         /JWKS is malformed|signing key was not found/
       );
     }
-    const identity = await verifyIdToken(token, config, "nonce-rsa", {
+    const identity = await verifyIdToken(token, config, "nonce-rsa", undefined, {
       keys: [null as never, { ...publicJwk, use: "sig", alg: "RS256", key_ops: ["verify"] }]
     });
     assert.equal(identity.role, "compliance-lead");
@@ -667,7 +791,7 @@ describe("OIDC boundary", () => {
       flippedLast
     ]) {
       await assert.rejects(
-        verifyIdToken(`${header}.${claims}.${variant}`, config, "nonce-b64", { keys }),
+        verifyIdToken(`${header}.${claims}.${variant}`, config, "nonce-b64", undefined, { keys }),
         /malformed|signature is invalid/
       );
     }
@@ -678,7 +802,7 @@ describe("OIDC boundary", () => {
       `${encodeJson(headerJson).slice(0, -1)}${encodeJson(headerJson).endsWith("A") ? "B" : "A"}`
     ]) {
       await assert.rejects(
-        verifyIdToken(signedToken(nonCanonicalHeader, claims, pair.privateKey), config, "nonce-b64", {
+        verifyIdToken(signedToken(nonCanonicalHeader, claims, pair.privateKey), config, "nonce-b64", undefined, {
           keys
         }),
         /malformed/
@@ -686,12 +810,12 @@ describe("OIDC boundary", () => {
     }
     const oversizedClaims = hardeningClaims("nonce-b64", { padding: "x".repeat(20_000) });
     await assert.rejects(
-      verifyIdToken(signedToken(header, oversizedClaims, pair.privateKey), config, "nonce-b64", {
+      verifyIdToken(signedToken(header, oversizedClaims, pair.privateKey), config, "nonce-b64", undefined, {
         keys
       }),
       /too large/
     );
-    const identity = await verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-b64", {
+    const identity = await verifyIdToken(`${header}.${claims}.${signature}`, config, "nonce-b64", undefined, {
       keys
     });
     assert.equal(identity.role, "compliance-lead");
@@ -733,7 +857,7 @@ describe("OIDC boundary", () => {
     }
     for (const [tokenHeader, tokenClaims] of cases) {
       await assert.rejects(
-        verifyIdToken(signedToken(tokenHeader, tokenClaims, pair.privateKey), config, "nonce-json", {
+        verifyIdToken(signedToken(tokenHeader, tokenClaims, pair.privateKey), config, "nonce-json", undefined, {
           keys
         }),
         /malformed|duplicate JSON members|header parameter is not supported/
@@ -750,8 +874,259 @@ describe("OIDC boundary", () => {
       ),
       config,
       "nonce-json",
-      { keys }
+      undefined, { keys }
     );
     assert.equal(identity.role, "compliance-lead");
+  });
+});
+
+describe("oidc exchange and verification against the dev issuer", () => {
+  it("exchanges a code once for an identity with the mapped role and at_hash", async () => {
+    const { issuerBase } = await startIssuer();
+    const cfg = oidcConfigFor(issuerBase).oidc;
+    const authorize = new URL(authorizationUrl(cfg, "state-1", "nonce-1", "v".repeat(64)));
+    const grant = await fetch(authorize, { redirect: "manual" });
+    assert.equal(grant.status, 302);
+    const code = new URL(grant.headers.get("location") ?? "").searchParams.get("code");
+    assert.ok(code);
+
+    const exchange = await exchangeAuthorizationCode(cfg, code, "v".repeat(64));
+    assert.ok(exchange.idToken);
+    assert.ok(exchange.accessToken);
+    const identity = await verifyIdToken(
+      exchange.idToken,
+      cfg,
+      "nonce-1",
+      exchange.accessToken
+    );
+    assert.equal(identity.subject, "operator-42");
+    assert.equal(identity.role, "compliance-lead");
+    assert.equal(identity.email, "operator@example.test");
+
+    // The authorization code is single-use.
+    await assert.rejects(exchangeAuthorizationCode(cfg, code, "v".repeat(64)));
+  });
+
+  it("rejects the exchange on wrong verifier, expired code, and bad form fields", async () => {
+    const { issuerBase, clock } = await startIssuer();
+    const cfg = oidcConfigFor(issuerBase).oidc;
+    const codeFor = async (state: string): Promise<string> => {
+      const authorize = new URL(authorizationUrl(cfg, state, "nonce-x", "v".repeat(64)));
+      const grant = await fetch(authorize, { redirect: "manual" });
+      const code = new URL(grant.headers.get("location") ?? "").searchParams.get("code");
+      assert.ok(code);
+      return code;
+    };
+
+    const first = await codeFor("s-1");
+    await assert.rejects(exchangeAuthorizationCode(cfg, first, "w".repeat(64)));
+
+    const second = await codeFor("s-2");
+    clock.value += 121;
+    await assert.rejects(exchangeAuthorizationCode(cfg, second, "v".repeat(64)));
+
+    await assert.rejects(exchangeAuthorizationCode(cfg, "cod_missing", "v".repeat(64)));
+  });
+
+  it("rejects non-POST verbs, wrong grant type and non-form bodies on the token endpoint", async () => {
+    const { issuerBase } = await startIssuer();
+    assert.equal((await fetch(`${issuerBase}/token`)).status, 405);
+    const wrongGrant = await fetch(`${issuerBase}/token`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "grant_type=password&code=x"
+    });
+    assert.equal(wrongGrant.status, 400);
+    const noType = await fetch(`${issuerBase}/token`, {
+      method: "POST",
+      body: "grant_type=authorization_code&code=x"
+    });
+    assert.equal(noType.status, 400);
+  });
+
+  it("rejects wrong nonce, foreign signature and a mismatched at_hash", async () => {
+    const { issuerBase } = await startIssuer();
+    const cfg = oidcConfigFor(issuerBase).oidc;
+    const authorize = new URL(authorizationUrl(cfg, "state-1", "nonce-1", "v".repeat(64)));
+    const grant = await fetch(authorize, { redirect: "manual" });
+    const code = new URL(grant.headers.get("location") ?? "").searchParams.get("code");
+    assert.ok(code);
+    const exchange = await exchangeAuthorizationCode(cfg, code, "v".repeat(64));
+
+    // Real token, wrong expected nonce.
+    await assert.rejects(verifyIdToken(exchange.idToken, cfg, "nonce-2", exchange.accessToken));
+    // at_hash fails closed when the presented access token differs or is absent.
+    await assert.rejects(verifyIdToken(exchange.idToken, cfg, "nonce-1", "acc_other"));
+    await assert.rejects(verifyIdToken(exchange.idToken, cfg, "nonce-1"));
+
+    // A token minted by a foreign key never verifies against the issuer JWKS.
+    const attacker = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const now = Math.floor(Date.now() / 1000);
+    const header = Buffer.from(JSON.stringify({ alg: "RS256", kid: "x" })).toString("base64url");
+    const claims = Buffer.from(JSON.stringify({
+      iss: issuerBase,
+      sub: "operator-42",
+      aud: clientId,
+      exp: now + 300,
+      iat: now,
+      nonce: "nonce-1",
+      groups: ["compliance"]
+    })).toString("base64url");
+    const forged = `${header}.${claims}.${sign("RSA-SHA256", Buffer.from(`${header}.${claims}`), attacker.privateKey).toString("base64url")}`;
+    await assert.rejects(verifyIdToken(forged, cfg, "nonce-1"));
+  });
+});
+
+describe("oidc login routes", () => {
+  async function bffLogin(base: string, cookie?: string): Promise<Response> {
+    return fetch(`${base}/bff/auth/login`, {
+      redirect: "manual",
+      headers: cookie ? { cookie } : {}
+    });
+  }
+
+  async function callbackLocation(
+    base: string,
+    loginResponse: Response,
+    cookie?: string
+  ): Promise<{ response: Response; callback: URL }> {
+    const authorize = new URL(loginResponse.headers.get("location") ?? "");
+    const tx = cookie ?? (txCookieOf(loginResponse) ?? "").split(";")[0];
+    const authorizeResponse = await fetch(authorize, { redirect: "manual" });
+    const callback = new URL(authorizeResponse.headers.get("location") ?? "");
+    const response = await fetch(`${base}${callback.pathname}${callback.search}`, {
+      redirect: "manual",
+      headers: { cookie: tx, "sec-fetch-site": "cross-site" }
+    });
+    return { response, callback };
+  }
+
+  it("serves 404 for auth routes when the env pair is unset", async () => {
+    const { base } = await startBff(oidcConfigFor("http://127.0.0.1:9"));
+    const unconfigured = oidcConfigFor("http://127.0.0.1:9");
+    delete (unconfigured as { oidc?: unknown }).oidc;
+    const { base: silent } = await startBff(unconfigured);
+    assert.equal((await bffLogin(silent)).status, 404);
+    assert.equal(
+      (await fetch(`${silent}/bff/auth/callback?code=x&state=y`, { redirect: "manual" })).status,
+      404
+    );
+    assert.equal((await bffLogin(base)).status, 302);
+  });
+
+  it("drives the full login flow to a session cookie and an operator profile", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+
+    const login = await bffLogin(base);
+    assert.equal(login.status, 302);
+    const authorize = new URL(login.headers.get("location") ?? "");
+    assert.equal(authorize.origin + authorize.pathname, `${issuerBase}/authorize`);
+    assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
+    assert.equal(authorize.searchParams.get("scope"), "openid profile email");
+    const tx = txCookieOf(login);
+    assert.ok(tx);
+    assert.match(tx, /HttpOnly/);
+    assert.match(tx, /SameSite=Lax/);
+    assert.match(tx, /Path=\/bff\/auth/);
+    assert.match(tx, /Max-Age=600/);
+
+    const { response: callback } = await callbackLocation(base, login);
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get("location"), origin);
+    const session = sessionCookieOf(callback);
+    assert.ok(session);
+
+    const profile = await fetch(`${base}/bff/api/session`, {
+      headers: { cookie: session.split(";")[0] }
+    });
+    assert.equal(profile.status, 200);
+    const envelope = await profile.json() as {
+      payload: { operator: { subject: string; role: string; email: string } };
+    };
+    // The session is minted for the pseudonymized `syn_oper_*` principal,
+    // never the raw IdP `sub`.
+    assert.equal(envelope.payload.operator.subject, customerApiSubject("operator-42"));
+    assert.match(envelope.payload.operator.subject, /^syn_oper_[0-9a-f]{24}$/);
+    assert.equal(envelope.payload.operator.role, "compliance-lead");
+    assert.equal(envelope.payload.operator.email, "operator@example.test");
+  });
+
+  it("fails closed on state mismatch, missing cookie, replayed code and error params", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const expectFailed = (response: Response) => {
+      assert.equal(response.status, 302);
+      assert.equal(response.headers.get("location"), `${origin}/?error=auth_failed`);
+    };
+
+    // `?error=` from the issuer → generic failure redirect.
+    expectFailed(
+      await fetch(`${base}/bff/auth/callback?error=access_denied`, { redirect: "manual" })
+    );
+
+    // Real authorize redirect but a foreign (mismatched) transaction cookie.
+    const loginA = await bffLogin(base);
+    const authorizeA = new URL(loginA.headers.get("location") ?? "");
+    const callbackA = new URL(
+      (await fetch(authorizeA, { redirect: "manual" })).headers.get("location") ?? ""
+    );
+    expectFailed(
+      await fetch(`${base}${callbackA.pathname}${callbackA.search}`, {
+        redirect: "manual",
+        headers: { cookie: "solidchange_bo_oidc_transaction=foreign.foreign" }
+      })
+    );
+
+    // No transaction cookie at all.
+    expectFailed(
+      await fetch(`${base}${callbackA.pathname}${callbackA.search}`, { redirect: "manual" })
+    );
+
+    // Happy path, then replaying the same callback URL fails: the pending
+    // entry was consumed on first use and the code is single-use at the issuer.
+    const loginB = await bffLogin(base);
+    const { response: callbackB, callback: callbackBUrl } = await callbackLocation(base, loginB);
+    assert.equal(callbackB.headers.get("location"), origin);
+    const txB = (txCookieOf(loginB) ?? "").split(";")[0];
+    const replayed = await fetch(`${base}${callbackBUrl.pathname}${callbackBUrl.search}`, {
+      redirect: "manual",
+      headers: { cookie: txB }
+    });
+    expectFailed(replayed);
+  });
+
+  it("fails closed when the issuer grants no mappable role", async () => {
+    const { issuerBase } = await startIssuer({ idTokenClaims: { groups: ["nobody"] } });
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    const login = await bffLogin(base);
+    const { response: callback } = await callbackLocation(base, login);
+    assert.equal(callback.status, 302);
+    assert.equal(callback.headers.get("location"), `${origin}/?error=auth_failed`);
+    assert.equal(sessionCookieOf(callback), undefined);
+  });
+
+  it("keeps at most two outstanding flows per initiator", async () => {
+    const { issuerBase } = await startIssuer();
+    const { base } = await startBff(oidcConfigFor(issuerBase));
+    // One browser chains three logins through the rotating tx cookie; the
+    // oldest pending entry is evicted so its callback must fail closed.
+    const first = await bffLogin(base);
+    const firstTx = (txCookieOf(first) ?? "").split(";")[0];
+    const firstAuthorize = new URL(first.headers.get("location") ?? "");
+    const firstCallback = new URL(
+      (await fetch(firstAuthorize, { redirect: "manual" })).headers.get("location") ?? ""
+    );
+
+    const second = await bffLogin(base, firstTx);
+    const secondTx = (txCookieOf(second) ?? "").split(";")[0];
+    await bffLogin(base, secondTx);
+
+    const oldest = await fetch(`${base}${firstCallback.pathname}${firstCallback.search}`, {
+      redirect: "manual",
+      headers: { cookie: firstTx }
+    });
+    assert.equal(oldest.status, 302);
+    assert.equal(oldest.headers.get("location"), `${origin}/?error=auth_failed`);
   });
 });

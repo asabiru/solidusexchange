@@ -38,7 +38,11 @@ import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from
 import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
 import { isSubjectRef, readableSubjectKinds, subjectTimelineAccessEvent } from "./subjects.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
-import { type CustomerApiClient, createCustomerApiClient } from "./customer-api-client.js";
+import {
+  type CustomerApiClient,
+  createCustomerApiClient,
+  customerApiSubject
+} from "./customer-api-client.js";
 import {
   buildReport,
   buildReportExport,
@@ -58,6 +62,9 @@ const sessionCookie = "solidchange_bo_session";
 const oidcTransactionCookie = "solidchange_bo_oidc_transaction";
 const deviceCookie = "solidchange_bo_device";
 const deviceCookieMaxAgeSeconds = 400 * 24 * 60 * 60;
+const oidcTransactionTtlSeconds = 600;
+const maxPendingLoginsPerInitiator = 2;
+const maxPendingLogins = 256;
 const validRoles = new Set<OperatorRole>([
   "compliance-lead",
   "support-l1",
@@ -252,25 +259,17 @@ export function createBackofficeServer(
     );
   }
 
-  function setOidcTransactionCookie(response: ServerResponse, state: string): void {
-    const flags = [
-      `${oidcTransactionCookie}=${encodeURIComponent(state)}`,
-      "HttpOnly",
-      "SameSite=Lax",
-      "Path=/bff/auth/callback",
-      "Max-Age=300"
-    ];
-    if (config.oidc && new URL(config.oidc.redirectUri).protocol === "https:") {
-      flags.push("Secure");
-    }
-    appendCookie(response, flags.join("; "));
+  function oidcTxCookieValue(value: string, maxAge: number): string {
+    const secure = config.allowedOrigins.every((origin) => origin.startsWith("https:"))
+      ? "; Secure"
+      : "";
+    return `${oidcTransactionCookie}=${encodeURIComponent(value)}; Path=/bff/auth; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
   }
 
-  function clearOidcTransactionCookie(response: ServerResponse): void {
-    appendCookie(
-      response,
-      `${oidcTransactionCookie}=; HttpOnly; SameSite=Lax; Path=/bff/auth/callback; Max-Age=0`
-    );
+  /** Every login-path failure collapses to one generic redirect. */
+  function oidcAuthFailed(response: ServerResponse): void {
+    response.setHeader("set-cookie", oidcTxCookieValue("", 0));
+    redirect(response, `${config.allowedOrigins[0]}/?error=auth_failed`);
   }
 
   function requestDeviceId(request: IncomingMessage): string | undefined {
@@ -303,15 +302,11 @@ export function createBackofficeServer(
   function admittedDevice(
     request: IncomingMessage,
     response: ServerResponse
-  ): { deviceId?: string } | undefined {
+  ): { deviceId?: string } | { deniedDigest: string } {
     if (!enforceDevices) return {};
     const deviceId = ensureDeviceId(request, response);
     if (deviceApproved(deviceId)) return { deviceId };
-    json(response, 403, {
-      error: "device_not_approved",
-      deviceDigest: deviceDigest(deviceId)
-    });
-    return undefined;
+    return { deniedDigest: deviceDigest(deviceId) };
   }
 
   async function currentSession(request: IncomingMessage): Promise<OperatorSession | undefined> {
@@ -461,19 +456,39 @@ export function createBackofficeServer(
 
       if (request.method === "GET" && path === "/bff/auth/login") {
         if (!config.oidc) {
-          json(response, 503, { error: "oidc_not_configured" });
+          json(response, 404, { error: "not_found" });
           return;
         }
+        const presented = parseCookies(request)[oidcTransactionCookie];
+        const presentedState = presented?.split(".")[0];
+        const prior = presentedState ? pendingLogins.get(presentedState) : undefined;
+        const current = await currentSession(request);
         const state = createOpaqueValue();
         const nonce = createOpaqueValue();
         const verifier = createOpaqueValue(48);
+        // `sub` is unknowable until the token verifies, so the outstanding
+        // bound keys on the initiating identity: the live session's subject
+        // when one exists, otherwise the chain of transaction cookies this
+        // browser presented (self-rooted on a first login).
+        const initiator = current
+          ? `sess:${current.subject}`
+          : prior?.initiator ?? `flow:${state}`;
         pendingLogins.set(state, {
           nonce,
           verifier,
+          initiator,
           previousSessionToken: parseCookies(request)[sessionCookie] || undefined,
-          expiresAt: Date.now() + 5 * 60 * 1_000
+          expiresAt: Date.now() + oidcTransactionTtlSeconds * 1_000
         });
-        setOidcTransactionCookie(response, state);
+        pendingLogins.retainNewest(
+          (entry) => entry.initiator === initiator,
+          maxPendingLoginsPerInitiator
+        );
+        pendingLogins.retainNewest(() => true, maxPendingLogins);
+        response.setHeader(
+          "set-cookie",
+          oidcTxCookieValue(`${state}.${nonce}`, oidcTransactionTtlSeconds)
+        );
         redirect(response, authorizationUrl(config.oidc, state, nonce, verifier));
         return;
       }
@@ -499,35 +514,58 @@ export function createBackofficeServer(
 
       if (request.method === "GET" && path === "/bff/auth/callback") {
         if (!config.oidc) {
-          json(response, 503, { error: "oidc_not_configured" });
+          json(response, 404, { error: "not_found" });
           return;
         }
-        const code = url.searchParams.get("code");
-        const state = url.searchParams.get("state");
-        const transactionState = parseCookies(request)[oidcTransactionCookie];
-        if (!code || !state || transactionState !== state) {
-          clearOidcTransactionCookie(response);
-          json(response, 400, { error: "oidc_callback_rejected" });
+        if (url.searchParams.get("error") !== null) {
+          oidcAuthFailed(response);
           return;
         }
-        const pending = pendingLogins.take(state);
-        if (!pending) {
-          clearOidcTransactionCookie(response);
-          json(response, 400, { error: "oidc_callback_rejected" });
+        const codes = url.searchParams.getAll("code");
+        const states = url.searchParams.getAll("state");
+        if (codes.length !== 1 || states.length !== 1 || !codes[0]) {
+          oidcAuthFailed(response);
           return;
         }
-        clearOidcTransactionCookie(response);
+        const transaction = parseCookies(request)[oidcTransactionCookie];
+        const [txState, txNonce] = transaction?.split(".") ?? [];
+        if (txState !== states[0] || !txNonce) {
+          oidcAuthFailed(response);
+          return;
+        }
+        const pending = pendingLogins.take(states[0]);
+        if (!pending || pending.nonce !== txNonce) {
+          oidcAuthFailed(response);
+          return;
+        }
         const device = admittedDevice(request, response);
-        if (!device) return;
-        const idToken = await exchangeAuthorizationCode(config.oidc, code, pending.verifier);
-        const identity = await verifyIdToken(idToken, config.oidc, pending.nonce);
-        await createSession(
-          request,
-          response,
-          { ...identity, ...device },
-          pending.previousSessionToken
-        );
-        redirect(response, config.allowedOrigins[0]);
+        if ("deniedDigest" in device) {
+          oidcAuthFailed(response);
+          return;
+        }
+        try {
+          const exchange = await exchangeAuthorizationCode(
+            config.oidc,
+            codes[0],
+            pending.verifier
+          );
+          const identity = await verifyIdToken(
+            exchange.idToken,
+            config.oidc,
+            pending.nonce,
+            exchange.accessToken
+          );
+          await createSession(
+            request,
+            response,
+            { ...identity, subject: customerApiSubject(identity.subject), ...device },
+            pending.previousSessionToken
+          );
+          appendCookie(response, oidcTxCookieValue("", 0));
+          redirect(response, config.allowedOrigins[0]);
+        } catch {
+          oidcAuthFailed(response);
+        }
         return;
       }
 
@@ -552,7 +590,13 @@ export function createBackofficeServer(
           return;
         }
         const device = admittedDevice(request, response);
-        if (!device) return;
+        if ("deniedDigest" in device) {
+          json(response, 403, {
+            error: "device_not_approved",
+            deviceDigest: device.deniedDigest
+          });
+          return;
+        }
         const session = await createSession(request, response, {
           subject: `dev:${profile.id}`,
           email: `${profile.id}@dev.solidchange.invalid`,
