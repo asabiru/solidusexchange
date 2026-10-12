@@ -24,6 +24,9 @@ const TICKET_MESSAGES = Object.freeze({
 export const TICKET_CATEGORIES = /** @type {readonly TicketCategory[]} */ (
   Object.freeze(Object.keys(TICKET_TOPICS))
 );
+
+const TICKET_TOPIC_LOOKUP = /** @type {Readonly<Record<string, string>>} */ (TICKET_TOPICS);
+const TICKET_MESSAGE_LOOKUP = /** @type {Readonly<Record<string, string>>} */ (TICKET_MESSAGES);
 export const TICKET_STATUSES = Object.freeze(["received", "in_review", "answered", "closed"]);
 
 const SIGNATURE_DOMAIN = "solidchange-customer-api-synthetic-support-v1";
@@ -188,7 +191,8 @@ export function validSupportTicketsView(view) {
   if (candidate.mode !== "test" || candidate.delivery !== "disabled" || !Array.isArray(candidate.tickets)) {
     return false;
   }
-  return candidate.tickets.every((ticket) => {
+  const seen = new Set();
+  return candidate.tickets.every((ticket, ticketIndex) => {
     if (
       ticket === null ||
       typeof ticket !== "object" ||
@@ -196,6 +200,10 @@ export function validSupportTicketsView(view) {
       JSON.stringify(Object.keys(ticket).sort()) !== JSON.stringify([...TICKET_KEYS].sort()) ||
       !TICKET_ID_PATTERN.test(ticket.ticket_id) ||
       !TICKET_CATEGORIES.includes(ticket.category) ||
+      // The topic and message are derived fields, not free text: they must
+      // be exactly the dictionary entries the category names.
+      ticket.topic !== TICKET_TOPIC_LOOKUP[ticket.category] ||
+      ticket.message !== TICKET_MESSAGE_LOOKUP[ticket.category] ||
       typeof ticket.topic !== "string" ||
       [...ticket.topic].length < 1 ||
       [...ticket.topic].length > TOPIC_MAX_LENGTH ||
@@ -209,10 +217,16 @@ export function validSupportTicketsView(view) {
       ticket.timeline.at(-1)?.status !== ticket.status ||
       typeof ticket.complaint_acknowledged !== "boolean" ||
       !isIsoTimestamp(ticket.created_at) ||
-      !isIsoTimestamp(ticket.expires_at)
+      !isIsoTimestamp(ticket.expires_at) ||
+      seen.has(ticket.ticket_id) ||
+      // The feed is newest-first: created_at is strictly decreasing across
+      // the collection.
+      (ticketIndex > 0 &&
+        Date.parse(candidate.tickets[ticketIndex - 1].created_at) <= Date.parse(ticket.created_at))
     ) {
       return false;
     }
+    seen.add(ticket.ticket_id);
     const createdMs = Date.parse(ticket.created_at);
     return (
       // The lifecycle is a strict prefix of the status order: a ticket that

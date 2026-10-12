@@ -40,9 +40,9 @@ const BOGUS_SCENARIO = "bogus_scenario";
 const KYC_REQUEST = {
   applicant_ref: "sim-applicant-1",
   level: "basic",
-  idempotency_key: "idem-kyc-0001",
+  idempotency_key: "idem-kyc-0001xxx",
 };
-const KYC_REQUEST_2 = { ...KYC_REQUEST, applicant_ref: "sim-applicant-2", idempotency_key: "idem-kyc-0002" };
+const KYC_REQUEST_2 = { ...KYC_REQUEST, applicant_ref: "sim-applicant-2", idempotency_key: "idem-kyc-0002xxx" };
 
 const KYT_REQUEST = {
   asset: "USDT",
@@ -51,26 +51,26 @@ const KYT_REQUEST = {
   address: "sim-wallet-1",
   tx_ref: "sim-tx-1",
   amount: "250.000000",
-  idempotency_key: "idem-kyt-0001",
+  idempotency_key: "idem-kyt-0001xxx",
 };
-const KYT_REQUEST_2 = { ...KYT_REQUEST, address: "sim-wallet-2", tx_ref: "sim-tx-2", idempotency_key: "idem-kyt-0002" };
+const KYT_REQUEST_2 = { ...KYT_REQUEST, address: "sim-wallet-2", tx_ref: "sim-tx-2", idempotency_key: "idem-kyt-0002xxx" };
 
 const BANK_REQUEST = {
   intent_ref: "sim-intent-1",
   amount: "1500.00",
   currency: "RUB",
   method: "sbp",
-  idempotency_key: "idem-bank-0001",
+  idempotency_key: "idem-bank-0001xx",
 };
-const BANK_REQUEST_2 = { ...BANK_REQUEST, intent_ref: "sim-intent-2", idempotency_key: "idem-bank-0002" };
+const BANK_REQUEST_2 = { ...BANK_REQUEST, intent_ref: "sim-intent-2", idempotency_key: "idem-bank-0002xx" };
 
 const QUOTE_REQUEST = {
   pair: "USDT/RUB",
   side: "buy",
   base_amount: "100.000000",
-  idempotency_key: "idem-quote-0001",
+  idempotency_key: "idem-quote-0001x",
 };
-const QUOTE_REQUEST_2 = { ...QUOTE_REQUEST, side: "sell", idempotency_key: "idem-quote-0002" };
+const QUOTE_REQUEST_2 = { ...QUOTE_REQUEST, side: "sell", idempotency_key: "idem-quote-0002x" };
 
 const CHECKS_MEMBERS = {
   "sim-sender-1": { kyc_verified: true },
@@ -88,18 +88,18 @@ const CHECKS_REQUEST = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 const CHECKS_ISSUE = (outputs) => ({
   check_id: outputs[0].check_id,
   member_ref: "sim-sender-1",
-  idempotency_key: "idem-issue-0001",
+  idempotency_key: "idem-issue-0001x",
 });
 const CHECKS_CLAIM = (outputs) => ({
   check_id: outputs[0].check_id,
   member_ref: "sim-recipient-1",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-claim-0001",
+  idempotency_key: "idem-claim-0001x",
 });
 
 /** Drains the shared delivery queue after advancing the simulated clock. */
@@ -323,7 +323,7 @@ const DOMAINS = [
         name: "quote_amount on a sell",
         code: "invalid_request",
         run: (simulator) =>
-          simulator.requestQuote({ pair: "USDT/RUB", side: "sell", quote_amount: "100.00", idempotency_key: "idem-quote-x001" }),
+          simulator.requestQuote({ pair: "USDT/RUB", side: "sell", quote_amount: "100.00", idempotency_key: "idem-quote-x001x" }),
       },
       {
         name: "unseeded quote",

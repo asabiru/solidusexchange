@@ -156,7 +156,7 @@ test("validChecksView fails closed on directory drift", () => {
     recipient_ref: "syn_peer_0123456789ab",
     amount: "25.000000",
     asset: "USDT",
-    fee_amount: "0.075000",
+    fee_amount: "0.000000",
     outstanding_amount: "25.000000",
     created_at: "2026-10-01T00:00:10.000Z",
     expires_at: "2026-10-04T00:00:10.000Z",
@@ -202,6 +202,9 @@ test("validChecksView fails closed on directory drift", () => {
     { mode: "test", checks: [{ ...entry, amount: "0.000000" }] },
     { mode: "test", checks: [{ ...entry, amount: "-25.000000" }] },
     { mode: "test", checks: [{ ...entry, fee_amount: "0.075" }] },
+    // The domain pins a zero fee in this slice: a nonzero fee is rejected
+    // even when the scale is right.
+    { mode: "test", checks: [{ ...entry, fee_amount: "0.075000" }] },
     { mode: "test", checks: [{ ...entry, outstanding_amount: "25.00000" }] },
     // An open check must carry its full amount outstanding and stay
     // unresolved; every other state resolves with zero outstanding.

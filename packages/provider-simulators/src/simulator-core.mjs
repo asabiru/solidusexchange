@@ -9,7 +9,7 @@ import { ProviderError, invalidRequest } from "./errors.mjs";
 /** @import { SignedDelivery } from "./signing.mjs" */
 
 export const SYNTHETIC_REFERENCE = /^sim-[a-z0-9-]{1,60}$/;
-export const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{8,128}$/;
+export const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 
 /**
  * @param {unknown} value
@@ -95,7 +95,7 @@ export function oneOf(value, allowed, name) {
  */
 export function idempotencyKey(value) {
   if (typeof value !== "string" || !IDEMPOTENCY_KEY.test(value)) {
-    invalidRequest("idempotency_key must match ^[A-Za-z0-9._:-]{8,128}$");
+    invalidRequest("idempotency_key must match ^[A-Za-z0-9._:-]{16,128}$");
   }
   return value;
 }

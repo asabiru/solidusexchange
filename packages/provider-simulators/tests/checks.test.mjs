@@ -25,7 +25,7 @@ const base = {
   amount: "25.000000",
   asset: "USDT",
   claim_reference: "claimref-0000000000000001",
-  idempotency_key: "idem-check-0001",
+  idempotency_key: "idem-check-0001x",
 };
 const GRACE = 300;
 const TTL = 259_200;
@@ -122,7 +122,7 @@ describe("checks simulator lifecycle", () => {
     const issued = await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0001",
+      idempotency_key: "idem-issue-0001x",
     });
     assert.equal(issued.status, "created");
     assert.equal(issued.outstanding_amount, "25.000000");
@@ -132,7 +132,7 @@ describe("checks simulator lifecycle", () => {
       check_id: run.created.check_id,
       member_ref: "sim-recipient-1",
       claim_reference: base.claim_reference,
-      idempotency_key: "idem-claim-0001",
+      idempotency_key: "idem-claim-0001x",
     });
     assert.equal(claimed.status, "claimed");
     assert.equal(claimed.outstanding_amount, "0.000000");
@@ -163,7 +163,7 @@ describe("checks simulator lifecycle", () => {
     await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0002",
+      idempotency_key: "idem-issue-0002x",
     });
     await collect(run);
     const cancelled = await run.simulator.cancelCheck({
@@ -181,7 +181,7 @@ describe("checks simulator lifecycle", () => {
         check_id: run.created.check_id,
         member_ref: "sim-recipient-1",
         claim_reference: base.claim_reference,
-        idempotency_key: "idem-claim-0002",
+        idempotency_key: "idem-claim-0002x",
       }),
       (error) => error.code === "invalid_request" && /cancelled/.test(error.message),
     );
@@ -193,7 +193,7 @@ describe("checks simulator lifecycle", () => {
     const issued = await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0003",
+      idempotency_key: "idem-issue-0003x",
     });
     assert.equal(issued.status, "awaiting_recipient_kyc");
     assert.equal(issued.outstanding_amount, "25.000000");
@@ -203,7 +203,7 @@ describe("checks simulator lifecycle", () => {
         check_id: run.created.check_id,
         member_ref: "sim-unverified-1",
         claim_reference: base.claim_reference,
-        idempotency_key: "idem-claim-0003",
+        idempotency_key: "idem-claim-0003x",
       }),
       (error) => error.code === "invalid_request" && /KYC/.test(error.message),
     );
@@ -228,7 +228,7 @@ describe("checks simulator lifecycle", () => {
       run.simulator.issueCheck({
         check_id: run.created.check_id,
         member_ref: "sim-sender-1",
-        idempotency_key: "idem-issue-0004",
+        idempotency_key: "idem-issue-0004x",
       }),
       (error) => error.code === "invalid_request" && /expired/.test(error.message),
     );
@@ -239,7 +239,7 @@ describe("checks simulator lifecycle", () => {
     await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0005",
+      idempotency_key: "idem-issue-0005x",
     });
     run.clock.advance(TTL + 1);
     await assert.rejects(
@@ -247,7 +247,7 @@ describe("checks simulator lifecycle", () => {
         check_id: run.created.check_id,
         member_ref: "sim-recipient-1",
         claim_reference: base.claim_reference,
-        idempotency_key: "idem-claim-0005",
+        idempotency_key: "idem-claim-0005x",
       }),
       (error) => error.code === "invalid_request" && /expired/.test(error.message),
     );
@@ -260,14 +260,14 @@ describe("checks simulator lifecycle", () => {
     await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0006",
+      idempotency_key: "idem-issue-0006x",
     });
     await assert.rejects(
       run.simulator.claimCheck({
         check_id: run.created.check_id,
         member_ref: "sim-recipient-1",
         claim_reference: "claimref-9999999999999999",
-        idempotency_key: "idem-claim-0006",
+        idempotency_key: "idem-claim-0006x",
       }),
       (error) => error.code === "invalid_request" && /claim reference/.test(error.message),
     );
@@ -276,7 +276,7 @@ describe("checks simulator lifecycle", () => {
       check_id: run.created.check_id,
       member_ref: "sim-recipient-1",
       claim_reference: base.claim_reference,
-      idempotency_key: "idem-claim-0007",
+      idempotency_key: "idem-claim-0007x",
     });
     assert.equal(claimed.status, "claimed");
     assert.equal(claimed.failed_claim_attempts, 1);
@@ -288,7 +288,7 @@ describe("checks simulator lifecycle", () => {
       run.simulator.issueCheck({
         check_id: run.created.check_id,
         member_ref: "sim-recipient-1",
-        idempotency_key: "idem-issue-0007",
+        idempotency_key: "idem-issue-0007x",
       }),
       (error) => error.code === "invalid_request" && /sender/.test(error.message),
     );
@@ -303,14 +303,14 @@ describe("checks simulator lifecycle", () => {
     await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0008",
+      idempotency_key: "idem-issue-0008x",
     });
     await assert.rejects(
       run.simulator.claimCheck({
         check_id: run.created.check_id,
         member_ref: "sim-sender-1",
         claim_reference: base.claim_reference,
-        idempotency_key: "idem-claim-0008",
+        idempotency_key: "idem-claim-0008x",
       }),
       (error) => error.code === "invalid_request" && /recipient/.test(error.message),
     );
@@ -357,7 +357,7 @@ describe("checks validation", () => {
       );
     }
     await assert.rejects(
-      simulator.issueCheck({ check_id: "chk_0000000000000000000000000000000a", member_ref: "customer-1", idempotency_key: "idem-issue-x" }),
+      simulator.issueCheck({ check_id: "chk_0000000000000000000000000000000a", member_ref: "customer-1", idempotency_key: "idem-issue-xxxxx" }),
       (error) => error.code === "invalid_request",
     );
     await assert.rejects(
@@ -380,9 +380,9 @@ describe("checks validation", () => {
     }
     const created = await simulator.createCheck(base);
     for (const command of [
-      simulator.claimCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", claim_reference: base.claim_reference, idempotency_key: "idem-claim-x" }),
-      simulator.cancelCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", idempotency_key: "idem-cancel-x" }),
-      simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", idempotency_key: "idem-issue-x" }),
+      simulator.claimCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", claim_reference: base.claim_reference, idempotency_key: "idem-claim-xxxxx" }),
+      simulator.cancelCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", idempotency_key: "idem-cancel-xxxx" }),
+      simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-stranger-1", idempotency_key: "idem-issue-xxxxx" }),
     ]) {
       await assert.rejects(command, (error) => error.code === "invalid_request" && /unknown member/.test(error.message));
     }
@@ -421,7 +421,7 @@ describe("checks validation", () => {
       (error) => error.code === "idempotency_conflict",
     );
 
-    const issueRequest = { check_id: run.created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0009" };
+    const issueRequest = { check_id: run.created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0009x" };
     const issued = await run.simulator.issueCheck(issueRequest);
     assert.deepEqual(await run.simulator.issueCheck(issueRequest), issued);
     assert.equal((await run.simulator.getCheckStatus(run.created.check_id)).sequence, 2);
@@ -434,7 +434,7 @@ describe("checks validation", () => {
       check_id: run.created.check_id,
       member_ref: "sim-recipient-1",
       claim_reference: base.claim_reference,
-      idempotency_key: "idem-claim-0009",
+      idempotency_key: "idem-claim-0009x",
     };
     const claimed = await run.simulator.claimCheck(claimRequest);
     const claimedAgain = await run.simulator.claimCheck(claimRequest);
@@ -523,7 +523,7 @@ describe("checks callbacks", () => {
     const issued = await run.simulator.issueCheck({
       check_id: run.created.check_id,
       member_ref: "sim-sender-1",
-      idempotency_key: "idem-issue-0011",
+      idempotency_key: "idem-issue-0011x",
     });
     assert.equal(issued.status, "created");
     assert.equal(run.simulator.pendingCallbacks(), 0);
@@ -565,8 +565,8 @@ describe("checks determinism", () => {
     responses.push(preview);
     const created = await simulator.createCheck(base);
     responses.push(created);
-    responses.push(await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0012" }));
-    responses.push(await simulator.claimCheck({ check_id: created.check_id, member_ref: "sim-recipient-1", claim_reference: base.claim_reference, idempotency_key: "idem-claim-0012" }));
+    responses.push(await simulator.issueCheck({ check_id: created.check_id, member_ref: "sim-sender-1", idempotency_key: "idem-issue-0012x" }));
+    responses.push(await simulator.claimCheck({ check_id: created.check_id, member_ref: "sim-recipient-1", claim_reference: base.claim_reference, idempotency_key: "idem-claim-0012x" }));
     responses.push(await simulator.getCheckStatus(created.check_id));
     const deliveries = simulator.drainCallbacks().map((delivery) => ({
       headers: delivery.headers,
