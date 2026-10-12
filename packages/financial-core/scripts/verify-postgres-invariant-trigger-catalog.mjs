@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+
+const expectedTriggerDefinitionCatalogSha256 =
+  "921cdfb3b9fe1888452bf7f2737f2a0bb9885899d15d4798fd2c7f5562f4c49d";
 
 const immediateTriggers = [
   ["ledger_accounts", "ledger_accounts_validate", "validate_account"],
@@ -24,6 +28,11 @@ const immediateTriggers = [
     "validate_delivery_attempt_reference"
   ],
   [
+    "posting_rule_registry",
+    "posting_rule_registry_validate",
+    "validate_posting_rule"
+  ],
+  [
     "schema_migrations",
     "schema_migrations_validate_sequence",
     "validate_migration_sequence"
@@ -44,6 +53,9 @@ for await (const chunk of process.stdin) {
 }
 
 const actual = JSON.parse(input);
+const actualMetadata = actual.map(
+  ({ definition_sha256: _definitionSha256, ...metadata }) => metadata
+);
 const expected = [
   ...immediateTriggers.map(([tableName, triggerName, functionName]) => ({
     table_name: tableName,
@@ -79,9 +91,28 @@ const expected = [
 );
 
 assert.deepStrictEqual(
-  actual,
+  actualMetadata,
   expected,
   "PostgreSQL invariant-trigger catalog differs from the expected policy"
+);
+
+const actualTriggerDefinitionCatalogSha256 = createHash("sha256")
+  .update(
+    JSON.stringify(
+      actual.map(
+        ({ table_name, trigger_name, definition_sha256 }) => ({
+          table_name,
+          trigger_name,
+          definition_sha256
+        })
+      )
+    )
+  )
+  .digest("hex");
+assert.equal(
+  actualTriggerDefinitionCatalogSha256,
+  expectedTriggerDefinitionCatalogSha256,
+  "PostgreSQL invariant trigger definitions differ from the expected policy"
 );
 
 console.log("postgres-invariant-trigger-catalog-ok");

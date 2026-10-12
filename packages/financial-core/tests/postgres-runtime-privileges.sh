@@ -147,6 +147,25 @@ assert_runtime_catalog_rejected \
   "GRANT TEMPORARY ON DATABASE \"$PGDATABASE\" TO PUBLIC;"
 assert_runtime_catalog_rejected \
   "GRANT CREATE ON DATABASE \"$PGDATABASE\" TO $runtime_role;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_external_grant_target NOLOGIN;
+   GRANT INSERT ON TABLE financial_core.ledger_entries
+     TO financial_core_external_grant_target;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_external_grant_target NOLOGIN;
+   GRANT SELECT ON TABLE financial_core.ledger_assets
+     TO financial_core_external_grant_target;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_external_grant_target NOLOGIN;
+   GRANT EXECUTE ON FUNCTION financial_core.reject_mutation()
+     TO financial_core_external_grant_target;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_external_grant_target NOLOGIN;
+   GRANT $runtime_role TO financial_core_external_grant_target;"
+assert_runtime_catalog_rejected \
+  "CREATE ROLE financial_core_external_grant_target NOLOGIN;
+   ALTER DEFAULT PRIVILEGES IN SCHEMA financial_core
+     GRANT SELECT ON TABLES TO financial_core_external_grant_target;"
 
 verify_runtime_catalog
 echo "postgres-runtime-privilege-catalog-negative-ok"

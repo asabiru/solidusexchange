@@ -3,7 +3,11 @@ WITH relation_rows AS (
     'relation_name', relation.relname,
     'relation_type', CASE relation.relkind
       WHEN 'r' THEN 'table'
+      WHEN 'p' THEN 'partitioned_table'
       WHEN 'v' THEN 'view'
+      WHEN 'm' THEN 'materialized_view'
+      WHEN 'S' THEN 'sequence'
+      WHEN 'f' THEN 'foreign_table'
       ELSE relation.relkind::TEXT
     END,
     'persistence', CASE relation.relpersistence
@@ -48,7 +52,7 @@ WITH relation_rows AS (
   LEFT JOIN pg_catalog.pg_am AS access_method
     ON access_method.oid = relation.relam
   WHERE namespace.nspname = 'financial_core'
-    AND relation.relkind IN ('r', 'v')
+    AND relation.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
 ),
 column_rows AS (
   SELECT jsonb_build_object(
@@ -124,9 +128,122 @@ column_rows AS (
   LEFT JOIN pg_catalog.pg_namespace AS collation_namespace
     ON collation_namespace.oid = catalog_collation.collnamespace
   WHERE namespace.nspname = 'financial_core'
-    AND relation.relkind IN ('r', 'v')
+    AND relation.relkind IN ('r', 'p', 'v', 'm', 'f')
     AND attribute.attnum > 0
     AND NOT attribute.attisdropped
+),
+policy_rows AS (
+  SELECT jsonb_build_object(
+    'relation_name', relation.relname,
+    'policy_name', policy.polname,
+    'command', policy.polcmd::TEXT,
+    'permissive', policy.polpermissive,
+    'roles', to_jsonb(ARRAY(
+      SELECT pg_catalog.pg_get_userbyid(role_oid)
+      FROM pg_catalog.unnest(policy.polroles) AS role_oid
+      ORDER BY pg_catalog.pg_get_userbyid(role_oid) COLLATE "C"
+    )),
+    'qual_sha256', pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          COALESCE(
+            pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, FALSE),
+            ''
+          ),
+          'UTF8'
+        )
+      ),
+      'hex'
+    ),
+    'with_check_sha256', pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          COALESCE(
+            pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, FALSE),
+            ''
+          ),
+          'UTF8'
+        )
+      ),
+      'hex'
+    )
+  ) AS value
+  FROM pg_catalog.pg_policy AS policy
+  JOIN pg_catalog.pg_class AS relation
+    ON relation.oid = policy.polrelid
+  JOIN pg_catalog.pg_namespace AS namespace
+    ON namespace.oid = relation.relnamespace
+  WHERE namespace.nspname = 'financial_core'
+),
+publication_rows AS (
+  SELECT jsonb_build_object(
+    'publication_name', publication.pubname,
+    'all_tables', publication.puballtables,
+    'insert', publication.pubinsert,
+    'update', publication.pubupdate,
+    'delete', publication.pubdelete,
+    'truncate', publication.pubtruncate,
+    'tables', COALESCE(
+      (
+        SELECT jsonb_agg(financial_relation.relname ORDER BY financial_relation.relname COLLATE "C")
+        FROM pg_catalog.pg_publication_rel AS publication_relation
+        JOIN pg_catalog.pg_class AS financial_relation
+          ON financial_relation.oid = publication_relation.prrelid
+        JOIN pg_catalog.pg_namespace AS financial_namespace
+          ON financial_namespace.oid = financial_relation.relnamespace
+        WHERE publication_relation.prpubid = publication.oid
+          AND financial_namespace.nspname = 'financial_core'
+      ),
+      '[]'::JSONB
+    )
+  ) AS value
+  FROM pg_catalog.pg_publication AS publication
+  WHERE publication.puballtables
+     OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_publication_rel AS publication_relation
+       JOIN pg_catalog.pg_class AS financial_relation
+         ON financial_relation.oid = publication_relation.prrelid
+       JOIN pg_catalog.pg_namespace AS financial_namespace
+         ON financial_namespace.oid = financial_relation.relnamespace
+       WHERE publication_relation.prpubid = publication.oid
+         AND financial_namespace.nspname = 'financial_core'
+     )
+),
+statistics_rows AS (
+  SELECT jsonb_build_object(
+    'statistics_name', statistics.stxname,
+    'owner_is_current_user',
+      pg_catalog.pg_get_userbyid(statistics.stxowner) = CURRENT_USER,
+    'definition_sha256', pg_catalog.encode(
+      pg_catalog.sha256(
+        pg_catalog.convert_to(
+          pg_catalog.pg_get_statisticsobjdef(statistics.oid),
+          'UTF8'
+        )
+      ),
+      'hex'
+    )
+  ) AS value
+  FROM pg_catalog.pg_statistic_ext AS statistics
+  JOIN pg_catalog.pg_namespace AS namespace
+    ON namespace.oid = statistics.stxnamespace
+  WHERE namespace.nspname = 'financial_core'
+),
+event_trigger_rows AS (
+  SELECT jsonb_build_object(
+    'event_trigger_name', event_trigger.evtname,
+    'enabled', event_trigger.evtenabled,
+    'event', event_trigger.evtevent,
+    'function_schema', function_namespace.nspname,
+    'function_name', event_function.proname,
+    'tags', COALESCE(to_jsonb(event_trigger.evttags), '[]'::JSONB)
+  ) AS value
+  FROM pg_catalog.pg_event_trigger AS event_trigger
+  JOIN pg_catalog.pg_proc AS event_function
+    ON event_function.oid = event_trigger.evtfoid
+  JOIN pg_catalog.pg_namespace AS function_namespace
+    ON function_namespace.oid = event_function.pronamespace
 )
 SELECT jsonb_build_object(
   'relations',
@@ -150,6 +267,52 @@ SELECT jsonb_build_object(
           (column_rows.value ->> 'position')::INTEGER
       )
       FROM column_rows
+    ),
+    '[]'::JSONB
+  ),
+  'policies',
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        policy_rows.value
+        ORDER BY
+          policy_rows.value ->> 'relation_name' COLLATE "C",
+          policy_rows.value ->> 'policy_name' COLLATE "C"
+      )
+      FROM policy_rows
+    ),
+    '[]'::JSONB
+  ),
+  'publications',
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        publication_rows.value
+        ORDER BY publication_rows.value ->> 'publication_name' COLLATE "C"
+      )
+      FROM publication_rows
+    ),
+    '[]'::JSONB
+  ),
+  'statistics',
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        statistics_rows.value
+        ORDER BY statistics_rows.value ->> 'statistics_name' COLLATE "C"
+      )
+      FROM statistics_rows
+    ),
+    '[]'::JSONB
+  ),
+  'event_triggers',
+  COALESCE(
+    (
+      SELECT jsonb_agg(
+        event_trigger_rows.value
+        ORDER BY event_trigger_rows.value ->> 'event_trigger_name' COLLATE "C"
+      )
+      FROM event_trigger_rows
     ),
     '[]'::JSONB
   )

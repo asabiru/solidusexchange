@@ -16,7 +16,16 @@ SELECT COALESCE(
       'deferrable', trigger.tgdeferrable,
       'initially_deferred', trigger.tginitdeferred,
       'function_schema', function_namespace.nspname,
-      'function_name', trigger_function.proname
+      'function_name', trigger_function.proname,
+      'definition_sha256', pg_catalog.encode(
+        pg_catalog.sha256(
+          pg_catalog.convert_to(
+            pg_catalog.pg_get_triggerdef(trigger.oid, FALSE),
+            'UTF8'
+          )
+        ),
+        'hex'
+      )
     )
     ORDER BY
       relation.relname COLLATE "C",
@@ -42,6 +51,7 @@ WHERE relation_namespace.nspname = 'financial_core'
     'validate_account',
     'validate_delivery_attempt_reference',
     'validate_entry_amount',
-    'validate_migration_sequence'
+    'validate_migration_sequence',
+    'validate_posting_rule'
   )
   AND trigger.tgisinternal = FALSE;
