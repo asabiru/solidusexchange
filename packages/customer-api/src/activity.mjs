@@ -212,6 +212,17 @@ function buildActivityView(subject) {
   return Object.freeze({ mode: "test", activity });
 }
 
+/**
+ * The raw item list of the synthetic feed, shared with the operator-side
+ * recent_activity projection which re-maps the same deterministic items
+ * onto its own summary shape.
+ * @param {string} subject
+ * @returns {readonly ActivityItemView[]}
+ */
+export function syntheticActivityItems(subject) {
+  return buildActivityView(subject).activity;
+}
+
 /** @param {unknown} value */
 function isIsoTimestamp(value) {
   return (

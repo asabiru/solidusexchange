@@ -109,6 +109,8 @@ import {
   countToward,
   intOf,
   operatorAccountStatusKeyOf,
+  operatorActivityKindKeyOf,
+  operatorActivitySummaryKeyOf,
   operatorAmlAlertTypeKeyOf,
   operatorKycStatusKeyOf,
   operatorQueuePriorityKeyOf,
@@ -298,7 +300,7 @@ export function CustomersView({ query, data, operatorSubjects }: { query: string
 }
 
 function DemoCustomersView({ query, data }: { query: string; data: CustomersPayload }) {
-  const { t, count } = useI18n();
+  const { t, count, date, time } = useI18n();
   const rows = rowsOf<CustomerRow>(recordOf(data).customers);
   const customers = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("ru");
@@ -317,6 +319,25 @@ function DemoCustomersView({ query, data }: { query: string; data: CustomersPayl
   }, [rows, query]);
   const [selectedId, setSelectedId] = useState(textOf(rows[0]?.id, ""));
   const selected = customers.find((customer) => customer.id === selectedId) ?? customers[0];
+  // Degrade path: the demo detail panel renders the local synthetic timeline
+  // as recent activity for the selected customer.
+  const [activityEntries, setActivityEntries] = useState<readonly SubjectTimelineEntry[]>([]);
+  useEffect(() => {
+    setActivityEntries([]);
+    const customerId = textOf(selected?.id, "");
+    if (!customerId) return;
+    let alive = true;
+    getSubjectTimeline(customerId)
+      .then((payload) => {
+        if (alive) setActivityEntries(rowsOf<SubjectTimelineEntry>(recordOf(payload).entries).slice(0, 8));
+      })
+      .catch(() => {
+        if (alive) setActivityEntries([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selected]);
 
   return (
     <>
@@ -378,6 +399,26 @@ function DemoCustomersView({ query, data }: { query: string; data: CustomersPayl
               <div><dt>{t("customers.restriction")}</dt><dd>{textOf(selected.restriction)}</dd></div>
               <div><dt>{t("customers.lastReviewed")}</dt><dd>{textOf(selected.lastReviewedAt)}</dd></div>
             </dl>
+            {activityEntries.length > 0 && (
+              <div className="subject-activity">
+                <h3>{t("customers.recentActivity")}</h3>
+                <div className="timeline-list">
+                  {activityEntries.map((entry, index) => (
+                    <div key={`${textOf(entry.kind)}:${textOf(entry.ref)}:${index}`}>
+                      <span />
+                      <div>
+                        <strong>
+                          <Status tone="info">{enumText(t, subjectKindKeyOf(entry.kind), entry.kind)}</Status>{" "}
+                          <code>{textOf(entry.ref)}</code>
+                        </strong>
+                        <small>{date(textOf(entry.at, ""))} · {time(textOf(entry.at, ""))}</small>
+                        <p>{textOf(entry.summary)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="safe-action">
               <strong>{t("customers.projectionTitle")}</strong>
               <p>{t("customers.projectionNote")}</p>
@@ -434,7 +475,7 @@ function OperatorSubjectsView({ query, subjects }: { query: string; subjects: re
 
 /** Lazily fetches `/bff/api/operator/subjects/{id}` for the picked row; failures fall back to the demo projection. */
 function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | null }) {
-  const { t, count, date } = useI18n();
+  const { t, count, date, time } = useI18n();
   const [detailState, setDetailState] = useState<"idle" | "loading" | "failed" | "not-found">("idle");
   const [detail, setDetail] = useState<OperatorSubjectDetail | null>(null);
   useEffect(() => {
@@ -490,6 +531,27 @@ function OperatorSubjectPanel({ selected }: { selected: OperatorSubjectRow | nul
           <div><dt>{t("customers.limits")}</dt><dd>{count(detail.limits.maxSessions)} / {count(detail.limits.maxDevices)}</dd></div>
           <div><dt>{t("customers.colLastActive")}</dt><dd>{date(detail.lastActiveAt)}</dd></div>
         </dl>
+        <div className="subject-activity">
+          <h3>{t("customers.recentActivity")}</h3>
+          <div className="timeline-list">
+            {detail.recentActivity.map((item, index) => (
+              <div key={`${item.activityId}:${index}`}>
+                <span />
+                <div>
+                  <strong>
+                    <Status tone="info">{enumText(t, operatorActivityKindKeyOf(item.kind), item.kind)}</Status>{" "}
+                    <code>{item.activityId}</code>
+                  </strong>
+                  <small>{date(item.occurredAt)} · {time(item.occurredAt)}</small>
+                  <p>
+                    {enumText(t, operatorActivitySummaryKeyOf(item.summary), item.summary)}
+                    {item.money === null ? "" : ` · ${item.money.amount} ${item.money.asset}`}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
         <div className="safe-action">
           <strong>{t("customers.projectionTitle")}</strong>
           <p>{t("customers.operatorNote")}</p>

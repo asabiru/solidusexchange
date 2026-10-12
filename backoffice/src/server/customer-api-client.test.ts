@@ -83,6 +83,22 @@ function subjectDetailView(overrides: Record<string, unknown> = {}): Record<stri
     sessions: 3,
     devices: [`dev_${"d".repeat(16)}`],
     limits: { max_sessions: 8, max_devices: 4 },
+    recent_activity: [
+      {
+        activity_id: `opact_${"e".repeat(24)}`,
+        kind: "kyc_transition",
+        occurred_at: "2026-09-20T10:00:00.000Z",
+        summary: "approved",
+        money: null
+      },
+      {
+        activity_id: `act_${"f".repeat(24)}`,
+        kind: "withdrawal",
+        occurred_at: "2026-09-19T10:00:00.000Z",
+        summary: "confirmed",
+        money: { amount: "0.500000", asset: "USDT" }
+      }
+    ],
     ...overrides
   };
 }
@@ -497,6 +513,17 @@ describe("customer API operator client", () => {
       for (const device of subject.devices) {
         assert.match(device, /^dev_[0-9a-f]{16}$/);
       }
+      // The recent activity page parses to a bounded newest-first list.
+      assert.ok(subject.recent_activity.length >= 1 && subject.recent_activity.length <= 8);
+      for (let index = 1; index < subject.recent_activity.length; index += 1) {
+        const prev = subject.recent_activity[index - 1];
+        const next = subject.recent_activity[index];
+        assert.ok(
+          next.occurred_at < prev.occurred_at
+            || (next.occurred_at === prev.occurred_at && next.activity_id > prev.activity_id),
+          `ordering at ${index}`
+        );
+      }
       // Unknown ids share the uniform not-found — no existence leak.
       assert.deepEqual(
         await client.operatorSubject("dev:compliance-lead", testDeviceId, `syn_cust_${"f".repeat(24)}`, Date.now()),
@@ -605,7 +632,15 @@ describe("customer API operator client", () => {
       detail({ limits: limits({ max_sessions: 17 }) }),
       detail({ limits: limits({ max_devices: 0 }) }),
       detail({ limits: limits({ max_devices: 9 }) }),
-      detail({ wallet_address: "0xabc" })
+      detail({ wallet_address: "0xabc" }),
+      detail({ recent_activity: [] }),
+      detail({ recent_activity: "not-an-array" }),
+      detail({ recent_activity: [
+        { activity_id: `act_${"f".repeat(24)}`, kind: "withdrawal", occurred_at: "2026-09-19T10:00:00.000Z", summary: "confirmed", money: { amount: "0.500000", asset: "USDT" } },
+        { activity_id: `opact_${"e".repeat(24)}`, kind: "kyc_transition", occurred_at: "2026-09-20T10:00:00.000Z", summary: "approved", money: null }
+      ] }),
+      detail({ recent_activity: [{ activity_id: `opact_${"e".repeat(24)}`, kind: "flag_added", occurred_at: "2026-09-20T10:00:00.000Z", summary: "structuring", money: { amount: "1.00", asset: "RUB" } }] }),
+      detail({ recent_activity: [{ activity_id: `act_${"0".repeat(24)}`, kind: "deposit", occurred_at: "2026-09-20T10:00:00.000Z", summary: "approved", money: null }] })
     ];
     for (const body of drifts) {
       await withFakeApi(
