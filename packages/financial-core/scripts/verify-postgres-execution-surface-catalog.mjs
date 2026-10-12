@@ -60,6 +60,7 @@ const triggers = [
   ],
   ["posting_rule_registry", "posting_rule_registry_append_only", "reject_mutation"],
   ["posting_rule_registry", "posting_rule_registry_reject_truncate", "reject_mutation"],
+  ["posting_rule_registry", "posting_rule_registry_validate", "validate_posting_rule"],
   ["schema_migrations", "schema_migrations_append_only", "reject_mutation"],
   ["schema_migrations", "schema_migrations_reject_truncate", "reject_mutation"],
   [

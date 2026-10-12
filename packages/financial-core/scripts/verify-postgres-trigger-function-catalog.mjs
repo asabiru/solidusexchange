@@ -32,6 +32,10 @@ const sourceHashes = [
   [
     "validate_migration_sequence",
     "fa98923be37da20c3bad269e4e99774b533520b8d62fca9d028adb0a96c59842"
+  ],
+  [
+    "validate_posting_rule",
+    "7ce96908a015fcb2853dab840a3edd58a415a8a2fb9a97fa035f4d43d2f33a92"
   ]
 ];
 
