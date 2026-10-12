@@ -564,7 +564,11 @@ export function createCustomerApiHandler({
       fail(400, "VALIDATION_FAILED", "X-Request-Id must be exactly one lowercase UUIDv7.");
       return;
     }
-    if (!operation.authenticated) {
+    // The metadata read is the only unauthenticated operation; it is
+    // dispatched by an explicit operationId arm like every other served
+    // route — if the contract ever marks it authenticated it falls through
+    // to the credential checks instead of being served open.
+    if (operation.operationId === "getApiMetadata" && !operation.authenticated) {
       if (!sameMetadata(metadata)) {
         throw new Error("Metadata drifted from the contract");
       }
@@ -617,6 +621,18 @@ export function createCustomerApiHandler({
     }
 
     if (operation.operationId === "getCustomerSession") {
+      // customer.session.read is granted to every authenticated customer:
+      // the session surface is the token principal's own metadata and must
+      // stay readable while they are unverified. The check stays so a
+      // served route can never drift from the capabilities the service
+      // exposes.
+      const sessionEvaluation = evaluateCapabilities({
+        kycStatus: await kycDirectory.statusFor(principal.subject)
+      });
+      if (!sessionEvaluation.granted.includes("customer.session.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
       send(
         response,
         200,
@@ -1238,12 +1254,27 @@ export function createCustomerApiHandler({
       send(response, 200, { ...view }, requestId);
       return;
     }
-    send(
-      response,
-      200,
-      { capabilities: [...evaluation.granted], commands_enabled: false },
-      requestId
-    );
+    if (operation.operationId === "getCustomerCapabilities") {
+      // customer.capabilities.read is granted to every authenticated
+      // customer like the session read: the view is the granted set
+      // itself. The check stays so a served route can never drift from
+      // the capabilities the service exposes.
+      if (!evaluation.granted.includes("customer.capabilities.read")) {
+        fail(403, "CAPABILITY_DENIED");
+        return;
+      }
+      send(
+        response,
+        200,
+        { capabilities: [...evaluation.granted], commands_enabled: false },
+        requestId
+      );
+      return;
+    }
+    // Every declared served operation is dispatched by an explicit
+    // operationId arm above; reaching the end of the pipeline means the
+    // contract and the dispatcher disagree and the request fails closed.
+    throw new Error("No dispatch arm exists for the matched operation");
   }
 
   /**
