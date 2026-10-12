@@ -116,7 +116,23 @@ function contractView(): CustomerApiOperatorSubject {
         contact_hash: `cth_${"a".repeat(32)}`,
         sessions: 3,
         devices: [`dev_${"b".repeat(16)}`],
-        limits: { max_sessions: 8, max_devices: 4 }
+        limits: { max_sessions: 8, max_devices: 4 },
+        recent_activity: [
+          {
+            activity_id: `opact_${"c".repeat(24)}`,
+            kind: "flag_added",
+            occurred_at: "2026-09-20T12:00:00.000Z",
+            summary: "velocity",
+            money: null
+          },
+          {
+            activity_id: `act_${"d".repeat(24)}`,
+            kind: "deposit",
+            occurred_at: "2026-09-19T08:00:00.000Z",
+            summary: "payment_received",
+            money: { amount: "1250.00", asset: "RUB" }
+          }
+        ]
       }
     }
   };
@@ -159,6 +175,7 @@ describe("operator subject detail BFF surface", () => {
     assert.equal(subject.sessions, null);
     assert.deepEqual(subject.devices, []);
     assert.equal(subject.limits, null);
+    assert.deepEqual(subject.recentActivity, []);
   });
 
   it("answers any non-local id with the uniform not-found when unconfigured", async () => {
@@ -203,7 +220,23 @@ describe("operator subject detail BFF surface", () => {
         contactHash: `cth_${"a".repeat(32)}`,
         sessions: 3,
         devices: [`dev_${"b".repeat(16)}`],
-        limits: { maxSessions: 8, maxDevices: 4 }
+        limits: { maxSessions: 8, maxDevices: 4 },
+        recentActivity: [
+          {
+            activityId: `opact_${"c".repeat(24)}`,
+            kind: "flag_added",
+            occurredAt: "2026-09-20T12:00:00.000Z",
+            summary: "velocity",
+            money: null
+          },
+          {
+            activityId: `act_${"d".repeat(24)}`,
+            kind: "deposit",
+            occurredAt: "2026-09-19T08:00:00.000Z",
+            summary: "payment_received",
+            money: { amount: "1250.00", asset: "RUB" }
+          }
+        ]
       }
     });
     // The session's bound workstation device and the requested id propagate.

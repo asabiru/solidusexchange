@@ -1,6 +1,7 @@
 import type { Capability, OperatorRole } from "../auth/access.js";
 import type {
   OperatorAccountStatus,
+  OperatorActivityKind,
   OperatorAmlAlertType,
   OperatorKycStatus,
   OperatorQueuePriority,
@@ -301,6 +302,76 @@ const operatorAmlAlertTypes: Readonly<Record<OperatorAmlAlertType, MessageKey>> 
 
 export function operatorAmlAlertTypeKeyOf(value: unknown): MessageKey | undefined {
   return member(operatorAmlAlertTypes, textOf(value, ""));
+}
+
+const operatorActivityKinds: Readonly<Record<OperatorActivityKind, MessageKey>> = {
+  deposit: "activity.kind.deposit",
+  withdrawal: "activity.kind.withdrawal",
+  quote: "activity.kind.quote",
+  order: "activity.kind.order",
+  payment: "activity.kind.payment",
+  card: "activity.kind.card",
+  check: "activity.kind.check",
+  kyc: "activity.kind.kyc",
+  security: "activity.kind.security",
+  kyc_transition: "activity.kind.kycTransition",
+  flag_added: "activity.kind.flagAdded"
+};
+
+export function operatorActivityKindKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorActivityKinds, textOf(value, ""));
+}
+
+// The recent_activity summary enum is i18n-safe by contract: the customer
+// per-kind statuses plus the operator-side event values. The AML alert-type
+// summaries reuse the alert labels instead of a parallel copy.
+const operatorActivitySummaries: Readonly<Record<string, MessageKey>> = {
+  awaiting_payment: "activity.summary.awaitingPayment",
+  payment_received: "activity.summary.paymentReceived",
+  partial_payment: "activity.summary.partialPayment",
+  duplicate_payment: "activity.summary.duplicatePayment",
+  payment_reversed: "activity.summary.paymentReversed",
+  expired_no_payment: "activity.summary.expiredNoPayment",
+  draft: "activity.summary.draft",
+  screened: "activity.summary.screened",
+  pending_maker_approval: "activity.summary.pendingMakerApproval",
+  pending_checker_approval: "activity.summary.pendingCheckerApproval",
+  unsigned_intent_ready: "activity.summary.unsignedIntentReady",
+  broadcast: "activity.summary.broadcast",
+  confirmed: "activity.summary.confirmed",
+  rejected: "activity.summary.rejected",
+  cancelled: "activity.summary.cancelled",
+  expired: "activity.summary.expired",
+  indicative: "activity.summary.indicative",
+  open: "activity.summary.open",
+  created: "activity.summary.created",
+  processing: "activity.summary.processing",
+  completed: "activity.summary.completed",
+  failed: "activity.summary.failed",
+  reversed: "activity.summary.reversed",
+  pending_activation: "activity.summary.pendingActivation",
+  active: "activity.summary.active",
+  frozen: "activity.summary.frozen",
+  blocked: "activity.summary.blocked",
+  terminated: "activity.summary.terminated",
+  awaiting_confirmation: "activity.summary.awaitingConfirmation",
+  awaiting_recipient_kyc: "activity.summary.awaitingRecipientKyc",
+  claimed: "activity.summary.claimed",
+  submitted: "activity.summary.submitted",
+  in_review: "activity.summary.inReview",
+  approved: "activity.summary.approved",
+  needs_more_data: "activity.summary.needsMoreData",
+  timed_out: "activity.summary.timedOut",
+  unavailable: "activity.summary.unavailable",
+  login: "activity.summary.login",
+  revoked: "activity.summary.revoked",
+  structuring: "aml.alertType.structuring",
+  velocity: "aml.alertType.velocity",
+  geo_mismatch: "aml.alertType.geoMismatch"
+};
+
+export function operatorActivitySummaryKeyOf(value: unknown): MessageKey | undefined {
+  return member(operatorActivitySummaries, textOf(value, ""));
 }
 
 const operatorTicketQueueStates: Readonly<Record<OperatorTicketQueueState, MessageKey>> = {

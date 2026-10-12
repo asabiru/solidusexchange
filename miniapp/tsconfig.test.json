@@ -25,6 +25,8 @@
     "src/app/notification-seen.test.ts",
     "src/app/server-fields.ts",
     "src/app/server-fields.test.ts",
+    "src/app/api.ts",
+    "src/app/api-audit.test.ts",
     "src/server/**/*.ts",
     "src/server/checks.test.ts",
     "src/server/notifications-routes.test.ts",

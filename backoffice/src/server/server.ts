@@ -754,7 +754,14 @@ export function createBackofficeServer(
               limits: {
                 maxSessions: upstream.view.subject.limits.max_sessions,
                 maxDevices: upstream.view.subject.limits.max_devices
-              }
+              },
+              recentActivity: upstream.view.subject.recent_activity.map((item) => ({
+                activityId: item.activity_id,
+                kind: item.kind,
+                occurredAt: item.occurred_at,
+                summary: item.summary,
+                money: item.money === null ? null : { amount: item.money.amount, asset: item.money.asset }
+              }))
             }
           });
           return;
@@ -782,7 +789,8 @@ export function createBackofficeServer(
             contactHash: null,
             sessions: null,
             devices: [],
-            limits: null
+            limits: null,
+            recentActivity: []
           }
         });
         return;

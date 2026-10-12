@@ -31,14 +31,14 @@ async function withCustomerApi<T>(key: string, run: (baseUrl: string) => Promise
 }
 
 async function withFakeApi<T>(
-  respond: (path: string) => unknown,
+  respond: (path: string, headers: IncomingHttpHeaders) => unknown,
   run: (baseUrl: string, seen: IncomingHttpHeaders[]) => Promise<T>
 ): Promise<T> {
   const seen: IncomingHttpHeaders[] = [];
   const server = createServer((request, response) => {
     seen.push(request.headers);
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify(respond(request.url ?? "")));
+    response.end(JSON.stringify(respond(request.url ?? "", request.headers)));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   try {
@@ -46,6 +46,18 @@ async function withFakeApi<T>(
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
   }
+}
+
+/** The session view the upstream contract serves for the presented dev token:
+ * the exact minted expiry and the fixed customer scope pair. */
+function sessionBody(authorization: string | undefined, subject: string): Record<string, unknown> {
+  const expiresAtSeconds = Number(String(authorization ?? "").split(".")[2]);
+  return {
+    subject,
+    actor_type: "customer",
+    scopes: ["customer.session.read", "customer.capabilities.read"],
+    expires_at: new Date(expiresAtSeconds * 1_000).toISOString()
+  };
 }
 
 describe("customer API client", () => {
@@ -75,8 +87,8 @@ describe("customer API client", () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
     await withFakeApi(
-      (path) => path === "/api/v1/customer/session"
-        ? { subject, actor_type: "customer", scopes: ["customer.session.read"], expires_at: "2026-10-06T00:00:00Z" }
+      (path, headers) => path === "/api/v1/customer/session"
+        ? sessionBody(String(headers.authorization), subject)
         : { capabilities: ["customer.session.read"], commands_enabled: false },
       async (baseUrl, seen) => {
         const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
@@ -96,20 +108,21 @@ describe("customer API client", () => {
   it("fails closed on unexpected responses", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
-    const session = { subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" };
-    for (const [sessionBody, capabilitiesBody] of [
-      [{ ...session, subject: "syn_cust_someoneelse00" }, { capabilities: [], commands_enabled: false }],
-      [{ ...session, actor_type: "operator" }, { capabilities: [], commands_enabled: false }],
-      [{ ...session, extra: true }, { capabilities: [], commands_enabled: false }],
-      [session, { capabilities: ["customer.withdrawals.create"], commands_enabled: true }],
-      [session, { capabilities: [42], commands_enabled: false }],
-      [session, { capabilities: ["operator.payouts.approve"], commands_enabled: false }]
+    for (const [sessionPatch, capabilitiesBody] of [
+      [{ subject: "syn_cust_someoneelse00" }, { capabilities: [], commands_enabled: false }],
+      [{ actor_type: "operator" }, { capabilities: [], commands_enabled: false }],
+      [{ extra: true }, { capabilities: [], commands_enabled: false }],
+      [{}, { capabilities: ["customer.withdrawals.create"], commands_enabled: true }],
+      [{}, { capabilities: [42], commands_enabled: false }],
+      [{}, { capabilities: ["operator.payouts.approve"], commands_enabled: false }]
     ]) {
       await withFakeApi(
-        (path) => path === "/api/v1/customer/session" ? sessionBody : capabilitiesBody,
+        (path, headers) => path === "/api/v1/customer/session"
+          ? { ...sessionBody(String(headers.authorization), subject), ...sessionPatch }
+          : capabilitiesBody,
         async (baseUrl) => {
           const client = createCustomerApiClient({ baseUrl, devTokenKey: key });
-          assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" }, JSON.stringify([sessionBody, capabilitiesBody]));
+          assert.deepEqual(await client.access("tg-0123456789abcdef", Date.now()), { status: "unavailable" }, JSON.stringify([sessionPatch, capabilitiesBody]));
         }
       );
     }
@@ -120,7 +133,6 @@ describe("customer API client", () => {
   it("fails closed on non-JSON content types and oversized bodies", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
-    const session = JSON.stringify({ subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" });
     const capabilities = (count: number) => JSON.stringify({
       capabilities: Array.from({ length: count }, () => "customer.session.read"),
       commands_enabled: false
@@ -134,7 +146,9 @@ describe("customer API client", () => {
     ];
     for (const [label, contentType, count] of cases) {
       const server = createServer((request, response) => {
-        const text = request.url?.endsWith("/session") ? session : capabilities(count);
+        const text = request.url?.endsWith("/session")
+          ? JSON.stringify(sessionBody(request.headers.authorization, subject))
+          : capabilities(count);
         if (contentType !== undefined) response.setHeader("content-type", contentType);
         if (count > 1) {
           // Chunked, without content-length: the client must cap the stream itself.
@@ -162,21 +176,21 @@ describe("customer API client", () => {
   it("rejects malformed content-length and encodings and cancels the body on every failure", async () => {
     const key = randomBytes(32).toString("hex");
     const subject = customerApiSubject("tg-0123456789abcdef");
-    const session = JSON.stringify({ subject, actor_type: "customer", scopes: [], expires_at: "2026-10-06T00:00:00Z" });
+    const sessionTemplate = JSON.stringify(sessionBody("Bearer scdev1.x.1791504000.sig", subject));
     const capabilities = JSON.stringify({ capabilities: [], commands_enabled: false });
     const encoder = new TextEncoder();
-    const invalidUtf8 = Buffer.from(session.replace("2026", "\u00ff026"), "latin1");
-    const cases: [string, number, Record<string, string>, Uint8Array[] | "endless" | "error"][] = [
-      ["control", 200, { "content-length": String(session.length) }, [encoder.encode(session)]],
-      ["negative length", 200, { "content-length": "-1" }, [encoder.encode(session)]],
-      ["NaN length", 200, { "content-length": "abc" }, [encoder.encode(session)]],
-      ["exponent length", 200, { "content-length": "1e2" }, [encoder.encode(session)]],
-      ["signed length", 200, { "content-length": "+120" }, [encoder.encode(session)]],
-      ["duplicate length", 200, { "content-length": "120, 120" }, [encoder.encode(session)]],
-      ["huge length", 200, { "content-length": "99999999999999999999" }, [encoder.encode(session)]],
-      ["declared oversize", 200, { "content-length": String(maxCustomerApiResponseBytes + 1) }, [encoder.encode(session)]],
-      ["error status", 500, {}, [encoder.encode(session)]],
-      ["wrong type", 200, { "content-type": "text/html" }, [encoder.encode(session)]],
+    const invalidUtf8 = Buffer.from(sessionTemplate.replace("2026", "\u00ff026"), "latin1");
+    const cases: [string, number, Record<string, string>, unknown[] | "endless" | "error"][] = [
+      ["control", 200, { "content-length": String(sessionTemplate.length) }, ["dynamic"]],
+      ["negative length", 200, { "content-length": "-1" }, [encoder.encode(sessionTemplate)]],
+      ["NaN length", 200, { "content-length": "abc" }, [encoder.encode(sessionTemplate)]],
+      ["exponent length", 200, { "content-length": "1e2" }, [encoder.encode(sessionTemplate)]],
+      ["signed length", 200, { "content-length": "+120" }, [encoder.encode(sessionTemplate)]],
+      ["duplicate length", 200, { "content-length": "120, 120" }, [encoder.encode(sessionTemplate)]],
+      ["huge length", 200, { "content-length": "99999999999999999999" }, [encoder.encode(sessionTemplate)]],
+      ["declared oversize", 200, { "content-length": String(maxCustomerApiResponseBytes + 1) }, [encoder.encode(sessionTemplate)]],
+      ["error status", 500, {}, [encoder.encode(sessionTemplate)]],
+      ["wrong type", 200, { "content-type": "text/html" }, [encoder.encode(sessionTemplate)]],
       ["endless chunks", 200, {}, "endless"],
       ["invalid utf-8", 200, {}, [invalidUtf8]],
       ["stream error", 200, {}, "error"]
@@ -186,23 +200,32 @@ describe("customer API client", () => {
       for (const [label, status, headers, body] of cases) {
         let cancelled = false;
         let pulls = 0;
+        const isDynamic = body.length === 1 && body[0] === "dynamic";
         const stream = new ReadableStream<Uint8Array>({
           pull(controller) {
             pulls += 1;
             if (body === "endless") controller.enqueue(new Uint8Array(1_024));
             else if (body === "error") controller.error(new Error("synthetic upstream reset"));
-            else if (body.length > 0) controller.enqueue(body.shift() as Uint8Array);
+            else if (isDynamic) {
+              // The session echo is minted per request: encode it at pull time
+              // once the bearer token (and its expiry) is known.
+              controller.enqueue(encoder.encode(sessionText));
+              controller.close();
+            } else if (body.length > 0) controller.enqueue(body.shift() as Uint8Array);
             else controller.close();
           },
           cancel() {
             cancelled = true;
           }
         });
-        globalThis.fetch = (async (input: string | URL | Request) => {
+        let sessionText = sessionTemplate;
+        globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
           const path = new URL(String(input)).pathname;
           if (path.endsWith("/capabilities")) {
             return new Response(capabilities, { headers: { "content-type": "application/json" } });
           }
+          const authorization = (init?.headers as Record<string, string> | undefined)?.authorization;
+          sessionText = JSON.stringify(sessionBody(authorization, subject));
           return new Response(stream, { status, headers: { "content-type": "application/json", ...headers } });
         }) as typeof fetch;
         const client = createCustomerApiClient({ baseUrl: "http://127.0.0.1:9", devTokenKey: key });

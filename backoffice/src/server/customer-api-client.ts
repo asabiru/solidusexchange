@@ -35,11 +35,58 @@ const subjectDetailKeys = [
   "last_active_at",
   "limits",
   "posting",
+  "recent_activity",
   "registered_at",
   "sessions",
   "subject_id"
 ] as const;
 const subjectLimitKeys = ["max_devices", "max_sessions"] as const;
+const activityItemKeys = ["activity_id", "kind", "occurred_at", "summary", "money"] as const;
+const activityMoneyKeys = ["amount", "asset"] as const;
+const activityIdPattern = /^(act|opact)_[0-9a-f]{24}$/u;
+const activityBound = 8;
+const customerActivityStatuses: Readonly<Record<string, ReadonlySet<string>>> = {
+  deposit: new Set([
+    "awaiting_payment",
+    "payment_received",
+    "partial_payment",
+    "duplicate_payment",
+    "payment_reversed",
+    "expired_no_payment"
+  ]),
+  withdrawal: new Set([
+    "draft",
+    "screened",
+    "pending_maker_approval",
+    "pending_checker_approval",
+    "unsigned_intent_ready",
+    "broadcast",
+    "confirmed",
+    "rejected",
+    "cancelled",
+    "expired"
+  ]),
+  quote: new Set(["indicative"]),
+  order: new Set(["open", "cancelled", "expired", "rejected"]),
+  payment: new Set(["created", "processing", "completed", "failed", "reversed", "cancelled", "expired"]),
+  card: new Set(["pending_activation", "active", "frozen", "blocked", "expired", "terminated"]),
+  check: new Set(["awaiting_confirmation", "created", "awaiting_recipient_kyc", "claimed", "cancelled", "expired"]),
+  kyc: new Set(["submitted", "in_review", "approved", "rejected", "needs_more_data", "timed_out", "unavailable"]),
+  security: new Set(["login", "revoked"])
+};
+const customerActivityKinds: ReadonlySet<string> = new Set(Object.keys(customerActivityStatuses));
+const operatorOnlyActivityKinds: ReadonlySet<string> = new Set(["kyc_transition", "flag_added"]);
+const activityMoneyKinds: ReadonlySet<string> = new Set(
+  [...customerActivityKinds].filter((kind) => kind !== "kyc" && kind !== "security")
+);
+const kycTransitionSummaries: ReadonlySet<string> = new Set(["submitted", "approved"]);
+const amlAlertTypes: ReadonlySet<string> = new Set(["structuring", "velocity", "geo_mismatch"]);
+const activitySummaries: ReadonlySet<string> = new Set([
+  ...Object.values(customerActivityStatuses).flatMap((statuses) => [...statuses]),
+  ...kycTransitionSummaries,
+  ...amlAlertTypes
+]);
+const activityAssetScales: ReadonlyMap<string, number> = new Map([["RUB", 2], ["USDT", 6], ["TON", 9]]);
 const subjectAccountStatuses: ReadonlySet<string> = new Set(["active", "closed", "dormant", "restricted"]);
 const contactHashPattern = /^cth_[0-9a-f]{32}$/;
 const deviceRefPattern = /^dev_[0-9a-f]{16}$/;
@@ -95,7 +142,6 @@ const queueKinds: ReadonlySet<string> = new Set(["kyc", "aml", "tickets"]);
 const queueStates: ReadonlySet<string> = new Set(["pending", "in_review", "escalated"]);
 const queueTicketStates: ReadonlySet<string> = new Set(["open", "waiting", "escalated"]);
 const queuePriorities: ReadonlySet<string> = new Set(["normal", "high", "urgent"]);
-const amlAlertTypes: ReadonlySet<string> = new Set(["structuring", "velocity", "geo_mismatch"]);
 // The queue's ticket categories echo the customer support ticket universe.
 const ticketCategories: ReadonlySet<string> = new Set(["question", "operation_problem", "complaint", "data_request"]);
 const operatorAdminViewKeys = [
@@ -177,6 +223,15 @@ export interface CustomerApiSubjectLimits {
   max_devices: number;
 }
 
+/** One recent_activity item of the operator subject detail — snake_case contract fields. */
+export interface CustomerApiSubjectActivityItem {
+  activity_id: string;
+  kind: string;
+  occurred_at: string;
+  summary: string;
+  money: { amount: string; asset: string } | null;
+}
+
 /** One subject row of the operator detail read — the list fields plus the id-bound detail extension. */
 export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   account_status: string;
@@ -184,6 +239,7 @@ export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   sessions: number;
   devices: readonly string[];
   limits: CustomerApiSubjectLimits;
+  recent_activity: readonly CustomerApiSubjectActivityItem[];
 }
 
 /** Wire view of GET /api/v1/operator/subjects/{subjectId} — snake_case contract fields. */
@@ -451,6 +507,112 @@ function parseOperatorSubjectsView(value: unknown): CustomerApiOperatorSubjectsV
 }
 
 /**
+ * Fail-closed parser for one recent_activity item: exact key set, the
+ * `act_*`/`opact_*` ref grammar, kind and summary vocabularies (the
+ * customer per-kind status sets plus the operator-side event values),
+ * the prefix↔kind and money↔kind coherence rules and a positive scaled
+ * decimal amount — the same axes the upstream activity-item check pins.
+ */
+function parseSubjectActivityItem(item: unknown): CustomerApiSubjectActivityItem | undefined {
+  if (!isRecord(item) || !hasExactKeys(item, activityItemKeys)) {
+    return undefined;
+  }
+  if (
+    typeof item.activity_id !== "string"
+    || !activityIdPattern.test(item.activity_id)
+    || typeof item.kind !== "string"
+    || !(customerActivityKinds.has(item.kind) || operatorOnlyActivityKinds.has(item.kind))
+    || typeof item.summary !== "string"
+    || !activitySummaries.has(item.summary)
+    || !isIsoTimestamp(item.occurred_at)
+  ) {
+    return undefined;
+  }
+  const operatorKind = operatorOnlyActivityKinds.has(item.kind);
+  if (operatorKind !== item.activity_id.startsWith("opact_")) {
+    return undefined;
+  }
+  if (operatorKind) {
+    if (item.kind === "kyc_transition" && !kycTransitionSummaries.has(item.summary)) {
+      return undefined;
+    }
+    if (item.kind === "flag_added" && !amlAlertTypes.has(item.summary)) {
+      return undefined;
+    }
+  } else if (!(customerActivityStatuses[item.kind] ?? new Set()).has(item.summary)) {
+    return undefined;
+  }
+  if (item.money === null) {
+    if (activityMoneyKinds.has(item.kind)) {
+      return undefined;
+    }
+    return Object.freeze({
+      activity_id: item.activity_id,
+      kind: item.kind,
+      occurred_at: item.occurred_at,
+      summary: item.summary,
+      money: null
+    });
+  }
+  if (
+    !activityMoneyKinds.has(item.kind)
+    || !isRecord(item.money)
+    || !hasExactKeys(item.money, activityMoneyKeys)
+    || typeof item.money.amount !== "string"
+    || typeof item.money.asset !== "string"
+  ) {
+    return undefined;
+  }
+  const scale = activityAssetScales.get(item.money.asset);
+  if (
+    scale === undefined
+    || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(item.money.amount)
+    || BigInt(item.money.amount.replace(".", "")) <= 0n
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    activity_id: item.activity_id,
+    kind: item.kind,
+    occurred_at: item.occurred_at,
+    summary: item.summary,
+    money: Object.freeze({ amount: item.money.amount, asset: item.money.asset })
+  });
+}
+
+/**
+ * The recent_activity page: a bounded newest-first list with unique ids;
+ * same-instant items order by id, mirroring the upstream sort.
+ */
+function parseSubjectRecentActivity(value: unknown): readonly CustomerApiSubjectActivityItem[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > activityBound) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const items: CustomerApiSubjectActivityItem[] = [];
+  let previousMs = Number.POSITIVE_INFINITY;
+  let previousId = "";
+  for (const raw of value) {
+    const item = parseSubjectActivityItem(raw);
+    if (item === undefined || seen.has(item.activity_id)) {
+      return undefined;
+    }
+    const occurredMs = Date.parse(item.occurred_at);
+    if (
+      occurredMs > previousMs
+      || (occurredMs === previousMs && item.activity_id.localeCompare(previousId) <= 0)
+    ) {
+      return undefined;
+    }
+    seen.add(item.activity_id);
+    previousMs = occurredMs;
+    previousId = item.activity_id;
+    items.push(item);
+  }
+  return Object.freeze(items);
+}
+
+/**
  * Fail-closed parser for the operator subject detail contract view: the list
  * row's axes (exact key sets, `syn_cust_*` ref, kyc_status enum, non-negative
  * integer flags, coherent ISO timestamps, pinned `posting: "none"`) plus the
@@ -516,6 +678,10 @@ function parseOperatorSubjectDetailView(
   ) {
     return undefined;
   }
+  const recentActivity = parseSubjectRecentActivity(item.recent_activity);
+  if (recentActivity === undefined) {
+    return undefined;
+  }
   return Object.freeze({
     mode: "test",
     subject: Object.freeze({
@@ -533,7 +699,8 @@ function parseOperatorSubjectDetailView(
       limits: Object.freeze({
         max_sessions: item.limits.max_sessions,
         max_devices: item.limits.max_devices
-      })
+      }),
+      recent_activity: recentActivity
     })
   });
 }

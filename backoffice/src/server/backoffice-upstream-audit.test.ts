@@ -66,7 +66,23 @@ function subjectDetailView(id: string): Record<string, unknown> {
       contact_hash: `cth_${"1".repeat(32)}`,
       sessions: 2,
       devices: [`dev_${"2".repeat(16)}`],
-      limits: { max_devices: 4, max_sessions: 8 }
+      limits: { max_devices: 4, max_sessions: 8 },
+      recent_activity: [
+        {
+          activity_id: `opact_${"6".repeat(24)}`,
+          kind: "kyc_transition",
+          occurred_at: "2026-09-20T10:00:00.000Z",
+          summary: "approved",
+          money: null
+        },
+        {
+          activity_id: `act_${"7".repeat(24)}`,
+          kind: "payment",
+          occurred_at: "2026-09-18T10:00:00.000Z",
+          summary: "completed",
+          money: { amount: "42.00", asset: "RUB" }
+        }
+      ]
     }
   };
 }
@@ -571,7 +587,16 @@ describe("upstream adapter layer — strict view adapters", () => {
       contactHash: `cth_${"3".repeat(32)}`,
       sessions: 3,
       devices: [`dev_${"4".repeat(16)}`],
-      limits: { maxSessions: 8, maxDevices: 4 }
+      limits: { maxSessions: 8, maxDevices: 4 },
+      recentActivity: [
+        {
+          activityId: `opact_${"8".repeat(24)}`,
+          kind: "kyc_transition",
+          occurredAt: "2026-09-20T10:00:00.000Z",
+          summary: "approved",
+          money: null
+        }
+      ]
     }
   };
 

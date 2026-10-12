@@ -12,6 +12,32 @@
 
 export type OperatorKycStatus = "unverified" | "pending" | "verified";
 export type OperatorAccountStatus = "active" | "closed" | "dormant" | "restricted";
+export type OperatorActivityCustomerKind =
+  | "deposit"
+  | "withdrawal"
+  | "quote"
+  | "order"
+  | "payment"
+  | "card"
+  | "check"
+  | "kyc"
+  | "security";
+export type OperatorActivityOperatorKind = "kyc_transition" | "flag_added";
+export type OperatorActivityKind = OperatorActivityCustomerKind | OperatorActivityOperatorKind;
+
+export interface OperatorActivityMoney {
+  amount: string;
+  asset: string;
+}
+
+/** One recent_activity item: `act_*` customer feed items or `opact_*` operator events. */
+export interface OperatorActivityItem {
+  activityId: string;
+  kind: OperatorActivityKind;
+  occurredAt: string;
+  summary: string;
+  money: OperatorActivityMoney | null;
+}
 export type OperatorQueueKind = "kyc" | "aml" | "tickets";
 export type OperatorQueueState = "pending" | "in_review" | "escalated";
 export type OperatorTicketQueueState = "open" | "waiting" | "escalated";
@@ -36,6 +62,7 @@ export interface OperatorSubjectDetail extends OperatorSubjectRow {
   sessions: number;
   devices: readonly string[];
   limits: { maxSessions: number; maxDevices: number };
+  recentActivity: readonly OperatorActivityItem[];
 }
 
 export interface OperatorSubjectsView {
@@ -138,11 +165,58 @@ const subjectDetailKeys = [
   "lastActiveAt",
   "limits",
   "posting",
+  "recentActivity",
   "registeredAt",
   "sessions",
   "subjectId"
 ] as const;
 const subjectLimitKeys = ["maxDevices", "maxSessions"] as const;
+const activityItemKeys = ["activityId", "kind", "occurredAt", "summary", "money"] as const;
+const activityMoneyKeys = ["amount", "asset"] as const;
+const activityIdPattern = /^(act|opact)_[0-9a-f]{24}$/;
+const activityBound = 8;
+const customerActivityStatuses: Readonly<Record<OperatorActivityCustomerKind, ReadonlySet<string>>> = {
+  deposit: new Set([
+    "awaiting_payment",
+    "payment_received",
+    "partial_payment",
+    "duplicate_payment",
+    "payment_reversed",
+    "expired_no_payment"
+  ]),
+  withdrawal: new Set([
+    "draft",
+    "screened",
+    "pending_maker_approval",
+    "pending_checker_approval",
+    "unsigned_intent_ready",
+    "broadcast",
+    "confirmed",
+    "rejected",
+    "cancelled",
+    "expired"
+  ]),
+  quote: new Set(["indicative"]),
+  order: new Set(["open", "cancelled", "expired", "rejected"]),
+  payment: new Set(["created", "processing", "completed", "failed", "reversed", "cancelled", "expired"]),
+  card: new Set(["pending_activation", "active", "frozen", "blocked", "expired", "terminated"]),
+  check: new Set(["awaiting_confirmation", "created", "awaiting_recipient_kyc", "claimed", "cancelled", "expired"]),
+  kyc: new Set(["submitted", "in_review", "approved", "rejected", "needs_more_data", "timed_out", "unavailable"]),
+  security: new Set(["login", "revoked"])
+};
+const customerActivityKinds: ReadonlySet<string> = new Set(Object.keys(customerActivityStatuses));
+const operatorOnlyActivityKinds: ReadonlySet<string> = new Set(["kyc_transition", "flag_added"]);
+const activityMoneyKinds: ReadonlySet<string> = new Set(
+  [...customerActivityKinds].filter((kind) => kind !== "kyc" && kind !== "security")
+);
+const kycTransitionSummaries: ReadonlySet<string> = new Set(["submitted", "approved"]);
+const amlAlertTypes: ReadonlySet<string> = new Set(["structuring", "velocity", "geo_mismatch"]);
+const activitySummaries: ReadonlySet<string> = new Set([
+  ...Object.values(customerActivityStatuses).flatMap((statuses) => [...statuses]),
+  ...kycTransitionSummaries,
+  ...amlAlertTypes
+]);
+const activityAssetScales: ReadonlyMap<string, number> = new Map([["RUB", 2], ["USDT", 6], ["TON", 9]]);
 const queueViewKeys = ["mode", "queue"] as const;
 const queueKeys = ["items", "kind", "posting", "summary"] as const;
 const queueItemKeys = [
@@ -199,7 +273,6 @@ const accountStatuses: ReadonlySet<string> = new Set(["active", "closed", "dorma
 const queueStates: ReadonlySet<string> = new Set(["pending", "in_review", "escalated"]);
 const queueTicketStates: ReadonlySet<string> = new Set(["open", "waiting", "escalated"]);
 const queuePriorities: ReadonlySet<string> = new Set(["normal", "high", "urgent"]);
-const amlAlertTypes: ReadonlySet<string> = new Set(["structuring", "velocity", "geo_mismatch"]);
 const ticketCategories: ReadonlySet<string> = new Set(["question", "operation_problem", "complaint", "data_request"]);
 
 const subjectsMaxItems = 64;
@@ -288,6 +361,107 @@ export function parseOperatorSubjectsView(value: unknown): OperatorSubjectsView 
 }
 
 /**
+ * One recent_activity item: exact key set, `act_*`/`opact_*` ref grammar,
+ * the kind and summary vocabularies, the prefix↔kind and money↔kind
+ * coherence rules and a positive scaled-decimal amount.
+ */
+function parseActivityItem(item: unknown): OperatorActivityItem | undefined {
+  if (!isRecord(item) || !hasExactKeys(item, activityItemKeys)) {
+    return undefined;
+  }
+  if (
+    typeof item.activityId !== "string"
+    || !activityIdPattern.test(item.activityId)
+    || typeof item.kind !== "string"
+    || !(customerActivityKinds.has(item.kind) || operatorOnlyActivityKinds.has(item.kind))
+    || typeof item.summary !== "string"
+    || !activitySummaries.has(item.summary)
+    || !isIsoTimestamp(item.occurredAt)
+  ) {
+    return undefined;
+  }
+  const operatorKind = operatorOnlyActivityKinds.has(item.kind);
+  if (operatorKind !== item.activityId.startsWith("opact_")) {
+    return undefined;
+  }
+  if (operatorKind) {
+    if (item.kind === "kyc_transition" && !kycTransitionSummaries.has(item.summary)) {
+      return undefined;
+    }
+    if (item.kind === "flag_added" && !amlAlertTypes.has(item.summary)) {
+      return undefined;
+    }
+  } else if (!(customerActivityStatuses[item.kind as OperatorActivityCustomerKind] ?? new Set()).has(item.summary)) {
+    return undefined;
+  }
+  if (item.money === null) {
+    if (activityMoneyKinds.has(item.kind)) {
+      return undefined;
+    }
+    return Object.freeze({
+      activityId: item.activityId,
+      kind: item.kind as OperatorActivityKind,
+      occurredAt: item.occurredAt,
+      summary: item.summary,
+      money: null
+    });
+  }
+  if (
+    !activityMoneyKinds.has(item.kind)
+    || !isRecord(item.money)
+    || !hasExactKeys(item.money, activityMoneyKeys)
+    || typeof item.money.amount !== "string"
+    || typeof item.money.asset !== "string"
+  ) {
+    return undefined;
+  }
+  const scale = activityAssetScales.get(item.money.asset);
+  if (
+    scale === undefined
+    || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(item.money.amount)
+    || BigInt(item.money.amount.replace(".", "")) <= 0n
+  ) {
+    return undefined;
+  }
+  return Object.freeze({
+    activityId: item.activityId,
+    kind: item.kind as OperatorActivityKind,
+    occurredAt: item.occurredAt,
+    summary: item.summary,
+    money: Object.freeze({ amount: item.money.amount, asset: item.money.asset })
+  });
+}
+
+/** The recent_activity page: a bounded newest-first list with unique ids. */
+function parseRecentActivity(value: unknown): readonly OperatorActivityItem[] | undefined {
+  if (!Array.isArray(value) || value.length < 1 || value.length > activityBound) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const items: OperatorActivityItem[] = [];
+  let previousMs = Number.POSITIVE_INFINITY;
+  let previousId = "";
+  for (const raw of value) {
+    const item = parseActivityItem(raw);
+    if (item === undefined || seen.has(item.activityId)) {
+      return undefined;
+    }
+    const occurredMs = Date.parse(item.occurredAt);
+    if (
+      occurredMs > previousMs
+      || (occurredMs === previousMs && item.activityId.localeCompare(previousId) <= 0)
+    ) {
+      return undefined;
+    }
+    seen.add(item.activityId);
+    previousMs = occurredMs;
+    previousId = item.activityId;
+    items.push(item);
+  }
+  return Object.freeze(items);
+}
+
+/**
  * The operator subject detail: the list row's axes plus the detail
  * extension — the account_status enum, the redacted `cth_*` contact digest,
  * a bounded integer session count, unique bounded `dev_*` device refs and a
@@ -342,6 +516,10 @@ export function parseOperatorSubjectView(
   ) {
     return undefined;
   }
+  const recentActivity = parseRecentActivity(item.recentActivity);
+  if (recentActivity === undefined) {
+    return undefined;
+  }
   return Object.freeze({
     mode: "test",
     subject: Object.freeze({
@@ -359,7 +537,8 @@ export function parseOperatorSubjectView(
       limits: Object.freeze({
         maxSessions: item.limits.maxSessions as number,
         maxDevices: item.limits.maxDevices as number
-      })
+      }),
+      recentActivity
     })
   });
 }
