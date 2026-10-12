@@ -14,7 +14,7 @@ truth, custody, compliance decisions, recovery or software delivery.
 
 It does not select a vendor, approve an outsourcing arrangement, authorize a
 production integration, accept a data location, create provider credentials or
-satisfy any open item in D-001 through D-018. Repository adapters, sandbox
+satisfy any open item in D-001 through D-019. Repository adapters, sandbox
 access, a completed scorecard and green CI are not production approval.
 
 ## Objectives
@@ -340,7 +340,7 @@ scorecard or contractual SLO alone is not internal recovery evidence.
 
 Production use remains blocked until:
 
-- applicable D-001 through D-018 decisions are approved;
+- applicable D-001 through D-019 decisions are approved;
 - the provider-specific scorecard and mandatory gates pass;
 - legal scope, contract and data-processing terms are approved;
 - Security and Privacy approve architecture, access, location and processors;

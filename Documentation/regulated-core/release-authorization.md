@@ -231,7 +231,7 @@ Do not deploy or enable when:
 - required monitoring, on-call, incident response or provider escalation is absent;
 - the affected business service lacks current resilience objectives, capacity evidence or required continuity exercise;
 - regulated functionality would become enabled by missing or implicit configuration;
-- D-001 through D-018 dependencies applicable to the scope remain unapproved.
+- D-001 through D-019 dependencies applicable to the scope remain unapproved.
 
 ## Current repository boundary
 

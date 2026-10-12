@@ -251,7 +251,7 @@
         "- event schema, canonicalization, partitioning and chain/checkpoint design are approved;",
         "- retention, legal hold, disposal, data location and processor decisions are approved;",
         "- evidence storage, checkpoint key custody, backup encryption and recovery targets are approved;",
-        "- applicable D-001 through D-018 decisions and domain gates are approved;",
+        "- applicable D-001 through D-019 decisions and domain gates are approved;",
         "Approval of this baseline confirms only the audit-evidence design. It does not authorize a production audit store, operator command plane, customer data migration, financial execution, provider access, custody signing, broadcast or launch."
       ],
       "fencedClaims": [
@@ -326,7 +326,7 @@
       "statusLines": [
         "- Status: Proposed",
         "- Production effect: none",
-        "- D-001, D-002 and every affected D-004…D-014 scope decision is approved;"
+        "- D-001, D-002, D-019 and every affected D-004…D-014 scope decision is approved;"
       ],
       "approverLines": [
         "- Required approvers: Legal, MLRO/Compliance, Product, Finance, Security and every affected domain owner"
@@ -376,7 +376,7 @@
         "- authenticated customer/session and approved representative scope;",
         "Evidence is minimized and retained under approved lifecycle policy. It does not",
         "## Approval dependencies",
-        "- D-001, D-002 and every affected D-004…D-014 scope decision is approved;",
+        "- D-001, D-002, D-019 and every affected D-004…D-014 scope decision is approved;",
         "- customer types, jurisdictions, assets, rails, limits and exclusions are approved;",
         "- disclosures, consent, fees, quotes, status semantics and receipts are approved;",
         "- restriction, notice, review and appeal policy is approved;",
@@ -460,7 +460,7 @@
         "- Status: Proposed",
         "- Production effect: none",
         "| State | Meaning | Allowed transition authority |",
-        "- D-001 through D-018 dependencies applicable to the scope are approved;"
+        "- D-001 through D-019 dependencies applicable to the scope are approved;"
       ],
       "approverLines": [
         "- Required approvers: Legal/Privacy, MLRO, Finance, Security, CTO, affected data owner"
@@ -545,7 +545,7 @@
         "- data categories, purposes, legal bases, owners, processors and locations are approved;",
         "- hold placement, propagation, conflict and release procedures are approved and tested;",
         "- subject-request, correction, restriction and lawful-exception workflows are approved;",
-        "- D-001 through D-018 dependencies applicable to the scope are approved;",
+        "- D-001 through D-019 dependencies applicable to the scope are approved;",
         "Approval of this baseline confirms only the proposed lifecycle control model. It does not authorize production data processing, select retention periods, approve processors or locations, migrate legacy/customer data, erase regulated evidence or launch the platform."
       ],
       "fencedClaims": []
@@ -754,7 +754,7 @@
       "statusLines": [
         "- Status: Proposed",
         "- Production effect: none",
-        "- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017 and D-018 dependencies applicable to the scope are approved;"
+        "- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017, D-018 and D-019 dependencies applicable to the scope are approved;"
       ],
       "approverLines": [
         "- Required approvers: CTO, Security, MLRO, Legal/Privacy, Finance"
@@ -795,7 +795,7 @@
         "- retained evidence manifest and approved retention/legal-hold state.",
         "5. suspected custody approval or signer-path compromise;",
         "8. outage with missing telemetry and uncertain accepted-command state.",
-        "- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017 and D-018 dependencies applicable to the scope are approved;",
+        "- D-001, D-002, D-003, D-008, D-011, D-015, D-016, D-017, D-018 and D-019 dependencies applicable to the scope are approved;",
         "- evidence storage, access audit, legal hold and retention are approved;",
         "- monitoring maps to the approved threat model and on-call ownership;",
         "Approval of this baseline confirms only the coordination model. It does not enable production, approve a live runbook, grant emergency execution authority or replace any domain approval."
@@ -970,7 +970,7 @@
             ],
             [
               "Third-party risk baseline",
-              "Proposed; provider selections, contracts and applicable D-001…D-018 approvals pending"
+              "Proposed; provider selections, contracts and applicable D-001…D-019 approvals pending"
             ],
             [
               "Operational-resilience baseline",
@@ -1261,7 +1261,7 @@
       "statusLines": [
         "- Status: Proposed",
         "- Production effect: none",
-        "- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017 and D-018 are approved where applicable;"
+        "- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017, D-018 and D-019 are approved where applicable;"
       ],
       "approverLines": [
         "- Required approvers: Legal, MLRO/Compliance, Finance, Treasury, Custody, Security, CTO and every affected product/provider owner"
@@ -1291,7 +1291,7 @@
         "Before production, the approved design must define how customer assets and",
         "- approved safeguarding scope and legal model;",
         "## Approval dependencies",
-        "- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017 and D-018 are approved where applicable;",
+        "- D-001, D-002, D-003, D-004, D-005, D-007, D-008, D-009, D-010, D-014, D-015, D-017, D-018 and D-019 are approved where applicable;",
         "- legal model, customer entitlement, insolvency and disclosure treatment are approved;",
         "- bank/payment/card/provider/custody contracts and evidence exports are approved;",
         "- chart of accounts, posting rules, opening balances and reconciliation policy are Finance-approved;",
@@ -1346,7 +1346,7 @@
         "AI cannot select or approve a vendor; accept an exception; authorize a",
         "reconciliation; make a regulated decision; or approve its own provider or",
         "## Approval dependencies",
-        "- applicable D-001 through D-018 decisions are approved;",
+        "- applicable D-001 through D-019 decisions are approved;",
         "- legal scope, contract and data-processing terms are approved;",
         "- Security and Privacy approve architecture, access, location and processors;",
         "- the accountable domain approves operational, evidence and outage semantics;",

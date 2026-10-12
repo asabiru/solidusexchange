@@ -282,6 +282,25 @@ test("rejects approval claims hidden by interior hyphens", () => {
   }
 });
 
+test("rejects whole-register decision ranges that do not reach the latest decision", () => {
+  assertRejected(
+    { "release-authorization.md": replaceOnce("D-001 through D-019", "D-001 through D-018") },
+    /decision range/,
+  );
+  assertRejected(
+    { "phase-0-evidence-index.md": replaceOnce("D-001…D-019 decisions", "D-001…D-018 decisions") },
+    /decision range/,
+  );
+  assertRejected(
+    { "zz-new.md": "# X\n\n- Status: Proposed\n\nD-001 through D-099 dependencies apply.\n" },
+    /decision range/,
+  );
+  assertRejected(
+    { "decision-register.md": (text) => text.replace(/^\| D-019 .*\n/m, "") },
+    /decision range|baseline/,
+  );
+});
+
 test("rejects non-regular entries in the regulated-core directory", () => {
   const errors = validateRegulatedCoreDocuments(documents, baseline, [
     "linked-doc.md",
