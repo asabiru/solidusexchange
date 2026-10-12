@@ -803,20 +803,17 @@
       "fencedClaims": []
     },
     "legacy-inventory.md": {
-      "title": "# Legacy SOLID Inventory",
-      "statusLines": [],
+      "title": "# Legacy Removal Record",
+      "statusLines": [
+        "- Status: Proposed",
+        "- Production effect: none"
+      ],
       "approverLines": [],
       "statusSections": [],
       "statusTables": [],
       "decisionRows": [],
       "datedApprovalClaims": [],
-      "approvalClaims": [
-        "| New backoffice | React/BFF, signed read-only APIs, deny-by-default RBAC | Использовать как operator shell, не как financial core |",
-        "| Crypto ingress/egress | CryptoCloud, Crypto APIs, CoinPayments, manual, treasury wallet, treasury queue | Adapter candidates only; no custody approval |",
-        "Adapter presence does not mean vendor approval, active credentials, supported geography or production readiness.",
-        "2. Export sanitized metadata counts and checksums from an approved environment.",
-        "7. Build a signed opening-journal process and discrepancy queue."
-      ],
+      "approvalClaims": [],
       "fencedClaims": []
     },
     "migration-boundary.md": {

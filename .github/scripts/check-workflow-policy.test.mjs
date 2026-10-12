@@ -42,7 +42,7 @@ test("rejects validation workflows missing required pull request or main push tr
   }
 });
 
-test("accepts unfiltered main pushes and the approved manual deployment trigger", () => {
+test("accepts unfiltered main pushes", () => {
   assert.deepEqual(
     validateWorkflowText(
       workflow("      - run: echo ok").replace(
@@ -52,29 +52,9 @@ test("accepts unfiltered main pushes and the approved manual deployment trigger"
     ),
     [],
   );
-
-  assert.deepEqual(
-    validateWorkflowText(
-      `name: Deploy
-on:
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo ok
-`,
-      ".github/workflows/deploy.yml",
-    ),
-    [],
-  );
 });
 
-test("rejects automatic triggers on the approved manual deployment workflow", () => {
+test("rejects manual-only workflows while none is approved", () => {
   const manualWorkflow = `name: Deploy
 on:
   workflow_dispatch:
@@ -89,20 +69,22 @@ jobs:
       - run: echo ok
 `;
 
-  for (const automaticTrigger of [
-    "  pull_request:\n",
-    "  push:\n",
-    "  schedule:\n    - cron: '0 0 * * *'\n",
+  for (const fileName of [
+    ".github/workflows/deploy.yml",
+    ".github/workflows/manual.yml",
   ]) {
-    const errors = validateWorkflowText(
-      manualWorkflow.replace(
-        "  workflow_dispatch:\n",
-        `${automaticTrigger}  workflow_dispatch:\n`,
-      ),
-      ".github/workflows/deploy.yml",
-    );
+    const errors = validateWorkflowText(manualWorkflow, fileName);
 
-    assert.match(errors.join("\n"), /must use only workflow_dispatch/);
+    assert.match(
+      errors.join("\n"),
+      /validation workflow must run for pull requests/,
+      fileName,
+    );
+    assert.match(
+      errors.join("\n"),
+      /workflow_dispatch is only allowed for approved manual workflows/,
+      fileName,
+    );
   }
 });
 
@@ -769,7 +751,7 @@ test("rejects expressions interpolated into run scripts in any key or scalar spe
 
   for (const step of ["      - run: echo ${{ github.head_ref }}"]) {
     const errors = validateWorkflowText(
-      `name: Deploy
+      `name: Manual
 on:
   workflow_dispatch:
 
@@ -777,12 +759,12 @@ permissions:
   contents: read
 
 jobs:
-  deploy:
+  manual:
     runs-on: ubuntu-latest
     steps:
 ${step}
 `,
-      ".github/workflows/deploy.yml",
+      ".github/workflows/manual.yml",
     );
 
     assert.match(errors.join("\n"), /run steps must not interpolate expressions/);
@@ -874,7 +856,7 @@ test("accepts run script text and data that only resemble conditions", () => {
   assert.deepEqual(errors, []);
 });
 
-test("accepts conditional steps in the approved manual workflow", () => {
+test("rejects conditional steps while no manual workflow is approved", () => {
   const errors = validateWorkflowText(
     `name: Deploy
 on:
@@ -893,5 +875,5 @@ jobs:
     ".github/workflows/deploy.yml",
   );
 
-  assert.deepEqual(errors, []);
+  assert.match(errors.join("\n"), /must not be conditional/);
 });

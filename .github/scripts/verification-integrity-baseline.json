@@ -187,7 +187,6 @@
         "env": "PSQL_DOCKER_IMAGE: postgres:16.10-alpine3.22@sha256:029660641a0cfc575b14f336ba448fb8a75fd595d42e1fa316b9fb4378742297"
       }
     ],
-    ".github/workflows/deploy.yml": [],
     ".github/workflows/e2e-dev-ci.yml": [
       {
         "run": "working-directory: packages/e2e-dev"
@@ -465,12 +464,12 @@
       "minCases": 15
     },
     ".github/scripts/check-verification-integrity.test.mjs": {
-      "minLines": 757,
+      "minLines": 713,
       "minCases": 34
     },
     ".github/scripts/check-workflow-policy.test.mjs": {
-      "minLines": 528,
-      "minCases": 44
+      "minLines": 567,
+      "minCases": 46
     },
     "backoffice/src/app/a11y.test.ts": {
       "minLines": 685,
@@ -1603,30 +1602,6 @@
       "minLines": 269,
       "minCases": 14
     },
-    "tests/CreatesApplication.php": {
-      "minLines": 16,
-      "minCases": 0
-    },
-    "tests/Feature/ExampleTest.php": {
-      "minLines": 15,
-      "minCases": 0
-    },
-    "tests/Feature/ExchangeReservationCleanupTest.php": {
-      "minLines": 60,
-      "minCases": 0
-    },
-    "tests/Feature/ExchangeRoutingTest.php": {
-      "minLines": 129,
-      "minCases": 0
-    },
-    "tests/TestCase.php": {
-      "minLines": 7,
-      "minCases": 0
-    },
-    "tests/Unit/ExampleTest.php": {
-      "minLines": 13,
-      "minCases": 0
-    },
     "miniapp/src/app/trades-sheet.test.ts": {
       "minLines": 164,
       "minCases": 10
@@ -1720,11 +1695,6 @@
     ".github/workflows/customer-api-ci.yml": [
       "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
       "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444"
-    ],
-    ".github/workflows/deploy.yml": [
-      "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",
-      "appleboy/scp-action@917f8b81dfc1ccd331fef9e2d61bdc6c8be94634",
-      "appleboy/ssh-action@029f5b4aeeeb58fdfe1410a5d17f967dacf36262"
     ],
     ".github/workflows/e2e-dev-ci.yml": [
       "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09",

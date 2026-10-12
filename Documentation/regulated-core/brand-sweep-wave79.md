@@ -3,15 +3,15 @@
 - Status: Proposed
 - Production effect: none
 
-Wave 79 sweeps every user-visible surface in the kept tree for brand consistency: the product brand is **SOLID**, `solidchange` is a technical identifier family that must not leak into human-readable prose, and `coinectra` — the upstream vendor the legacy Laravel application derives from — must not appear at all. Scope: `miniapp/` (all locales plus literals), `backoffice/` (all locales plus literals), `packages/` served and dynamic strings, and `Documentation/regulated-core/` prose. The legacy surface (`app/`, `routes/`, `config/`, `database/`, `resources/`, `SQL/`, `deployment/`, `assets/`, `bootstrap/`, `storage/`, root `tests/`, root files, root `Documentation/*.md`) is excluded — a sibling wave deletes it wholesale.
+Wave 79 sweeps every user-visible surface in the kept tree for brand consistency: the product brand is **SOLID**, `solidchange` is a technical identifier family that must not leak into human-readable prose, and `coinectra` — the upstream vendor the legacy Laravel application derives from — must not appear at all. Scope: `miniapp/` (all locales plus literals), `backoffice/` (all locales plus literals), `packages/` served and dynamic strings, and `Documentation/regulated-core/` prose. The legacy surface (`app/`, `routes/`, `config/`, `database/`, `resources/`, `SQL/`, `deployment/`, `assets/`, `bootstrap/`, `storage/`, root `tests/`, root files, root `Documentation/*.md`) was excluded here — the sibling wave-79 change (`legacy-removal-wave79.md`) deleted it wholesale, and this branch merges on top of that deletion.
 
 Method: repository-wide case-insensitive search for `coinectra`, `solidchange` and `SolidChange`, each hit classified as user-visible prose (defect) or technical identifier (correct). Locale catalogs are additionally pinned by the i18n suites, which assert no catalog value matches `/SolidChange/` in either app.
 
 ## coinectra removal
 
-- **Kept tree is clean.** Zero `coinectra` occurrences exist in `miniapp/`, `backoffice/`, `packages/`, `infra/` or `.github/` — no file in the swept scope needed a change for this rule.
-- **Every remaining occurrence sits inside the sibling's deletion scope** — `SQL/install.sql` (seed site title, CMS content, SEO meta, a serialized queued-mail payload, the `-- Database:` comment), `database/migrations/2026_03_13_060000_add_russian_frontend_content.php` (Russian frontend copy), `resources/views/themes/light/partials/loader.blade.php` (preloader fallback title), `.env.example` (`APP_NAME`, `DB_DATABASE`), `deployment/deploy.sh` and `deployment/rollback.sh` (`/var/www/coinectra` default), `Documentation/safe-deploy.md` (the same path in prose), and `Documentation/index.html` (the vendor meta-refresh flagged in wave 78). None was touched here; the deletion removes them wholesale.
-- **After the removal merges, `grep -ri coinectra` must return only audit-doc mentions.** Pinned by a new rule in `check-verification-integrity.mjs`: `validateVendorBrand` flags the literal in every kept-tree file except `Documentation/regulated-core/provider-docs-audit-wave78.md` and this document. Legacy directories, root legacy files and the rest of `Documentation/` stay exempt until the deletion lands, so the gate never depends on merge order.
+- **Kept tree is clean.** Zero `coinectra` occurrences existed in `miniapp/`, `backoffice/`, `packages/`, `infra/` or `.github/` — no file in the swept scope needed a change for this rule.
+- **Every remaining occurrence sat inside the sibling's deletion scope** — `SQL/install.sql` (seed site title, CMS content, SEO meta, a serialized queued-mail payload, the `-- Database:` comment), `database/migrations/2026_03_13_060000_add_russian_frontend_content.php` (Russian frontend copy), `resources/views/themes/light/partials/loader.blade.php` (preloader fallback title), `.env.example` (`APP_NAME`, `DB_DATABASE`), `deployment/deploy.sh` and `deployment/rollback.sh` (`/var/www/coinectra` default), `Documentation/safe-deploy.md` (the same path in prose), and `Documentation/index.html` (the vendor meta-refresh flagged in wave 78). None was touched here; the sibling deletion removed them all.
+- **`grep -ri coinectra` now returns only audit-doc mentions.** Pinned by a new rule in `check-verification-integrity.mjs`: `validateVendorBrand` flags the literal in every file except `Documentation/regulated-core/provider-docs-audit-wave78.md`, this document, and binary extensions. The scope widened to the whole surviving tree once the removal landed; a reappearing legacy entry is flagged by `validateLegacyRemoval` for the path and by this rule for the name.
 
 ## Surfaces checked
 
@@ -25,7 +25,7 @@ Method: repository-wide case-insensitive search for `coinectra`, `solidchange` a
 1. `Documentation/regulated-core/README.md` — "legacy SolidChange" → "legacy SOLID".
 2. `Documentation/regulated-core/access-control.md` — "regulated SolidChange platform" → "regulated SOLID platform" (pinned status-section line; baseline repinned).
 3. `Documentation/regulated-core/migration-boundary.md` — "Legacy SolidChange is an inventory" → "Legacy SOLID is an inventory" (a pinned status-snapshot line — baseline repinned).
-4. `Documentation/regulated-core/legacy-inventory.md` — title `# Legacy SolidChange Inventory` → `# Legacy SOLID Inventory` (pinned title; baseline repinned).
+4. `Documentation/regulated-core/legacy-inventory.md` — title `# Legacy SolidChange Inventory` → `# Legacy SOLID Inventory`; superseded on merge by the sibling's rewrite to `# Legacy Removal Record`, which stands (baseline carries the removal-record snapshot).
 5. `Documentation/regulated-core/third-party-risk.md` — "how SolidChange must assess" → "how SOLID must assess" (a pinned status-snapshot line — baseline repinned); "SolidChange must preserve" → "SOLID must preserve".
 6. `Documentation/regulated-core/threat-model.md` — "while SolidChange is separated" → "while SOLID is separated".
 7. `Documentation/regulated-core/safeguarding.md` — "before SolidChange can hold" → "before SOLID can hold"; "that SolidChange can meet" → "that SOLID can meet".
@@ -34,8 +34,8 @@ Method: repository-wide case-insensitive search for `coinectra`, `solidchange` a
 10. `Documentation/regulated-core/compliance-operations.md` — "before SolidChange can" → "before SOLID can"; "owned by SolidChange" → "owned by SOLID".
 11. `.github/scripts/regulated-core-status-baseline.json` — repinned the four pinned documents above so the extracted status snapshot matches the corrected prose.
 12. `.github/scripts/check-verification-integrity.mjs` — added `vendorBrandScoped`/`validateVendorBrand` (the coinectra rule above), wired into the repo walk.
-13. `.github/scripts/check-verification-integrity.test.mjs` — new case covering flag/exempt/legacy-scoped/binary paths for the vendor rule.
-14. `.github/scripts/verification-integrity-baseline.json` — repinned the test file's `minLines`/`minCases` (757/34) for the added case.
+13. `.github/scripts/check-verification-integrity.test.mjs` — new case covering flag/exempt/reappearing-legacy/binary paths for the vendor rule.
+14. `.github/scripts/verification-integrity-baseline.json` — repinned the test file's `minLines`/`minCases` (713/34) for the added case on the post-removal test surface.
 
 ## Verified-unchanged technical identifiers
 
@@ -51,6 +51,6 @@ Method: repository-wide case-insensitive search for `coinectra`, `solidchange` a
 ## Observations
 
 - Locale-value coverage already exists in both apps (`/SolidChange/` banned on every catalog string), so no new i18n pin was needed; the vendor rule adds the missing repo-wide literal gate for the kept tree.
-- `SQL/install.sql` also embeds third-party brand names unrelated to this sweep (`KuCoin`, `Changelly`, `bugfinder.net` links) inside seed content — inside the deletion scope, recorded for the record.
+- `SQL/install.sql` also embedded third-party brand names unrelated to this sweep (`KuCoin`, `Changelly`, `bugfinder.net` links) inside seed content — removed with the file by the sibling wave, recorded for the record.
 - The two download filenames are the closest thing in the kept tree to vendor-adjacent user-facing text: an operator sees `solidchange-draft-*.csv` in their downloads folder. Left unchanged as identifier-style names pending a deliberate `solid-*` rename.
 - The exempt set for the vendor rule is exactly two audit documents. If a future wave rewrites `provider-docs-audit-wave78.md`, the exemption — not the rule — is what to revisit.
