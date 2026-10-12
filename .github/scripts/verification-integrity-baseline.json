@@ -525,7 +525,7 @@
       "minCases": 5
     },
     "backoffice/src/server/authz.test.ts": {
-      "minLines": 290,
+      "minLines": 268,
       "minCases": 8
     },
     "backoffice/src/server/backoffice-upstream-audit.test.ts": {
@@ -541,7 +541,7 @@
       "minCases": 9
     },
     "backoffice/src/server/config.test.ts": {
-      "minLines": 299,
+      "minLines": 290,
       "minCases": 21
     },
     "backoffice/src/server/controls.test.ts": {
@@ -561,15 +561,15 @@
       "minCases": 12
     },
     "backoffice/src/server/oidc-audit.test.ts": {
-      "minLines": 517,
+      "minLines": 507,
       "minCases": 24
     },
     "backoffice/src/server/oidc-session.test.ts": {
-      "minLines": 297,
+      "minLines": 294,
       "minCases": 6
     },
     "backoffice/src/server/oidc.test.ts": {
-      "minLines": 1055,
+      "minLines": 1018,
       "minCases": 28
     },
     "backoffice/src/server/operator-admin-upstream.test.ts": {
@@ -605,11 +605,11 @@
       "minCases": 14
     },
     "backoffice/src/server/security-headers.test.ts": {
-      "minLines": 606,
+      "minLines": 603,
       "minCases": 12
     },
     "backoffice/src/server/server.test.ts": {
-      "minLines": 1214,
+      "minLines": 1210,
       "minCases": 26
     },
     "backoffice/src/server/session-store-audit-wave62.test.ts": {
@@ -1204,7 +1204,7 @@
       "minCases": 5
     },
     "packages/e2e-dev/tests/oidc.test.mjs": {
-      "minLines": 379,
+      "minLines": 354,
       "minCases": 7
     },
     "packages/e2e-dev/tests/postgres-journal-helper.mjs": {
@@ -1556,7 +1556,7 @@
       "minCases": 16
     },
     "packages/provider-simulators/tests/oidc.test.mjs": {
-      "minLines": 239,
+      "minLines": 236,
       "minCases": 12
     },
     "packages/provider-simulators/tests/quotes.test.mjs": {

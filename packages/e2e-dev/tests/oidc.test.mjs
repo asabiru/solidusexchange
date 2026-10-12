@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { after, before, describe, test } from "node:test";
 
 import { createOidcIssuer } from "../../provider-simulators/src/index.mjs";
+import { loadServerConfig as loadBackofficeConfig } from "../../../backoffice/.server-dist/server/config.js";
+import { createBackofficeServer } from "../../../backoffice/.server-dist/server/server.js";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
 import { createMiniappServer } from "../../../miniapp/.server-dist/server/server.js";
 import { closeServer, listen } from "./stack.mjs";
@@ -235,13 +237,6 @@ let backofficeBase;
 
 describe("backoffice oidc operator login", () => {
   before(async () => {
-    const { createBackofficeServer } = await import(
-      "../../../backoffice/.server-dist/server/server.js"
-    );
-    const { loadServerConfig } = await import(
-      "../../../backoffice/.server-dist/server/config.js"
-    );
-
     boNow = Date.now();
     boIssuerServer = createServer();
     await new Promise((resolve) => boIssuerServer.listen(0, "127.0.0.1", resolve));
@@ -278,25 +273,28 @@ describe("backoffice oidc operator login", () => {
       });
     });
 
-    const saved = {};
-    const env = {
-      BACKOFFICE_ALLOWED_ORIGINS: boOrigin,
-      BACKOFFICE_OIDC_ISSUER_URL: boIssuerBase,
-      BACKOFFICE_OIDC_CLIENT_ID: boClientId,
-      BACKOFFICE_OIDC_ROLE_MAP_JSON: JSON.stringify({ compliance: "compliance-lead" }),
+    const saved = {
+      BACKOFFICE_ALLOWED_ORIGINS: process.env.BACKOFFICE_ALLOWED_ORIGINS,
+      BACKOFFICE_OIDC_ISSUER_URL: process.env.BACKOFFICE_OIDC_ISSUER_URL,
+      BACKOFFICE_OIDC_CLIENT_ID: process.env.BACKOFFICE_OIDC_CLIENT_ID,
+      BACKOFFICE_OIDC_ROLE_MAP_JSON: process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON,
     };
-    for (const [name, value] of Object.entries(env)) {
-      saved[name] = process.env[name];
-      process.env[name] = value;
-    }
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = boOrigin;
+    process.env.BACKOFFICE_OIDC_ISSUER_URL = boIssuerBase;
+    process.env.BACKOFFICE_OIDC_CLIENT_ID = boClientId;
+    process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON = JSON.stringify({ compliance: "compliance-lead" });
     let config;
     try {
-      config = loadServerConfig();
+      config = loadBackofficeConfig();
     } finally {
-      for (const [name, value] of Object.entries(saved)) {
-        if (value === undefined) delete process.env[name];
-        else process.env[name] = value;
-      }
+      if (saved.BACKOFFICE_ALLOWED_ORIGINS === undefined) delete process.env.BACKOFFICE_ALLOWED_ORIGINS;
+      else process.env.BACKOFFICE_ALLOWED_ORIGINS = saved.BACKOFFICE_ALLOWED_ORIGINS;
+      if (saved.BACKOFFICE_OIDC_ISSUER_URL === undefined) delete process.env.BACKOFFICE_OIDC_ISSUER_URL;
+      else process.env.BACKOFFICE_OIDC_ISSUER_URL = saved.BACKOFFICE_OIDC_ISSUER_URL;
+      if (saved.BACKOFFICE_OIDC_CLIENT_ID === undefined) delete process.env.BACKOFFICE_OIDC_CLIENT_ID;
+      else process.env.BACKOFFICE_OIDC_CLIENT_ID = saved.BACKOFFICE_OIDC_CLIENT_ID;
+      if (saved.BACKOFFICE_OIDC_ROLE_MAP_JSON === undefined) delete process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON;
+      else process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON = saved.BACKOFFICE_OIDC_ROLE_MAP_JSON;
     }
     assert.ok(config.oidc, "BACKOFFICE_OIDC_* pair should configure OIDC");
     backoffice = createBackofficeServer(config);
@@ -395,13 +393,7 @@ describe("backoffice oidc operator login", () => {
   });
 
   test("an unconfigured BFF has no auth routes", async () => {
-    const { createBackofficeServer } = await import(
-      "../../../backoffice/.server-dist/server/server.js"
-    );
-    const { loadServerConfig } = await import(
-      "../../../backoffice/.server-dist/server/config.js"
-    );
-    const config = loadServerConfig();
+    const config = loadBackofficeConfig();
     assert.equal(config.oidc, undefined);
     const isolated = createBackofficeServer(config);
     const base = await listen(isolated);
