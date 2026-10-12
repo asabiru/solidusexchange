@@ -826,7 +826,13 @@ export function createBackofficeServer(
                       decidedAt: attempt.decided_at,
                       rejectionReason: attempt.rejection_reason
                     }))
-                  }
+                  },
+              balances: upstream.view.subject.balances.map((entry) => ({
+                asset: entry.asset,
+                assetScale: entry.asset_scale,
+                available: entry.available,
+                hold: entry.hold
+              }))
             }
           });
           return;
@@ -856,7 +862,8 @@ export function createBackofficeServer(
             devices: [],
             limits: null,
             recentActivity: [],
-            kyc: null
+            kyc: null,
+            balances: []
           }
         });
         return;

@@ -321,7 +321,8 @@ const pinnedResponseSchemas = {
       "devices",
       "limits",
       "recent_activity",
-      "kyc"
+      "kyc",
+      "balances"
     ],
     properties: {
       subject_id: { type: "string", pattern: "^syn_cust_[a-z0-9]{8,32}$" },
@@ -389,7 +390,22 @@ const pinnedResponseSchemas = {
             }
           }
         }
+      },
+      balances: {
+        type: "array",
+        items: { $ref: "#/components/schemas/OperatorSubjectBalance" }
       }
+    }
+  },
+  OperatorSubjectBalance: {
+    type: "object",
+    additionalProperties: false,
+    required: ["asset", "available", "hold", "asset_scale"],
+    properties: {
+      asset: { $ref: "#/$defs/assetCode" },
+      available: { $ref: "#/$defs/decimalAmount" },
+      hold: { $ref: "#/$defs/decimalAmount" },
+      asset_scale: { type: "integer", minimum: 0, maximum: 18 }
     }
   },
   OperatorSubjectActivityItem: {

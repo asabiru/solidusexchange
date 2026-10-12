@@ -75,7 +75,12 @@ const subjectDetailPayload = {
           rejectionReason: "SIM_DATA_MISMATCH"
         }
       ]
-    }
+    },
+    balances: [
+      { asset: "RUB", assetScale: 2, available: "1200.50", hold: "0.00" },
+      { asset: "TON", assetScale: 9, available: "3.500000000", hold: "0.125000000" },
+      { asset: "USDT", assetScale: 6, available: "87.000000", hold: "1.250000" }
+    ]
   }
 } as const;
 
@@ -269,6 +274,61 @@ describe("operator subject detail adapter", () => {
     }
   });
 
+  it("rejects malformed or dishonest balances rows", () => {
+    const subject = subjectDetailPayload.subject;
+    const subjectId = subject.subjectId;
+    const [rub, ton, usdt] = subject.balances;
+    const drifts: readonly unknown[] = [
+      "not-an-array",
+      [],
+      [{ ...rub, hold: "0.00" }, { ...rub, available: "1.00" }, usdt], // wrong asset order
+      [{ ...rub, asset: "EUR" }, ton, usdt],
+      [{ ...rub, asset: "TON" }, ton, usdt], // duplicated asset slot
+      [{ ...rub, assetScale: 6 }, ton, usdt],
+      [{ ...rub, available: "1200.5" }, ton, usdt],
+      [{ ...rub, available: "-1.00" }, ton, usdt],
+      [{ ...rub, available: "1,200.50" }, ton, usdt],
+      [{ ...rub, hold: "lots" }, ton, usdt],
+      [{ ...rub, extra: true }, ton, usdt],
+      [{ asset: rub.asset, assetScale: rub.assetScale, available: rub.available }, ton, usdt],
+      [rub, ton],
+      [rub, ton, usdt, { asset: "RUB", assetScale: 2, available: "0.00", hold: "0.00" }]
+    ];
+    for (const balances of drifts) {
+      assert.equal(
+        parseOperatorSubjectView({ mode: "test", subject: { ...subject, balances } }, subjectId),
+        undefined,
+        JSON.stringify(balances).slice(0, 96)
+      );
+    }
+  });
+
+  it("clamps closed-account balances to canonical zero", () => {
+    const subject = subjectDetailPayload.subject;
+    const subjectId = subject.subjectId;
+    const zeroed = subject.balances.map((entry) => ({
+      ...entry,
+      available: `0.${"0".repeat(entry.assetScale)}`,
+      hold: `0.${"0".repeat(entry.assetScale)}`
+    }));
+    const closed = parseOperatorSubjectView(
+      { mode: "test", subject: { ...subject, accountStatus: "closed", sessions: 0, balances: zeroed } },
+      subjectId
+    );
+    assert.ok(closed !== undefined);
+    assert.deepEqual(closed.subject.balances, zeroed);
+    assert.ok(closed.subject.balances.every((entry) => BigInt(entry.available.replace(".", "")) === 0n));
+    // A closed account must never echo a live position.
+    assert.equal(
+      parseOperatorSubjectView(
+        { mode: "test", subject: { ...subject, accountStatus: "closed", sessions: 0 } },
+        subjectId
+      ),
+      undefined,
+      "closed account with nonzero balances"
+    );
+  });
+
   it("rejects cross-block drift inside the account window", () => {
     const subject = subjectDetailPayload.subject;
     const subjectId = subject.subjectId;
@@ -311,9 +371,23 @@ describe("operator subject detail adapter", () => {
       "sessions on a closed account"
     );
     assert.ok(
-      parseOperatorSubjectView({ mode: "test", subject: { ...subject, accountStatus: "closed", sessions: 0 } }, subjectId)
-        !== undefined,
-      "closed account with no sessions is fine"
+      parseOperatorSubjectView(
+        {
+          mode: "test",
+          subject: {
+            ...subject,
+            accountStatus: "closed",
+            sessions: 0,
+            balances: subject.balances.map((entry) => ({
+              ...entry,
+              available: `0.${"0".repeat(entry.assetScale)}`,
+              hold: `0.${"0".repeat(entry.assetScale)}`
+            }))
+          }
+        },
+        subjectId
+      ) !== undefined,
+      "closed account with no sessions and zeroed balances is fine"
     );
     // flag_added rows never outnumber the roster's open flags.
     assert.equal(
