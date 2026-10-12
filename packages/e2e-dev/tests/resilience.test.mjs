@@ -337,6 +337,9 @@ describe("Mini App BFF with a failing customer-api", () => {
       };
     }
     if (request.url.endsWith("/markets")) {
+      // The served contract emits every declared instrument exactly once
+      // in canonical ORDER_PAIRS order; the adapter pins that sequence, so
+      // the stub must report all three — a book side may still rest empty.
       return {
         mode: "test",
         markets: [
@@ -350,6 +353,34 @@ describe("Mini App BFF with a failing customer-api", () => {
             spread_bps: 2,
             base_scale: 6,
             quote_scale: 2,
+            price_scale: 8,
+            as_of: "2026-10-02T14:10:00.000Z",
+            posting: "none"
+          },
+          {
+            instrument: "TON/RUB",
+            base_asset: "TON",
+            quote_asset: "RUB",
+            best_bid: { price: "299.00000000", quantity: "5.000000000", order_count: 1 },
+            best_ask: { price: "301.00000000", quantity: "4.000000000", order_count: 1 },
+            last_trade: null,
+            spread_bps: 67,
+            base_scale: 9,
+            quote_scale: 2,
+            price_scale: 8,
+            as_of: "2026-10-02T14:10:00.000Z",
+            posting: "none"
+          },
+          {
+            instrument: "TON/USDT",
+            base_asset: "TON",
+            quote_asset: "USDT",
+            best_bid: null,
+            best_ask: null,
+            last_trade: null,
+            spread_bps: null,
+            base_scale: 9,
+            quote_scale: 6,
             price_scale: 8,
             as_of: "2026-10-02T14:10:00.000Z",
             posting: "none"
@@ -1417,7 +1448,7 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(markets.mode, "test");
     assert.equal(markets.kyc, "verified");
     assert.deepEqual(Object.keys(markets).sort(), ["kyc", "markets", "mode"]);
-    assert.equal(markets.markets.length, 1);
+    assert.equal(markets.markets.length, 3);
     assert.deepEqual(Object.keys(markets.markets[0]).sort(), [
       "asOf",
       "base",
@@ -1438,6 +1469,12 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal(markets.markets[0].lastTrade.price, "90.00000000");
     assert.equal(markets.markets[0].spreadBps, 2);
     assert.equal(markets.markets[0].posting, "none");
+    // Canonical ORDER_PAIRS sequence: every declared pair reports exactly
+    // once, in catalog order — the same pin the adapter enforces upstream.
+    assert.deepEqual(
+      markets.markets.map((m) => m.instrument),
+      ["USDT/RUB", "TON/RUB", "TON/USDT"]
+    );
     const gatedMarkets = await getJson(app, "/bff/markets", cookie);
     assert.equal(gatedMarkets.kyc, "kyc-gated");
     assert.equal(gatedMarkets.markets.length, 0);
