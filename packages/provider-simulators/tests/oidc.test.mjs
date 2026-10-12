@@ -222,6 +222,44 @@ describe("oidc issuer", () => {
     const oldestPossible = await exchange(issuer, { code: "cod_unlikely" });
     assert.equal(JSON.parse(oldestPossible.body).error, "invalid_grant");
   });
+
+  test("merges configured idTokenClaims into every minted id_token", async () => {
+    const issuer = makeIssuer({
+      idTokenClaims: {
+        groups: ["compliance"],
+        email: "operator@example.test",
+        name: "Dev Operator",
+      },
+    });
+    const granted = await authorize(issuer);
+    const { code } = codeFrom(granted);
+    const reply = await exchange(issuer, { code });
+    assert.equal(reply.status, 200);
+    const body = JSON.parse(reply.body);
+    const decodedClaims = JSON.parse(
+      Buffer.from(body.id_token.split(".")[1], "base64url").toString(),
+    );
+    assert.deepEqual(decodedClaims.groups, ["compliance"]);
+    assert.equal(decodedClaims.email, "operator@example.test");
+    assert.equal(decodedClaims.name, "Dev Operator");
+    // Reserved claims are untouched.
+    assert.equal(decodedClaims.iss, issuerBase);
+    assert.equal(decodedClaims.sub, "dev-customer-1");
+  });
+
+  test("refuses idTokenClaims that override reserved claims or are not JSON", () => {
+    for (const reserved of ["iss", "sub", "aud", "exp", "iat", "nbf", "nonce", "at_hash", "azp"]) {
+      assert.throws(
+        () => makeIssuer({ idTokenClaims: { [reserved]: "x" } }),
+        /reserved claim/,
+        reserved,
+      );
+    }
+    assert.throws(() => makeIssuer({ idTokenClaims: { groups: () => [] } }), TypeError);
+    assert.throws(() => makeIssuer({ idTokenClaims: { n: Number.POSITIVE_INFINITY } }), TypeError);
+    assert.throws(() => makeIssuer({ idTokenClaims: "not-an-object" }), TypeError);
+    assert.throws(() => makeIssuer({ idTokenClaims: { deep: { x: "a".repeat(5_000) } } }), TypeError);
+  });
 });
 
 describe("oidc issuer adversarial pins (wave-65)", () => {

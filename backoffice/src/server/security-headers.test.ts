@@ -268,7 +268,6 @@ describe("Backoffice BFF security headers on every route", () => {
       tokenEndpoint: `${identityUrl}/token`,
       jwksUri: `${identityUrl}/jwks`,
       clientId,
-      clientSecret: "",
       redirectUri: `${origin}/bff/auth/callback`,
       roleClaim: "groups",
       roleMap: { compliance: "compliance-lead" }
@@ -321,7 +320,7 @@ describe("Backoffice BFF security headers on every route", () => {
     nonces.set(`code-${state}`, nonce);
     const callback = await fetch(`${oidcUrl}/bff/auth/callback?code=code-${state}&state=${state}`, {
       redirect: "manual",
-      headers: { cookie: `solidchange_bo_oidc_transaction=${state}` }
+      headers: { cookie: `solidchange_bo_oidc_transaction=${state}.${nonce}` }
     });
     return { login, callback };
   }
@@ -480,7 +479,17 @@ describe("Backoffice BFF security headers on every route", () => {
     }
     await check(await fetch(`${baseUrl}/bff/auth/login`), "login without OIDC");
     await check(await fetch(`${baseUrl}/bff/auth/callback?code=x&state=y`), "callback without OIDC");
-    await check(await fetch(`${oidcUrl}/bff/auth/callback?code=x&state=y`), "rejected callback");
+    const rejectedCallback = await fetch(
+      `${oidcUrl}/bff/auth/callback?code=x&state=y`,
+      { redirect: "manual" }
+    );
+    assert.equal(rejectedCallback.status, 302, "rejected callback");
+    assert.equal(
+      rejectedCallback.headers.get("location"),
+      `${origin}/?error=auth_failed`,
+      "rejected callback"
+    );
+    await assertApiHeaders(rejectedCallback, "rejected callback");
     await check(await postJson("/bff/auth/dev-session", { role: "root" }), "unsupported role");
     await check(await fetch(`${baseUrl}/bff/metrics`, { headers: { "x-forwarded-for": "198.51.100.7" } }), "forwarded metrics");
     await check(await fetch(`${baseUrl}/bff/api/reports`, { headers: { cookie, "sec-fetch-site": "cross-site" } }), "cross-site report");

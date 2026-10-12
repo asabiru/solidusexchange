@@ -4,6 +4,8 @@ import { createServer, request as httpRequest } from "node:http";
 import { after, before, describe, test } from "node:test";
 
 import { createOidcIssuer } from "../../provider-simulators/src/index.mjs";
+import { loadServerConfig as loadBackofficeConfig } from "../../../backoffice/.server-dist/server/config.js";
+import { createBackofficeServer } from "../../../backoffice/.server-dist/server/server.js";
 import { loadServerConfig } from "../../../miniapp/.server-dist/server/config.js";
 import { createMiniappServer } from "../../../miniapp/.server-dist/server/server.js";
 import { closeServer, listen } from "./stack.mjs";
@@ -512,5 +514,196 @@ describe("oidc wiring edges (wave-65)", () => {
     });
     assert.equal(reply.status, 404);
     assert.ok(tx);
+  });
+});
+
+// Backoffice arm: the same authorization-code + PKCE flow for operator SSO —
+// the env-pair-configured BFF mints a SessionStore session for the
+// pseudonymized `syn_oper_*` principal derived from `sub`, and every step
+// failure collapses to the generic `?error=auth_failed` redirect.
+
+const boOrigin = "http://127.0.0.1:4173";
+const boClientId = "solidchange-backoffice";
+const boSubject = "operator-42";
+
+let boNow;
+let boIssuer;
+let boIssuerBase;
+let boIssuerServer;
+let backoffice;
+let backofficeBase;
+
+describe("backoffice oidc operator login", () => {
+  before(async () => {
+    boNow = Date.now();
+    boIssuerServer = createServer();
+    await new Promise((resolve) => boIssuerServer.listen(0, "127.0.0.1", resolve));
+    boIssuerBase = `http://127.0.0.1:${boIssuerServer.address().port}`;
+    boIssuer = createOidcIssuer({
+      issuer: boIssuerBase,
+      clientId: boClientId,
+      redirectUris: [`${boOrigin}/bff/auth/callback`],
+      defaultSubject: boSubject,
+      idTokenClaims: {
+        groups: ["compliance"],
+        email: "operator@example.test",
+        name: "Dev Operator",
+      },
+      clock: { now: () => Math.floor(boNow / 1000) },
+    });
+    boIssuerServer.on("request", (request, response) => {
+      let body = "";
+      request.on("data", (chunk) => {
+        body += chunk.toString("utf8");
+      });
+      request.on("end", () => {
+        void boIssuer
+          .handle({
+            method: request.method ?? "GET",
+            url: request.url ?? "/",
+            headers: request.headers,
+            body: body || undefined,
+          })
+          .then((reply) => {
+            response.writeHead(reply.status, { ...reply.headers });
+            response.end(reply.body);
+          });
+      });
+    });
+
+    const saved = {
+      BACKOFFICE_ALLOWED_ORIGINS: process.env.BACKOFFICE_ALLOWED_ORIGINS,
+      BACKOFFICE_OIDC_ISSUER_URL: process.env.BACKOFFICE_OIDC_ISSUER_URL,
+      BACKOFFICE_OIDC_CLIENT_ID: process.env.BACKOFFICE_OIDC_CLIENT_ID,
+      BACKOFFICE_OIDC_ROLE_MAP_JSON: process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON,
+    };
+    process.env.BACKOFFICE_ALLOWED_ORIGINS = boOrigin;
+    process.env.BACKOFFICE_OIDC_ISSUER_URL = boIssuerBase;
+    process.env.BACKOFFICE_OIDC_CLIENT_ID = boClientId;
+    process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON = JSON.stringify({ compliance: "compliance-lead" });
+    let config;
+    try {
+      config = loadBackofficeConfig();
+    } finally {
+      if (saved.BACKOFFICE_ALLOWED_ORIGINS === undefined) delete process.env.BACKOFFICE_ALLOWED_ORIGINS;
+      else process.env.BACKOFFICE_ALLOWED_ORIGINS = saved.BACKOFFICE_ALLOWED_ORIGINS;
+      if (saved.BACKOFFICE_OIDC_ISSUER_URL === undefined) delete process.env.BACKOFFICE_OIDC_ISSUER_URL;
+      else process.env.BACKOFFICE_OIDC_ISSUER_URL = saved.BACKOFFICE_OIDC_ISSUER_URL;
+      if (saved.BACKOFFICE_OIDC_CLIENT_ID === undefined) delete process.env.BACKOFFICE_OIDC_CLIENT_ID;
+      else process.env.BACKOFFICE_OIDC_CLIENT_ID = saved.BACKOFFICE_OIDC_CLIENT_ID;
+      if (saved.BACKOFFICE_OIDC_ROLE_MAP_JSON === undefined) delete process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON;
+      else process.env.BACKOFFICE_OIDC_ROLE_MAP_JSON = saved.BACKOFFICE_OIDC_ROLE_MAP_JSON;
+    }
+    assert.ok(config.oidc, "BACKOFFICE_OIDC_* pair should configure OIDC");
+    backoffice = createBackofficeServer(config);
+    backofficeBase = await listen(backoffice);
+  });
+
+  after(async () => {
+    if (backoffice) await closeServer(backoffice);
+    if (boIssuerServer) await closeServer(boIssuerServer);
+  });
+
+  async function boLoginStart() {
+    const response = await fetch(`${backofficeBase}/bff/auth/login`, { redirect: "manual" });
+    assert.equal(response.status, 302);
+    const authorize = new URL(response.headers.get("location") ?? "");
+    assert.equal(authorize.origin + authorize.pathname, `${boIssuerBase}/authorize`);
+    const tx = setCookies(response, "solidchange_bo_oidc_transaction")[0];
+    assert.ok(tx, "transaction cookie expected");
+    return { authorize, tx: tx.split(";")[0] };
+  }
+
+  async function boCallbackOf(callbackUrl, tx, headers = {}) {
+    return fetch(`${backofficeBase}${callbackUrl.pathname}${callbackUrl.search}`, {
+      redirect: "manual",
+      headers: { cookie: tx, ...headers },
+    });
+  }
+
+  test("full authorization-code + PKCE flow mints an operator session", async () => {
+    const { authorize, tx } = await boLoginStart();
+    assert.equal(authorize.searchParams.get("response_type"), "code");
+    assert.equal(authorize.searchParams.get("client_id"), boClientId);
+    assert.equal(authorize.searchParams.get("redirect_uri"), `${boOrigin}/bff/auth/callback`);
+    assert.equal(authorize.searchParams.get("code_challenge_method"), "S256");
+    assert.ok(authorize.searchParams.get("nonce"));
+
+    const callback = await issuerGrant(authorize);
+    const response = await boCallbackOf(callback, tx, { "sec-fetch-site": "cross-site" });
+    assert.equal(response.status, 302);
+    assert.equal(response.headers.get("location"), boOrigin);
+    const session = setCookies(response, "solidchange_bo_session")[0];
+    assert.ok(session, "session cookie expected");
+
+    const profile = await fetch(`${backofficeBase}/bff/api/session`, {
+      headers: { cookie: session.split(";")[0] },
+    });
+    assert.equal(profile.status, 200);
+    const { payload } = await profile.json();
+    const expectedSubject = `syn_oper_${createHash("sha256")
+      .update(`solidchange-backoffice-bff|${boSubject}`)
+      .digest("hex")
+      .slice(0, 24)}`;
+    assert.equal(payload.operator.subject, expectedSubject);
+    assert.equal(payload.operator.role, "compliance-lead");
+    assert.equal(payload.operator.email, "operator@example.test");
+  });
+
+  test("issuer error, state mismatch, expired and replayed codes fail closed", async () => {
+    const expectFailed = (response) => {
+      assert.equal(response.status, 302);
+      assert.equal(response.headers.get("location"), `${boOrigin}/?error=auth_failed`);
+      assert.equal(setCookies(response, "solidchange_bo_session").length, 0);
+    };
+
+    expectFailed(
+      await fetch(`${backofficeBase}/bff/auth/callback?error=access_denied&state=s`, {
+        redirect: "manual",
+      })
+    );
+
+    const { authorize, tx } = await boLoginStart();
+    const callback = await issuerGrant(authorize);
+    expectFailed(await boCallbackOf(callback, "solidchange_bo_oidc_transaction=foreign.foreign"));
+    expectFailed(
+      await fetch(`${backofficeBase}${callback.pathname}${callback.search}`, {
+        redirect: "manual",
+      })
+    );
+
+    // Expired code: the issuer clock moves past the code TTL before exchange.
+    const second = await boLoginStart();
+    const callbackB = await issuerGrant(second.authorize);
+    boNow += 121_000;
+    try {
+      expectFailed(await boCallbackOf(callbackB, second.tx));
+    } finally {
+      boNow -= 121_000;
+    }
+
+    // Replayed: the pending entry and the issuer code are both single-use.
+    const third = await boLoginStart();
+    const callbackC = await issuerGrant(third.authorize);
+    const first = await boCallbackOf(callbackC, third.tx);
+    assert.equal(first.headers.get("location"), boOrigin);
+    expectFailed(await boCallbackOf(callbackC, third.tx));
+  });
+
+  test("an unconfigured BFF has no auth routes", async () => {
+    const config = loadBackofficeConfig();
+    assert.equal(config.oidc, undefined);
+    const isolated = createBackofficeServer(config);
+    const base = await listen(isolated);
+    try {
+      const login = await fetch(`${base}/bff/auth/login`, { redirect: "manual" });
+      assert.equal(login.status, 404);
+      const callback = await fetch(`${base}/bff/auth/callback?code=c&state=s`, {
+        redirect: "manual",
+      });
+      assert.equal(callback.status, 404);
+    } finally {
+      await closeServer(isolated);
+    }
   });
 });

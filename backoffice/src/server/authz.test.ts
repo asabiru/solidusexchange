@@ -238,12 +238,8 @@ describe("backoffice authorization matrix", () => {
   it("accepts every declared role as an OIDC role-map target and rejects others", () => {
     const env = {
       BACKOFFICE_ALLOWED_ORIGINS: origin,
-      BACKOFFICE_OIDC_ISSUER: "https://idp.example.test",
-      BACKOFFICE_OIDC_AUTHORIZATION_ENDPOINT: "https://idp.example.test/authorize",
-      BACKOFFICE_OIDC_TOKEN_ENDPOINT: "https://idp.example.test/token",
-      BACKOFFICE_OIDC_JWKS_URI: "https://idp.example.test/jwks.json",
+      BACKOFFICE_OIDC_ISSUER_URL: "https://idp.example.test",
       BACKOFFICE_OIDC_CLIENT_ID: "backoffice-dev",
-      BACKOFFICE_OIDC_REDIRECT_URI: `${origin}/bff/auth/callback`,
       BACKOFFICE_OIDC_ROLE_MAP_JSON: "",
       NODE_ENV: "",
       BACKOFFICE_MODE: ""

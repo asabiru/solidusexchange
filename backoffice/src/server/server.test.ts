@@ -1025,7 +1025,6 @@ describe("OIDC browser transaction boundary", () => {
         tokenEndpoint: "http://127.0.0.1:1/token",
         jwksUri: "https://identity.example.test/jwks",
         clientId: "solidchange-backoffice",
-        clientSecret: "",
         redirectUri: `${origin}/bff/auth/callback`,
         roleClaim: "groups",
         roleMap: { compliance: "compliance-lead" }
@@ -1049,25 +1048,27 @@ describe("OIDC browser transaction boundary", () => {
       assert.ok(state);
       assert.match(
         setCookie,
-        new RegExp(`^solidchange_bo_oidc_transaction=${state}; HttpOnly; SameSite=Lax;`)
+        new RegExp(`^solidchange_bo_oidc_transaction=${state}\\.[A-Za-z0-9_-]+; Path=/bff/auth; HttpOnly; SameSite=Lax; Max-Age=600`)
       );
 
       const missingCookie = await fetch(
-        `${isolatedBaseUrl}/bff/auth/callback?code=synthetic&state=${state}`
+        `${isolatedBaseUrl}/bff/auth/callback?code=synthetic&state=${state}`,
+        { redirect: "manual" }
       );
-      assert.equal(missingCookie.status, 400);
-      assert.deepEqual(await missingCookie.json(), { error: "oidc_callback_rejected" });
+      assert.equal(missingCookie.status, 302);
+      assert.equal(missingCookie.headers.get("location"), `${origin}/?error=auth_failed`);
 
       const mismatchedCookie = await fetch(
         `${isolatedBaseUrl}/bff/auth/callback?code=synthetic&state=${state}`,
         {
+          redirect: "manual",
           headers: {
-            cookie: "solidchange_bo_oidc_transaction=other-state"
+            cookie: "solidchange_bo_oidc_transaction=other-state.other-nonce"
           }
         }
       );
-      assert.equal(mismatchedCookie.status, 400);
-      assert.deepEqual(await mismatchedCookie.json(), { error: "oidc_callback_rejected" });
+      assert.equal(mismatchedCookie.status, 302);
+      assert.equal(mismatchedCookie.headers.get("location"), `${origin}/?error=auth_failed`);
     } finally {
       await new Promise<void>((resolve, reject) => {
         isolated.close((error) => error ? reject(error) : resolve());
@@ -1219,7 +1220,6 @@ describe("operator device binding", () => {
         tokenEndpoint: "https://identity.example.test/token",
         jwksUri: "https://identity.example.test/jwks",
         clientId: "solidchange-backoffice",
-        clientSecret: "",
         redirectUri: "http://127.0.0.1:4173/bff/auth/callback",
         roleClaim: "groups",
         roleMap: { compliance: "compliance-lead" }
@@ -1231,21 +1231,24 @@ describe("operator device binding", () => {
       const login = await fetch(`${isolatedUrl}/bff/auth/login`, { redirect: "manual" });
       const location = login.headers.get("location");
       assert.ok(location);
-      const state = new URL(location).searchParams.get("state");
-      assert.ok(state);
+      const authorize = new URL(location);
+      const state = authorize.searchParams.get("state");
+      const nonce = authorize.searchParams.get("nonce");
+      assert.ok(state && nonce);
       const callback = await fetch(
         `${isolatedUrl}/bff/auth/callback?code=synthetic&state=${state}`,
         {
+          redirect: "manual",
           headers: {
-            cookie: `solidchange_bo_oidc_transaction=${state}; solidchange_bo_device=${otherDevice}`
+            cookie: `solidchange_bo_oidc_transaction=${state}.${nonce}; solidchange_bo_device=${otherDevice}`
           }
         }
       );
-      assert.equal(callback.status, 403);
-      assert.deepEqual(await callback.json(), {
-        error: "device_not_approved",
-        deviceDigest: deviceDigest(otherDevice)
-      });
+      assert.equal(callback.status, 302);
+      assert.equal(
+        callback.headers.get("location"),
+        "http://127.0.0.1:4173/?error=auth_failed"
+      );
       assert.equal(
         callback.headers.getSetCookie().some((value) => value.startsWith("solidchange_bo_session=")),
         false
