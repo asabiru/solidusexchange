@@ -922,7 +922,7 @@ describe("operator journey through the backoffice BFF", () => {
       ["?cursor=bogus", 400, "operator_audit_cursor_invalid"],
       ["?cursor=auc_0011223344556677", 404, "operator_audit_not_found"],
       ["?cursor=auc_0011223344556677&cursor=auc_8899aabbccddeeff", 400, "operator_audit_query_invalid"],
-      ["?page=2", 400, "operator_audit_query_invalid"]
+      ["?page=2", 400, "invalid_request"]
     ]) {
       const response = await fetch(`${backofficeBase}/bff/api/operator/audit${suffix}`, {
         headers: { cookie: lead }
