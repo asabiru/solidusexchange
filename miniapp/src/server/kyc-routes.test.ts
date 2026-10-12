@@ -109,7 +109,12 @@ describe("KYC routes: authentication, CSRF and strict input", () => {
     });
     assert.equal(plain.status, 415);
     assert.equal((await post(running.base, "/bff/kyc/applications", [], { cookie })).status, 400);
-    const ignored = await getJson<KycVerificationView>(running.base, "/bff/kyc/status?state=approved&kyc=verified", cookie);
+    const spoofed = await fetch(`${running.base}/bff/kyc/status?state=approved&kyc=verified`, {
+      headers: { cookie }
+    });
+    assert.equal(spoofed.status, 400);
+    assert.deepEqual(await spoofed.json(), { error: "invalid_request" });
+    const ignored = await getJson<KycVerificationView>(running.base, "/bff/kyc/status", cookie);
     assert.equal(ignored.state, "not_started");
     assert.equal(ignored.sessionKyc, "kyc-gated");
   });
