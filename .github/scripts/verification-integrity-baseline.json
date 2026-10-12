@@ -1628,8 +1628,8 @@
       "minCases": 10
     },
     "packages/e2e-dev/tests/operator-chain.test.mjs": {
-      "minLines": 510,
-      "minCases": 10
+      "minLines": 1125,
+      "minCases": 14
     },
     "packages/customer-api/tests/served-reads-meta-audit-wave67.test.mjs": {
       "minLines": 628,
