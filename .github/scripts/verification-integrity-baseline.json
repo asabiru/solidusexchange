@@ -1638,6 +1638,10 @@
     "backoffice/src/server/route-table-audit-wave70.test.ts": {
       "minLines": 300,
       "minCases": 13
+    },
+    "packages/matching-core/tests/orderbook-audit.test.mjs": {
+      "minLines": 572,
+      "minCases": 46
     }
   }
 }
