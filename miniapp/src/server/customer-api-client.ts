@@ -19,7 +19,7 @@ import type {
   WithdrawalStatus
 } from "../shared/api.js";
 import type { ScreeningNetwork } from "../shared/address-screening.js";
-import { type AssetCode, assets, isAssetCode } from "../shared/assets.js";
+import { type AssetCode, assetCodes, assets, isAssetCode } from "../shared/assets.js";
 import { checkReferencePattern } from "../shared/checks.js";
 import { fromUnits, isDecimalString, toUnits } from "../shared/decimal.js";
 import { type SupportCategory, type SupportStatus, isSupportCategory, isSupportStatus, supportStatuses } from "../shared/support.js";
@@ -27,17 +27,19 @@ import {
   cardIdPattern,
   cardLast4Pattern,
   cardRubScale,
+  cardStatuses,
   cardTokenReferencePattern,
   isCardBrand,
   isCardKind,
   isCardStatus
 } from "./cards.js";
-import { depositIdPattern, depositPaymentReferencePattern, isDepositStatus } from "./deposits.js";
+import { depositIdPattern, depositPaymentReferencePattern, depositStatuses, isDepositStatus } from "./deposits.js";
 import {
   contractExchangeOrderAmounts,
   exchangeOrderIdPattern,
   exchangeOrderMaxBps,
   exchangeOrderPriceScale,
+  exchangeOrderStatuses,
   isExchangeOrderStatus,
   isExchangeOrderType
 } from "./exchange-orders.js";
@@ -49,7 +51,8 @@ import {
   paymentProviderReferencePattern,
   paymentRailObservedStatuses,
   paymentRecipientReferencePattern,
-  paymentRubScale
+  paymentRubScale,
+  paymentStatuses
 } from "./payments.js";
 import {
   contractQuoteAmounts,
@@ -67,7 +70,8 @@ import {
   isWithdrawalPair,
   isWithdrawalStatus,
   withdrawalIdPattern,
-  withdrawalLegIdPattern
+  withdrawalLegIdPattern,
+  withdrawalStatuses
 } from "./withdrawals.js";
 
 export const customerApiClientVersion = "solidchange-miniapp-bff/0.1.0";
@@ -802,18 +806,30 @@ function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): 
   return actual.length === keys.length && actual.every((key, index) => key === [...keys].sort()[index]);
 }
 
+const walletIdPattern = /^syn_wal_[a-z0-9]{8,32}$/u;
+
 function parseWalletsView(value: unknown): readonly CustomerApiWallet[] | undefined {
-  if (!isRecord(value) || !hasExactKeys(value, ["wallets"]) || !Array.isArray(value.wallets)) {
+  if (
+    !isRecord(value)
+    || !hasExactKeys(value, ["wallets"])
+    || !Array.isArray(value.wallets)
+    // The wallet set is the fixed asset table: exactly one entry per asset
+    // code — a subset, an extra row or a duplicate asset is contract drift.
+    || value.wallets.length !== assetCodes.length
+  ) {
     return undefined;
   }
   const wallets: CustomerApiWallet[] = [];
+  const seenAssets = new Set<string>();
   for (const entry of value.wallets) {
     if (
       !isRecord(entry)
       || !hasExactKeys(entry, ["wallet_id", "asset", "available", "hold"])
       || typeof entry.wallet_id !== "string"
+      || !walletIdPattern.test(entry.wallet_id)
       || typeof entry.asset !== "string"
       || !isAssetCode(entry.asset)
+      || seenAssets.has(entry.asset)
       || typeof entry.available !== "string"
       || typeof entry.hold !== "string"
       || !isDecimalString(entry.available, assets[entry.asset].scale)
@@ -821,6 +837,7 @@ function parseWalletsView(value: unknown): readonly CustomerApiWallet[] | undefi
     ) {
       return undefined;
     }
+    seenAssets.add(entry.asset);
     wallets.push(Object.freeze({
       wallet_id: entry.wallet_id,
       asset: entry.asset,
@@ -881,6 +898,27 @@ function parseDepositsView(value: unknown): readonly CustomerApiDeposit[] | unde
     ) {
       return undefined;
     }
+    const expected = toUnits(entry.expected_amount, assets[entry.asset as AssetCode].scale);
+    const received = toUnits(entry.received_total, assets[entry.asset as AssetCode].scale);
+    const reversed = toUnits(entry.reversed_total, assets[entry.asset as AssetCode].scale);
+    const createdMs = Date.parse(entry.created_at);
+    const updatedMs = Date.parse(entry.updated_at);
+    // The lifecycle pins the totals and last-touch stamp per status:
+    // awaiting and expired intents carry nothing, received and reversed
+    // intents carry exactly the expected amount, duplicates twice it,
+    // partials strictly less.
+    if (
+      expected <= 0n
+      || updatedMs < createdMs
+      || (entry.status === "awaiting_payment" && !(received === 0n && reversed === 0n && updatedMs === createdMs))
+      || (entry.status === "payment_received" && !(received === expected && reversed === 0n))
+      || (entry.status === "partial_payment" && !(received > 0n && received < expected && reversed === 0n))
+      || (entry.status === "duplicate_payment" && !(received === expected * 2n && reversed === 0n))
+      || (entry.status === "payment_reversed" && !(received === expected && reversed > 0n && reversed <= received))
+      || (entry.status === "expired_no_payment" && !(received === 0n && reversed === 0n && updatedMs > createdMs))
+    ) {
+      return undefined;
+    }
     deposits.push(Object.freeze({
       deposit_id: entry.deposit_id,
       asset: entry.asset,
@@ -897,6 +935,9 @@ function parseDepositsView(value: unknown): readonly CustomerApiDeposit[] | unde
   }
   return Object.freeze(deposits);
 }
+
+// The withdrawal intent's fixed creation-to-expiry window upstream mints.
+const withdrawalIntentTtlMs = 300_000;
 
 const withdrawalKeys = [
   "withdrawal_id",
@@ -974,6 +1015,26 @@ function parseWithdrawalsView(value: unknown): readonly CustomerApiWithdrawal[] 
       }));
     }
     if (!legsOk) return undefined;
+    const createdMs = Date.parse(entry.created_at);
+    const updatedMs = Date.parse(entry.updated_at);
+    const expiresMs = Date.parse(entry.expires_at);
+    // The intent carries a fixed TTL from creation, and the lifecycle pins
+    // the last-touch timestamp per status: drafts untouched, expired
+    // intents at their expiry, confirmations after it, everything else in
+    // flight strictly inside the window.
+    if (
+      expiresMs - createdMs !== withdrawalIntentTtlMs
+      || updatedMs < createdMs
+      || (entry.status === "draft" && updatedMs !== createdMs)
+      || (entry.status === "expired" && updatedMs !== expiresMs)
+      || (entry.status === "confirmed" && updatedMs <= expiresMs)
+      || (entry.status !== "draft"
+        && entry.status !== "expired"
+        && entry.status !== "confirmed"
+        && !(updatedMs > createdMs && updatedMs < expiresMs))
+    ) {
+      return undefined;
+    }
     withdrawals.push(Object.freeze({
       withdrawal_id: entry.withdrawal_id,
       asset: entry.asset,
@@ -1179,6 +1240,9 @@ function parseExchangeOrdersView(value: unknown): readonly CustomerApiExchangeOr
       || !isIsoTimestamp(entry.created_at)
       || !isIsoTimestamp(entry.updated_at)
       || !isExchangeOrderStatus(entry.status)
+      // A market order never rests and is never cancelled: the only market
+      // row the projection can emit is a rejected one.
+      || (entry.order_type === "market" && entry.status !== "rejected")
       || entry.execution !== "not_supported"
       || entry.posting !== "none"
     ) {
@@ -1820,6 +1884,11 @@ const customerApiCheckStatuses = new Set<string>([
 ]);
 
 const openCustomerApiCheckStatuses = new Set<string>(["created", "awaiting_recipient_kyc"]);
+const checkCounterpartyRefPattern = /^syn_cust_[a-z0-9]{4,64}$/u;
+const checkPeerRefPattern = /^syn_peer_[0-9a-f]{12}$/u;
+// The check directory mints USDT and TON checks only — the fiat rail has no
+// claim-code surface upstream.
+const checkAssets = new Set<string>(["USDT", "TON"]);
 
 /**
  * Validates an upstream ChecksView for one subject. The exact key set is
@@ -1854,11 +1923,15 @@ function parseChecksView(value: unknown, subject: string): readonly CustomerApiC
       || !customerApiCheckStatuses.has(entry.status)
       || typeof entry.sender_ref !== "string"
       || typeof entry.recipient_ref !== "string"
+      // Both sides carry the contract's counterparty shapes: a synthetic
+      // customer ref or a minted peer ref — anything else is unbound drift.
+      || (!checkCounterpartyRefPattern.test(entry.sender_ref) && !checkPeerRefPattern.test(entry.sender_ref))
+      || (!checkCounterpartyRefPattern.test(entry.recipient_ref) && !checkPeerRefPattern.test(entry.recipient_ref))
       || entry.sender_ref === entry.recipient_ref
       || (entry.sender_ref !== subject && entry.recipient_ref !== subject)
       || (entry.sender_ref === subject && entry.recipient_ref === subject)
       || typeof entry.asset !== "string"
-      || !isAssetCode(entry.asset)
+      || !checkAssets.has(entry.asset)
       || typeof entry.amount !== "string"
       || typeof entry.fee_amount !== "string"
       || typeof entry.outstanding_amount !== "string"
@@ -1952,11 +2025,47 @@ const moneyActivityKinds = new Set<string>([
   "check"
 ]);
 
+const kycApplicationStatuses: readonly KycVerificationState[] = [
+  "not_started",
+  "submitted",
+  "in_review",
+  "approved",
+  "rejected",
+  "needs_more_data",
+  "timed_out",
+  "unavailable"
+];
+
 const activityIdContractPattern = /^act_[0-9a-f]{24}$/u;
-const activityStatusPattern = /^[a-z][a-z0-9_]{0,63}$/u;
-// The feed only ever references existing domain identifiers in its detail
-// text — never a claim secret, address or posting id.
-const activityDetailPattern = /^[a-z0-9 .·:_/-]{1,256}$/iu;
+// Per-kind status vocabulary mirrors the sibling collections exactly: the
+// feed item's status is the lifecycle state the referenced domain record is
+// in — never a re-declared local word.
+const activityStatuses: Readonly<Record<string, ReadonlySet<string>>> = {
+  deposit: new Set<string>(depositStatuses),
+  withdrawal: new Set<string>(withdrawalStatuses),
+  quote: new Set<string>(["indicative"]),
+  order: new Set<string>(exchangeOrderStatuses),
+  payment: new Set<string>(paymentStatuses),
+  card: new Set<string>(cardStatuses),
+  check: new Set<string>(customerApiCheckStatuses),
+  kyc: new Set<string>(kycApplicationStatuses.filter((status) => status !== "not_started")),
+  security: new Set<string>(["login", "revoked"])
+};
+// The domain id prefix a detail line cites for each money/domain kind — the
+// same prefixes the sibling collections mint; kyc and security entries
+// carry no domain reference and must never cite one.
+const activityRefPrefixes: Readonly<Record<string, string | undefined>> = {
+  deposit: "dep_",
+  withdrawal: "wdr_",
+  quote: "qte_",
+  order: "ord_",
+  payment: "pay_",
+  card: "crd_",
+  check: "chk_",
+  kyc: undefined,
+  security: undefined
+};
+const activityDomainIdPattern = /(?:dep|wdr|qte|ord|pay|crd|chk)_[0-9a-f]{24}/u;
 
 /**
  * Validates an upstream ActivityView. The exact key set is the boundary:
@@ -1971,30 +2080,58 @@ function parseActivityView(value: unknown): readonly CustomerApiActivityItem[] |
     || !hasExactKeys(value, ["mode", "activity"])
     || value.mode !== "test"
     || !Array.isArray(value.activity)
+    // The feed stays bounded like the miniapp cap: at most one synthetic
+    // entry per kind, newest first with unique ids and strictly decreasing
+    // timestamps.
+    || value.activity.length < 1
+    || value.activity.length > activityKinds.size
   ) {
     return undefined;
   }
   const activity: CustomerApiActivityItem[] = [];
+  const seenIds = new Set<string>();
+  const seenKinds = new Set<string>();
+  let previousAt = Number.POSITIVE_INFINITY;
   for (const entry of value.activity) {
     if (
       !isRecord(entry)
       || !hasExactKeys(entry, activityItemKeys)
       || typeof entry.activity_id !== "string"
       || !activityIdContractPattern.test(entry.activity_id)
+      || seenIds.has(entry.activity_id)
       || typeof entry.kind !== "string"
       || !activityKinds.has(entry.kind)
+      || seenKinds.has(entry.kind)
       || typeof entry.status !== "string"
-      || !activityStatusPattern.test(entry.status)
+      || !activityStatuses[entry.kind]?.has(entry.status)
       || typeof entry.title !== "string"
       || entry.title.length < 1
       || entry.title.length > 128
       || typeof entry.detail !== "string"
-      || !activityDetailPattern.test(entry.detail)
+      || entry.detail.length < 1
+      || entry.detail.length > 256
       || !isIsoTimestamp(entry.created_at)
       || entry.posting !== "none"
     ) {
       return undefined;
     }
+    // The detail cites the domain record the item describes: money/domain
+    // kinds must contain their collection's id, kyc and security events
+    // must not cite any domain id.
+    const refPrefix = activityRefPrefixes[entry.kind];
+    if (
+      (refPrefix !== undefined && !new RegExp(`${refPrefix}[0-9a-f]{24}`, "u").test(entry.detail))
+      || (refPrefix === undefined && activityDomainIdPattern.test(entry.detail))
+    ) {
+      return undefined;
+    }
+    const entryAt = Date.parse(entry.created_at);
+    if (entryAt >= previousAt) {
+      return undefined;
+    }
+    seenIds.add(entry.activity_id);
+    seenKinds.add(entry.kind);
+    previousAt = entryAt;
     if (!moneyActivityKinds.has(entry.kind)) {
       if (entry.money !== null) {
         return undefined;
@@ -2062,8 +2199,16 @@ const operationTimelineKeys = ["title", "detail", "at", "state"] as const;
 const operationKinds = new Set<string>(["deposit", "exchange", "qr", "withdrawal"]);
 const operationIdContractPattern = /^ope_[0-9a-f]{24}$/u;
 const operationReferencePattern = /^SCX-[0-9]{5,10}$/u;
-const operationStatusPattern = /^[a-z][a-z0-9_]{0,63}$/u;
-const operationChannelPattern = /^[a-z][a-z0-9_-]{1,31}$/u;
+// Per-kind status vocabulary mirrors the sibling collections exactly: the
+// feed item's status is the lifecycle state the referenced domain record is
+// in — never a re-declared local word.
+const operationStatuses: Readonly<Record<string, ReadonlySet<string>>> = {
+  exchange: new Set<string>(exchangeOrderStatuses),
+  deposit: new Set<string>(depositStatuses),
+  withdrawal: new Set<string>(withdrawalStatuses),
+  qr: new Set<string>(paymentStatuses)
+};
+const operationTimelineMaxSteps = 4;
 const operationStates = new Set<string>(["blocked", "current", "done", "pending"]);
 
 /**
@@ -2088,20 +2233,22 @@ function parseOperationItem(value: unknown): CustomerApiOperationItem | undefine
     || typeof value.kind !== "string"
     || !operationKinds.has(value.kind)
     || typeof value.status !== "string"
-    || !operationStatusPattern.test(value.status)
+    || !operationStatuses[value.kind]?.has(value.status)
     || typeof value.title !== "string"
     || value.title.length < 1
-    || value.title.length > 64
+    || value.title.length > 128
     || typeof value.channel !== "string"
-    || !operationChannelPattern.test(value.channel)
+    || value.channel.length < 1
+    || value.channel.length > 64
     || !Array.isArray(value.legs)
     || value.legs.length < 1
     || typeof value.fee_amount !== "string"
     || typeof value.fee_asset !== "string"
     || !isAssetCode(value.fee_asset)
     || !isScaledDecimal(value.fee_amount, assets[value.fee_asset as AssetCode].scale)
-    || toUnits(value.fee_amount, assets[value.fee_asset as AssetCode].scale) < 0n
+    || toUnits(value.fee_amount, assets[value.fee_asset as AssetCode].scale) <= 0n
     || typeof value.note !== "string"
+    || value.note.length < 1
     || value.note.length > 256
     || !isIsoTimestamp(value.created_at)
     || value.posting !== "none"
@@ -2155,13 +2302,27 @@ function parseOperationItem(value: unknown): CustomerApiOperationItem | undefine
       quote_asset: raw.quote_asset as AssetCode,
       rate: raw.rate
     });
-  } else if (value.exchange !== null || legs.length !== 1) {
+  } else if (
+    value.exchange !== null
+    || legs.length !== 1
+    // A non-exchange operation is a single-leg move: withdrawals pay out,
+    // every other kind pays in.
+    || legs[0]?.direction !== (value.kind === "withdrawal" ? "out" : "in")
+  ) {
     return undefined;
   }
   const timeline: CustomerApiOperationTimelineStep[] = [];
-  if (!Array.isArray(value.timeline) || value.timeline.length < 1) {
+  if (
+    !Array.isArray(value.timeline)
+    || value.timeline.length < 1
+    || value.timeline.length > operationTimelineMaxSteps
+  ) {
     return undefined;
   }
+  // The walk only ever moves forward inside the operation's own window:
+  // recorded steps are non-decreasing in time and never past creation.
+  const createdMs = Date.parse(value.created_at);
+  let previousStepAt = Number.NEGATIVE_INFINITY;
   for (const step of value.timeline) {
     if (
       !isRecord(step)
@@ -2181,6 +2342,11 @@ function parseOperationItem(value: unknown): CustomerApiOperationItem | undefine
       if (typeof step.at !== "string" || !isIsoTimestamp(step.at)) {
         return undefined;
       }
+      const stepAt = Date.parse(step.at);
+      if (stepAt < previousStepAt || stepAt > createdMs) {
+        return undefined;
+      }
+      previousStepAt = stepAt;
     } else if (step.at !== null) {
       return undefined;
     }
@@ -2215,15 +2381,34 @@ function parseOperationsView(value: unknown): readonly CustomerApiOperationItem[
     || !hasExactKeys(value, ["mode", "operations"])
     || value.mode !== "test"
     || !Array.isArray(value.operations)
+    // The feed stays bounded like the miniapp cap: at most one synthetic
+    // entry per kind, newest first with unique ids and strictly decreasing
+    // timestamps.
+    || value.operations.length < 1
+    || value.operations.length > operationKinds.size
   ) {
     return undefined;
   }
   const operations: CustomerApiOperationItem[] = [];
+  const seenIds = new Set<string>();
+  const seenKinds = new Set<string>();
+  let previousAt = Number.POSITIVE_INFINITY;
   for (const entry of value.operations) {
     const item = parseOperationItem(entry);
-    if (item === undefined) {
+    if (
+      item === undefined
+      || seenIds.has(item.operation_id)
+      || seenKinds.has(item.kind)
+    ) {
       return undefined;
     }
+    const entryAt = Date.parse(item.created_at);
+    if (entryAt >= previousAt) {
+      return undefined;
+    }
+    seenIds.add(item.operation_id);
+    seenKinds.add(item.kind);
+    previousAt = entryAt;
     operations.push(item);
   }
   return Object.freeze(operations);
@@ -2262,9 +2447,7 @@ function parseNotificationsView(
       ])
       || typeof entry.notification_id !== "string"
       || !notificationIdPattern.test(entry.notification_id)
-      || typeof entry.created_at !== "string"
-      || !isoTimestampPattern.test(entry.created_at)
-      || !Number.isFinite(Date.parse(entry.created_at))
+      || !isIsoTimestamp(entry.created_at)
       || entry.channel !== "telegram-draft"
       || typeof entry.template !== "string"
       || !isNotificationTemplate(entry.template)
@@ -2301,16 +2484,6 @@ function parseNotificationsView(
 }
 
 const kycSessionStatuses: readonly CustomerApiSessionKyc[] = ["unverified", "pending", "verified"];
-const kycApplicationStatuses: readonly KycVerificationState[] = [
-  "not_started",
-  "submitted",
-  "in_review",
-  "approved",
-  "rejected",
-  "needs_more_data",
-  "timed_out",
-  "unavailable"
-];
 const kycReasonCodes: readonly CustomerApiKycReasonCode[] = ["SIM_DOCUMENT_UNREADABLE", "SIM_DATA_MISMATCH"];
 const kycRequestedItems: readonly CustomerApiKycRequestedItem[] = ["proof_of_address", "selfie_retake"];
 const kycApplicationIdPattern = /^kyc_[0-9a-f]{24}$/;
@@ -2376,6 +2549,10 @@ const supportTicketKeys = [
 const supportTimelineKeys = ["at", "status"] as const;
 const supportTopicMaxLength = 120;
 const supportMessageMaxLength = 1_000;
+// The upstream timeline walks a fixed hourly step from creation and the
+// ticket expires exactly one day later.
+const supportTimelineStepMs = 3_600_000;
+const supportTicketTtlMs = 86_400_000;
 
 const profileLocales: readonly CustomerApiProfileView["locale"][] = ["en", "ky", "ru"];
 const profileCustomerRefPattern = /^SC-DEV-[0-9A-Z]{5}$/;
@@ -2436,35 +2613,30 @@ function parseSupportView(value: unknown): CustomerApiSupportTicketsView | undef
       || !isIsoTimestamp(entry.created_at)
       || !isIsoTimestamp(entry.expires_at)
       // The ack flag mirrors the complaint category and the ticket always
-      // expires strictly after creation — the upstream TTL is fixed.
+      // expires exactly one TTL after creation.
       || entry.complaint_acknowledged !== (entry.category === "complaint")
-      || !(Date.parse(entry.expires_at) > Date.parse(entry.created_at))
+      || Date.parse(entry.expires_at) !== Date.parse(entry.created_at) + supportTicketTtlMs
     ) {
       return undefined;
     }
+    const createdMs = Date.parse(entry.created_at);
     const timeline: CustomerApiTicketTimelineEntry[] = [];
     for (const [index, step] of entry.timeline.entries()) {
       if (
         !isRecord(step)
         || !hasExactKeys(step, supportTimelineKeys)
-        // The lifecycle walks the status order: the timeline is a strict
-        // prefix of received → in_review → answered → closed.
+        // The lifecycle walks the status order at a fixed hourly step: the
+        // timeline is a strict prefix of received → in_review → answered →
+        // closed, each stamp exactly index * step after creation.
         || step.status !== supportStatuses[index]
         || !isIsoTimestamp(step.at)
+        || Date.parse(step.at as string) !== createdMs + index * supportTimelineStepMs
       ) {
         return undefined;
       }
       timeline.push(Object.freeze({ status: step.status as SupportStatus, at: step.at }));
     }
     if (timeline.at(-1)?.status !== entry.status) return undefined;
-    // The first observation is the creation instant; later steps strictly
-    // increase (upstream mints them on a fixed hourly step).
-    if (Date.parse(timeline[0]?.at as string) !== Date.parse(entry.created_at)) return undefined;
-    for (let index = 1; index < timeline.length; index += 1) {
-      if (!(Date.parse(timeline[index]?.at as string) > Date.parse(timeline[index - 1]?.at as string))) {
-        return undefined;
-      }
-    }
     tickets.push(Object.freeze({
       ticket_id: entry.ticket_id,
       category: entry.category,
@@ -2695,7 +2867,12 @@ function parseUserView(value: unknown, expectedSubject: string): CustomerApiUser
 
 const depositAddressIdPattern = /^dpa_[0-9a-f]{24}$/;
 const depositAddressNetworkPattern = /^[A-Z0-9]+_TESTNET$/;
-const depositAddressValuePattern = /^[A-Za-z0-9_-]{20,64}$/;
+// The network's own address shape: TON-friendly-form and TRON base58check —
+// a syntactically valid string for the wrong network is still drift.
+const depositAddressValuePatterns: Readonly<Record<string, RegExp>> = {
+  TON_TESTNET: /^kQ[A-Za-z0-9_-]{46}$/u,
+  TRON_TESTNET: /^T[1-9A-HJ-NP-Za-km-z]{33}$/u
+};
 // custody-dev-v1 pairs — the same allowlist the local wallet surface offers.
 const depositAddressTargets = new Set(["TON|TON_TESTNET", "USDT|TON_TESTNET", "USDT|TRON_TESTNET"]);
 const depositAddressKeys = [
@@ -2720,10 +2897,14 @@ function parseDepositAddressesView(value: unknown): readonly CustomerApiDepositA
     || !hasExactKeys(value, ["mode", "deposit_addresses"])
     || value.mode !== "test"
     || !Array.isArray(value.deposit_addresses)
+    // The set is exactly the allowlisted receiving targets: one entry per
+    // (asset, network) pair — a duplicate or a missing pair fails closed.
+    || value.deposit_addresses.length !== depositAddressTargets.size
   ) {
     return undefined;
   }
   const addresses: CustomerApiDepositAddress[] = [];
+  const seenTargets = new Set<string>();
   for (const entry of value.deposit_addresses) {
     if (
       !isRecord(entry)
@@ -2734,14 +2915,16 @@ function parseDepositAddressesView(value: unknown): readonly CustomerApiDepositA
       || typeof entry.network !== "string"
       || !depositAddressNetworkPattern.test(entry.network)
       || !depositAddressTargets.has(`${entry.asset}|${entry.network}`)
+      || seenTargets.has(`${entry.asset}|${entry.network}`)
       || typeof entry.address !== "string"
-      || !depositAddressValuePattern.test(entry.address)
+      || !depositAddressValuePatterns[entry.network]?.test(entry.address)
       || entry.status !== "active"
       || !isIsoTimestamp(entry.created_at)
       || entry.posting !== "none"
     ) {
       return undefined;
     }
+    seenTargets.add(`${entry.asset}|${entry.network}`);
     addresses.push(Object.freeze({
       deposit_address_id: entry.deposit_address_id,
       asset: entry.asset,
@@ -2854,15 +3037,20 @@ function parseAddressScreeningsView(value: unknown): readonly CustomerApiAddress
     || !hasExactKeys(value, ["mode", "screenings"])
     || value.mode !== "test"
     || !Array.isArray(value.screenings)
+    // The set is exactly the allowlisted screening targets: one record per
+    // (asset, network) pair — a duplicate or a missing pair fails closed.
+    || value.screenings.length !== screeningTargets.size
   ) {
     return undefined;
   }
   const screenings: CustomerApiAddressScreening[] = [];
+  const seenTargets = new Set<string>();
   for (const entry of value.screenings) {
     const record = parseAddressScreeningRecord(entry);
-    if (record === undefined) {
+    if (record === undefined || seenTargets.has(`${record.asset}|${record.network}`)) {
       return undefined;
     }
+    seenTargets.add(`${record.asset}|${record.network}`);
     screenings.push(record);
   }
   return Object.freeze(screenings);
