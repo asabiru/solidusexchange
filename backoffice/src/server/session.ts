@@ -1,19 +1,7 @@
-import type { OperatorRole } from "../auth/access.js";
-
-export interface OperatorSession {
-  id: string;
-  subject: string;
-  email: string;
-  name: string;
-  role: OperatorRole;
-  deviceId?: string;
-  expiresAt: number;
-}
-
 export interface PendingLogin {
   nonce: string;
   verifier: string;
-  previousSessionId?: string;
+  previousSessionToken?: string;
   expiresAt: number;
 }
 
