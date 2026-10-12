@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This baseline defines how SolidChange must identify important business services,
+This baseline defines how SOLID must identify important business services,
 set human-approved resilience objectives, control degraded operation and prove
 that regulated processing can be recovered without losing financial, custody,
 audit or compliance integrity.

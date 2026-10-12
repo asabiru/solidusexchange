@@ -195,6 +195,17 @@ const LEGACY_LITERAL = new RegExp(
 );
 const LEGACY_TRAVERSAL = /(?:\.\.[\/\\])+(?:[\w$.-]+[\/\\])*[\w$.-]*/g;
 
+// The upstream vendor's product name must not appear in the tree that
+// survives the legacy removal: the product brand is SOLID and the
+// technical identifier family is `solidchange`. Only the audit documents
+// that record the finding may name it; the literal is spelled in
+// fragments so this checker does not trip its own rule.
+const VENDOR_BRAND_LITERAL = new RegExp("coin" + "ectra", "i");
+const VENDOR_BRAND_EXEMPT = new Set([
+  "Documentation/regulated-core/provider-docs-audit-wave78.md",
+  "Documentation/regulated-core/brand-sweep-wave79.md",
+]);
+
 export function normalizeCommand(text) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -718,6 +729,35 @@ export function validateLegacyBoundary(text, fileName) {
   }
   for (const match of text.matchAll(new RegExp(LEGACY_LITERAL.source, "gi"))) {
     flag(match.index, `legacy artifact name ${match[0]}`);
+  }
+  return errors;
+}
+
+// The vendor-name ban scopes to the kept tree: new-core directories plus
+// Documentation/regulated-core. Legacy directories, root legacy files and
+// the rest of Documentation/ stay exempt until the removal lands, so the
+// gate never depends on the sibling wave's merge order.
+export function vendorBrandScoped(fileName) {
+  if (VENDOR_BRAND_EXEMPT.has(fileName)) return false;
+  if (LEGACY_BOUNDARY_BINARY.test(fileName)) return false;
+  if (fileName.startsWith("Documentation/")) {
+    return fileName.startsWith("Documentation/regulated-core/");
+  }
+  const root = fileName.split("/", 1)[0];
+  if (LEGACY_ROOT_DIRS.has(root)) return false;
+  if (!fileName.includes("/")) return !LEGACY_ROOT_FILES.has(fileName);
+  return true;
+}
+
+export function validateVendorBrand(text, fileName) {
+  if (!vendorBrandScoped(fileName)) return [];
+  const errors = [];
+  for (const match of text.matchAll(
+    new RegExp(VENDOR_BRAND_LITERAL.source, "gi"),
+  )) {
+    errors.push(
+      `${fileName}:${lineAt(text, match.index)}: the upstream vendor name must not appear outside the audit documents that record it`,
+    );
   }
   return errors;
 }
@@ -1411,19 +1451,21 @@ async function main() {
   for await (const file of walk(process.cwd(), nonRegular)) {
     const relative = path.relative(process.cwd(), file).replaceAll("\\", "/");
     repoFiles.push(relative);
-    if (
-      !CODE_FILE.test(relative) &&
-      !SHELL_FILE.test(relative) &&
-      !legacyBoundaryScoped(relative)
-    ) {
+    const sourceScoped =
+      CODE_FILE.test(relative) || SHELL_FILE.test(relative);
+    const vendorScoped = vendorBrandScoped(relative);
+    if (!sourceScoped && !legacyBoundaryScoped(relative) && !vendorScoped) {
       continue;
     }
     const text = await readFile(file, "utf8");
-    if (CODE_FILE.test(relative) || SHELL_FILE.test(relative)) {
+    if (sourceScoped) {
       errors.push(...validateSourceText(text, relative));
     }
     if (legacyBoundaryScoped(relative)) {
       errors.push(...validateLegacyBoundary(text, relative));
+    }
+    if (vendorScoped) {
+      errors.push(...validateVendorBrand(text, relative));
     }
   }
   errors.push(...validateRepoCompleteness(repoFiles, baseline));

@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This baseline defines how SolidChange must assess, approve, monitor and exit a
+This baseline defines how SOLID must assess, approve, monitor and exit a
 third party whose service can affect regulated data, customer access, financial
 truth, custody, compliance decisions, recovery or software delivery.
 
@@ -198,7 +198,7 @@ approval.
 ### 7. Incident coordination
 
 A provider incident follows the
-[incident-response baseline](incident-response.md). SolidChange must preserve
+[incident-response baseline](incident-response.md). SOLID must preserve
 its own evidence and record:
 
 - provider incident reference and authenticated communications;

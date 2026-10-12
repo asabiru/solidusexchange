@@ -2,7 +2,7 @@
 
 ## Principle
 
-Legacy SolidChange is an inventory and migration source. The regulated core becomes source of truth only after signed migration journals, independent reconciliation and explicit cutover approval.
+Legacy SOLID is an inventory and migration source. The regulated core becomes source of truth only after signed migration journals, independent reconciliation and explicit cutover approval.
 
 ## Context boundary
 

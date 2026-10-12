@@ -1,4 +1,4 @@
-# Legacy SolidChange Inventory
+# Legacy SOLID Inventory
 
 ## Метод и ограничения
 

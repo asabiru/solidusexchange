@@ -8,7 +8,7 @@
 
 ## Purpose
 
-This baseline defines the control evidence required before SolidChange can
+This baseline defines the control evidence required before SOLID can
 onboard customers, screen activity, monitor transactions, restrict activity,
 escalate cases or assess regulatory reporting duties in a regulated product.
 It makes compliance operations auditable, human-controlled and fail-closed
@@ -36,7 +36,7 @@ Related controls are defined by the [decision register](decision-register.md),
 1. Compliance policy is explicit, versioned and approved before execution.
 2. Unknown, stale, failed or contradictory compliance evidence denies or holds the affected action.
 3. Customer due diligence, sanctions, PEP, adverse media, KYT and transaction monitoring evidence are linked, not substituted for one another.
-4. Provider scores, dashboards and callbacks are inputs; internal policy decisions remain owned by SolidChange.
+4. Provider scores, dashboards and callbacks are inputs; internal policy decisions remain owned by SOLID.
 5. Compliance cases have accountable human owners, deadlines, evidence and independent review where required.
 6. Customer-impacting restrictions use approved reason categories and notice paths.
 7. Regulatory reporting assessments are preserved even when the outcome is “not reportable.”
