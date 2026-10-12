@@ -74,10 +74,13 @@ function isScaledDecimal(value, scale) {
 }
 
 /**
+ * The subject's synthetic wallet universe. Exported so every composed view
+ * that projects the same wallets — the customer read and the operator
+ * subject-360 balances block — derives them from this one function.
  * @param {string} subject
  * @returns {WalletsView}
  */
-function buildWalletsView(subject) {
+export function buildWalletsView(subject) {
   const wallets = WALLET_ASSETS.map(({ code, scale }) =>
     Object.freeze({
       wallet_id: `syn_wal_${digest(subject, `id:${code}`).toString("hex").slice(0, 12)}`,

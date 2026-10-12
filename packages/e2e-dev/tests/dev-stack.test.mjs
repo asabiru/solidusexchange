@@ -18,7 +18,7 @@ import { createMiniappServer } from "../../../miniapp/.server-dist/server/server
 import {
   backofficeEntry,
   customerApiEntry,
-  freePort,
+  startServiceOnFreePort,
   readJson,
   startService,
   stopService,
@@ -208,16 +208,16 @@ before(async () => {
   await new Promise((resolve) => miniapp.listen(0, "127.0.0.1", resolve));
   miniappBase = `http://127.0.0.1:${miniapp.address().port}`;
 
-  const backofficePort = await freePort();
-  backoffice = await startService(
+  backoffice = await startServiceOnFreePort(
     backofficeEntry,
     {
       BACKOFFICE_BFF_HOST: "127.0.0.1",
-      BACKOFFICE_BFF_PORT: String(backofficePort),
+      BACKOFFICE_BFF_PORT: "",
       BACKOFFICE_ALLOWED_ORIGINS: backofficeOrigin,
       BACKOFFICE_ALLOW_DEV_LOGIN: "true"
     },
-    /Backoffice BFF listening on http:\/\/127\.0\.0\.1:(\d+)/
+    /Backoffice BFF listening on http:\/\/127\.0\.0\.1:(\d+)/,
+    "BACKOFFICE_BFF_PORT"
   );
   backofficeBase = `http://127.0.0.1:${backoffice.match[1]}`;
 });

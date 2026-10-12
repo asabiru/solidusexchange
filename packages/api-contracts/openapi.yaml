@@ -2693,7 +2693,8 @@
           "devices",
           "limits",
           "recent_activity",
-          "kyc"
+          "kyc",
+          "balances"
         ],
         "properties": {
           "subject_id": {
@@ -2863,6 +2864,38 @@
                 }
               }
             }
+          },
+          "balances": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OperatorSubjectBalance"
+            }
+          }
+        }
+      },
+      "OperatorSubjectBalance": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "asset",
+          "available",
+          "hold",
+          "asset_scale"
+        ],
+        "properties": {
+          "asset": {
+            "$ref": "#/$defs/assetCode"
+          },
+          "available": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "hold": {
+            "$ref": "#/$defs/decimalAmount"
+          },
+          "asset_scale": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 18
           }
         }
       },

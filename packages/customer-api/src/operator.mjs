@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { ACTIVITY_ASSETS, ACTIVITY_KINDS, ACTIVITY_STATUSES, syntheticActivityItems } from "./activity.mjs";
 import { KYC_STATUSES, OPERATOR_CAPABILITY_POLICY } from "./capabilities.mjs";
 import { syntheticSupportTickets, TICKET_CATEGORIES } from "./support.mjs";
+import { WALLET_ASSETS, buildWalletsView } from "./wallets.mjs";
 
 // Deterministic synthetic operator admin source. A future operator-directory
 // adapter replaces it behind `viewFor(subject, grantedCapabilities) ->
@@ -299,6 +300,7 @@ const SUBJECT_ACCOUNT_STATUSES = Object.freeze(["active", "dormant", "restricted
 const SUBJECT_DETAIL_VIEW_KEYS = Object.freeze(["mode", "subject"]);
 const SUBJECT_DETAIL_KEYS = Object.freeze([
   "account_status",
+  "balances",
   "contact_hash",
   "devices",
   "display_name",
@@ -352,6 +354,13 @@ const OPERATOR_ACTIVITY_SUMMARIES = new Set([
 const KYC_HISTORY_BOUND = 4;
 const KYC_DECISION_WINDOW_MS = 5 * 86_400_000;
 const SUBJECT_KYC_KEYS = Object.freeze(["history", "level", "session_id", "status"]);
+
+// The balances block projects the subject's synthetic wallet universe — the
+// exact view the customer's own /customer/wallets read serves — minus the
+// wallet handle and plus the asset scale, so the operator sees precisely the
+// positions the customer sees. Each row carries one entry per fixed asset,
+// amounts in canonical decimal form at the asset's own scale.
+const SUBJECT_BALANCE_KEYS = Object.freeze(["asset", "asset_scale", "available", "hold"]);
 const SUBJECT_KYC_ATTEMPT_KEYS = Object.freeze([
   "decided_at",
   "rejection_reason",
@@ -512,6 +521,18 @@ const SUBJECT_LAST_NAMES = Object.freeze([
  * @property {OperatorSubjectLimits} limits
  * @property {readonly OperatorSubjectActivityItem[]} recent_activity
  * @property {OperatorSubjectKyc | null} kyc
+ * @property {readonly OperatorSubjectBalance[]} balances
+ */
+
+/**
+ * One asset position inside the balances block: the customer's wallet row
+ * for that asset minus its wallet_id, plus the asset scale the UI needs to
+ * format the amounts.
+ * @typedef {object} OperatorSubjectBalance
+ * @property {string} asset
+ * @property {number} asset_scale
+ * @property {string} available
+ * @property {string} hold
  */
 
 /**
@@ -957,8 +978,36 @@ function buildSubjectDetail(row) {
     devices: derived.devices,
     limits: derived.limits,
     recent_activity: deriveSubjectRecentActivity(row),
-    kyc: deriveSubjectKyc(row)
+    kyc: deriveSubjectKyc(row),
+    balances: deriveSubjectBalances(row.subject_id, derived.account_status)
   });
+}
+
+/**
+ * The subject's balances block: the shared synthetic wallet universe the
+ * customer's own wallets read serves, re-mapped onto the operator row shape
+ * (wallet_id dropped — it names a handle, not a position — asset_scale added
+ * for display). Following the sessions clamp, a closed account holds no
+ * positions: every amount is the canonical zero at the asset's own scale.
+ * Pure function of the subject id and the account status — no cache.
+ * @param {string} subjectId
+ * @param {string} accountStatus
+ * @returns {readonly OperatorSubjectBalance[]}
+ */
+function deriveSubjectBalances(subjectId, accountStatus) {
+  const closed = accountStatus === "closed";
+  const wallets = buildWalletsView(subjectId).wallets;
+  const balances = WALLET_ASSETS.map(({ code, scale }) => {
+    const wallet = wallets.find((entry) => entry.asset === code);
+    const zero = `0.${"0".repeat(scale)}`;
+    return Object.freeze({
+      asset: code,
+      asset_scale: scale,
+      available: closed || wallet === undefined ? zero : wallet.available,
+      hold: closed || wallet === undefined ? zero : wallet.hold
+    });
+  });
+  return Object.freeze(balances);
 }
 
 /** @returns {OperatorSubjectsView} */
@@ -1187,6 +1236,39 @@ export function validOperatorSubjectKyc(kyc) {
   );
 }
 
+/**
+ * Shape checks for the balances block: exactly one row per fixed wallet
+ * asset — nothing more, nothing less — exact keys, the asset's pinned
+ * scale and canonical decimal amounts at that scale. The account-state
+ * coherence and the verbatim recompute live in the detail validator —
+ * same subset discipline as the kyc dossier.
+ * @param {unknown} balances
+ */
+export function validOperatorSubjectBalances(balances) {
+  if (!Array.isArray(balances) || balances.length !== WALLET_ASSETS.length) {
+    return false;
+  }
+  const seen = new Set();
+  return balances.every((entry) => {
+    const spec =
+      entry !== null && typeof entry === "object" && !Array.isArray(entry)
+        ? WALLET_ASSETS.find(({ code }) => code === entry.asset)
+        : undefined;
+    if (
+      spec === undefined ||
+      seen.has(entry.asset) ||
+      JSON.stringify(Object.keys(entry).sort()) !== JSON.stringify([...SUBJECT_BALANCE_KEYS].sort()) ||
+      entry.asset_scale !== spec.scale ||
+      !isScaledDecimal(entry.available, spec.scale) ||
+      !isScaledDecimal(entry.hold, spec.scale)
+    ) {
+      return false;
+    }
+    seen.add(entry.asset);
+    return true;
+  });
+}
+
 /** @param {unknown} view */
 export function validOperatorSubjectDetailView(view) {
   if (view === null || typeof view !== "object" || Array.isArray(view)) {
@@ -1313,6 +1395,18 @@ export function validOperatorSubjectDetailView(view) {
   if (subject.sessions > 0 && (subject.devices.length === 0 || subject.account_status === "closed")) {
     return false;
   }
+  // The balances block carries one row per fixed wallet asset; a closed
+  // account holds no positions — every amount must be the canonical zero,
+  // the same account-state coherence the sessions clamp pins.
+  if (!validOperatorSubjectBalances(subject.balances)) {
+    return false;
+  }
+  if (
+    subject.account_status === "closed" &&
+    subject.balances.some((entry) => parseUnits(entry.available) !== 0n || parseUnits(entry.hold) !== 0n)
+  ) {
+    return false;
+  }
   // The nullable kyc dossier is detail-only and derives from the same
   // roster row; the roster kyc_status bounds its current state without
   // pinning the attempt count — the same subset discipline the
@@ -1383,7 +1477,9 @@ export function validOperatorSubjectDetailView(view) {
     JSON.stringify(subject.devices) === JSON.stringify(derived.devices) &&
     JSON.stringify(subject.limits) === JSON.stringify(derived.limits) &&
     JSON.stringify(subject.recent_activity) === JSON.stringify(deriveSubjectRecentActivity(row)) &&
-    JSON.stringify(subject.kyc) === JSON.stringify(deriveSubjectKyc(row))
+    JSON.stringify(subject.kyc) === JSON.stringify(deriveSubjectKyc(row)) &&
+    JSON.stringify(subject.balances) ===
+      JSON.stringify(deriveSubjectBalances(subject.subject_id, subject.account_status))
   );
 }
 

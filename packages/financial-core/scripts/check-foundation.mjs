@@ -116,6 +116,9 @@ const migrationSequenceGuardMigration = read(
 const commandDigestUniquenessMigration = read(
   "migrations/0012_ledger_command_digest_uniqueness.sql"
 );
+const representationGuardMigration = read(
+  "migrations/0013_ledger_representation_guard.sql"
+);
 const migrations = [
   migration,
   verificationMigration,
@@ -128,7 +131,8 @@ const migrations = [
   acceptanceTimelineGuardMigration,
   finiteTimestampGuardMigration,
   migrationSequenceGuardMigration,
-  commandDigestUniquenessMigration
+  commandDigestUniquenessMigration,
+  representationGuardMigration
 ].join("\n");
 assert(
   !migrations.includes("ALTER DEFAULT PRIVILEGES"),
@@ -157,6 +161,49 @@ for (const required of [
   assert(
     commandDigestUniquenessMigration.includes(required),
     `Command digest uniqueness migration is missing ${required}`
+  );
+}
+for (const required of [
+  "ADD CONSTRAINT ledger_accounts_account_id_rfc_shape",
+  "ADD CONSTRAINT ledger_journals_journal_id_rfc_shape",
+  "ADD CONSTRAINT ledger_journals_correlation_id_rfc_shape",
+  "ADD CONSTRAINT ledger_journals_causation_id_rfc_shape",
+  "ADD CONSTRAINT ledger_entries_entry_id_rfc_shape",
+  "ADD CONSTRAINT ledger_entries_journal_id_rfc_shape",
+  "ADD CONSTRAINT ledger_entries_account_id_rfc_shape",
+  "ADD CONSTRAINT ledger_idempotency_journal_id_rfc_shape",
+  "ADD CONSTRAINT ledger_outbox_outbox_id_rfc_shape",
+  "ADD CONSTRAINT ledger_outbox_journal_id_rfc_shape",
+  "ADD CONSTRAINT ledger_delivery_delivery_id_rfc_shape",
+  "ADD CONSTRAINT ledger_delivery_outbox_id_rfc_shape",
+  "ADD CONSTRAINT ledger_journal_seals_journal_id_rfc_shape",
+  "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+  "ADD CONSTRAINT schema_migrations_applied_at_range",
+  "ADD CONSTRAINT ledger_assets_created_at_range",
+  "ADD CONSTRAINT account_definitions_created_at_range",
+  "ADD CONSTRAINT ledger_accounts_created_at_range",
+  "ADD CONSTRAINT ledger_journals_effective_at_range",
+  "ADD CONSTRAINT ledger_journals_accepted_at_range",
+  "ADD CONSTRAINT ledger_journals_created_at_range",
+  "ADD CONSTRAINT ledger_entries_created_at_range",
+  "ADD CONSTRAINT ledger_idempotency_first_seen_at_range",
+  "ADD CONSTRAINT ledger_outbox_created_at_range",
+  "ADD CONSTRAINT ledger_delivery_attempts_attempted_at_range",
+  "ADD CONSTRAINT posting_rule_registry_created_at_range",
+  "ADD CONSTRAINT ledger_journal_seals_sealed_at_range",
+  "'0001-01-01 00:00:00+14:00'::TIMESTAMPTZ",
+  "'9999-12-31 23:59:59.999999-14:00'::TIMESTAMPTZ",
+  "ADD CONSTRAINT account_definitions_chart_version_singleton",
+  "ADD CONSTRAINT ledger_accounts_chart_version_singleton",
+  "ADD CONSTRAINT posting_rule_registry_version_singleton",
+  "CREATE FUNCTION financial_core.validate_posting_rule()",
+  "CREATE TRIGGER posting_rule_registry_validate",
+  "ENABLE ALWAYS TRIGGER posting_rule_registry_validate",
+  "REVOKE ALL ON FUNCTION financial_core.validate_posting_rule() FROM PUBLIC"
+]) {
+  assert(
+    representationGuardMigration.includes(required),
+    `Representation guard migration is missing ${required}`
   );
 }
 for (const required of [
@@ -774,11 +821,11 @@ for (const [fixture, evidence] of [
   ],
   [
     "tests/postgres-migration-history.sh",
-    "migration version 14 must follow installed version 12 with version 13"
+    "migration version 15 must follow installed version 13 with version 14"
   ],
   [
     "tests/postgres-migration-history.sh",
-    "migration name 0014_wrong_version must encode version 13"
+    "migration name 0015_wrong_version must encode version 14"
   ],
   [
     "tests/postgres-migration-history.sh",
@@ -941,7 +988,7 @@ for (const [fixture, evidence] of [
   ],
   ["tests/postgres-backup-restore.sh", "postgres-backup-sequence-continuity-ok"],
   ["tests/postgres-backup-restore.sh", "verify_migration_history"],
-  ["tests/postgres-backup-restore.sh", "0013_unreviewed_restore_drift"],
+  ["tests/postgres-backup-restore.sh", "0014_unreviewed_restore_drift"],
   [
     "tests/postgres-backup-restore.sh",
     "postgres-backup-migration-history-negative-ok"
@@ -1124,7 +1171,7 @@ for (const required of [
   "CTO approver:",
   "Security approver:",
   "synthetic logical backup/restore",
-  "migration history точно соответствует migrations `0001`–`0012` и порядку их применения",
+  "migration history точно соответствует migrations `0001`–`0013` и порядку их применения",
   "failed migration полностью откатывает schema objects и history row",
   "restored и second-generation databases обязаны пройти exact migration-history verifier",
   "structurally valid backup без committed outbox data проходит catalog и migration-history проверки, но отклоняется canonical state snapshot",

@@ -163,8 +163,11 @@ describe("backoffice BFF", () => {
     ]);
     assert.equal(kycResponse.status, 200);
     assert.equal(amlResponse.status, 200);
-    assert.equal(mutationResponse.status, 404);
-    assert.deepEqual(await mutationResponse.json(), { error: "not_found" });
+    // A write to a read view answers the uniform 405 + Allow: GET, the same
+    // contract the audit-appending family pins — never a mutation.
+    assert.equal(mutationResponse.status, 405);
+    assert.equal(mutationResponse.headers.get("allow"), "GET");
+    assert.deepEqual(await mutationResponse.json(), { error: "method_not_allowed" });
 
     const kycEnvelope = await kycResponse.json() as {
       resource: string;
@@ -230,8 +233,9 @@ describe("backoffice BFF", () => {
     ]);
     assert.equal(investigationsResponse.status, 200);
     assert.equal(fraudResponse.status, 200);
-    assert.equal(mutationResponse.status, 404);
-    assert.deepEqual(await mutationResponse.json(), { error: "not_found" });
+    assert.equal(mutationResponse.status, 405);
+    assert.equal(mutationResponse.headers.get("allow"), "GET");
+    assert.deepEqual(await mutationResponse.json(), { error: "method_not_allowed" });
 
     const investigationsEnvelope = await investigationsResponse.json() as {
       resource: string;
@@ -358,7 +362,8 @@ describe("backoffice BFF", () => {
       method: "POST",
       headers: { cookie, origin }
     });
-    assert.equal(mutation.status, 404);
+    assert.equal(mutation.status, 405);
+    assert.equal(mutation.headers.get("allow"), "GET");
   });
 
   it("returns a side-effect-free preview with policy blockers", async () => {

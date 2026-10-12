@@ -211,6 +211,9 @@ function isAllowedHistoryChange(statement, version) {
     String.raw`^ALTER\s+TABLE(?:\s+ONLY)?\s+${historyTablePattern}\s+ENABLE\s+ALWAYS\s+TRIGGER\s+schema_migrations_[a-z_]+\s*;$`,
     version === 10
       ? String.raw`^ALTER\s+TABLE(?:\s+ONLY)?\s+${historyTablePattern}\s+ADD\s+CONSTRAINT\s+schema_migrations_applied_at_finite\s+CHECK\s*\(\s*pg_catalog\.isfinite\s*\(\s*applied_at\s*\)\s*\)\s*;$`
+      : null,
+    version === 13
+      ? String.raw`^ALTER\s+TABLE(?:\s+ONLY)?\s+${historyTablePattern}\s+ADD\s+CONSTRAINT\s+schema_migrations_applied_at_range\s+CHECK\s*\(\s*applied_at\s*>=\s*::TIMESTAMPTZ\s+AND\s+applied_at\s*<=\s*::TIMESTAMPTZ\s*\)\s*;$`
       : null
   ].some((pattern) => pattern !== null && new RegExp(pattern, "iu").test(masked));
 }

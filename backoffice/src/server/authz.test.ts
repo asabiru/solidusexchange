@@ -30,7 +30,7 @@ async function devSession(role: string): Promise<string> {
 }
 
 function routeGateCalls(): { shape: string; capability?: string }[] {
-  return [...serverSource.matchAll(/authorized\(request, response(?:, "([^"]+)")?\)/g)]
+  return [...serverSource.matchAll(/authorized\(request, response, url(?:, "([^"]+)")?\)/g)]
     .map((match) => ({ shape: match[0], capability: match[1] }));
 }
 
@@ -77,7 +77,7 @@ describe("backoffice authorization matrix", () => {
     assert.equal(
       mentions.length - 1 - calls.length,
       0,
-      "a capability gate ran on something other than (request, response, capability)"
+      "a capability gate ran on something other than (request, response, url, capability)"
     );
 
     const expected = new Set([

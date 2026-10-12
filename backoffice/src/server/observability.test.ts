@@ -181,7 +181,9 @@ describe("backoffice BFF observability enabled", () => {
     const dashboard = await fetch(`${running.base}/bff/api/dashboard?token=${querySecret}&ref=${providerReference}`, {
       headers: { cookie, authorization: `Bearer ${bearer}` }
     });
-    assert.equal(dashboard.status, 200);
+    // The secret-bearing query is rejected by the uniform pin — it still
+    // reaches the log line only as the route template, never as raw input.
+    assert.equal(dashboard.status, 400);
     const preview = await fetch(`${running.base}/bff/api/approvals/${providerReference}/preview?address=${syntheticAddress}`, {
       method: "POST",
       headers: { "content-type": "application/json", origin, cookie },

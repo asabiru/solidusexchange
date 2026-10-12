@@ -27,6 +27,7 @@ const subjectRowKeys = [
 const subjectDetailViewKeys = ["mode", "subject"] as const;
 const subjectDetailKeys = [
   "account_status",
+  "balances",
   "contact_hash",
   "devices",
   "display_name",
@@ -64,6 +65,8 @@ const subjectKycReasonCodes: ReadonlySet<string> = new Set(["SIM_DOCUMENT_UNREAD
 const kycSessionPattern = /^kys_[0-9a-f]{24}$/u;
 const kycHistoryBound = 4;
 const subjectLimitKeys = ["max_devices", "max_sessions"] as const;
+const subjectBalanceKeys = ["asset", "asset_scale", "available", "hold"] as const;
+const subjectBalanceAssets = ["RUB", "TON", "USDT"] as const;
 const activityItemKeys = ["activity_id", "kind", "occurred_at", "summary", "money"] as const;
 const activityMoneyKeys = ["amount", "asset"] as const;
 const activityIdPattern = /^(act|opact)_[0-9a-f]{24}$/u;
@@ -329,6 +332,14 @@ export interface CustomerApiSubjectKyc {
   history: readonly CustomerApiSubjectKycAttempt[];
 }
 
+/** One asset position inside the operator subject detail's balances block — snake_case contract fields. */
+export interface CustomerApiSubjectBalance {
+  asset: string;
+  asset_scale: number;
+  available: string;
+  hold: string;
+}
+
 /** One subject row of the operator detail read — the list fields plus the id-bound detail extension. */
 export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   account_status: string;
@@ -338,6 +349,7 @@ export interface CustomerApiSubjectDetail extends CustomerApiSubjectRow {
   limits: CustomerApiSubjectLimits;
   recent_activity: readonly CustomerApiSubjectActivityItem[];
   kyc: CustomerApiSubjectKyc | null;
+  balances: readonly CustomerApiSubjectBalance[];
 }
 
 /** Wire view of GET /api/v1/operator/subjects/{subjectId} — snake_case contract fields. */
@@ -896,6 +908,51 @@ function parseSubjectKyc(value: unknown): CustomerApiSubjectKyc | undefined {
 }
 
 /**
+ * Fail-closed parser for the balances block: exactly one row per wallet
+ * asset — the same fixed table the activity money checks pin — exact keys,
+ * the asset's pinned scale and canonical decimal amounts at that scale
+ * (zero included: a closed account holds no positions, and an empty wallet
+ * is a legitimate draw). The account-state coherence lives with the caller.
+ */
+function parseSubjectBalances(value: unknown): readonly CustomerApiSubjectBalance[] | undefined {
+  if (!Array.isArray(value) || value.length !== activityAssetScales.size) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const entries: CustomerApiSubjectBalance[] = [];
+  for (const [index, raw] of value.entries()) {
+    if (
+      !isRecord(raw)
+      || !hasExactKeys(raw, subjectBalanceKeys)
+      || typeof raw.asset !== "string"
+      || raw.asset !== subjectBalanceAssets[index]
+    ) {
+      return undefined;
+    }
+    const scale = activityAssetScales.get(raw.asset);
+    if (
+      scale === undefined
+      || seen.has(raw.asset)
+      || raw.asset_scale !== scale
+      || typeof raw.available !== "string"
+      || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(raw.available)
+      || typeof raw.hold !== "string"
+      || !new RegExp(`^(0|[1-9][0-9]*)\\.[0-9]{${scale}}$`, "u").test(raw.hold)
+    ) {
+      return undefined;
+    }
+    seen.add(raw.asset);
+    entries.push(Object.freeze({
+      asset: raw.asset,
+      asset_scale: raw.asset_scale,
+      available: raw.available,
+      hold: raw.hold
+    }));
+  }
+  return Object.freeze(entries);
+}
+
+/**
  * Fail-closed parser for the operator subject detail contract view: the list
  * row's axes (exact key sets, `syn_cust_*` ref, kyc_status enum, non-negative
  * integer flags, coherent ISO timestamps, pinned `posting: "none"`) plus the
@@ -989,6 +1046,17 @@ function parseOperatorSubjectDetailView(
   if (kyc === undefined) {
     return undefined;
   }
+  // The balances block carries one row per wallet asset; a closed account
+  // holds no positions — every amount must be the canonical zero, the same
+  // account-state coherence the sessions clamp pins.
+  const balances = parseSubjectBalances(item.balances);
+  if (
+    balances === undefined
+    || (item.account_status === "closed"
+      && balances.some((entry) => BigInt(entry.available.replace(".", "")) !== 0n || BigInt(entry.hold.replace(".", "")) !== 0n))
+  ) {
+    return undefined;
+  }
   if (
     kyc !== null
     && ((item.kyc_status === "verified" && kyc.status !== "approved")
@@ -1038,7 +1106,8 @@ function parseOperatorSubjectDetailView(
         max_devices: item.limits.max_devices
       }),
       recent_activity: recentActivity,
-      kyc
+      kyc,
+      balances
     })
   });
 }

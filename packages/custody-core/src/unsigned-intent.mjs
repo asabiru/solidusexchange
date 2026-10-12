@@ -59,6 +59,7 @@ const restrictedFields = new Set([
   "signed_transaction",
   "signing_key"
 ]);
+const maximumPolicyTtlSeconds = 86400;
 const referencePattern = /^[a-z][a-z0-9_]{2,127}$/u;
 const digestPattern = /^[0-9a-f]{64}$/u;
 const uuidV7Pattern = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
@@ -169,6 +170,11 @@ function assertExactKeys(value, expected, label) {
   );
 }
 
+function compareCanonicalText(left, right) {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
+}
+
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value !== null && typeof value === "object") {
@@ -220,9 +226,17 @@ function assertPolicy(policy) {
   assert(policy.minimum_approvals === 2, "maker-checker requires exactly two approval roles");
   assert(Number.isInteger(policy.approval_ttl_seconds) && policy.approval_ttl_seconds > 0, "approval TTL must be positive");
   assert(
+    policy.approval_ttl_seconds <= maximumPolicyTtlSeconds,
+    "approval TTL exceeds the custody dev bound"
+  );
+  assert(
     Number.isInteger(policy.maximum_intent_ttl_seconds) &&
       policy.maximum_intent_ttl_seconds > 0,
     "intent TTL must be positive"
+  );
+  assert(
+    policy.maximum_intent_ttl_seconds <= maximumPolicyTtlSeconds,
+    "intent TTL exceeds the custody dev bound"
   );
   assert(Array.isArray(policy.required_approval_roles), "approval roles must be an array");
   assert(
@@ -401,7 +415,7 @@ export function verifyUnsignedTransactionIntent({
   );
 
   const orderedApprovals = [...intent.approvals].sort((left, right) =>
-    `${left.role}:${left.approval_id}`.localeCompare(`${right.role}:${right.approval_id}`)
+    compareCanonicalText(`${left.role}:${left.approval_id}`, `${right.role}:${right.approval_id}`)
   );
   assert(
     JSON.stringify(intent.approvals) === JSON.stringify(orderedApprovals),
@@ -434,7 +448,7 @@ export function prepareUnsignedTransactionIntent({
   const orderedApprovals = approvals
     .map((approval) => ({ ...approval }))
     .sort((left, right) =>
-      `${left.role}:${left.approval_id}`.localeCompare(`${right.role}:${right.approval_id}`)
+      compareCanonicalText(`${left.role}:${left.approval_id}`, `${right.role}:${right.approval_id}`)
     );
 
   return deepFreeze({

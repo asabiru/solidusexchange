@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 
 const expectedConstraintCounts = new Map([
-  ["check", 62],
+  ["check", 91],
   ["constraint_trigger", 5],
   ["foreign_key", 10],
   ["primary_key", 11],
   ["unique", 11]
 ]);
 const expectedCatalogSha256 =
-  "6869090625181203697e140d01830b1e72fb56ce965b47a40e8ef261a18c8326";
+  "aa4cdc637bd3dcf7973278ce27d52488b843000bf9a6af87cf836e1109f063c0";
 
 function canonicalize(value) {
   if (Array.isArray(value)) return value.map(canonicalize);
@@ -29,7 +29,7 @@ for await (const chunk of process.stdin) {
 }
 
 const actual = JSON.parse(input);
-assert.equal(actual.constraints.length, 99, "Unexpected PostgreSQL constraint count");
+assert.equal(actual.constraints.length, 128, "Unexpected PostgreSQL constraint count");
 assert.equal(actual.indexes.length, 2, "Unexpected standalone PostgreSQL index count");
 
 const actualConstraintCounts = new Map();

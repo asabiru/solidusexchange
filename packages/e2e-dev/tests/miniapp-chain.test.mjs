@@ -46,10 +46,10 @@ import { syntheticData } from "../../../miniapp/.server-dist/server/synthetic.js
 import {
   cookieOf,
   customerApiEntry,
-  freePort,
   miniappEntry,
   readJson,
   startService,
+  startServiceOnFreePort,
   stopService
 } from "./stack.mjs";
 
@@ -233,6 +233,7 @@ let customerApi;
 let miniapp;
 let miniappBase;
 let upstreamBase;
+let upstreamPort;
 let devVerified;
 let devGated;
 let telegram;
@@ -243,7 +244,11 @@ let outageScreeningView;
 
 const customerApiEnv = {
   CUSTOMER_API_HOST: "127.0.0.1",
-  CUSTOMER_API_PORT: "",
+  // The kernel assigns the port and the ready match reports it back — no
+  // probe-release-bind window a sibling test file could steal. On the
+  // outage restart the same port is rebound explicitly because the BFF's
+  // configured upstream URL points at it.
+  CUSTOMER_API_PORT: "0",
   CUSTOMER_API_DEV_AUTH: "synthetic",
   CUSTOMER_API_DEV_TOKEN_KEY: devTokenKey,
   // The BFF's own upstream traffic and the direct contract probes all share
@@ -254,7 +259,8 @@ const customerApiEnv = {
 
 async function startCustomerApi() {
   customerApi = await startService(customerApiEntry, customerApiEnv, customerApiReady);
-  upstreamBase = `http://127.0.0.1:${customerApi.match[1]}`;
+  upstreamPort = customerApi.match[1];
+  upstreamBase = `http://127.0.0.1:${upstreamPort}`;
 }
 
 async function postMiniapp(path, body, headers = {}) {
@@ -342,14 +348,12 @@ async function upstreamDenied(path, token) {
 }
 
 before(async () => {
-  customerApiEnv.CUSTOMER_API_PORT = String(await freePort());
   await startCustomerApi();
-  const miniappPort = await freePort();
-  miniapp = await startService(
+  miniapp = await startServiceOnFreePort(
     miniappEntry,
     {
       MINIAPP_BFF_HOST: "127.0.0.1",
-      MINIAPP_BFF_PORT: String(miniappPort),
+      MINIAPP_BFF_PORT: "",
       MINIAPP_ALLOWED_ORIGINS: allowedOrigin,
       MINIAPP_ALLOW_DEV_LOGIN: "true",
       MINIAPP_TELEGRAM_BOT_TOKEN: botToken,
@@ -359,7 +363,8 @@ before(async () => {
       MINIAPP_CUSTOMER_API_URL: upstreamBase,
       MINIAPP_CUSTOMER_API_DEV_TOKEN_KEY: devTokenKey
     },
-    miniappReady
+    miniappReady,
+    "MINIAPP_BFF_PORT"
   );
   miniappBase = `http://127.0.0.1:${miniapp.match[1]}`;
   devVerified = await devSession("verified");
@@ -484,6 +489,7 @@ describe("miniapp chain through the live customer-api", () => {
       assert.ok(Array.isArray(row.timeline) && row.timeline.length > 0);
       assert.equal(typeof row.createdAt, "number");
       assert.equal(typeof row.expiresAt, "number");
+      assert.equal(row.expiresAt - row.createdAt, 259_200 * 1_000);
     }
 
     // Notifications and activity degrade to the local stores: the two dev
@@ -513,6 +519,15 @@ describe("miniapp chain through the live customer-api", () => {
       assert.equal(item.kind, "session_login");
       assert.equal(item.source, "dev-synthetic");
     }
+    // `limit` is the feed's declared query input: served values are honored
+    // (not merely validated) — a handler that silently ignores it fails here.
+    const limited = await okGet("/bff/activity?limit=1", devVerified.cookie);
+    assert.equal(limited.mode, "test");
+    assert.equal(limited.items.length, 1);
+    assert.equal(limited.items[0].kind, "session_login");
+    const unbounded = await okGet("/bff/activity?limit=50", devVerified.cookie);
+    assert.equal(unbounded.items.length, 2);
+    await deniedGet("/bff/activity?limit=51", devVerified.cookie, 400, "invalid_request");
 
     // Same reads, straight against upstream: one uniform capability denial.
     for (const path of gatedUpstreamReads) {
@@ -642,6 +657,48 @@ describe("miniapp chain through the live customer-api", () => {
     assert.equal(reapply.status, 409);
     assert.deepEqual(await readJson(reapply), { error: "kyc_already_verified" });
   });
+
+  it("serves the check preview per the documented availability contract", async () => {
+    // Same availability contract as the quote preview: a verified session
+    // consults the upstream wallet — denied means available reads as zero,
+    // so insufficientBalance stays honest; decimals stay canonical strings.
+    const preview = await okGet(
+      "/bff/checks/preview?asset=USDT&amount=10",
+      devVerified.cookie
+    );
+    assert.match(preview.id, /^CHK-[0-9A-F]{12}$/);
+    assert.equal(preview.mode, "test");
+    assert.equal(preview.asset, "USDT");
+    assert.equal(preview.amount, "10.000000");
+    assert.equal(preview.fee, "0.030000");
+    assert.equal(preview.feeAsset, "USDT");
+    assert.equal(preview.feeBps, 30);
+    assert.equal(preview.total, "10.030000");
+    assert.equal(preview.claimRule, "personal");
+    assert.equal(preview.insufficientBalance, true);
+    assert.equal(preview.kycRequired, false);
+    assert.equal(preview.executable, false);
+    assert.equal(preview.executionUnavailableReason, "dev_test_version");
+    assert.equal(preview.ttlSeconds, 259_200);
+    assert.equal(preview.expiresAt - preview.issuedAt, preview.ttlSeconds * 1_000);
+    assert.equal(typeof preview.issuedAt, "number");
+    assert.equal(typeof preview.serverTime, "number");
+    const gatedPreview = await okGet(
+      "/bff/checks/preview?asset=USDT&amount=10",
+      devGated.cookie
+    );
+    assert.equal(gatedPreview.kycRequired, true);
+    // Non-enum assets and unparseable or non-positive amounts fail closed —
+    // each with its own code, not a lumped 400.
+    await deniedGet("/bff/checks/preview?asset=BTC&amount=1", devVerified.cookie, 400, "invalid_asset");
+    await deniedGet("/bff/checks/preview?asset=USDT&amount=0", devVerified.cookie, 400, "invalid_amount");
+    await deniedGet(
+      "/bff/checks/preview?asset=USDT&amount=bogus",
+      devVerified.cookie,
+      400,
+      "invalid_amount"
+    );
+  });
 });
 
 describe("miniapp chain fail-closed paths", () => {
@@ -657,6 +714,12 @@ describe("miniapp chain fail-closed paths", () => {
       const body = await readJson(response);
       assert.deepEqual(body, { error: "unauthenticated" });
       assert.equal(response.status, 401);
+    }
+    // A forged session bearer — exactly the store's smt_<64hex> shape but
+    // never minted — denies identically to an absent one: the store resolves
+    // the token digest, not the bearer shape.
+    for (const path of ["/bff/session", "/bff/account"]) {
+      await deniedGet(path, `solidchange_ma_session=smt_${"0".repeat(64)}`, 401, "unauthenticated");
     }
     // X-Device-Id is operator-only: the BFF edge and the upstream customer
     // surface both refuse it, each with its own error family.
@@ -683,6 +746,41 @@ describe("miniapp chain fail-closed paths", () => {
       assert.equal(response.status, 401);
       assert.equal(body.code, "AUTHENTICATION_REQUIRED");
       assert.equal(response.headers.get("www-authenticate"), "Bearer");
+    }
+    // Signature and lifetime are the whole synthetic-token contract: an
+    // expired token, a beyond-TTL token and a well-formed token signed under
+    // a different key all fail as unauthenticated with the Bearer challenge.
+    const now = Math.floor(Date.now() / 1_000);
+    for (const token of [
+      mintSyntheticCustomerToken({ key: devTokenKey, subject: devUpstreamSubject, expiresAtSeconds: now - 1 }),
+      mintSyntheticCustomerToken({ key: devTokenKey, subject: devUpstreamSubject, expiresAtSeconds: now + 7_200 }),
+      mintSyntheticCustomerToken({ key: randomBytes(32).toString("hex"), subject: devUpstreamSubject, expiresAtSeconds: now + 300 })
+    ]) {
+      const response = await upstreamGet("/api/v1/customer/session", token);
+      assert.equal(response.status, 401);
+      assert.equal(response.headers.get("www-authenticate"), "Bearer");
+      assert.equal((await readJson(response)).code, "AUTHENTICATION_REQUIRED");
+    }
+    // The declared request headers are part of the contract: absent or
+    // malformed x-request-id / x-client-version / x-platform fail closed as
+    // VALIDATION_FAILED before authn — they are not tolerated decoration.
+    for (const [name, value] of [
+      ["x-request-id", null],
+      ["x-request-id", "not-a-uuidv7"],
+      ["x-client-version", null],
+      ["x-client-version", ""],
+      ["x-platform", null],
+      ["x-platform", "not-a-platform"]
+    ]) {
+      const headers = upstreamHeaders(mintCustomer(devUpstreamSubject));
+      if (value === null) {
+        delete headers[name];
+      } else {
+        headers[name] = value;
+      }
+      const response = await fetch(`${upstreamBase}/api/v1/customer/session`, { headers });
+      assert.equal(response.status, 400, name);
+      assert.equal((await readJson(response)).code, "VALIDATION_FAILED", name);
     }
     // Cross-site fetches and origin-less writes stay refused.
     const crossSite = await bffGet("/bff/session", devVerified.cookie, {
@@ -997,6 +1095,8 @@ describe("miniapp chain degrade and recovery", () => {
       }
       await deniedGet("/bff/address-screening", devGated.cookie, 403, "kyc_required");
     } finally {
+      // Rebind the same port the BFF is configured to reach.
+      customerApiEnv.CUSTOMER_API_PORT = upstreamPort;
       await startCustomerApi();
     }
     // Recovery: the same cookies — no re-login — and the live-upstream
