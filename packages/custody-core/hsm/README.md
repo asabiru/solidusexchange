@@ -71,8 +71,10 @@ strictly advancing per `(tier, network)` → then counters commit.
 | `../src/signer-gateway.mjs` | Orchestrator→gateway→HSM transport: hash-bound `signing_request`/`signing_decision` envelopes, gateway verification, dispatch |
 | `../tests/signer-gateway.test.mjs` | Gateway contract evidence: prepare/verify/dispatch, tamper rejection, propagation |
 | `../src/tx-decoders.mjs` | Independent TON/TRON synthetic wire decoders (co-verifier stand-in) |
+| `../src/wire/` | Real-format decoders: TRON protobuf (`TransferContract`/`TriggerSmartContract` + TRC-20 ABI) and TON BoC (wallet-v4 input message + TEP-74 jetton), resolver-gated to custody references |
 | `../src/watcher.mjs` | Testnet watcher prototype: intent-matched outflows reconcile, unexplained outflows open a critical incident and freeze the network |
 | `../tests/hsm-custody.test.mjs` | Synthetic evidence for every check arm |
+| `../tests/real-wire-decoders.test.mjs` | Real-format evidence: protobuf/BoC round-trips through a second encoder, tamper and malformed-wire rejection |
 | `ceremonies.md` | Draft ceremony scripts (C-01..C-08), recovery/rotation/destruction runbooks and the key-inventory register template |
 
 ## Draft findings worth recording

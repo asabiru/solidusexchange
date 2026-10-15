@@ -221,6 +221,7 @@ Within the current dev-only boundary and without human custody roles:
 - Signer interface contract between orchestrator, signer gateway and HSM policy module.
 - Reference implementation and tests of the HSM policy rules (quorum, limits, allowlist, intent-to-transaction matching) running outside any HSM.
 - Independent TON and TRON transaction decoders for the co-verifier, tested with synthetic testnet transactions.
+- Real wire-format reference decoders exist in `packages/custody-core/src/wire/`: TRON protobuf (`TransferContract`, `TriggerSmartContract` + TRC-20 ABI) and TON BoC (wallet-v4 input message, TEP-74 jetton bodies). Decoded raw addresses are resolver-gated to custody references; anything outside the pinned shape fails closed. They are evidence for the independent-implementation requirement, not a production co-verifier.
 - Testnet on-chain watcher and reconciliation prototype.
 - Draft ceremony scripts, runbooks and the key inventory register template.
 
