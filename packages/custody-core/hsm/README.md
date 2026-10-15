@@ -20,7 +20,14 @@ The three-way seam (orchestrator → signer gateway → in-HSM policy module):
 Custody orchestrator (unsigned-intent.mjs, exists)
   └─► verified intent envelope ── intent_digest binds command+policy+approvals
 
-Signer gateway (reference: src/hsm-policy.mjs boundary)
+Signer gateway (reference: src/signer-gateway.mjs transport + src/hsm-policy.mjs boundary)
+  transport: signing_request envelope = { request_id, custody_policy_version,
+    hsm_policy_version, tier, network, intent_digest, policy_digest,
+    wire_payload, wire_digest, created_at, expires_at, request_digest,
+    runtime_boundary, key_material_present: false, signature_attached: false }
+    — hash-bound end to end: request_digest covers every field, wire_digest
+    pins the payload bytes, expiry ≤ intent expiry, versions must equal the
+    live custody/HSM policies.
   request:  { intent, transaction: { raw_payload: <hex> } }
   response: { decision: "approved" | "rejected",
               reason: null | <stable reason code>,
@@ -29,6 +36,9 @@ Signer gateway (reference: src/hsm-policy.mjs boundary)
                         transaction_match, expiry, replay, time_delay },
               transaction?: <canonical decoded shape>,
               evidence_digest }
+  decision envelope (signer-gateway.mjs): { decision, reason, tier,
+    signing_mode, intent_digest, request_digest, wire_digest,
+    hsm_policy_version, evidence_digest, runtime_boundary }
   invariants: no keys in or out; every rejection names exactly which arm
   refused; an approval mutates only counters/nonce/consumed-digest state.
 ```
@@ -58,6 +68,8 @@ strictly advancing per `(tier, network)` → then counters commit.
 |---|---|
 | `hsm-policy-draft.json` | Tier policies (hot/warm/cold), limits, velocity, allowlist, quorum, freeze semantics |
 | `../src/hsm-policy.mjs` | Reference policy-module engine + freeze/unfreeze quorum |
+| `../src/signer-gateway.mjs` | Orchestrator→gateway→HSM transport: hash-bound `signing_request`/`signing_decision` envelopes, gateway verification, dispatch |
+| `../tests/signer-gateway.test.mjs` | Gateway contract evidence: prepare/verify/dispatch, tamper rejection, propagation |
 | `../src/tx-decoders.mjs` | Independent TON/TRON synthetic wire decoders (co-verifier stand-in) |
 | `../src/watcher.mjs` | Testnet watcher prototype: intent-matched outflows reconcile, unexplained outflows open a critical incident and freeze the network |
 | `../tests/hsm-custody.test.mjs` | Synthetic evidence for every check arm |

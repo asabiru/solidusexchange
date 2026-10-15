@@ -145,7 +145,7 @@ export function snapshotPlainData(value, label = "input", ancestors = new Set())
   return snapshot;
 }
 
-function assertNoRestrictedMaterial(value, label = "input") {
+export function assertNoRestrictedMaterial(value, label = "input") {
   if (Array.isArray(value)) {
     value.forEach((item, index) => assertNoRestrictedMaterial(item, `${label}[${index}]`));
     return;
