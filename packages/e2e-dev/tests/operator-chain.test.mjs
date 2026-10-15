@@ -1005,6 +1005,7 @@ describe("operator chain through the live customer-api", () => {
           "customers:read",
           "checks:read",
           "custody:read",
+          "finance:read",
           "support:read",
           "kyc:read",
           "aml:read",
