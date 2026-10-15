@@ -7,9 +7,16 @@ import type {
   ChatCheck,
   CheckStatus,
   CustomerRow,
+  CustodyIncidentStatus,
+  CustodyKeyRecord,
+  CustodyTier,
+  CustodyWatcherIncident,
   FraudAlert,
   InvestigationCase,
   KycCase,
+  LedgerJournal,
+  LedgerJournalType,
+  LedgerTrialRow,
   Metric,
   QueueRow,
   SupportTicket,
@@ -116,6 +123,30 @@ export interface SupportTicketsPayload {
 export interface WithdrawalsPayload {
   statuses: readonly WithdrawalIntentStatus[];
   intents: readonly WithdrawalIntent[];
+}
+
+export interface LedgerPayload {
+  journalTypes: readonly LedgerJournalType[];
+  journals: readonly LedgerJournal[];
+  trialBalance: readonly LedgerTrialRow[];
+}
+
+export interface CustodyIntentSummary {
+  id: string;
+  intentId: string;
+  asset: string;
+  amount: string;
+  network: string;
+  status: string;
+  expiresAt: string;
+}
+
+export interface CustodyPayload {
+  tiers: readonly CustodyTier[];
+  incidentStatuses: readonly CustodyIncidentStatus[];
+  incidents: readonly CustodyWatcherIncident[];
+  keyInventory: readonly CustodyKeyRecord[];
+  intents: readonly CustodyIntentSummary[];
 }
 
 export interface SubjectTimelinePayload {
@@ -616,6 +647,24 @@ export function getWithdrawals(status?: WithdrawalIntentStatus): Promise<Withdra
 
 export function getWithdrawal(id: string): Promise<WithdrawalIntent> {
   return getSigned(`/bff/api/withdrawals/${encodeURIComponent(id)}`, `withdrawal:${id}`);
+}
+
+export function getLedger(type?: LedgerJournalType): Promise<LedgerPayload> {
+  const query = type ? `?type=${encodeURIComponent(type)}` : "";
+  return getSigned(`/bff/api/ledger${query}`, "ledger");
+}
+
+export function getLedgerJournal(id: string): Promise<LedgerJournal> {
+  return getSigned(`/bff/api/ledger/${encodeURIComponent(id)}`, `ledger:${id}`);
+}
+
+export function getCustody(status?: CustodyIncidentStatus): Promise<CustodyPayload> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return getSigned(`/bff/api/custody${query}`, "custody");
+}
+
+export function getCustodyIncident(id: string): Promise<CustodyWatcherIncident> {
+  return getSigned(`/bff/api/custody/incidents/${encodeURIComponent(id)}`, `custody-incident:${id}`);
 }
 
 export function getSubjectTimeline(ref: string): Promise<SubjectTimelinePayload> {

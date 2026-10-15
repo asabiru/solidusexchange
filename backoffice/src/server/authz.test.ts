@@ -91,6 +91,7 @@ describe("backoffice authorization matrix", () => {
       "custody:read",
       "customers:read",
       "dashboard:read",
+      "finance:read",
       "fraud:read",
       "investigations:read",
       "kyc:read",
