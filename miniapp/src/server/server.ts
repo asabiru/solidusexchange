@@ -89,6 +89,7 @@ import {
 } from "./support.js";
 import { contractCardsView, cardsView } from "./cards.js";
 import { contractDepositsView, depositsView } from "./deposits.js";
+import { documentsView } from "./documents.js";
 import { contractExchangeOrdersView, exchangeOrdersView } from "./exchange-orders.js";
 import { contractMarketDepthView, contractMarketsView, marketsView } from "./markets.js";
 import { contractTradesView, tradesView } from "./trades.js";
@@ -152,6 +153,7 @@ export const routeTable: readonly Route[] = Object.freeze([
   { method: "GET", path: "/bff/markets/:instrument" },
   { method: "GET", path: "/bff/payments" },
   { method: "GET", path: "/bff/cards" },
+  { method: "GET", path: "/bff/documents" },
   { method: "GET", path: "/bff/checks" },
   { method: "GET", path: "/bff/checks/preview" },
   { method: "GET", path: "/bff/checks/:id" },
@@ -1288,19 +1290,40 @@ export function createMiniappServer(
             json(response, 503, { error: "support_unavailable" });
             return;
           }
-          json(response, 200, contractSupportRequestsView(upstream.view));
+          // The POST write arm stores drafts only locally, so the served list
+          // is the union: the subject's own drafts first (newest write wins
+          // ordering), then the upstream projection — a just-created request
+          // never disappears behind the contract feed.
+          const adapted = contractSupportRequestsView(upstream.view);
+          json(response, 200, { ...adapted, requests: [...support.list(session.subject), ...adapted.requests] });
           return;
         }
         const view: SupportRequestsView = { mode: "test", delivery: "disabled", requests: support.list(session.subject) };
         json(response, 200, view);
         return;
       }
-      const found = support.view(session.subject, path.slice("/bff/support/requests/".length));
-      if (!found) {
-        json(response, 404, { error: "not_found" });
+      const id = path.slice("/bff/support/requests/".length);
+      const found = support.view(session.subject, id);
+      if (found) {
+        json(response, 200, found);
         return;
       }
-      json(response, 200, found);
+      // Upstream-listed tck_* ids resolve through the collection — like
+      // /bff/checks/:reference, the contract owns that reference space and
+      // has no member read.
+      if (customerApi.configured) {
+        const upstream = await customerApi.support(session.subject, clock());
+        if (upstream.status !== "ok") {
+          json(response, 503, { error: "support_unavailable" });
+          return;
+        }
+        const match = contractSupportRequestsView(upstream.view).requests.find((request) => request.id === id);
+        if (match) {
+          json(response, 200, match);
+          return;
+        }
+      }
+      json(response, 404, { error: "not_found" });
       return;
     }
     if (path === "/bff/address-screening") {
@@ -1541,6 +1564,13 @@ export function createMiniappServer(
         return;
       }
       json(response, 503, { error: "cards_unavailable" });
+      return;
+    }
+    if (path === "/bff/documents") {
+      // No upstream contract exists for documents — the local fixture owns
+      // the surface for every session. Read-only: download/signature stay
+      // unserved, so nothing here wires a write.
+      json(response, 200, documentsView());
       return;
     }
     if (path === "/bff/quotes/preview") {

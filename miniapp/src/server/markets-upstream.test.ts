@@ -261,7 +261,8 @@ describe("GET /bff/markets through the customer-api seam", () => {
         quoteScale: 2,
         priceScale: 8,
         asOf: Date.parse("2026-10-02T14:10:00.000Z"),
-        posting: "none"
+        posting: "none",
+        depth: true
       });
       assert.deepEqual(view.markets[1], {
         instrument: "TON/RUB",
@@ -275,7 +276,8 @@ describe("GET /bff/markets through the customer-api seam", () => {
         quoteScale: 2,
         priceScale: 8,
         asOf: Date.parse("2026-10-02T14:10:00.000Z"),
-        posting: "none"
+        posting: "none",
+        depth: true
       });
       assert.equal(stub.calls.length, 1);
     } finally {

@@ -7,6 +7,7 @@ import type {
   ChecksView,
   DepositsView,
   DeviceSessionsView,
+  DocumentsView,
   ExchangeOrdersView,
   MarketDepthView,
   MarketsView,
@@ -163,6 +164,7 @@ export const api = {
   screenAddress: (asset: ScreeningAsset, network: ScreeningNetwork, address: string) =>
     call<AddressScreeningView>("/bff/address-screening", { asset, network, address }),
   supportRequests: () => call<SupportRequestsView>("/bff/support/requests"),
+  documents: () => call<DocumentsView>("/bff/documents"),
   createSupportRequest: (category: SupportCategory, topic: string, message: string, activityId?: string) =>
     call<SupportRequestView>("/bff/support/requests", activityId ? { category, topic, message, activityId } : { category, topic, message }),
   addressScreening: (id: string) => call<AddressScreeningView>(`/bff/address-screening/${encodeURIComponent(id)}`),

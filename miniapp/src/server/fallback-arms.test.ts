@@ -486,7 +486,7 @@ describe("fallback id namespace pins", () => {
     }
   });
 
-  it("keeps the support detail local-only: an upstream ticket id 404s while the list serves it", async () => {
+  it("resolves the support detail through the collection: an upstream ticket id answers while unknown ids 404", async () => {
     const ticketId = "tck_00112233445566778899aabb";
     const calls: string[] = [];
     const client = stubClient({
@@ -517,13 +517,16 @@ describe("fallback id namespace pins", () => {
       const list = await get(running.base, "/bff/support/requests", cookie);
       assert.equal(list.status, 200);
       assert.equal((await list.text()).includes(ticketId), true, "the upstream list serves the ticket");
-      // The detail read is deliberately local-only: POST-created sup_* drafts
-      // render, upstream tck_* ids resolve nowhere locally — the route does
-      // not even ask upstream for them.
+      // The detail read follows the collection: POST-created sup_* drafts
+      // resolve locally, upstream tck_* ids resolve through the ticket list
+      // that owns their reference space — like /bff/checks/:reference.
       const detail = await get(running.base, `/bff/support/requests/${ticketId}`, cookie);
-      assert.equal(detail.status, 404);
-      assert.deepEqual(await detail.json(), { error: "not_found" });
-      assert.deepEqual(calls, ["support"], "the detail read stays local");
+      assert.equal(detail.status, 200);
+      assert.equal((await detail.json() as { id: string }).id, ticketId);
+      const missing = await get(running.base, `/bff/support/requests/tck_ffffffffffffffffffffffff`, cookie);
+      assert.equal(missing.status, 404);
+      assert.deepEqual(await missing.json(), { error: "not_found" });
+      assert.deepEqual(calls, ["support", "support", "support"], "each upstream-owned detail costs a collection read");
     } finally {
       await running.close();
     }

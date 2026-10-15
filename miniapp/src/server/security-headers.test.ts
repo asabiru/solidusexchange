@@ -380,6 +380,7 @@ describe("Mini App BFF security headers on every route", () => {
       },
       "GET /bff/payments": () => get("/bff/payments"),
       "GET /bff/cards": () => get("/bff/cards"),
+      "GET /bff/documents": () => get("/bff/documents"),
       "GET /bff/operations": () => get("/bff/operations"),
       "GET /bff/operations/:id": async () => {
         const list = JSON.parse((await get("/bff/operations")).body) as { operations: { id: string }[] };

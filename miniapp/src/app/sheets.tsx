@@ -18,10 +18,12 @@ import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
 import { CardsSheet } from "./CardsSheet";
 import { ChecksSheet } from "./ChecksSheet";
+import { DocumentsSheet } from "./DocumentsSheet";
 import { MarketsSheet } from "./MarketsSheet";
 import { MoneyFlowSheet } from "./MoneyFlowSheet";
 import { OrdersSheet } from "./OrdersSheet";
 import { QuotesSheet } from "./QuotesSheet";
+import { RequisitesSheet } from "./RequisitesSheet";
 import { TradesSheet } from "./TradesSheet";
 import { assetNameKey, assetNetworkKey } from "./format";
 import { type MessageKey, messageKeyFor } from "./i18n";
@@ -101,6 +103,10 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <QuotesSheet close={close} />;
     case "cards":
       return <CardsSheet close={close} />;
+    case "requisites":
+      return <RequisitesSheet wallet={wallet} close={close} />;
+    case "documents":
+      return <DocumentsSheet close={close} />;
     case "notifications":
       return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":

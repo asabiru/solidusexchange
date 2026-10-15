@@ -589,6 +589,13 @@ export interface MarketView {
   priceScale: number;
   asOf: number;
   posting: "none";
+  /**
+   * Whether /bff/markets/:instrument resolves a book for this row. Locally
+   * listed fixtures carry false — depth is never fabricated — while the
+   * upstream-owned list marks true so the sheet can render rows without a
+   * dead-end click.
+   */
+  depth?: boolean;
 }
 
 export interface MarketsView {
@@ -681,6 +688,29 @@ export interface CardsView {
   mode: "test";
   kyc: KycStatus;
   cards: readonly CardView[];
+}
+
+export type DocumentKind = "agreement" | "statement" | "check";
+export type DocumentStatus = "available" | "draft";
+
+/**
+ * A read-only documents entry (agreements, statements, checks). No upstream
+ * contract exists for this surface — the BFF serves the local synthetic
+ * fixture unconditionally, and download stays unserved.
+ */
+export interface DocumentView {
+  id: string;
+  kind: DocumentKind;
+  title: string;
+  status: DocumentStatus;
+  createdAt: number;
+  posting: "none";
+}
+
+export interface DocumentsView {
+  mode: "test";
+  delivery: "disabled";
+  documents: readonly DocumentView[];
 }
 
 export interface CheckStatusEntry {

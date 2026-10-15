@@ -235,8 +235,9 @@ describe("GET /bff/support/requests through the customer-api seam", () => {
 
   it("keeps the upstream read source of truth for the list while local drafts stay writable", async () => {
     // POST /bff/support/requests stays a local desk write (the contract serves
-    // no command side), so a configured upstream owns the list read: a local
-    // draft created mid-session does not join the adapted tickets.
+    // no command side), so the served list is the union: the subject's own
+    // drafts first, then the upstream projection — a just-created request
+    // never disappears behind the contract feed.
     const stub = supportStub({ status: "ok", view: upstreamView() });
     const running = await start(config(), stub);
     try {
@@ -250,11 +251,13 @@ describe("GET /bff/support/requests through the customer-api seam", () => {
       const draft = await created.json();
       assert.match(draft.id, supportIdPattern);
       const view = await (await get(running.base, "/bff/support/requests", cookie)).json() as SupportRequestsView;
-      assert.deepEqual(view.requests.map((entry) => entry.id), [marker]);
+      assert.deepEqual(view.requests.map((entry) => entry.id), [draft.id, marker]);
       assert.equal(stub.calls.length, 1);
-      // The local detail read still resolves only locally stored drafts.
+      // Detail resolves both spaces: local sup_* drafts from the desk and
+      // upstream tck_* ids through the collection that owns them.
       assert.equal((await get(running.base, `/bff/support/requests/${draft.id}`, cookie)).status, 200);
-      assert.equal((await get(running.base, `/bff/support/requests/${marker}`, cookie)).status, 404);
+      assert.equal((await get(running.base, `/bff/support/requests/${marker}`, cookie)).status, 200);
+      assert.equal((await get(running.base, `/bff/support/requests/tck_${"0".repeat(24)}`, cookie)).status, 404);
     } finally {
       await running.close();
     }
