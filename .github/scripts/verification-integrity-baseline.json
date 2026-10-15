@@ -1699,7 +1699,7 @@
       "minCases": 9
     },
     "packages/custody-core/tests/real-wire-decoders.test.mjs": {
-      "minLines": 376,
+      "minLines": 199,
       "minCases": 10
     },
     "packages/custody-core/tests/signer-gateway.test.mjs": {
@@ -1713,6 +1713,14 @@
     "packages/financial-core/tests/session-d.test.mjs": {
       "minLines": 497,
       "minCases": 12
+    },
+    "packages/custody-core/tests/co-verifier.test.mjs": {
+      "minLines": 167,
+      "minCases": 5
+    },
+    "packages/custody-core/tests/fixtures/wire-encode.mjs": {
+      "minLines": 213,
+      "minCases": 0
     }
   },
   "uses": {
