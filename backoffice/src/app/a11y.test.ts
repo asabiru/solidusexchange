@@ -16,9 +16,12 @@ interface CssRule {
 }
 
 const root = new URL("../../", import.meta.url);
-const css = readFileSync(new URL("src/styles.css", root), "utf8");
-const appSource = readFileSync(new URL("src/app/App.tsx", root), "utf8");
-const iconsSource = readFileSync(new URL("src/app/icons.tsx", root), "utf8");
+// Checked-out trees may carry CRLF; the source assertions below match
+// structure, not line endings, so every read is normalized once here.
+const readSource = (path: string) => readFileSync(new URL(path, root), "utf8").replace(/\r\n/g, "\n");
+const css = readSource("src/styles.css");
+const appSource = readSource("src/app/App.tsx");
+const iconsSource = readSource("src/app/icons.tsx");
 
 function parseCss(source: string): CssRule[] {
   const text = source.replace(/\/\*[\s\S]*?\*\//g, "");

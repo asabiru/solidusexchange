@@ -557,8 +557,12 @@ describe("Backoffice Vite document security headers", () => {
       await vite.listen();
       const { port } = vite.httpServer?.address() as AddressInfo;
       const base = `http://127.0.0.1:${port}`;
+      // The probe must name a file that exists but sits outside the Vite
+      // root, so the fs allowlist answers 403 instead of the SPA fallback's
+      // 200 — /etc/passwd does not exist on Windows.
+      const outsideRoot = process.platform === "win32" ? "/@fs/C:/Windows/win.ini" : "/@fs/etc/passwd";
       const responses: [number, Response][] = [
-        [403, await fetch(`${base}/@fs/etc/passwd`)],
+        [403, await fetch(`${base}${outsideRoot}`)],
         [404, await fetch(`${base}/`, { method: "POST" })],
         [204, await fetch(`${base}/`, { method: "OPTIONS", headers: { "access-control-request-method": "POST" } })],
         [500, await fetch(`${base}/bff/health`)]
