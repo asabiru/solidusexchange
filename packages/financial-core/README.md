@@ -63,6 +63,11 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `tests/postgres-runtime-privileges.sh` | Runtime-role acceptance and denied-mutation regression |
 | `tests/postgres-runtime-privilege-catalog.sql` | Runtime-role capabilities, settings, ownership, memberships and effective runtime-role/`PUBLIC` grants |
 | `scripts/verify-postgres-runtime-privilege-catalog.mjs` | Exact reviewed runtime writer privilege profile |
+| `session-d/chart-draft.json` | Unapproved Session D draft chart: canonical v1 shape plus the proposed `CUSTOMER_HELD_LIABILITY` definition |
+| `session-d/posting-rules-draft.json` | Unapproved Session D draft registry: hold/reversal/fee/spread/suspense rules, all synthetic-test-only |
+| `src/session-d.mjs` | Session D semantic layer over the posting boundary: hold lifecycle, reversal binding, reconciliation breaks and suspense review |
+| `session-d/README.md` | Session D proposal semantics, fail-closed layering and the promotion path on Finance/CTO/Security approval |
+| `tests/session-d.test.mjs` | Synthetic Session D lifecycle, binding and fail-closed tests |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
 | `tests/postgres-reject-unbalanced.sql` | Database rejection test for an unbalanced journal |
 | `tests/postgres-reject-late-entry.sql` | Database rejection test for post-acceptance entry insertion |

@@ -1,0 +1,224 @@
+{
+  "registry_version": 1,
+  "status": "draft",
+  "runtime_boundary": "dev-dry-run",
+  "production_execution_enabled": false,
+  "rules": [
+    {
+      "journal_type": "SYNTHETIC_PROVIDER_POSITION",
+      "posting_rule_version": "synthetic-provider-position-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "PROVIDER_PAYABLE_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Exercise balanced posting and projection controls with synthetic assets only."
+    },
+    {
+      "journal_type": "SYNTHETIC_PROVIDER_POSITION_REVERSAL",
+      "posting_rule_version": "synthetic-provider-position-reversal-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "PROVIDER_PAYABLE_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Mirror an accepted provider-position journal with flipped sides under a causation binding."
+    },
+    {
+      "journal_type": "SYNTHETIC_CUSTOMER_CREDIT",
+      "posting_rule_version": "synthetic-customer-credit-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "PROVIDER_RECEIVABLE_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Recognize a synthetic inbound provider position as a settled customer liability."
+    },
+    {
+      "journal_type": "SYNTHETIC_HOLD_CREATE",
+      "posting_rule_version": "synthetic-hold-create-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "CUSTOMER_HELD_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Reserve a synthetic customer liability balance under a named hold reference."
+    },
+    {
+      "journal_type": "SYNTHETIC_HOLD_RELEASE",
+      "posting_rule_version": "synthetic-hold-release-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "CUSTOMER_HELD_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Return a reserved synthetic customer liability to settled status under the same hold reference."
+    },
+    {
+      "journal_type": "SYNTHETIC_FEE_CHARGE",
+      "posting_rule_version": "synthetic-fee-charge-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "FEE_REVENUE",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Recognize a synthetic platform fee against the customer liability under an approved posting rule."
+    },
+    {
+      "journal_type": "SYNTHETIC_SPREAD_RECOGNITION",
+      "posting_rule_version": "synthetic-spread-recognition-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "FEE_REVENUE",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Recognize synthetic exchange spread captured into treasury as platform revenue."
+    },
+    {
+      "journal_type": "SYNTHETIC_SUSPENSE_PARK_IN",
+      "posting_rule_version": "synthetic-suspense-park-in-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "SUSPENSE_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Park an unexplained synthetic inbound position in suspense pending review."
+    },
+    {
+      "journal_type": "SYNTHETIC_SUSPENSE_PARK_OUT",
+      "posting_rule_version": "synthetic-suspense-park-out-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "CUSTOMER_SETTLED_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "SUSPENSE_LIABILITY",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Park an unexplained synthetic outbound position in suspense pending review."
+    },
+    {
+      "journal_type": "SYNTHETIC_SUSPENSE_CLEAR_IN",
+      "posting_rule_version": "synthetic-suspense-clear-in-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "SUSPENSE_ASSET",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Resolve a reviewed inbound suspense position into treasury ownership."
+    },
+    {
+      "journal_type": "SYNTHETIC_SUSPENSE_CLEAR_OUT",
+      "posting_rule_version": "synthetic-suspense-clear-out-v1",
+      "scope": "synthetic-test-only",
+      "allowed_actor_types": [
+        "OPERATOR",
+        "SERVICE"
+      ],
+      "entry_pattern": [
+        {
+          "definition_code": "SUSPENSE_LIABILITY",
+          "side": "DEBIT"
+        },
+        {
+          "definition_code": "TREASURY_ASSET",
+          "side": "CREDIT"
+        }
+      ],
+      "purpose": "Resolve a reviewed outbound suspense position into a confirmed treasury outflow."
+    }
+  ]
+}
