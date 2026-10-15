@@ -1,0 +1,112 @@
+{
+  "policy_version": "hsm-dev-draft-v1",
+  "status": "draft-pending-approval",
+  "runtime_boundary": "dev-dry-run",
+  "production_signing_enabled": false,
+  "key_material_allowed": false,
+  "execution_authority": false,
+  "quorum": {
+    "minimum_approvals": 2,
+    "required_roles": [
+      "custody_checker",
+      "custody_maker"
+    ],
+    "distinct_subjects_required": true
+  },
+  "tiers": {
+    "hot": {
+      "signing_mode": "automatic_within_limits",
+      "time_delay_seconds": 0,
+      "limits": [
+        {
+          "asset": "TON",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "500.000000000",
+          "daily_velocity_maximum": "2000.000000000",
+          "scale": 9
+        },
+        {
+          "asset": "USDT",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "5000.000000",
+          "daily_velocity_maximum": "20000.000000",
+          "scale": 6
+        },
+        {
+          "asset": "USDT",
+          "network": "TRON_TESTNET",
+          "per_transaction_maximum": "5000.000000",
+          "daily_velocity_maximum": "20000.000000",
+          "scale": 6
+        }
+      ]
+    },
+    "warm": {
+      "signing_mode": "quorum_with_delay",
+      "time_delay_seconds": 120,
+      "limits": [
+        {
+          "asset": "TON",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "5000.000000000",
+          "daily_velocity_maximum": "20000.000000000",
+          "scale": 9
+        },
+        {
+          "asset": "USDT",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "25000.000000",
+          "daily_velocity_maximum": "100000.000000",
+          "scale": 6
+        },
+        {
+          "asset": "USDT",
+          "network": "TRON_TESTNET",
+          "per_transaction_maximum": "25000.000000",
+          "daily_velocity_maximum": "100000.000000",
+          "scale": 6
+        }
+      ]
+    },
+    "cold": {
+      "signing_mode": "ceremony_only",
+      "time_delay_seconds": 86400,
+      "limits": [
+        {
+          "asset": "TON",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "50000.000000000",
+          "daily_velocity_maximum": "50000.000000000",
+          "scale": 9
+        },
+        {
+          "asset": "USDT",
+          "network": "TON_TESTNET",
+          "per_transaction_maximum": "250000.000000",
+          "daily_velocity_maximum": "250000.000000",
+          "scale": 6
+        },
+        {
+          "asset": "USDT",
+          "network": "TRON_TESTNET",
+          "per_transaction_maximum": "250000.000000",
+          "daily_velocity_maximum": "250000.000000",
+          "scale": 6
+        }
+      ]
+    }
+  },
+  "destination_allowlist": [
+    "destination_ref_synthetic_user_wallet",
+    "destination_ref_warm_tier_refill",
+    "destination_ref_treasury_hot"
+  ],
+  "replay_protection": {
+    "consumed_intent_digests_rejected": true,
+    "transaction_nonces_must_advance": true
+  },
+  "freeze": {
+    "any_officer_may_freeze": true,
+    "unfreeze_requires_full_quorum": true
+  }
+}
