@@ -3,7 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { connect, createServer as createNetServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -564,7 +564,7 @@ describe("Backoffice Vite document security headers", () => {
       // The probe must name a file that exists but sits outside the Vite
       // root, so the fs allowlist answers 403 instead of the SPA fallback's
       // 200 — /etc/passwd does not exist on Windows.
-      const outsideRoot = process.platform === "win32" ? "/@fs/C:/Windows/win.ini" : "/@fs/etc/passwd";
+      const outsideRoot = platform() === "win32" ? "/@fs/C:/Windows/win.ini" : "/@fs/etc/passwd";
       const responses: [number, Response][] = [
         [403, await fetch(`${base}${outsideRoot}`)],
         [404, await fetch(`${base}/`, { method: "POST" })],

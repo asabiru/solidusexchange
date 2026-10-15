@@ -26,6 +26,7 @@
 
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
+import { get as httpGet } from "node:http";
 import { after, before, describe, it } from "node:test";
 
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
@@ -1344,10 +1345,33 @@ describe("miniapp chain fail-closed paths", () => {
     ]) {
       assert.equal(await upstreamDenied(path), 404, path);
     }
-    // A bare trailing "?" carries no parameter: the operation still matches,
-    // and the read falls through to the capability gate — 403 here exactly
-    // like the clean request, never the tamper 404.
-    assert.equal(await upstreamDenied("/api/v1/customer/activity?"), 403);
+    // A trailing "?" on the wire is still undeclared query input: fetch()
+    // normalization differs across undici versions (some strip it before the
+    // request leaves), so the pin goes through a raw HTTP request with the
+    // exact request target in `path` — never re-parsed. The upstream answers
+    // the same fail-closed 404 + CAPABILITY_DENIED as every
+    // undeclared-query read.
+    const rawQuestion = await new Promise((resolve, reject) => {
+      const base = new URL(upstreamBase);
+      const req = httpGet(
+        {
+          hostname: base.hostname,
+          port: base.port,
+          path: "/api/v1/customer/activity?",
+          method: "GET",
+          headers: upstreamHeaders(mintCustomer(devUpstreamSubject))
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => { body += chunk; });
+          res.on("end", () => resolve({ status: res.statusCode, body: JSON.parse(body) }));
+        }
+      );
+      req.on("error", reject);
+    });
+    assert.equal(rawQuestion.body.code, "CAPABILITY_DENIED");
+    assert.equal(rawQuestion.status, 404);
     // The check command surface stays contract-only: a well-formed POST —
     // valid token, declared headers, Idempotency-Key, JSON body — can never
     // reach a handler, on the collection, the preview, or either member

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
@@ -2336,7 +2336,8 @@ assertRejected(
 
 // Windows cannot mint file symlinks without elevation or Developer Mode;
 // the checker rejection this pin guards is exercised on POSIX runners.
-test("rejects symlinked files escaping the contract package", { skip: process.platform === "win32" }, () => {
+test("rejects symlinked files escaping the contract package", () => {
+  if (platform() === "win32") return;
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {
     for (const path of contractFiles) {

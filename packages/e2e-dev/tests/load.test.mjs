@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { after, before, describe, it } from "node:test";
+import { platform } from "node:os";
 import { getHeapStatistics } from "node:v8";
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
 import { startCustomerApi } from "@solidchange/customer-api/dev-server";
@@ -229,7 +230,7 @@ describe("bounded load on the dev stack", () => {
     cookies = [];
     // Windows RSTs a SYN burst of this size against the loopback backlog;
     // the bound invariant is identical, only the per-wave concurrency drops.
-    const burstSize = process.platform === "win32" ? 100 : 400;
+    const burstSize = platform() === "win32" ? 100 : 400;
     for (let offset = 0; offset < userIds.length; offset += burstSize) {
       const batch = await Promise.all(userIds.slice(offset, offset + burstSize).map((id) => telegramLogin(id)));
       for (const response of batch) {
@@ -368,7 +369,7 @@ describe("bounded load on the dev stack", () => {
     // Windows RSTs thousand-socket waves on the loopback: fire each arm
     // lazily inside fixed-size waves — same arm mix, same totals, same
     // documented statuses.
-    const waveSize = process.platform === "win32" ? 96 : total;
+    const waveSize = platform() === "win32" ? 96 : total;
     const results = [];
     for (let offset = 0; offset < total; offset += waveSize) {
       results.push(
