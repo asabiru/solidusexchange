@@ -227,8 +227,11 @@ describe("bounded load on the dev stack", () => {
   it("creates hundreds of concurrent sessions while the outbox and activity log stay bounded", async () => {
     const userIds = Array.from({ length: defaultMaxTotal + 200 }, (_, index) => 2_000_000 + index);
     cookies = [];
-    for (let offset = 0; offset < userIds.length; offset += 400) {
-      const batch = await Promise.all(userIds.slice(offset, offset + 400).map((id) => telegramLogin(id)));
+    // Windows RSTs a SYN burst of this size against the loopback backlog;
+    // the bound invariant is identical, only the per-wave concurrency drops.
+    const burstSize = process.platform === "win32" ? 100 : 400;
+    for (let offset = 0; offset < userIds.length; offset += burstSize) {
+      const batch = await Promise.all(userIds.slice(offset, offset + burstSize).map((id) => telegramLogin(id)));
       for (const response of batch) {
         assert.equal(response.status, 201);
         cookies.push(cookieOf(response));
@@ -286,7 +289,7 @@ describe("bounded load on the dev stack", () => {
     const auditBefore = (await auditStore.snapshot()).status.length;
 
     const total = 1_008;
-    const burst = Array.from({ length: total }, (_, index) => {
+    const fire = (index) => {
       const cookie = cookies[index % cookies.length];
       switch (index % 24) {
         case 0:
@@ -361,8 +364,19 @@ describe("bounded load on the dev stack", () => {
         default:
           return outcome("quotes", request(miniappBase, "/bff/quotes", { cookie: devCookie }));
       }
-    });
-    const results = await Promise.all(burst);
+    };
+    // Windows RSTs thousand-socket waves on the loopback: fire each arm
+    // lazily inside fixed-size waves — same arm mix, same totals, same
+    // documented statuses.
+    const waveSize = process.platform === "win32" ? 96 : total;
+    const results = [];
+    for (let offset = 0; offset < total; offset += waveSize) {
+      results.push(
+        ...(await Promise.all(
+          Array.from({ length: Math.min(waveSize, total - offset) }, (_, i) => fire(offset + i))
+        ))
+      );
+    }
     assert.equal(results.length, total);
     assertDocumented(results);
 

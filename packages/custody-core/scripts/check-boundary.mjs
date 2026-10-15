@@ -6,7 +6,9 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(root, "..", "..");
 const policy = JSON.parse(readFileSync(join(root, "custody-policy.json"), "utf8"));
-const read = (path) => readFileSync(join(repositoryRoot, path), "utf8");
+// Windows checkouts carry CRLF line endings; the evidence patterns below
+// match against a normalized LF view regardless of checkout flavor.
+const read = (path) => readFileSync(join(repositoryRoot, path), "utf8").replaceAll("\r\n", "\n");
 
 assert.equal(policy.runtime_boundary, "dev-dry-run");
 assert.equal(policy.execution_authority, false);
