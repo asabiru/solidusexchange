@@ -1356,6 +1356,29 @@ describe("Mini App BFF with a failing customer-api", () => {
     return elapsed;
   }
 
+  async function kycOwnedByLocalApp(label, sessionCookie, sessionKyc) {
+    // Once the shared subject owns a live local application the BFF answers
+    // /bff/kyc/status from that record under every sibling session - the read
+    // no longer consults upstream, so a hostile or down upstream cannot leak
+    // into the view or degrade it.
+    const hits = upstream.length;
+    const response = await call(app.base, "/bff/kyc/status", { cookie: sessionCookie });
+    assert.equal(response.status, 200, label);
+    const text = await response.text();
+    assert.equal(text.includes(marker), false, label);
+    assert.equal(text.includes(key), false, label);
+    assert.equal(text.includes("syn_cust_"), false, label);
+    const view = JSON.parse(text);
+    assert.equal(view.mode, "test", label);
+    assert.equal(view.provider, "simulator", label);
+    assert.equal(view.state, "submitted", label);
+    assert.equal(view.sessionKyc, sessionKyc, label);
+    assert.equal(view.canSubmit, false, label);
+    assert.equal(typeof view.submittedAt, "number", label);
+    assert.equal(typeof view.reviewDeadline, "number", label);
+    assert.equal(upstream.length, hits, `${label}: the local view consulted upstream`);
+  }
+
   async function kycFailsClosed(label, sessionCookie) {
     const hits = upstream.length;
     const startedAt = Date.now();
@@ -1749,6 +1772,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       "baseScale",
       "bestAsk",
       "bestBid",
+      "depth",
       "instrument",
       "lastTrade",
       "posting",
@@ -1757,6 +1781,7 @@ describe("Mini App BFF with a failing customer-api", () => {
       "quoteScale",
       "spreadBps"
     ]);
+    assert.equal(markets.markets[0].depth, true);
     assert.equal(markets.markets[0].instrument, "USDT/RUB");
     assert.equal(markets.markets[0].bestBid.price, "89.99000000");
     assert.equal(markets.markets[0].bestAsk.price, "90.01000000");
@@ -2515,8 +2540,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await notificationsReadFailsClosed(name);
       await previewsFailClosed(name);
       await localSurfacesStayLocal(name);
-      await kycFailsClosed(`${name} verified`, verifiedCookie);
-      await kycFailsClosed(`${name} gated`, cookie);
+      await kycOwnedByLocalApp(`${name} verified`, verifiedCookie, "verified");
+      await kycOwnedByLocalApp(`${name} gated`, cookie, "kyc-gated");
       await sessionsFailsClosed(`${name} verified`, verifiedCookie);
       await sessionsFailsClosed(`${name} gated`, cookie);
       await accountFailsClosed(`${name} verified`, verifiedCookie);
@@ -2550,8 +2575,8 @@ describe("Mini App BFF with a failing customer-api", () => {
       await notificationsFailClosed(name);
       await notificationsReadFailsClosed(name);
       await previewsFailClosed(name);
-      await kycFailsClosed(`${name} verified`, verifiedCookie);
-      await kycFailsClosed(`${name} gated`, cookie);
+      await kycOwnedByLocalApp(`${name} verified`, verifiedCookie, "verified");
+      await kycOwnedByLocalApp(`${name} gated`, cookie, "kyc-gated");
       await sessionsFailsClosed(`${name} verified`, verifiedCookie);
       await sessionsFailsClosed(`${name} gated`, cookie);
       await accountFailsClosed(`${name} verified`, verifiedCookie);
@@ -2582,8 +2607,12 @@ describe("Mini App BFF with a failing customer-api", () => {
     assert.equal((await getJson(app, "/bff/payments", verifiedCookie)).payments[0].id, "pay_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/cards", verifiedCookie)).cards[0].id, "crd_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/notifications", verifiedCookie)).mode, "test");
-    assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "rejected");
-    assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests[0].id, "tck_0123456789abcdef01234567");
+    // The subject's live local application owns the KYC read: recovery of the
+    // upstream feed does not displace it — the view still answers the stored
+    // submission.
+    assert.equal((await getJson(app, "/bff/kyc/status", cookie)).state, "submitted");
+    // Local drafts lead the union — the live upstream tck_* rows follow them.
+    assert.equal((await getJson(app, "/bff/support/requests", cookie)).requests.at(-1).id, "tck_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/sessions", cookie)).sessions[0].handle, "sess_0123456789abcdef01234567");
     assert.equal((await getJson(app, "/bff/account", cookie)).id, "usr_0123456789abcdef01234567");
     // Member reads are live again too — an id only the real upstream serves.

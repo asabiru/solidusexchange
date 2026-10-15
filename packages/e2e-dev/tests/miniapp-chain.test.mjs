@@ -26,6 +26,7 @@
 
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
+import { get as httpGet } from "node:http";
 import { after, before, describe, it } from "node:test";
 
 import { generateUuidV7 } from "@solidchange/customer-api/request-id";
@@ -198,7 +199,8 @@ async function expectedSessionsView(subject) {
       client: entry.platform === "telegram-mini-app" ? "telegram" : "dev-login",
       createdAt: Date.parse(entry.created_at),
       lastSeenAt: Date.parse(entry.last_seen_at),
-      current: entry.current
+      current: entry.current,
+      revocable: false
     }))
     .sort(
       (a, b) =>
@@ -239,6 +241,8 @@ let devVerified;
 let devGated;
 let telegram;
 let supportRequest;
+let secondSupportView;
+let outageSupportView;
 let screeningView;
 let secondScreeningView;
 let checkReference;
@@ -663,7 +667,7 @@ describe("miniapp chain through the live customer-api", () => {
       { category: "complaint", topic: "second topic", message: "different body" },
       { cookie: devVerified.cookie }
     );
-    const secondSupportView = await readJson(secondSupport);
+    secondSupportView = await readJson(secondSupport);
     assert.equal(secondSupport.status, 201);
     assert.notEqual(secondSupportView.id, supportRequest.id);
     assert.equal(secondSupportView.category, "complaint");
@@ -690,13 +694,20 @@ describe("miniapp chain through the live customer-api", () => {
       assert.equal(denied.status, 400);
       assert.deepEqual(await readJson(denied), { error });
     }
-    // The list stays upstream-owned: the local desk row never merges in.
+    // The list unions the local desk drafts first with the upstream-roster
+    // rows after them: local writes stay immediately visible, and upstream
+    // tck_* ids resolve through the same collection on the member read.
+    const expectedUpstream = await expectedSupportList(devUpstreamSubject);
+    const list = await okGet("/bff/support/requests", devVerified.cookie);
+    assert.deepEqual(list.requests.slice(-expectedUpstream.requests.length), expectedUpstream.requests);
+    const localIds = list.requests.slice(0, list.requests.length - expectedUpstream.requests.length).map((row) => row.id);
+    assert.deepEqual(localIds, [secondSupportView.id, supportRequest.id]);
+    assert.equal(list.delivery, "disabled");
+    const upstreamTicket = expectedUpstream.requests[0].id;
     assert.deepEqual(
-      await okGet("/bff/support/requests", devVerified.cookie),
-      await expectedSupportList(devUpstreamSubject)
+      await okGet(`/bff/support/requests/${upstreamTicket}`, devVerified.cookie),
+      expectedUpstream.requests[0]
     );
-    const upstreamTicket = (await expectedSupportList(devUpstreamSubject)).requests[0].id;
-    await deniedGet(`/bff/support/requests/${upstreamTicket}`, devVerified.cookie, 404, "not_found");
 
     // The checks surface serves the five deterministic fixtures verbatim:
     // every stable field is pinned literally (any drift in the fixture or
@@ -832,8 +843,7 @@ describe("miniapp chain through the live customer-api", () => {
       "/bff/address-screening/scr_00000000000000000000000000000000",
       "/bff/address-screening/not-a-screening",
       "/bff/address-screening/sup_000000000000000000000000",
-      "/bff/support/requests/sup_000000000000000000000000",
-      `/bff/support/requests/${upstreamTicket}`
+      "/bff/support/requests/sup_000000000000000000000000"
     ]) {
       await deniedGet(path, devVerified.cookie, 404, "not_found");
     }
@@ -1000,13 +1010,9 @@ describe("miniapp chain through the live customer-api", () => {
     const resubmit = await postMiniapp("/bff/kyc/applications", {}, { cookie: telegram.cookie });
     assert.equal(resubmit.status, 200);
     assert.deepEqual(await readJson(resubmit), submitView);
-    // The upstream kyc/status read is untouched by the local submission —
-    // the surfaces are separate by contract (a gated session's status is
-    // served from the customer-api kyc directory, not the local record).
-    assert.deepEqual(
-      await okGet("/bff/kyc/status", telegram.cookie),
-      await expectedKycView(telegramUpstreamSubject)
-    );
+    // The local submission owns the read path: /bff/kyc/status answers the
+    // stored application verbatim rather than the upstream directory view.
+    assert.deepEqual(await okGet("/bff/kyc/status", telegram.cookie), submitView);
 
     // The dev subject's outbox has unread entries from the earlier probes;
     // marking them by id flips unread to 0 exactly, re-marking is a 0-op,
@@ -1332,7 +1338,6 @@ describe("miniapp chain fail-closed paths", () => {
       "/api/v1/customer/operations/ope_000000000000000000000000?bogus=1",
       "/api/v1/customer/notifications?bogus=1",
       "/api/v1/customer/activity?limit=5",
-      "/api/v1/customer/activity?",
       "/api/v1/customer/checks?kind=sent",
       "/api/v1/customer/checks?cursor=1",
       "/api/v1/customer/account?=x",
@@ -1340,6 +1345,33 @@ describe("miniapp chain fail-closed paths", () => {
     ]) {
       assert.equal(await upstreamDenied(path), 404, path);
     }
+    // A trailing "?" on the wire is still undeclared query input: fetch()
+    // normalization differs across undici versions (some strip it before the
+    // request leaves), so the pin goes through a raw HTTP request with the
+    // exact request target in `path` — never re-parsed. The upstream answers
+    // the same fail-closed 404 + CAPABILITY_DENIED as every
+    // undeclared-query read.
+    const rawQuestion = await new Promise((resolve, reject) => {
+      const base = new URL(upstreamBase);
+      const req = httpGet(
+        {
+          hostname: base.hostname,
+          port: base.port,
+          path: "/api/v1/customer/activity?",
+          method: "GET",
+          headers: upstreamHeaders(mintCustomer(devUpstreamSubject))
+        },
+        (res) => {
+          let body = "";
+          res.setEncoding("utf8");
+          res.on("data", (chunk) => { body += chunk; });
+          res.on("end", () => resolve({ status: res.statusCode, body: JSON.parse(body) }));
+        }
+      );
+      req.on("error", reject);
+    });
+    assert.equal(rawQuestion.body.code, "CAPABILITY_DENIED");
+    assert.equal(rawQuestion.status, 404);
     // The check command surface stays contract-only: a well-formed POST —
     // valid token, declared headers, Idempotency-Key, JSON body — can never
     // reach a handler, on the collection, the preview, or either member
@@ -1429,10 +1461,18 @@ describe("miniapp chain fail-closed paths", () => {
     const devUpstreamProfile = await profileDirectory.viewFor(devUpstreamSubject);
     assert.notEqual(tgProfile.customerRef, devUpstreamProfile.customer_ref);
     assert.deepEqual(tgProfile.apiAccess, apiAccessView);
-    assert.deepEqual(
-      await okGet("/bff/kyc/status", telegram.cookie),
-      await expectedKycView(telegramUpstreamSubject)
-    );
+    // The telegram subject's local submission from the lifecycle test owns
+    // its read path — the status answers the stored application, not the
+    // upstream directory verdict.
+    const tgKyc = await okGet("/bff/kyc/status", telegram.cookie);
+    assert.equal(tgKyc.mode, "test");
+    assert.equal(tgKyc.provider, "simulator");
+    assert.equal(tgKyc.state, "submitted");
+    assert.equal(tgKyc.sessionKyc, "kyc-gated");
+    assert.equal(tgKyc.canSubmit, false);
+    assert.equal(typeof tgKyc.submittedAt, "number");
+    assert.equal(typeof tgKyc.reviewDeadline, "number");
+    assert.ok(tgKyc.reviewDeadline > tgKyc.submittedAt);
     assert.deepEqual(
       await okGet("/bff/sessions", telegram.cookie),
       await expectedSessionsView(telegramUpstreamSubject)
@@ -1684,6 +1724,7 @@ describe("miniapp chain degrade and recovery", () => {
         { cookie: devVerified.cookie }
       );
       assert.equal(outageSupport.status, 201);
+      outageSupportView = await readJson(outageSupport);
       // The read-mark POST consults upstream on the verified session and
       // fails closed with the sibling *_unavailable shape.
       const markRead = await postMiniapp(
@@ -1729,9 +1770,15 @@ describe("miniapp chain degrade and recovery", () => {
       await okGet("/bff/sessions", devVerified.cookie),
       await expectedSessionsView(devUpstreamSubject)
     );
+    const recoveredSupport = await okGet("/bff/support/requests", devVerified.cookie);
+    const recoveredUpstream = await expectedSupportList(devUpstreamSubject);
     assert.deepEqual(
-      await okGet("/bff/support/requests", devVerified.cookie),
-      await expectedSupportList(devUpstreamSubject)
+      recoveredSupport.requests.slice(-recoveredUpstream.requests.length),
+      recoveredUpstream.requests
+    );
+    assert.deepEqual(
+      recoveredSupport.requests.slice(0, recoveredSupport.requests.length - recoveredUpstream.requests.length).map((row) => row.id),
+      [outageSupportView.id, secondSupportView.id, supportRequest.id]
     );
     const profile = await okGet("/bff/profile", devVerified.cookie);
     assert.deepEqual(profile.apiAccess, apiAccessView);

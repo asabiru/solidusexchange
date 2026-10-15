@@ -11,12 +11,16 @@ import {
   getAuthStatus,
   getCheck,
   getChecks,
+  getCustody,
+  getCustodyIncident,
   getCustomers,
   getDashboard,
   getFraudAlerts,
   getHealth,
   getInvestigations,
   getKycCases,
+  getLedger,
+  getLedgerJournal,
   getOperatorAudit,
   getOperatorQueue,
   getOperatorQueueItem,
@@ -38,12 +42,15 @@ import {
   type ApprovalsPayload,
   type AuditPayload,
   type ChecksPayload,
+  type CustodyIntentSummary,
+  type CustodyPayload,
   type CustomersPayload,
   type DashboardPayload,
   type FraudPayload,
   type HealthPayload,
   type InvestigationsPayload,
   type KycPayload,
+  type LedgerPayload,
   type OperatorAuditPayload,
   type OperatorQueuePayload,
   type OperatorSubjectsPayload,
@@ -63,11 +70,18 @@ import type {
   CheckStatus,
   CheckTimelineEvent,
   CustomerRow,
+  CustodyKeyRecord,
+  CustodyTier,
+  CustodyWatcherIncident,
   EvidenceItem,
   FraudAlert,
   InvestigationCase,
   InvestigationTimelineEvent,
   KycCase,
+  LedgerJournal,
+  LedgerJournalEntry,
+  LedgerJournalType,
+  LedgerTrialRow,
   Metric,
   QueueRow,
   SupportTicket,
@@ -116,6 +130,7 @@ import {
   checkStatusKeyOf,
   checkStatusOf,
   countToward,
+  custodyIncidentStatusKeyOf,
   intOf,
   operatorAccountStatusKeyOf,
   operatorActivityKindKeyOf,
@@ -2844,6 +2859,373 @@ export function WithdrawalsView({ query, data, focusRef }: { query: string; data
   );
 }
 
+export function LedgerJournalDetail({ item }: { item: LedgerJournal }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <header className="panel-heading">
+        <div><h2>{textOf(item.id)}</h2><p className="hash-value">{textOf(item.journalId)}</p></div>
+        <Status tone={toneOf(item.tone)}>{textOf(item.status)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("ledger.journalType")}</dt><dd>{textOf(item.journalType)}</dd></div>
+        <div><dt>{t("ledger.legalEntity")}</dt><dd>{textOf(item.legalEntityId)}</dd></div>
+        <div><dt>{t("ledger.actor")}</dt><dd>{textOf(item.actorType)} · {textOf(item.actorId)}</dd></div>
+        <div><dt>{t("ledger.source")}</dt><dd>{textOf(item.sourceType)} · {textOf(item.sourceReference)}</dd></div>
+        <div><dt>{t("ledger.causation")}</dt><dd className="hash-value">{item.causationId ? textOf(item.causationId) : t("ledger.causationNone")}</dd></div>
+        <div><dt>{t("ledger.idempotencyKey")}</dt><dd>{textOf(item.idempotencyKey)}</dd></div>
+        <div><dt>{t("ledger.correlationId")}</dt><dd>{textOf(item.correlationId)}</dd></div>
+        <div><dt>{t("ledger.postingRule")}</dt><dd>{textOf(item.postingRuleVersion)} · {textOf(item.policyVersion)}</dd></div>
+        <div><dt>{t("ledger.effectiveAt")}</dt><dd>{textOf(item.effectiveAt)}</dd></div>
+        <div><dt>{t("ledger.commandDigest")}</dt><dd className="hash-value">{textOf(item.commandDigest)}</dd></div>
+        <div><dt>{t("common.auditEvidence")}</dt><dd className="hash-value">{textOf(item.auditEvidenceDigest)}</dd></div>
+      </dl>
+      <h3 className="detail-section-title">{t("ledger.entries")}</h3>
+      <TableShell label={t("ledger.entries")}>
+        <table>
+          <thead><tr><th scope="col">{t("ledger.side")}</th><th scope="col">{t("ledger.account")}</th><th scope="col">{t("ledger.amount")}</th></tr></thead>
+          <tbody>
+            {rowsOf<LedgerJournalEntry>(item.entries).map((entry, index) => (
+              <tr key={`${textOf(entry.entryId)}:${index}`}>
+                <td><Status tone={entry.side === "DEBIT" ? "info" : "neutral"}>{textOf(entry.side)}</Status></td>
+                <td>
+                  {textOf(entry.definitionCode)}
+                  <small className="cell-note hash-value">{textOf(entry.accountId)}</small>
+                </td>
+                <td className="numeric">{textOf(entry.amount)} {textOf(entry.assetCode)}</td>
+              </tr>
+            ))}
+            {!rowsOf<LedgerJournalEntry>(item.entries).length && (
+              <tr><td colSpan={3}><div className="empty">{t("ledger.entriesEmpty")}</div></td></tr>
+            )}
+          </tbody>
+        </table>
+      </TableShell>
+      <div className="safe-action">
+        <strong>{t("ledger.readOnlyTitle")}</strong>
+        <p>{t("ledger.readOnlyNote")}</p>
+      </div>
+    </>
+  );
+}
+
+export function LedgerView({ query, data }: { query: string; data: LedgerPayload }) {
+  const { t, count } = useI18n();
+  const journalTypes = arrayOf<LedgerJournalType>(recordOf(data).journalTypes);
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [journals, setJournals] = useState<readonly LedgerJournal[]>(rowsOf<LedgerJournal>(recordOf(data).journals));
+  const [exportState, setExportState] = useState<"idle" | "loading" | "failed">("idle");
+  const [selectedId, setSelectedId] = useState(textOf(journals[0]?.id, ""));
+  const [detail, setDetail] = useState<LedgerJournal | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+  const trialBalance = rowsOf<LedgerTrialRow>(recordOf(data).trialBalance);
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return journals;
+    return journals.filter((journal) =>
+      [journal.id, journal.journalId, journal.journalType, journal.sourceReference, journal.actorId]
+        .some((value) => textOf(value, "").toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [journals, query]);
+
+  function applyFilter(next: string) {
+    setTypeFilter(next);
+    setExportState("loading");
+    getLedger(next === "all" ? undefined : (next as LedgerJournalType))
+      .then((payload) => {
+        const rows = rowsOf<LedgerJournal>(recordOf(payload).journals);
+        setJournals(rows);
+        setSelectedId((current) =>
+          rows.some((journal) => journal.id === current) ? current : textOf(rows[0]?.id, "")
+        );
+        setExportState("idle");
+      })
+      .catch(() => setExportState("failed"));
+  }
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setDetailState("loading");
+    setDetail(undefined);
+    getLedgerJournal(selectedId)
+      .then((payload) => {
+        if (!active) return;
+        setDetail(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
+  return (
+    <>
+      <PageHeading title={t("screen.ledger")} description={t("ledger.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("ledger.queueTitle")}</h2><p>{t("ledger.count", { count: count(visible.length) })}</p></div>
+            <div className="audit-actions">
+              <select
+                className="check-filter"
+                value={typeFilter}
+                disabled={exportState === "loading"}
+                onChange={(event) => applyFilter(event.target.value)}
+                aria-label={t("ledger.filterLabel")}
+                title={t("ledger.filterLabel")}
+              >
+                <option value="all">{t("ledger.type.all")}</option>
+                {journalTypes.map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+              <Status tone="info">{t("common.readOnly")}</Status>
+            </div>
+          </header>
+          <LiveStatus
+            message={exportState === "loading" ? t("ledger.loadingList") : detailState === "loading" ? t("ledger.loadingDetail") : ""}
+          />
+          {exportState === "failed" && (
+            <div className="preview-error" role="alert">{t("ledger.listFailed")}</div>
+          )}
+          <TableShell label={t("ledger.queueTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("ledger.journal")}</th><th scope="col">{t("ledger.journalType")}</th><th scope="col">{t("ledger.source")}</th><th scope="col">{t("ledger.actor")}</th><th scope="col">{t("ledger.effectiveAt")}</th></tr></thead>
+              <tbody>
+                {visible.map((journal, index) => (
+                  <tr key={`${textOf(journal.id)}:${index}`} data-selected={journal.id === selectedId}>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        aria-current={journal.id === selectedId ? "true" : undefined}
+                        onClick={() => setSelectedId(textOf(journal.id, ""))}
+                      >
+                        {textOf(journal.id)}
+                      </button>
+                      <small className="cell-note hash-value">{textOf(journal.journalId).slice(0, 13)}…</small>
+                    </td>
+                    <td><Status tone={toneOf(journal.tone)}>{textOf(journal.journalType)}</Status></td>
+                    <td>{textOf(journal.sourceType)}<small className="cell-note">{textOf(journal.sourceReference)}</small></td>
+                    <td>{textOf(journal.actorType)}<small className="cell-note">{textOf(journal.actorId)}</small></td>
+                    <td>{textOf(journal.effectiveAt)}</td>
+                  </tr>
+                ))}
+                {!visible.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("ledger.empty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+          <h3 className="detail-section-title">{t("ledger.trialBalance")}</h3>
+          <TableShell label={t("ledger.trialBalance")}>
+            <table>
+              <thead><tr><th scope="col">{t("ledger.account")}</th><th scope="col">{t("ledger.owner")}</th><th scope="col">{t("ledger.debits")}</th><th scope="col">{t("ledger.credits")}</th><th scope="col">{t("ledger.normalBalance")}</th></tr></thead>
+              <tbody>
+                {trialBalance.map((row, index) => (
+                  <tr key={`${textOf(row.accountId)}:${index}`}>
+                    <td>{textOf(row.definitionCode)}<small className="cell-note hash-value">{textOf(row.accountId).slice(0, 13)}…</small></td>
+                    <td>{textOf(row.ownerReference)}</td>
+                    <td className="numeric">{textOf(row.debitTurnover)}</td>
+                    <td className="numeric">{textOf(row.creditTurnover)}</td>
+                    <td className="numeric">{textOf(row.normalBalance)} {textOf(row.assetCode)}</td>
+                  </tr>
+                ))}
+                {!trialBalance.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("ledger.trialEmpty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <aside className="panel case-detail">
+          {detailState === "loading" && <div className="empty">{t("ledger.loadingDetail")}</div>}
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">{t("ledger.failed")}</div>
+          )}
+          {detail && <LedgerJournalDetail item={detail} />}
+        </aside>
+      </section>
+    </>
+  );
+}
+
+export function CustodyIncidentDetail({ item }: { item: CustodyWatcherIncident }) {
+  const { t } = useI18n();
+  return (
+    <>
+      <header className="panel-heading">
+        <div><h2>{textOf(item.id)}</h2><p className="hash-value">{textOf(item.txId)}</p></div>
+        <Status tone={toneOf(item.tone)}>{enumText(t, custodyIncidentStatusKeyOf(item.status), item.status)}</Status>
+      </header>
+      <dl className="detail-list">
+        <div><dt>{t("custody.severity")}</dt><dd><Status tone="danger">{textOf(item.severity)}</Status></dd></div>
+        <div><dt>{t("custody.incidentReason")}</dt><dd>{textOf(item.reason)}</dd></div>
+        <div><dt>{t("custody.network")}</dt><dd>{textOf(item.network)}</dd></div>
+        <div><dt>{t("custody.amount")}</dt><dd className="numeric">{textOf(item.amount)} {textOf(item.asset)}</dd></div>
+        <div><dt>{t("custody.destinationRef")}</dt><dd>{textOf(item.destinationReference)}</dd></div>
+        <div><dt>{t("custody.observedAt")}</dt><dd>{textOf(item.observedAt)}</dd></div>
+        <div><dt>{t("custody.frozen")}</dt><dd>{item.frozenNetwork ? t("custody.frozenYes") : t("custody.frozenNo")}</dd></div>
+      </dl>
+      <div className="safe-action">
+        <strong>{t("custody.readOnlyTitle")}</strong>
+        <p>{t("custody.readOnlyNote")}</p>
+      </div>
+    </>
+  );
+}
+
+export function CustodyView({ query, data }: { query: string; data: CustodyPayload }) {
+  const { t, count } = useI18n();
+  const incidents = rowsOf<CustodyWatcherIncident>(recordOf(data).incidents);
+  const tiers = rowsOf<CustodyTier>(recordOf(data).tiers);
+  const keys = rowsOf<CustodyKeyRecord>(recordOf(data).keyInventory);
+  const intents = rowsOf<CustodyIntentSummary>(recordOf(data).intents);
+  const [selectedId, setSelectedId] = useState(textOf(incidents[0]?.id, ""));
+  const [detail, setDetail] = useState<CustodyWatcherIncident | undefined>();
+  const [detailState, setDetailState] = useState<"idle" | "loading" | "failed">("idle");
+
+  const visible = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ru");
+    if (!normalized) return incidents;
+    return incidents.filter((incident) =>
+      [incident.id, incident.txId, incident.reason, incident.network, incident.asset]
+        .some((value) => textOf(value, "").toLocaleLowerCase("ru").includes(normalized))
+    );
+  }, [incidents, query]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setDetailState("loading");
+    setDetail(undefined);
+    getCustodyIncident(selectedId)
+      .then((payload) => {
+        if (!active) return;
+        setDetail(payload);
+        setDetailState("idle");
+      })
+      .catch(() => {
+        if (active) setDetailState("failed");
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedId]);
+
+  return (
+    <>
+      <PageHeading title={t("screen.custody")} description={t("custody.description")} />
+      <section className="grid risk-grid">
+        <article className="panel">
+          <header className="panel-heading">
+            <div><h2>{t("custody.incidentsTitle")}</h2><p>{t("custody.incidentsCount", { count: count(visible.length) })}</p></div>
+            <Status tone="info">{t("common.readOnly")}</Status>
+          </header>
+          <TableShell label={t("custody.incidentsTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("custody.incident")}</th><th scope="col">{t("custody.incidentReason")}</th><th scope="col">{t("custody.network")}</th><th scope="col">{t("custody.amount")}</th><th scope="col">{t("custody.status")}</th></tr></thead>
+              <tbody>
+                {visible.map((incident, index) => (
+                  <tr key={`${textOf(incident.id)}:${index}`} data-selected={incident.id === selectedId}>
+                    <td>
+                      <button
+                        className="table-link"
+                        type="button"
+                        aria-current={incident.id === selectedId ? "true" : undefined}
+                        onClick={() => setSelectedId(textOf(incident.id, ""))}
+                      >
+                        {textOf(incident.id)}
+                      </button>
+                      <small className="cell-note hash-value">{textOf(incident.txId)}</small>
+                    </td>
+                    <td>{textOf(incident.reason)}</td>
+                    <td>{textOf(incident.network)}</td>
+                    <td className="numeric">{textOf(incident.amount)} {textOf(incident.asset)}</td>
+                    <td><Status tone={toneOf(incident.tone)}>{enumText(t, custodyIncidentStatusKeyOf(incident.status), incident.status)}</Status></td>
+                  </tr>
+                ))}
+                {!visible.length && (
+                  <tr><td colSpan={5}><div className="empty">{t("custody.incidentsEmpty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+          <h3 className="detail-section-title">{t("custody.tiersTitle")}</h3>
+          <TableShell label={t("custody.tiersTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("custody.tier")}</th><th scope="col">{t("custody.signingMode")}</th><th scope="col">{t("custody.delay")}</th><th scope="col">{t("custody.share")}</th></tr></thead>
+              <tbody>
+                {tiers.map((tier, index) => (
+                  <tr key={`${textOf(tier.id)}:${index}`}>
+                    <td><Status tone={tier.id === "cold" ? "neutral" : tier.id === "warm" ? "info" : "warning"}>{textOf(tier.id)}</Status></td>
+                    <td>{textOf(tier.signingMode)}</td>
+                    <td className="numeric">{t("custody.delayValue", { seconds: textOf(String(tier.timeDelaySeconds), "0") })}</td>
+                    <td className="numeric">{textOf(tier.targetShare)}</td>
+                  </tr>
+                ))}
+                {!tiers.length && (
+                  <tr><td colSpan={4}><div className="empty">{t("custody.tiersEmpty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+          <h3 className="detail-section-title">{t("custody.keysTitle")}</h3>
+          <TableShell label={t("custody.keysTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("custody.keyId")}</th><th scope="col">{t("custody.keyPurpose")}</th><th scope="col">{t("custody.keyChain")}</th><th scope="col">{t("custody.keyStatus")}</th></tr></thead>
+              <tbody>
+                {keys.map((record, index) => (
+                  <tr key={`${textOf(record.keyId)}:${index}`}>
+                    <td>{textOf(record.keyId)}<small className="cell-note">{textOf(record.hsmSerial)} · {textOf(record.ceremonyId)}</small></td>
+                    <td>{textOf(record.purpose)}</td>
+                    <td>{textOf(record.chain)} · {textOf(record.tier)} · {textOf(record.environment)}</td>
+                    <td><Status tone={record.status === "active" ? "success" : "neutral"}>{textOf(record.status)}</Status></td>
+                  </tr>
+                ))}
+                {!keys.length && (
+                  <tr><td colSpan={4}><div className="empty">{t("custody.keysEmpty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+          <h3 className="detail-section-title">{t("custody.intentsTitle")}</h3>
+          <TableShell label={t("custody.intentsTitle")}>
+            <table>
+              <thead><tr><th scope="col">{t("custody.intent")}</th><th scope="col">{t("custody.amount")}</th><th scope="col">{t("custody.network")}</th><th scope="col">{t("custody.expires")}</th></tr></thead>
+              <tbody>
+                {intents.map((intent, index) => (
+                  <tr key={`${textOf(intent.id)}:${index}`}>
+                    <td>{textOf(intent.id)}<small className="cell-note">{textOf(intent.intentId)} · {textOf(intent.status)}</small></td>
+                    <td className="numeric">{textOf(intent.amount)} {textOf(intent.asset)}</td>
+                    <td>{textOf(intent.network)}</td>
+                    <td>{textOf(intent.expiresAt)}</td>
+                  </tr>
+                ))}
+                {!intents.length && (
+                  <tr><td colSpan={4}><div className="empty">{t("custody.intentsEmpty")}</div></td></tr>
+                )}
+              </tbody>
+            </table>
+          </TableShell>
+        </article>
+        <aside className="panel case-detail">
+          {detailState === "loading" && <div className="empty">{t("custody.loadingDetail")}</div>}
+          {detailState === "failed" && (
+            <div className="preview-error" role="alert">{t("custody.failed")}</div>
+          )}
+          {detail && <CustodyIncidentDetail item={detail} />}
+        </aside>
+      </section>
+    </>
+  );
+}
+
 // Timeline entries link into the detail views only where that entity kind has
 // a dedicated screen and the operator can read it; everything else renders as
 // a plain reference so the feed stays read-only and permission-aware.
@@ -3013,6 +3395,8 @@ interface WorkspaceData {
   checks?: ChecksPayload;
   support?: SupportTicketsPayload;
   withdrawals?: WithdrawalsPayload;
+  ledger?: LedgerPayload;
+  custody?: CustodyPayload;
   kyc?: KycPayload;
   operatorSubjects?: OperatorSubjectsPayload;
   operatorQueue?: OperatorQueuePayload;
@@ -3170,12 +3554,14 @@ export function App() {
         throw error;
       }
 
-      const [dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
+      const [dashboard, customers, checks, support, withdrawals, ledger, custody, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports] = await Promise.all([
         getDashboard(),
         getCustomers(),
         hasCapability(session, "checks:read") ? getChecks() : Promise.resolve(undefined),
         hasCapability(session, "support:read") ? getSupportTickets() : Promise.resolve(undefined),
         hasCapability(session, "custody:read") ? getWithdrawals() : Promise.resolve(undefined),
+        hasCapability(session, "finance:read") ? getLedger() : Promise.resolve(undefined),
+        hasCapability(session, "custody:read") ? getCustody() : Promise.resolve(undefined),
         hasCapability(session, "kyc:read") ? getKycCases() : Promise.resolve(undefined),
         // Degrade-tolerant: a denied/unavailable/unconfigured operator read resolves
         // to undefined and the views fall back to the demo rows instead of failing
@@ -3195,7 +3581,7 @@ export function App() {
       setAccess({
         status: "ready",
         health,
-        data: { session, dashboard, customers, checks, support, withdrawals, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports }
+        data: { session, dashboard, customers, checks, support, withdrawals, ledger, custody, kyc, operatorSubjects, operatorQueue, operatorQueueAml, operatorQueueTickets, operatorAudit, aml, investigations, fraud, approvals, audit, reports }
       });
     } catch (error) {
       setAccess({
@@ -3477,7 +3863,13 @@ export function App() {
               operatorQueue={access.data.operatorQueueTickets}
             />
           )}
-          {screen === "withdrawal" && access.data.withdrawals && (
+          {screen === "ledger" && access.data.ledger && (
+        <LedgerView query={query} data={access.data.ledger} />
+      )}
+      {screen === "custody" && access.data.custody && (
+        <CustodyView query={query} data={access.data.custody} />
+      )}
+      {screen === "withdrawal" && access.data.withdrawals && (
             <WithdrawalsView
               query={query}
               data={access.data.withdrawals}

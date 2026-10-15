@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -309,7 +309,10 @@ test("the ORDER_PAIRS / INSTRUMENTS drift check throws at module load", () => {
   mkdirSync(coreDir, { recursive: true });
   const repoBridge = fileURLToPath(new URL("../src/exchange-orders.mjs", import.meta.url));
   const repoCore = fileURLToPath(new URL("../../matching-core/src", import.meta.url));
-  cpSync(repoBridge, join(bridgeDir, "exchange-orders.mjs"));
+  // cpSync's Windows override path (fs.cp native binding) fails to overwrite
+  // a destination whose parent tree came from mkdtempSync under a non-ASCII
+  // source path — copyFileSync keeps the file-to-file semantics everywhere.
+  copyFileSync(repoBridge, join(bridgeDir, "exchange-orders.mjs"));
   for (const name of [
     "book.mjs",
     "decimal.mjs",
@@ -320,7 +323,7 @@ test("the ORDER_PAIRS / INSTRUMENTS drift check throws at module load", () => {
     "journal-store.mjs",
     "snapshot.mjs"
   ]) {
-    cpSync(join(repoCore, name), join(coreDir, name));
+    copyFileSync(join(repoCore, name), join(coreDir, name));
   }
   const entry = join(root, "entry.mjs");
   writeFileSync(entry, `import ${JSON.stringify(`file://${join(bridgeDir, "exchange-orders.mjs")}`)};\n`);
@@ -336,7 +339,7 @@ test("the ORDER_PAIRS / INSTRUMENTS drift check throws at module load", () => {
     const drifted = spawnSync(process.execPath, [entry], { encoding: "utf8" });
     assert.notEqual(drifted.status, 0);
     assert.match(drifted.stderr, /instrument registry drifted/u);
-    cpSync(join(repoCore, "instruments.mjs"), instrumentsPath);
+    copyFileSync(join(repoCore, "instruments.mjs"), instrumentsPath);
   }
 });
 

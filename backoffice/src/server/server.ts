@@ -35,6 +35,8 @@ import {
 } from "./controls.js";
 import { checkAccessEvent, checkStatuses, isCheckStatus } from "./checks.js";
 import { isSupportTicketStatus, supportAccessEvent, supportTicketStatuses } from "./support.js";
+import { custodyIncidentAccessEvent, custodyIncidentStatuses, isCustodyIncidentStatus } from "./custody.js";
+import { isLedgerJournalType, ledgerAccessEvent, ledgerJournalTypes } from "./ledger.js";
 import { isWithdrawalStatus, withdrawalAccessEvent, withdrawalStatuses } from "./withdrawals.js";
 import { isSubjectRef, readableSubjectKinds, subjectTimelineAccessEvent } from "./subjects.js";
 import { createProviderEvidenceSource } from "./provider-evidence.js";
@@ -95,6 +97,8 @@ const literalGetViews: ReadonlySet<string> = new Set([
   "/bff/api/checks",
   "/bff/api/support",
   "/bff/api/withdrawals",
+  "/bff/api/ledger",
+  "/bff/api/custody",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -110,6 +114,8 @@ const memberGetViewArms: readonly RegExp[] = [
   /^\/bff\/api\/checks\/[^/]+$/,
   /^\/bff\/api\/support\/[^/]+$/,
   /^\/bff\/api\/withdrawals\/[^/]+$/,
+  /^\/bff\/api\/ledger\/[^/]+$/,
+  /^\/bff\/api\/custody\/incidents\/[^/]+$/,
   /^\/bff\/api\/subjects\/[^/]+\/timeline$/,
   /^\/bff\/api\/reports\/[^/]+$/,
   /^\/bff\/api\/reports\/[^/]+\/export$/
@@ -124,7 +130,9 @@ const queryInputGetRoutes: ReadonlyMap<string, ReadonlySet<string>> = new Map([
   ["/bff/api/operator/audit", new Set(["cursor"])],
   ["/bff/api/checks", new Set(["status"])],
   ["/bff/api/support", new Set(["status"])],
-  ["/bff/api/withdrawals", new Set(["status"])]
+  ["/bff/api/withdrawals", new Set(["status"])],
+  ["/bff/api/ledger", new Set(["type"])],
+  ["/bff/api/custody", new Set(["status"])]
 ]);
 
 function securityHeaders(response: ServerResponse): void {
@@ -227,6 +235,10 @@ export const routeTemplates: readonly string[] = Object.freeze([
   "/bff/api/support/:ticketId",
   "/bff/api/withdrawals",
   "/bff/api/withdrawals/:withdrawalId",
+  "/bff/api/ledger",
+  "/bff/api/ledger/:journalId",
+  "/bff/api/custody",
+  "/bff/api/custody/incidents/:incidentId",
   "/bff/api/subjects/:ref/timeline",
   "/bff/api/kyc",
   "/bff/api/aml",
@@ -1495,6 +1507,108 @@ export function createBackofficeServer(
           audit.status.headHash
         );
         signed(response, `withdrawal:${intent.id}`, intent);
+        return;
+      }
+
+      const journalMatch = path.match(/^\/bff\/api\/ledger\/([^/]+)$/);
+      if (path === "/bff/api/ledger" || journalMatch) {
+        // Ledger journal views append audit events; SameSite=Strict still admits
+        // same-site subresource requests (e.g. other loopback ports).
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = await authorized(request, response, url, "finance:read");
+        if (!session) return;
+        if (!journalMatch) {
+          const typeFilters = url.searchParams.getAll("type");
+          if (!typeFilters.every(isLedgerJournalType)) {
+            json(response, 400, { error: "invalid_journal_type" });
+            return;
+          }
+          const wanted = new Set(typeFilters);
+          const journals = demoRepository.ledgerJournals();
+          signed(response, "ledger", {
+            journalTypes: ledgerJournalTypes,
+            journals: wanted.size === 0 ? journals : journals.filter((journal) => wanted.has(journal.journalType)),
+            trialBalance: demoRepository.ledgerTrialBalance()
+          });
+          return;
+        }
+        let journalId: string;
+        try {
+          journalId = decodeURIComponent(journalMatch[1]);
+        } catch {
+          json(response, 404, { error: "journal_not_found" });
+          return;
+        }
+        const journal = demoRepository.ledgerJournals().find((item) => item.id === journalId);
+        if (!journal) {
+          json(response, 404, { error: "journal_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          ledgerAccessEvent(`AUD-JRN-${randomUUID()}`, session.subject, journal),
+          audit.status.headHash
+        );
+        signed(response, `ledger:${journal.id}`, journal);
+        return;
+      }
+
+      const incidentMatch = path.match(/^\/bff\/api\/custody\/incidents\/([^/]+)$/);
+      if (path === "/bff/api/custody" || incidentMatch) {
+        const fetchSite = request.headers["sec-fetch-site"];
+        if (fetchSite !== undefined && fetchSite !== "same-origin" && fetchSite !== "none") {
+          json(response, 403, { error: "fetch_site_rejected" });
+          return;
+        }
+        const session = await authorized(request, response, url, "custody:read");
+        if (!session) return;
+        if (!incidentMatch) {
+          const statusFilters = url.searchParams.getAll("status");
+          if (!statusFilters.every(isCustodyIncidentStatus)) {
+            json(response, 400, { error: "invalid_custody_incident_status" });
+            return;
+          }
+          const wanted = new Set(statusFilters);
+          const incidents = demoRepository.custodyIncidents();
+          signed(response, "custody", {
+            tiers: demoRepository.custodyTiers(),
+            incidentStatuses: custodyIncidentStatuses,
+            incidents: wanted.size === 0 ? incidents : incidents.filter((incident) => wanted.has(incident.status)),
+            keyInventory: demoRepository.custodyKeyInventory(),
+            intents: demoRepository.withdrawalIntents().map((intent) => ({
+              id: intent.id,
+              intentId: intent.intentId,
+              asset: intent.asset,
+              amount: intent.amount,
+              network: intent.network,
+              status: intent.status,
+              expiresAt: intent.expiresAt
+            }))
+          });
+          return;
+        }
+        let incidentId: string;
+        try {
+          incidentId = decodeURIComponent(incidentMatch[1]);
+        } catch {
+          json(response, 404, { error: "custody_incident_not_found" });
+          return;
+        }
+        const incident = demoRepository.custodyIncidents().find((item) => item.id === incidentId);
+        if (!incident) {
+          json(response, 404, { error: "custody_incident_not_found" });
+          return;
+        }
+        const audit = await auditStore.snapshot();
+        await auditStore.append(
+          custodyIncidentAccessEvent(`AUD-CIN-${randomUUID()}`, session.subject, incident),
+          audit.status.headHash
+        );
+        signed(response, `custody-incident:${incident.id}`, incident);
         return;
       }
 

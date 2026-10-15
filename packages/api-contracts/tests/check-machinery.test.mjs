@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -24,11 +24,24 @@ function writeJson(directory, path, value) {
   writeFileSync(join(directory, path), `${JSON.stringify(value, null, 2)}\n`);
 }
 
+// fs.cpSync's native Windows binding hard-crashes the whole test subprocess
+// on directory copies — walk entries and copyFileSync files instead.
+function copyTree(source, destination) {
+  if (statSync(source).isDirectory()) {
+    mkdirSync(destination, { recursive: true });
+    for (const entry of readdirSync(source)) {
+      copyTree(join(source, entry), join(destination, entry));
+    }
+  } else {
+    copyFileSync(source, destination);
+  }
+}
+
 function withScratch(mutate) {
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-machinery-"));
   try {
     for (const path of contractFiles) {
-      cpSync(join(root, path), join(scratch, path), { recursive: true });
+      copyTree(join(root, path), join(scratch, path));
     }
     mutate(scratch);
     return spawnSync(process.execPath, [checker, scratch], { encoding: "utf8" });

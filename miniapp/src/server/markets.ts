@@ -76,7 +76,8 @@ export function contractMarketsView(
       quoteScale: market.quote_scale,
       priceScale: market.price_scale,
       asOf: Date.parse(market.as_of),
-      posting: "none"
+      posting: "none",
+      depth: true
     }))
   };
 }
@@ -131,6 +132,8 @@ export function contractMarketDepthView(depth: ContractMarketDepth): MarketDepth
   };
 }
 
+// Local rows mark depth:false — the member read is never fabricated, so a
+// row click would 404. The sheet renders them without the dead-end action.
 const syntheticMarkets: readonly MarketView[] = Object.freeze([
   Object.freeze({
     instrument: "USDT/RUB",
@@ -148,7 +151,8 @@ const syntheticMarkets: readonly MarketView[] = Object.freeze([
     quoteScale: 2,
     priceScale: 8,
     asOf: Date.parse("2026-10-02T14:10:00.000Z"),
-    posting: "none"
+    posting: "none",
+    depth: false
   }),
   Object.freeze({
     instrument: "TON/USDT",
@@ -166,7 +170,8 @@ const syntheticMarkets: readonly MarketView[] = Object.freeze([
     quoteScale: 6,
     priceScale: 8,
     asOf: Date.parse("2026-10-07T10:45:00.000Z"),
-    posting: "none"
+    posting: "none",
+    depth: false
   }),
   Object.freeze({
     instrument: "TON/RUB",
@@ -180,7 +185,8 @@ const syntheticMarkets: readonly MarketView[] = Object.freeze([
     quoteScale: 2,
     priceScale: 8,
     asOf: Date.parse("2026-10-07T10:45:00.000Z"),
-    posting: "none"
+    posting: "none",
+    depth: false
   })
 ]);
 

@@ -202,7 +202,9 @@ describe("Mini App accessibility semantics", () => {
   });
 
   it("closes sheets on native Escape cancellation without submitting anything", () => {
-    assert.match(ui, /onCancel=\{\(event\) => \{\s*event.preventDefault\(\);\s*onClose\(\);/);
+    // Escape routes through requestClose so the panel animates out before
+    // onClose unmounts; nothing is submitted on the way.
+    assert.match(ui, /onCancel=\{\(event\) => \{\s*event.preventDefault\(\);\s*requestClose\(\);/);
   });
 
   it("traps Tab and Shift+Tab in visible enabled sheet controls", () => {
@@ -284,10 +286,12 @@ describe("Mini App accessibility semantics", () => {
 
   it("confirms device-session sign-outs, names each action and never renders handles", () => {
     assert.match(sheets, /function SessionsSheet/);
-    assert.match(sheets, /session\.current \? null : \(\s*<button/);
+    // Upstream-listed sessions carry revocable:false: the sign-out action is
+    // rendered only for handles the local revoke commands actually resolve.
+    assert.match(sheets, /session\.current \|\| session\.revocable !== true \? null : \(\s*<button/);
     assert.match(sheets, /aria-label=\{t\("sessions\.signOutLabel"/);
     assert.match(sheets, /onClick=\{\(\) => ask\(\{ scope: "single", session \}\)\}/);
-    assert.match(sheets, /onClick=\{\(\) => ask\(\{ scope: "others", count: others \}\)\}/);
+    assert.match(sheets, /onClick=\{\(\) => ask\(\{ scope: "others", count: revocableOthers \}\)\}/);
     assert.match(sheets, /className="cta cta--danger" aria-describedby=\{confirmId\}/);
     assert.match(sheets, /if \(pending\) cancelButton\.current\?\.focus\(\)/);
     assert.match(sheets, /opener\.current\?\.isConnected\) opener\.current\.focus\(\)/);

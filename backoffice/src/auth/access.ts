@@ -3,6 +3,7 @@ export type Capability =
   | "customers:read"
   | "checks:read"
   | "custody:read"
+  | "finance:read"
   | "support:read"
   | "kyc:read"
   | "aml:read"
@@ -43,6 +44,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "checks:read",
       "custody:read",
+      "finance:read",
       "support:read",
       "kyc:read",
       "aml:read",
@@ -75,6 +77,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "checks:read",
       "custody:read",
+      "finance:read",
       "support:read",
       "kyc:read",
       "aml:read",
@@ -107,6 +110,7 @@ export const roleProfiles: readonly RoleProfile[] = [
       "customers:read",
       "checks:read",
       "custody:read",
+      "finance:read",
       "support:read",
       "kyc:read",
       "aml:read",

@@ -7,8 +7,10 @@ import { validateChart, validatePostingRules } from "../src/ledger.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Windows checkouts carry CRLF line endings; every evidence pattern and
+// migration regex below matches against a normalized LF view instead.
 function read(path) {
-  return readFileSync(join(root, path), "utf8");
+  return readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n");
 }
 
 function readJson(path) {
@@ -16,7 +18,7 @@ function readJson(path) {
 }
 
 function readRepositoryFile(path) {
-  return readFileSync(join(root, "..", "..", path), "utf8");
+  return readFileSync(join(root, "..", "..", path), "utf8").replaceAll("\r\n", "\n");
 }
 
 function assert(condition, message) {

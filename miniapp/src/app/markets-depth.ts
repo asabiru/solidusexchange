@@ -1,7 +1,7 @@
 import { isDecimalString } from "../shared/decimal.js";
 import type { MarketDepthView, MarketLastTradeView, MarketLevelView, MarketsView, MarketView } from "../shared/api.js";
 import { contractQuotePair, quotePriceScale } from "../shared/quote.js";
-import { boundedRows, hasExactKeys, isEpochMs, isKycFlag, isNonNegativeInt, isRecord, servedRowsLimit, type ServedKycRows } from "./served-views.js";
+import { boundedRows, hasContractKeys, hasExactKeys, isEpochMs, isKycFlag, isNonNegativeInt, isRecord, servedRowsLimit, type ServedKycRows } from "./served-views.js";
 
 /**
  * The contract caps the served ladder: `depthLevels` reports the deeper
@@ -54,7 +54,8 @@ const marketViewKeys = [
 ] as const;
 
 function isMarketRow(value: unknown): value is MarketView {
-  if (!isRecord(value) || !hasExactKeys(value, marketViewKeys)) return false;
+  if (!isRecord(value) || !hasContractKeys(value, marketViewKeys, ["depth"])) return false;
+  if (value.depth !== undefined && typeof value.depth !== "boolean") return false;
   if (typeof value.instrument !== "string") return false;
   const pairDef = contractQuotePair(value.instrument);
   if (pairDef === undefined) return false;

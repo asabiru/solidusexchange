@@ -3,7 +3,7 @@ import { generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { connect, createServer as createNetServer, type AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { platform, tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -361,6 +361,10 @@ describe("Backoffice BFF security headers on every route", () => {
       "/bff/api/support/:ticketId": () => get("/bff/api/support/SUP-384120"),
       "/bff/api/withdrawals": () => get("/bff/api/withdrawals"),
       "/bff/api/withdrawals/:withdrawalId": () => get("/bff/api/withdrawals/WDR-991804"),
+      "/bff/api/ledger": () => get("/bff/api/ledger"),
+      "/bff/api/ledger/:journalId": () => get("/bff/api/ledger/JRN-000501"),
+      "/bff/api/custody": () => get("/bff/api/custody"),
+      "/bff/api/custody/incidents/:incidentId": () => get("/bff/api/custody/incidents/CINC-001"),
       "/bff/api/subjects/:ref/timeline": () => get("/bff/api/subjects/sim-alina-mironova/timeline"),
       "/bff/api/kyc": () => get("/bff/api/kyc"),
       "/bff/api/operator/admin": () => get("/bff/api/operator/admin"),
@@ -557,8 +561,12 @@ describe("Backoffice Vite document security headers", () => {
       await vite.listen();
       const { port } = vite.httpServer?.address() as AddressInfo;
       const base = `http://127.0.0.1:${port}`;
+      // The probe must name a file that exists but sits outside the Vite
+      // root, so the fs allowlist answers 403 instead of the SPA fallback's
+      // 200 — /etc/passwd does not exist on Windows.
+      const outsideRoot = platform() === "win32" ? "/@fs/C:/Windows/win.ini" : "/@fs/etc/passwd";
       const responses: [number, Response][] = [
-        [403, await fetch(`${base}/@fs/etc/passwd`)],
+        [403, await fetch(`${base}${outsideRoot}`)],
         [404, await fetch(`${base}/`, { method: "POST" })],
         [204, await fetch(`${base}/`, { method: "OPTIONS", headers: { "access-control-request-method": "POST" } })],
         [500, await fetch(`${base}/bff/health`)]

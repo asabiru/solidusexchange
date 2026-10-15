@@ -154,6 +154,7 @@ assert_out_of_order_history_rejected() {
     "0010_ledger_finite_timestamp_guard.sql"
     "0011_ledger_migration_sequence_guard.sql"
     "0012_ledger_command_digest_uniqueness.sql"
+    "0013_ledger_representation_guard.sql"
   )
 
   drop_out_of_order_database

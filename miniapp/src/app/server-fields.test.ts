@@ -469,14 +469,22 @@ describe("served view validators", () => {
   it("adapts a valid sessions view and rejects drifted shapes", () => {
     const view = { mode: "test", sessions: [session] };
     assert.equal(sessionsViewOf(view)?.sessions.length, 1);
+    // Both served handle shapes are valid: upstream sess_* rows (read-only)
+    // and local ses_* rows (the only ones the revoke commands resolve).
+    const upstream = { ...session, revocable: false };
+    assert.equal(sessionsViewOf({ ...view, sessions: [upstream] })?.sessions.length, 1);
+    const local = { ...session, handle: `ses_${"0".repeat(32)}`, revocable: true };
+    assert.equal(sessionsViewOf({ ...view, sessions: [local] })?.sessions.length, 1);
     for (const corrupt of [
       { ...view, extra: true },
       { ...view, mode: "live" },
       { ...view, sessions: "nope" },
       { ...view, sessions: [{ ...session, extra: 1 }] },
       { ...view, sessions: [{ ...session, handle: "weird" }] },
+      { ...view, sessions: [{ ...session, handle: `sess_${"0".repeat(32)}` }] },
       { ...view, sessions: [{ ...session, client: "web" }] },
       { ...view, sessions: [{ ...session, current: "yes" }] },
+      { ...view, sessions: [{ ...session, revocable: "yes" }] },
       { ...view, sessions: [{ ...session, createdAt: "now" }] }
     ]) {
       assert.equal(sessionsViewOf(corrupt), undefined, JSON.stringify(corrupt).slice(0, 100));
@@ -541,6 +549,8 @@ describe("served view validators", () => {
     assert.equal(supportRequestsViewOf(view)?.total, 1);
     const withRef = { ...request, activityRef: { id: "act_1", kind: "session_login" } };
     assert.equal(supportRequestsViewOf({ ...view, requests: [withRef] })?.rows.length, 1);
+    const upstream = { ...request, id: "tck_0123456789abcdef01234567" };
+    assert.equal(supportRequestsViewOf({ ...view, requests: [upstream] })?.rows.length, 1);
     for (const corrupt of [
       { ...view, extra: true },
       { ...view, mode: "live" },

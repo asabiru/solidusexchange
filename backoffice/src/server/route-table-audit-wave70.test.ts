@@ -80,6 +80,8 @@ const queueStub: CustomerApiClient = {
 const checkId = demoRepository.chatChecks()[0].id;
 const ticketId = demoRepository.supportTickets()[0].id;
 const withdrawalId = demoRepository.withdrawalIntents()[0].id;
+const journalId = demoRepository.ledgerJournals()[0].id;
+const custodyIncidentId = demoRepository.custodyIncidents()[0].id;
 const customerId = demoRepository.customers()[0].id;
 const reportId = listReports(new Date(0).toISOString()).reports[0].id;
 const subjectRef = "syn-demo-subject";
@@ -103,6 +105,8 @@ const literalGetViews = [
   "/bff/api/checks",
   "/bff/api/support",
   "/bff/api/withdrawals",
+  "/bff/api/ledger",
+  "/bff/api/custody",
   "/bff/api/kyc",
   "/bff/api/aml",
   "/bff/api/investigations",
@@ -118,6 +122,8 @@ const memberGetViews = [
   `/bff/api/checks/${checkId}`,
   `/bff/api/support/${ticketId}`,
   `/bff/api/withdrawals/${withdrawalId}`,
+  `/bff/api/ledger/${journalId}`,
+  `/bff/api/custody/incidents/${custodyIncidentId}`,
   `/bff/api/subjects/${subjectRef}/timeline`,
   `/bff/api/reports/${reportId}`,
   `/bff/api/reports/${reportId}/export`
@@ -155,6 +161,8 @@ describe("wave-70 route-table audit: malformed member encodings", () => {
       ["/bff/api/checks/%", "check_not_found"],
       ["/bff/api/support/%", "ticket_not_found"],
       ["/bff/api/withdrawals/%", "withdrawal_not_found"],
+      ["/bff/api/ledger/%", "journal_not_found"],
+      ["/bff/api/custody/incidents/%", "custody_incident_not_found"],
       ["/bff/api/subjects/%/timeline", "subject_not_found"],
       ["/bff/api/reports/%", "report_not_found"],
       ["/bff/api/reports/%/export", "report_not_found"]

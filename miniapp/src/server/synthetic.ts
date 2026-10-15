@@ -262,7 +262,7 @@ function fees(): ProfileView["fees"] {
 function security(): ProfileView["security"] {
   return [
     { title: "Подтверждение действий", detail: "MFA и повторное подтверждение — в следующих версиях", status: "placeholder" },
-    { title: "Активные сессии", detail: "Управление сессиями появится позже", status: "placeholder" },
+    { title: "Активные сессии", detail: "Список входов — в «Устройства и сессии» профиля", status: "placeholder" },
     { title: "Whitelist адресов", detail: "24-часовая задержка для нового адреса — в разработке", status: "placeholder" }
   ];
 }

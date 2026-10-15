@@ -39,6 +39,7 @@
   --serif: "New York", Georgia, "Times New Roman", serif;
   --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in: cubic-bezier(0.3, 0, 0.8, 0.15);
   --safe-top: max(env(safe-area-inset-top), var(--tg-content-safe-area-inset-top, 0px));
   --safe-bottom: max(env(safe-area-inset-bottom), var(--tg-content-safe-area-inset-bottom, 0px));
 }
@@ -2058,11 +2059,19 @@ button.row:active:not(:disabled) {
   }
 
   .sheet[open] .sheet__panel {
-    animation: sheet-up 0.58s var(--spring) both;
+    animation: sheet-up 0.34s var(--ease-out) both;
   }
 
   .sheet[open]::backdrop {
-    animation: fade-in 0.3s ease both;
+    animation: fade-in 0.22s ease both;
+  }
+
+  .sheet[open][data-closing] .sheet__panel {
+    animation: sheet-down 0.2s var(--ease-in) both;
+  }
+
+  .sheet[open][data-closing]::backdrop {
+    animation: fade-out 0.18s ease both;
   }
 
   .tick {
@@ -2108,6 +2117,16 @@ button.row:active:not(:disabled) {
   }
 }
 
+@keyframes sheet-down {
+  from {
+    transform: none;
+  }
+
+  to {
+    transform: translateY(100%);
+  }
+}
+
 @keyframes fade-in {
   from {
     opacity: 0;
@@ -2115,6 +2134,16 @@ button.row:active:not(:disabled) {
 
   to {
     opacity: 1;
+  }
+}
+
+@keyframes fade-out {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
   }
 }
 

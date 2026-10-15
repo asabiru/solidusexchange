@@ -22,4 +22,7 @@ export type SheetRequest =
   | { kind: "markets" }
   | { kind: "trades" }
   | { kind: "orders" }
-  | { kind: "quotes" };
+  | { kind: "quotes" }
+  | { kind: "cards" }
+  | { kind: "requisites" }
+  | { kind: "documents" };

@@ -56,17 +56,30 @@ export function MarketsSheet({ close }: { close: () => void }) {
             <ul className="list" aria-label={t("markets.listLabel")}>
               {rows.map((market, index) => (
                 <li key={`${market.instrument}:${index}`}>
-                  <button type="button" className="row" onClick={() => show({ kind: "detail", instrument: market.instrument })}>
-                    <span className="row__main">
-                      <strong>{market.instrument}</strong>
-                      <span className="num">
-                        {market.bestBid !== null ? format.decimal(market.bestBid.price, { fractionDigits: market.priceScale }) : "—"}
-                        {" / "}
-                        {market.bestAsk !== null ? format.decimal(market.bestAsk.price, { fractionDigits: market.priceScale }) : "—"}
+                  {market.depth === true ? (
+                    <button type="button" className="row" onClick={() => show({ kind: "detail", instrument: market.instrument })}>
+                      <span className="row__main">
+                        <strong>{market.instrument}</strong>
+                        <span className="num">
+                          {market.bestBid !== null ? format.decimal(market.bestBid.price, { fractionDigits: market.priceScale }) : "—"}
+                          {" / "}
+                          {market.bestAsk !== null ? format.decimal(market.bestAsk.price, { fractionDigits: market.priceScale }) : "—"}
+                        </span>
+                      </span>
+                      <Icon name="chevron-right" size="sm" />
+                    </button>
+                  ) : (
+                    <span className="row row--static">
+                      <span className="row__main">
+                        <strong>{market.instrument}</strong>
+                        <span className="num">
+                          {market.bestBid !== null ? format.decimal(market.bestBid.price, { fractionDigits: market.priceScale }) : "—"}
+                          {" / "}
+                          {market.bestAsk !== null ? format.decimal(market.bestAsk.price, { fractionDigits: market.priceScale }) : "—"}
+                        </span>
                       </span>
                     </span>
-                    <Icon name="chevron-right" size="sm" />
-                  </button>
+                  )}
                 </li>
               ))}
             </ul>

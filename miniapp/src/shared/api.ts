@@ -14,6 +14,12 @@ export interface DeviceSessionView {
   createdAt: number;
   lastSeenAt: number;
   current: boolean;
+  /**
+   * Whether the handle resolves on the BFF's local revoke commands. Upstream
+   * reads own the list but not the commands, so upstream-listed rows are
+   * marked false and the sheet renders them without a sign-out action.
+   */
+  revocable?: boolean;
 }
 
 export interface DeviceSessionsView {
@@ -583,6 +589,13 @@ export interface MarketView {
   priceScale: number;
   asOf: number;
   posting: "none";
+  /**
+   * Whether /bff/markets/:instrument resolves a book for this row. Locally
+   * listed fixtures carry false — depth is never fabricated — while the
+   * upstream-owned list marks true so the sheet can render rows without a
+   * dead-end click.
+   */
+  depth?: boolean;
 }
 
 export interface MarketsView {
@@ -675,6 +688,29 @@ export interface CardsView {
   mode: "test";
   kyc: KycStatus;
   cards: readonly CardView[];
+}
+
+export type DocumentKind = "agreement" | "statement" | "check";
+export type DocumentStatus = "available" | "draft";
+
+/**
+ * A read-only documents entry (agreements, statements, checks). No upstream
+ * contract exists for this surface — the BFF serves the local synthetic
+ * fixture unconditionally, and download stays unserved.
+ */
+export interface DocumentView {
+  id: string;
+  kind: DocumentKind;
+  title: string;
+  status: DocumentStatus;
+  createdAt: number;
+  posting: "none";
+}
+
+export interface DocumentsView {
+  mode: "test";
+  delivery: "disabled";
+  documents: readonly DocumentView[];
 }
 
 export interface CheckStatusEntry {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { platform, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
@@ -24,12 +24,25 @@ function writeJson(directory, path, value) {
   writeFileSync(join(directory, path), `${JSON.stringify(value, null, 2)}\n`);
 }
 
+// fs.cpSync's native Windows binding hard-crashes the whole test subprocess
+// on directory copies — walk entries and copyFileSync files instead.
+function copyTree(source, destination) {
+  if (statSync(source).isDirectory()) {
+    mkdirSync(destination, { recursive: true });
+    for (const entry of readdirSync(source)) {
+      copyTree(join(source, entry), join(destination, entry));
+    }
+  } else {
+    copyFileSync(source, destination);
+  }
+}
+
 function assertRejected(name, expected, mutate) {
   test(name, () => {
     const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
     try {
       for (const path of contractFiles) {
-        cpSync(join(root, path), join(scratch, path), { recursive: true });
+        copyTree(join(root, path), join(scratch, path));
       }
       mutate(scratch);
       const result = spawnSync(process.execPath, [checker, scratch], {
@@ -1494,7 +1507,7 @@ test("accepts reordered event envelope required fields", () => {
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {
     for (const path of contractFiles) {
-      cpSync(join(root, path), join(scratch, path), { recursive: true });
+      copyTree(join(root, path), join(scratch, path));
     }
     mutateEventSchema(scratch, (schema) => {
       schema.required = [...schema.required].reverse();
@@ -1604,7 +1617,7 @@ test("accepts optional event payload fields and reordered payload required field
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {
     for (const path of contractFiles) {
-      cpSync(join(root, path), join(scratch, path), { recursive: true });
+      copyTree(join(root, path), join(scratch, path));
     }
     mutateEventSchema(scratch, (schema) => {
       const payload = schema.$defs.withdrawalHeld;
@@ -1773,7 +1786,7 @@ test("accepts unrelated response headers, parameters and header descriptions", (
   const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
   try {
     for (const path of contractFiles) {
-      cpSync(join(root, path), join(scratch, path), { recursive: true });
+      copyTree(join(root, path), join(scratch, path));
     }
     mutateOpenApi(scratch, (openapi) => {
       openapi.components.headers.RequestId.description = "Echoed request identifier.";
@@ -1809,7 +1822,7 @@ function assertAccepted(name, mutate) {
     const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
     try {
       for (const path of contractFiles) {
-        cpSync(join(root, path), join(scratch, path), { recursive: true });
+        copyTree(join(root, path), join(scratch, path));
       }
       mutate(scratch);
       const result = spawnSync(process.execPath, [checker, scratch], {
@@ -2321,14 +2334,29 @@ assertRejected(
   })
 );
 
-assertRejected(
-  "rejects symlinked files escaping the contract package",
-  "escapes contract package through a link",
-  (scratch) => {
+// Windows cannot mint file symlinks without elevation or Developer Mode;
+// the checker rejection this pin guards is exercised on POSIX runners.
+test("rejects symlinked files escaping the contract package", () => {
+  if (platform() === "win32") return;
+  const scratch = mkdtempSync(join(tmpdir(), "solidchange-contract-boundary-"));
+  try {
+    for (const path of contractFiles) {
+      copyTree(join(root, path), join(scratch, path));
+    }
     rmSync(join(scratch, "schemas", "error.schema.json"));
     symlinkSync("/etc/hostname", join(scratch, "schemas", "error.schema.json"));
+    const result = spawnSync(process.execPath, [checker, scratch], {
+      encoding: "utf8"
+    });
+    assert.notEqual(result.status, 0, "Invalid contract boundary unexpectedly passed");
+    assert(
+      `${result.stdout}${result.stderr}`.includes("escapes contract package through a link"),
+      "Expected rejection containing: escapes contract package through a link"
+    );
+  } finally {
+    rmSync(scratch, { force: true, recursive: true });
   }
-);
+});
 
 // Wave 44: contract-validation internals audit. Each fixture below encodes a
 // previously-passing drift: a schema looking strict but enforced as `any`, a

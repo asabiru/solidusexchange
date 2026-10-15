@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import type { OperationStatus, OperationSummary } from "../shared/api";
 import { assetMetaOf } from "../shared/assets";
 import { useI18n } from "./i18n-context";
@@ -34,11 +34,46 @@ export function DisabledCta({ label, hint }: { label: string; hint?: string }) {
   );
 }
 
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+const SHEET_CLOSE_MS = 200;
+
+/**
+ * Animated sheet close for buttons rendered by the sheet's own component.
+ * X/Escape are covered inside Sheet; footer CTAs call the returned requestClose
+ * which slides the panel down first, then runs the real close.
+ */
+export function useAnimatedSheetClose(close: () => void): { closing: boolean; requestClose: () => void } {
+  const [closing, setClosing] = useState(false);
+  const done = useRef(false);
+  const requestClose = useCallback(() => {
+    if (done.current) return;
+    done.current = true;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      close();
+      return;
+    }
+    setClosing(true);
+    window.setTimeout(close, SHEET_CLOSE_MS);
+  }, [close]);
+  return { closing, requestClose };
+}
+
+export function Sheet({ title, onClose, closing, children }: { title: string; onClose: () => void; closing?: boolean; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const titleId = useId();
+  const [closingSelf, setClosingSelf] = useState(false);
+  const closingRef = useRef(false);
   const { t } = useI18n();
+  const requestClose = () => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      onClose();
+      return;
+    }
+    setClosingSelf(true);
+    window.setTimeout(onClose, SHEET_CLOSE_MS);
+  };
   useLayoutEffect(() => {
     const dialog = ref.current;
     const opener = document.activeElement;
@@ -53,6 +88,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
     <dialog
       ref={ref}
       className="sheet"
+      data-closing={closing === true || closingSelf ? "" : undefined}
       aria-modal="true"
       aria-labelledby={titleId}
       onKeyDown={(event) => {
@@ -76,14 +112,14 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
       }}
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        requestClose();
       }}
     >
       <div className="sheet__panel">
         <div className="sheet__grabber" />
         <header className="sheet__head">
           <h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2>
-          <button type="button" className="icon-btn icon-btn--outlined" aria-label={t("common.close")} onClick={onClose}>
+          <button type="button" className="icon-btn icon-btn--outlined" aria-label={t("common.close")} onClick={requestClose}>
             <Icon name="close" />
           </button>
         </header>

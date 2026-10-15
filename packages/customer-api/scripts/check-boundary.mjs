@@ -3,6 +3,9 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
+// join() emits the platform separator; the containment check below compares
+// with a forward-slash prefix, so normalize once on the repo root.
+const rootPrefix = `${join(root).replaceAll("\\", "/")}/`;
 const errors = [];
 const ENV_ACCESS = new RegExp(`${"pro" + "cess"}\\.env`, "u");
 const ALLOWED_IMPORTS = new Set([
@@ -81,7 +84,7 @@ for (const directory of ["src", "scripts"]) {
       }
       if (
         match[1].startsWith("../") &&
-        !join(root, directory, match[1]).startsWith(`${root}/`) &&
+        !join(root, directory, match[1]).replaceAll("\\", "/").startsWith(rootPrefix) &&
         !ALLOWED_CROSS_PACKAGE.has(match[1])
       ) {
         errors.push(`${directory}/${name}: cross-package import ${match[1]} escapes the dev runtime boundary`);
@@ -101,7 +104,7 @@ for (const directory of ["src", "scripts"]) {
       }
       if (
         match[1].startsWith("../") &&
-        !join(root, directory, match[1]).startsWith(`${root}/`) &&
+        !join(root, directory, match[1]).replaceAll("\\", "/").startsWith(rootPrefix) &&
         !ALLOWED_CROSS_PACKAGE.has(match[1])
       ) {
         errors.push(`${directory}/${name}: dynamic cross-package import ${match[1]} escapes the dev runtime boundary`);

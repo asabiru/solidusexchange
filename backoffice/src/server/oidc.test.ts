@@ -581,8 +581,11 @@ describe("OIDC boundary", () => {
       },
       {
         nonce: "nonce-iat-future",
+        // iat must clear the verifier's +60s skew window measured at verify
+        // time — keygen and signing move the wall clock, so +61 can land on
+        // the boundary. +120 stays strictly outside it on any host.
         claims: `{"sub":"operator-iat-future",${commonClaims},`
-          + `"exp":${now + 300},"iat":${now + 61},"nonce":"nonce-iat-future"}`,
+          + `"exp":${now + 300},"iat":${now + 120},"nonce":"nonce-iat-future"}`,
         error: /token claims are not valid/
       }
     ];

@@ -91,8 +91,8 @@ export function ProfileScreen({ session, profile, openSheet, switchScenario, log
             <span>{apiAccessDetail(profile.apiAccess, t)}</span>
           </span>
         </div>
-        <MenuRow icon="bank" title={t("profile.requisitesTitle")} detail={t("profile.requisitesDetail")} />
-        <MenuRow icon="file" title={t("profile.documentsTitle")} detail={t("profile.documentsDetail")} />
+        <MenuRow icon="bank" title={t("profile.requisitesTitle")} detail={t("profile.requisitesDetail")} onClick={() => openSheet({ kind: "requisites" })} />
+        <MenuRow icon="file" title={t("profile.documentsTitle")} detail={t("profile.documentsDetail")} onClick={() => openSheet({ kind: "documents" })} />
         <MenuRow icon="help" title={t("common.support")} detail={t("profile.supportDetail")} onClick={() => openSheet({ kind: "support" })} />
       </div>
 

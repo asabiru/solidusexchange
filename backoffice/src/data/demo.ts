@@ -293,6 +293,116 @@ export interface WithdrawalIntent {
   auditEvidenceDigest: string;
 }
 
+// Read-only synthetic ledger vocabulary mirroring packages/financial-core:
+// journals carry double-entry legs under registered posting-rule types; the
+// console never exposes posting commands, only the accepted, append-only
+// record plus the trial-balance projection.
+export type LedgerJournalType =
+  | "SYNTHETIC_PROVIDER_POSITION"
+  | "SYNTHETIC_PROVIDER_POSITION_REVERSAL"
+  | "SYNTHETIC_CUSTOMER_CREDIT"
+  | "SYNTHETIC_HOLD_CREATE"
+  | "SYNTHETIC_HOLD_RELEASE"
+  | "SYNTHETIC_FEE_CHARGE"
+  | "SYNTHETIC_SPREAD_RECOGNITION"
+  | "SYNTHETIC_MIGRATION_OPENING"
+  | "SYNTHETIC_SUSPENSE_PARK_IN"
+  | "SYNTHETIC_SUSPENSE_PARK_OUT"
+  | "SYNTHETIC_SUSPENSE_CLEAR_IN"
+  | "SYNTHETIC_SUSPENSE_CLEAR_OUT";
+
+export interface LedgerJournalEntry {
+  entryId: string;
+  accountId: string;
+  definitionCode: string;
+  assetCode: string;
+  side: "DEBIT" | "CREDIT";
+  amount: string;
+}
+
+export interface LedgerJournal {
+  id: string;
+  journalId: string;
+  journalType: LedgerJournalType;
+  legalEntityId: string;
+  correlationId: string;
+  causationId: string | null;
+  idempotencyKey: string;
+  actorType: "SERVICE" | "OPERATOR" | "MIGRATION_JOB";
+  actorId: string;
+  policyVersion: string;
+  postingRuleVersion: string;
+  sourceType: string;
+  sourceReference: string;
+  effectiveAt: string;
+  commandDigest: string;
+  entries: readonly LedgerJournalEntry[];
+  status: "accepted";
+  runtimeBoundary: "dev-dry-run";
+  auditEvidenceDigest: string;
+  tone: Tone;
+}
+
+export interface LedgerTrialRow {
+  accountId: string;
+  definitionCode: string;
+  assetCode: string;
+  ownerReference: string;
+  debitTurnover: string;
+  creditTurnover: string;
+  normalBalance: string;
+}
+
+export type CustodyTierId = "hot" | "warm" | "cold";
+
+export interface CustodyTierLimit {
+  asset: string;
+  network: string;
+  perTransactionMaximum: string;
+  dailyVelocityMaximum: string;
+}
+
+export interface CustodyTier {
+  id: CustodyTierId;
+  signingMode: "automatic_within_limits" | "quorum_with_delay" | "ceremony_only";
+  timeDelaySeconds: number;
+  targetShare: string;
+  limits: readonly CustodyTierLimit[];
+}
+
+export type CustodyIncidentStatus = "open" | "investigating" | "resolved";
+
+export interface CustodyWatcherIncident {
+  id: string;
+  severity: "critical";
+  reason: "outflow_without_intent" | "outflow_on_frozen_network";
+  txId: string;
+  network: string;
+  asset: string;
+  amount: string;
+  destinationReference: string;
+  observedAt: string;
+  status: CustodyIncidentStatus;
+  frozenNetwork: boolean;
+  tone: Tone;
+}
+
+// Key inventory register rows — references only; key material never leaves
+// the HSM boundary and never appears here.
+export interface CustodyKeyRecord {
+  keyId: string;
+  purpose: string;
+  chain: "TON" | "TRON";
+  tier: CustodyTierId;
+  environment: "testnet" | "mainnet";
+  hsmSerial: string;
+  ceremonyId: string;
+  custodians: readonly string[];
+  status: "active" | "retired" | "destroyed";
+  addressReference: string;
+  evidenceDigest: string;
+}
+
 export interface ApprovalRow {
   id: string;
   action: string;
@@ -401,6 +511,11 @@ export interface ReadonlyBackofficeRepository {
   chatChecks(): readonly ChatCheck[];
   supportTickets(): readonly SupportTicket[];
   withdrawalIntents(): readonly WithdrawalIntent[];
+  ledgerJournals(): readonly LedgerJournal[];
+  ledgerTrialBalance(): readonly LedgerTrialRow[];
+  custodyTiers(): readonly CustodyTier[];
+  custodyIncidents(): readonly CustodyWatcherIncident[];
+  custodyKeyInventory(): readonly CustodyKeyRecord[];
   kycCases(): readonly KycCase[];
   amlCases(): readonly AmlCase[];
   investigationCases(): readonly InvestigationCase[];
@@ -1406,6 +1521,332 @@ const data = deepFreeze({
       auditEvidenceDigest: "sha256:7ac51d0e8f39"
     }
   ],
+  // Synthetic ledger rows mirror the Session D draft journal types from
+  // packages/financial-core — read-only evidence of the append-only books.
+  ledgerJournals: [
+    {
+      id: "JRN-000501",
+      journalId: "a0000000-0000-4000-8000-000000000501",
+      journalType: "SYNTHETIC_CUSTOMER_CREDIT",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000501",
+      causationId: null,
+      idempotencyKey: "synthetic-credit-cus10482-001",
+      actorType: "SERVICE",
+      actorId: "deposit-recognizer",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-customer-credit-v1",
+      sourceType: "synthetic-test",
+      sourceReference: "deposit:trc20:tx_synthetic_811",
+      effectiveAt: "2026-09-27T09:12:04.000Z",
+      commandDigest: "sha256:8f3c2a91d504",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000501", accountId: "10000000-0000-4000-8000-000000000001", definitionCode: "PROVIDER_RECEIVABLE_ASSET", assetCode: "TUSDT", side: "DEBIT", amount: "4500.000000" },
+        { entryId: "e2000000-0000-4000-8000-000000000501", accountId: "20000000-0000-4000-8000-000000000002", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", side: "CREDIT", amount: "4500.000000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:8f3c2a91d504",
+      tone: "neutral"
+    },
+    {
+      id: "JRN-000512",
+      journalId: "a0000000-0000-4000-8000-000000000512",
+      journalType: "SYNTHETIC_HOLD_CREATE",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000512",
+      causationId: null,
+      idempotencyKey: "synthetic-hold-wdr991804",
+      actorType: "SERVICE",
+      actorId: "withdrawal-pipeline",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-hold-create-v1",
+      sourceType: "synthetic-test",
+      sourceReference: "hold:wdr-991804",
+      effectiveAt: "2026-09-28T14:29:37.000Z",
+      commandDigest: "sha256:50b17fe2a991",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000512", accountId: "20000000-0000-4000-8000-000000000002", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", side: "DEBIT", amount: "2450.000000" },
+        { entryId: "e2000000-0000-4000-8000-000000000512", accountId: "30000000-0000-4000-8000-000000000003", definitionCode: "CUSTOMER_HELD_LIABILITY", assetCode: "TUSDT", side: "CREDIT", amount: "2450.000000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:50b17fe2a991",
+      tone: "info"
+    },
+    {
+      id: "JRN-000513",
+      journalId: "a0000000-0000-4000-8000-000000000513",
+      journalType: "SYNTHETIC_FEE_CHARGE",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000513",
+      causationId: null,
+      idempotencyKey: "synthetic-fee-wdr991804",
+      actorType: "SERVICE",
+      actorId: "withdrawal-pipeline",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-fee-charge-v1",
+      sourceType: "synthetic-test",
+      sourceReference: "fee:wdr-991804",
+      effectiveAt: "2026-09-28T14:29:38.000Z",
+      commandDigest: "sha256:9c24d17b5a03",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000513", accountId: "20000000-0000-4000-8000-000000000002", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", side: "DEBIT", amount: "25.000000" },
+        { entryId: "e2000000-0000-4000-8000-000000000513", accountId: "50000000-0000-4000-8000-000000000005", definitionCode: "FEE_REVENUE", assetCode: "TUSDT", side: "CREDIT", amount: "25.000000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:9c24d17b5a03",
+      tone: "success"
+    },
+    {
+      id: "JRN-000522",
+      journalId: "a0000000-0000-4000-8000-000000000522",
+      journalType: "SYNTHETIC_PROVIDER_POSITION",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000522",
+      causationId: null,
+      idempotencyKey: "synthetic-provider-pos-047",
+      actorType: "SERVICE",
+      actorId: "provider-simulator",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-provider-position-v1",
+      sourceType: "synthetic-test",
+      sourceReference: "provider-pos:47",
+      effectiveAt: "2026-09-29T08:01:22.000Z",
+      commandDigest: "sha256:1d48a0f6e2c7",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000522", accountId: "40000000-0000-4000-8000-000000000004", definitionCode: "TREASURY_ASSET", assetCode: "TUSDT", side: "DEBIT", amount: "4.250000" },
+        { entryId: "e2000000-0000-4000-8000-000000000522", accountId: "80000000-0000-4000-8000-000000000008", definitionCode: "PROVIDER_PAYABLE_LIABILITY", assetCode: "TUSDT", side: "CREDIT", amount: "4.250000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:1d48a0f6e2c7",
+      tone: "neutral"
+    },
+    {
+      id: "JRN-000523",
+      journalId: "a0000000-0000-4000-8000-000000000523",
+      journalType: "SYNTHETIC_PROVIDER_POSITION_REVERSAL",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000523",
+      causationId: "a0000000-0000-4000-8000-000000000522",
+      idempotencyKey: "synthetic-provider-rev-047",
+      actorType: "OPERATOR",
+      actorId: "operator_ref_maria_koval",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-provider-position-reversal-v1",
+      sourceType: "journal_reversal",
+      sourceReference: "a0000000-0000-4000-8000-000000000522",
+      effectiveAt: "2026-09-29T09:44:10.000Z",
+      commandDigest: "sha256:2e59b1f7d38e",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000523", accountId: "40000000-0000-4000-8000-000000000004", definitionCode: "TREASURY_ASSET", assetCode: "TUSDT", side: "CREDIT", amount: "4.250000" },
+        { entryId: "e2000000-0000-4000-8000-000000000523", accountId: "80000000-0000-4000-8000-000000000008", definitionCode: "PROVIDER_PAYABLE_LIABILITY", assetCode: "TUSDT", side: "DEBIT", amount: "4.250000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:2e59b1f7d38e",
+      tone: "warning"
+    },
+    {
+      id: "JRN-000531",
+      journalId: "a0000000-0000-4000-8000-000000000531",
+      journalType: "SYNTHETIC_SUSPENSE_PARK_IN",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000531",
+      causationId: null,
+      idempotencyKey: "synthetic-suspense-brk0021",
+      actorType: "OPERATOR",
+      actorId: "operator_ref_roman_yudin",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-suspense-park-in-v1",
+      sourceType: "reconciliation_break",
+      sourceReference: "break:rec-2026-09-30:1",
+      effectiveAt: "2026-09-30T10:15:00.000Z",
+      commandDigest: "sha256:4f72c8a1b5d9",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000531", accountId: "60000000-0000-4000-8000-000000000006", definitionCode: "SUSPENSE_ASSET", assetCode: "TUSDT", side: "DEBIT", amount: "12.400000" },
+        { entryId: "e2000000-0000-4000-8000-000000000531", accountId: "20000000-0000-4000-8000-000000000002", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", side: "CREDIT", amount: "12.400000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:4f72c8a1b5d9",
+      tone: "warning"
+    },
+    {
+      id: "JRN-000532",
+      journalId: "a0000000-0000-4000-8000-000000000532",
+      journalType: "SYNTHETIC_SUSPENSE_CLEAR_IN",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000532",
+      causationId: "a0000000-0000-4000-8000-000000000531",
+      idempotencyKey: "synthetic-suspense-clear-brk0021",
+      actorType: "OPERATOR",
+      actorId: "operator_ref_anton_bely",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-suspense-clear-in-v1",
+      sourceType: "reconciliation_break",
+      sourceReference: "break:rec-2026-09-30:1",
+      effectiveAt: "2026-10-01T11:02:45.000Z",
+      commandDigest: "sha256:6a91d4e7b2c3",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000532", accountId: "40000000-0000-4000-8000-000000000004", definitionCode: "TREASURY_ASSET", assetCode: "TUSDT", side: "DEBIT", amount: "12.400000" },
+        { entryId: "e2000000-0000-4000-8000-000000000532", accountId: "60000000-0000-4000-8000-000000000006", definitionCode: "SUSPENSE_ASSET", assetCode: "TUSDT", side: "CREDIT", amount: "12.400000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:6a91d4e7b2c3",
+      tone: "success"
+    },
+    {
+      id: "JRN-000540",
+      journalId: "a0000000-0000-4000-8000-000000000540",
+      journalType: "SYNTHETIC_MIGRATION_OPENING",
+      legalEntityId: "solidchange-dev",
+      correlationId: "d0000000-0000-4000-8000-000000000540",
+      causationId: null,
+      idempotencyKey: "migration-opening-cus10477-tusdt",
+      actorType: "MIGRATION_JOB",
+      actorId: "migration-run-demo-001",
+      policyVersion: "ledger-dev-policy-v1",
+      postingRuleVersion: "synthetic-migration-opening-v1",
+      sourceType: "migration_opening",
+      sourceReference: "migration.opening.cus10477.TUSDT",
+      effectiveAt: "2026-10-02T06:00:00.000Z",
+      commandDigest: "sha256:7b02e5f9c4d1",
+      entries: [
+        { entryId: "e1000000-0000-4000-8000-000000000540", accountId: "40000000-0000-4000-8000-000000000004", definitionCode: "TREASURY_ASSET", assetCode: "TUSDT", side: "DEBIT", amount: "85.250000" },
+        { entryId: "e2000000-0000-4000-8000-000000000540", accountId: "20000000-0000-4000-8000-000000000007", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", side: "CREDIT", amount: "85.250000" }
+      ],
+      status: "accepted",
+      runtimeBoundary: "dev-dry-run",
+      auditEvidenceDigest: "sha256:7b02e5f9c4d1",
+      tone: "info"
+    }
+  ],
+  ledgerTrialBalance: [
+    { accountId: "10000000-0000-4000-8000-000000000001", definitionCode: "PROVIDER_RECEIVABLE_ASSET", assetCode: "TUSDT", ownerReference: "provider-demo", debitTurnover: "4500.000000", creditTurnover: "0.000000", normalBalance: "4500.000000" },
+    { accountId: "20000000-0000-4000-8000-000000000002", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", ownerReference: "customer-demo", debitTurnover: "2475.000000", creditTurnover: "4512.400000", normalBalance: "2037.400000" },
+    { accountId: "20000000-0000-4000-8000-000000000007", definitionCode: "CUSTOMER_SETTLED_LIABILITY", assetCode: "TUSDT", ownerReference: "cust-cus10477", debitTurnover: "0.000000", creditTurnover: "85.250000", normalBalance: "85.250000" },
+    { accountId: "30000000-0000-4000-8000-000000000003", definitionCode: "CUSTOMER_HELD_LIABILITY", assetCode: "TUSDT", ownerReference: "customer-demo", debitTurnover: "0.000000", creditTurnover: "2450.000000", normalBalance: "2450.000000" },
+    { accountId: "40000000-0000-4000-8000-000000000004", definitionCode: "TREASURY_ASSET", assetCode: "TUSDT", ownerReference: "treasury-demo", debitTurnover: "101.900000", creditTurnover: "4.250000", normalBalance: "97.650000" },
+    { accountId: "50000000-0000-4000-8000-000000000005", definitionCode: "FEE_REVENUE", assetCode: "TUSDT", ownerReference: "platform", debitTurnover: "0.000000", creditTurnover: "25.000000", normalBalance: "25.000000" },
+    { accountId: "60000000-0000-4000-8000-000000000006", definitionCode: "SUSPENSE_ASSET", assetCode: "TUSDT", ownerReference: "break-review-demo", debitTurnover: "12.400000", creditTurnover: "12.400000", normalBalance: "0.000000" },
+    { accountId: "80000000-0000-4000-8000-000000000008", definitionCode: "PROVIDER_PAYABLE_LIABILITY", assetCode: "TUSDT", ownerReference: "provider-demo", debitTurnover: "4.250000", creditTurnover: "4.250000", normalBalance: "0.000000" }
+  ],
+  custodyTiers: [
+    {
+      id: "hot",
+      signingMode: "automatic_within_limits",
+      timeDelaySeconds: 0,
+      targetShare: "2-5%",
+      limits: [
+        { asset: "TON", network: "TON_TESTNET", perTransactionMaximum: "500.000000000", dailyVelocityMaximum: "2000.000000000" },
+        { asset: "USDT", network: "TON_TESTNET", perTransactionMaximum: "5000.000000", dailyVelocityMaximum: "20000.000000" },
+        { asset: "USDT", network: "TRON_TESTNET", perTransactionMaximum: "5000.000000", dailyVelocityMaximum: "20000.000000" }
+      ]
+    },
+    {
+      id: "warm",
+      signingMode: "quorum_with_delay",
+      timeDelaySeconds: 120,
+      targetShare: "5-15%",
+      limits: [
+        { asset: "TON", network: "TON_TESTNET", perTransactionMaximum: "5000.000000000", dailyVelocityMaximum: "20000.000000000" },
+        { asset: "USDT", network: "TON_TESTNET", perTransactionMaximum: "25000.000000", dailyVelocityMaximum: "100000.000000" },
+        { asset: "USDT", network: "TRON_TESTNET", perTransactionMaximum: "25000.000000", dailyVelocityMaximum: "100000.000000" }
+      ]
+    },
+    {
+      id: "cold",
+      signingMode: "ceremony_only",
+      timeDelaySeconds: 86400,
+      targetShare: "80-90%",
+      limits: [
+        { asset: "TON", network: "TON_TESTNET", perTransactionMaximum: "50000.000000000", dailyVelocityMaximum: "50000.000000000" },
+        { asset: "USDT", network: "TON_TESTNET", perTransactionMaximum: "250000.000000", dailyVelocityMaximum: "250000.000000" },
+        { asset: "USDT", network: "TRON_TESTNET", perTransactionMaximum: "250000.000000", dailyVelocityMaximum: "250000.000000" }
+      ]
+    }
+  ],
+  custodyIncidents: [
+    {
+      id: "CINC-001",
+      severity: "critical",
+      reason: "outflow_without_intent",
+      txId: "tx_synthetic_rogue_01",
+      network: "TRON_TESTNET",
+      asset: "USDT",
+      amount: "99.000000",
+      destinationReference: "destination_ref_not_allowlisted",
+      observedAt: "2026-10-03T08:41:12.000Z",
+      status: "investigating",
+      frozenNetwork: true,
+      tone: "danger"
+    },
+    {
+      id: "CINC-002",
+      severity: "critical",
+      reason: "outflow_on_frozen_network",
+      txId: "tx_synthetic_frozen_02",
+      network: "TRON_TESTNET",
+      asset: "USDT",
+      amount: "1.000000",
+      destinationReference: "destination_ref_synthetic_user_wallet",
+      observedAt: "2026-10-03T09:05:33.000Z",
+      status: "open",
+      frozenNetwork: true,
+      tone: "danger"
+    }
+  ],
+  custodyKeyInventory: [
+    {
+      keyId: "key_ton_hot_test_001",
+      purpose: "hot-tier TON root",
+      chain: "TON",
+      tier: "hot",
+      environment: "testnet",
+      hsmSerial: "LAB-HSM-0001",
+      ceremonyId: "C-02-2026-0001",
+      custodians: ["operator_ref_maria_koval", "operator_ref_roman_yudin"],
+      status: "active",
+      addressReference: "custody_address_ref_ton_hot_001",
+      evidenceDigest: "sha256:c001a9f2d4e6"
+    },
+    {
+      keyId: "key_tron_warm_test_001",
+      purpose: "warm-tier TRON root",
+      chain: "TRON",
+      tier: "warm",
+      environment: "testnet",
+      hsmSerial: "LAB-HSM-0001",
+      ceremonyId: "C-02-2026-0002",
+      custodians: ["operator_ref_maria_koval", "operator_ref_anton_bely", "operator_ref_ilia_nurov"],
+      status: "active",
+      addressReference: "custody_address_ref_tron_warm_001",
+      evidenceDigest: "sha256:c002b8e1d3f7"
+    },
+    {
+      keyId: "key_ton_cold_test_001",
+      purpose: "cold-tier TON root",
+      chain: "TON",
+      tier: "cold",
+      environment: "testnet",
+      hsmSerial: "LAB-HSM-OFFLINE-01",
+      ceremonyId: "C-02-2026-0003",
+      custodians: [
+        "operator_ref_maria_koval",
+        "operator_ref_anton_bely",
+        "operator_ref_elena_sokolova",
+        "operator_ref_roman_yudin",
+        "operator_ref_ilia_nurov"
+      ],
+      status: "active",
+      addressReference: "custody_address_ref_ton_cold_001",
+      evidenceDigest: "sha256:c003c7d0e2f8"
+    }
+  ],
   kycCases: [
     {
       id: "KYC-220184",
@@ -2014,6 +2455,11 @@ export const demoRepository: ReadonlyBackofficeRepository = {
   chatChecks: () => data.chatChecks,
   supportTickets: () => data.supportTickets,
   withdrawalIntents: () => data.withdrawalIntents,
+  ledgerJournals: () => data.ledgerJournals,
+  ledgerTrialBalance: () => data.ledgerTrialBalance,
+  custodyTiers: () => data.custodyTiers,
+  custodyIncidents: () => data.custodyIncidents,
+  custodyKeyInventory: () => data.custodyKeyInventory,
   kycCases: () => data.kycCases,
   amlCases: () => data.amlCases,
   investigationCases: () => data.investigationCases,

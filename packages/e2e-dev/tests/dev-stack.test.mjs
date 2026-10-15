@@ -419,12 +419,10 @@ describe("customer journey through the Mini App BFF", () => {
       if (seen.at(-1) !== session.kyc) seen.push(session.kyc);
     }
     assert.deepEqual(seen, ["kyc-gated", "verified"], seen.join(" -> "));
-    // /bff/kyc/status answers through the customer-api contract for gated and
-    // verified sessions alike (customer.kyc.read is never denied upstream).
-    // The upstream's synthetic directory marks every subject unverified, so the
-    // adapted view reports that deterministic application status with
-    // sessionKyc "kyc-gated" — the upstream verdict — even though the local
-    // session flag just promoted to verified.
+    // /bff/kyc/status answers the local application once a submission owns the
+    // read path; sessionKyc mirrors the session flag, which just promoted to
+    // verified through the simulator callbacks even though the application
+    // record still shows the last review state.
     const devSubject = `dev-${createHash("sha256").update("solidchange-miniapp-dev-synthetic|900000001").digest("hex").slice(0, 16)}`;
     const upstreamView = await createSyntheticKycApplicationDirectory().viewFor(
       customerApiSubject(devSubject),
@@ -432,18 +430,22 @@ describe("customer journey through the Mini App BFF", () => {
     );
     assert.equal(upstreamView.session_kyc, "unverified");
     const statusView = await getMiniapp("/bff/kyc/status", cookie);
-    // The upstream directory is deterministic for this subject: its "rejected"
-    // application always carries submitted_at and never a review_deadline, so
-    // the adapted key set is pinned exactly — an upstream view that drops
-    // submitted_at or adds an unexpected field must fail here.
+    // A local POST above owns the read path: the view answers the local
+    // application's submitted state (submitted_at + review_deadline), so the
+    // adapted key set is pinned exactly — a stray key must fail here.
     assert.deepEqual(Object.keys(statusView).sort(), [
-      "canSubmit", "mode", "provider", "sessionKyc", "state", "submittedAt"
+      "canSubmit", "mode", "provider", "reviewDeadline", "sessionKyc", "state", "submittedAt"
     ]);
     assert.equal(statusView.mode, "test");
     assert.equal(statusView.provider, "simulator");
-    assert.equal(statusView.sessionKyc, "kyc-gated");
-    assert.equal(statusView.state, upstreamView.status);
-    assert.equal(statusView.canSubmit, upstreamView.can_submit);
+    assert.equal(statusView.sessionKyc, "verified");
+    // The local POST owns the read path after submission: the adapted view
+    // mirrors the local application's verdict (approved by the simulator
+    // callbacks above) rather than the upstream directory's deterministic
+    // verdict, and keeps its original review deadline.
+    assert.equal(statusView.state, "approved");
+    assert.equal(statusView.canSubmit, false);
+    assert.equal(typeof statusView.reviewDeadline, "number");
     // The BFF session is verified, but the customer-api's own synthetic KYC
     // directory marks every subject unverified, so customer.wallets.read is
     // refused upstream and the wallet surface degrades to its gated form.
@@ -621,7 +623,8 @@ describe("customer journey through the Mini App BFF", () => {
         client: session.platform === "telegram-mini-app" ? "telegram" : "dev-login",
         createdAt: Date.parse(session.created_at),
         lastSeenAt: Date.parse(session.last_seen_at),
-        current: session.current
+        current: session.current,
+        revocable: false
       }))
       .sort(
         (a, b) =>
@@ -1186,7 +1189,9 @@ describe("operator journey through the backoffice BFF", () => {
   it("exposes no POST money routes to operators", async () => {
     // Money routes that gained a read-only GET view keep rejecting POST, now
     // with the standard 405 Allow: GET of every registered read route.
-    const readOnlyMoneyPaths = new Set(["/bff/api/withdrawals"]);
+    // /bff/api/ledger/entries lands on the read-only journal member arm —
+    // registered GET, so a POST flips to the uniform 405 like withdrawals.
+    const readOnlyMoneyPaths = new Set(["/bff/api/withdrawals", "/bff/api/ledger/entries"]);
     for (const path of moneyRoutes.map((route) => route.replace("/bff/", "/bff/api/"))) {
       const response = await postBackoffice(path, {}, lead);
       if (readOnlyMoneyPaths.has(path)) {
@@ -1215,5 +1220,61 @@ describe("operator journey through the backoffice BFF", () => {
     const aml = await operatorSession("aml-investigator");
     await deniedGet("/bff/api/reports", aml);
     await deniedGet("/bff/api/operator/audit", aml);
+  });
+
+  it("serves the read-only ledger surface with type filters, journal detail and audit", async () => {
+    const list = await signedGet("/bff/api/ledger", lead, "ledger");
+    assert.ok(Array.isArray(list.journalTypes) && list.journalTypes.length > 0);
+    assert.ok(list.journals.length > 0);
+    assert.ok(list.trialBalance.length > 0);
+    for (const journal of list.journals) {
+      assert.equal(journal.status, "accepted");
+      assert.equal(journal.runtimeBoundary, "dev-dry-run");
+      assert.equal(journal.entries.length >= 2, true, `${journal.id} must carry double-entry legs`);
+      const debits = journal.entries.filter((entry) => entry.side === "DEBIT");
+      const credits = journal.entries.filter((entry) => entry.side === "CREDIT");
+      assert.ok(debits.length > 0 && credits.length > 0, journal.id);
+    }
+    const filtered = await signedGet("/bff/api/ledger?type=SYNTHETIC_HOLD_CREATE", lead, "ledger");
+    for (const journal of filtered.journals) assert.equal(journal.journalType, "SYNTHETIC_HOLD_CREATE");
+    const journalId = list.journals[0].id;
+    const before = await signedGet("/bff/api/audit", lead, "audit");
+    const detail = await signedGet(`/bff/api/ledger/${journalId}`, lead, `ledger:${journalId}`);
+    assert.equal(detail.id, journalId);
+    const after = await signedGet("/bff/api/audit", lead, "audit");
+    const appended = after.events.slice(-1)[0];
+    assert.deepEqual(
+      [appended.actor, appended.action, appended.resource],
+      ["dev:compliance-lead", "ledger.journal_viewed", `ledger:${journalId}`]
+    );
+    await deniedGet("/bff/api/ledger", support);
+    await deniedGet(`/bff/api/ledger/${journalId}`, support);
+  });
+
+  it("serves the read-only custody surface with tiers, incidents, keys and audit", async () => {
+    const payload = await signedGet("/bff/api/custody", lead, "custody");
+    assert.deepEqual(payload.tiers.map((tier) => tier.id), ["hot", "warm", "cold"]);
+    assert.ok(payload.keyInventory.length > 0);
+    assert.ok(payload.incidents.length > 0);
+    assert.ok(payload.intents.length > 0);
+    // The register is references only: no key material field may appear.
+    const text = JSON.stringify(payload);
+    for (const forbidden of ["private_key", "mnemonic", "seed_phrase", "raw_transaction", "signature"]) {
+      assert.equal(text.includes(forbidden), false, forbidden);
+    }
+    const openOnly = await signedGet("/bff/api/custody?status=open", lead, "custody");
+    for (const incident of openOnly.incidents) assert.equal(incident.status, "open");
+    const incidentId = payload.incidents[0].id;
+    const before = await signedGet("/bff/api/audit", lead, "audit");
+    const detail = await signedGet(`/bff/api/custody/incidents/${incidentId}`, lead, `custody-incident:${incidentId}`);
+    assert.equal(detail.id, incidentId);
+    const after = await signedGet("/bff/api/audit", lead, "audit");
+    const appended = after.events.slice(-1)[0];
+    assert.deepEqual(
+      [appended.actor, appended.action, appended.resource],
+      ["dev:compliance-lead", "custody.incident_viewed", `custody-incident:${incidentId}`]
+    );
+    await deniedGet("/bff/api/custody", support);
+    await deniedGet(`/bff/api/custody/incidents/${incidentId}`, support);
   });
 });

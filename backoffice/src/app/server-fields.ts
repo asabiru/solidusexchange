@@ -14,6 +14,7 @@ import type {
 } from "../data/operator.js";
 import type {
   CheckStatus,
+  CustodyIncidentStatus,
   SubjectTimelineKind,
   SupportTicketChannel,
   SupportTicketPriority,
@@ -191,6 +192,16 @@ export function withdrawalStatusOf(value: unknown): WithdrawalIntentStatus | und
 export function withdrawalStatusKeyOf(value: unknown): MessageKey | undefined {
   const status = withdrawalStatusOf(value);
   return status === undefined ? undefined : withdrawalStatuses[status];
+}
+
+const custodyIncidentStatuses: Readonly<Record<CustodyIncidentStatus, MessageKey>> = {
+  open: "custody.incidentStatus.open",
+  investigating: "custody.incidentStatus.investigating",
+  resolved: "custody.incidentStatus.resolved"
+};
+
+export function custodyIncidentStatusKeyOf(value: unknown): MessageKey | undefined {
+  return member(custodyIncidentStatuses, textOf(value, ""));
 }
 
 const withdrawalRoles: Readonly<Record<WithdrawalApprovalRole, MessageKey>> = {
