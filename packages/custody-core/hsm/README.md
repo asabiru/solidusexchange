@@ -72,9 +72,12 @@ strictly advancing per `(tier, network)` → then counters commit.
 | `../tests/signer-gateway.test.mjs` | Gateway contract evidence: prepare/verify/dispatch, tamper rejection, propagation |
 | `../src/tx-decoders.mjs` | Independent TON/TRON synthetic wire decoders (co-verifier stand-in) |
 | `../src/wire/` | Real-format decoders: TRON protobuf (`TransferContract`/`TriggerSmartContract` + TRC-20 ABI) and TON BoC (wallet-v4 input message + TEP-74 jetton), resolver-gated to custody references |
+| `../src/co-verifier.mjs` | Co-verifier seam: second decode of the real wire, field-compared against the canonical shape the policy module used; frozen evidence digest on agreement, `coverifier_*` rejections on divergence |
 | `../src/watcher.mjs` | Testnet watcher prototype: intent-matched outflows reconcile, unexplained outflows open a critical incident and freeze the network |
 | `../tests/hsm-custody.test.mjs` | Synthetic evidence for every check arm |
 | `../tests/real-wire-decoders.test.mjs` | Real-format evidence: protobuf/BoC round-trips through a second encoder, tamper and malformed-wire rejection |
+| `../tests/co-verifier.test.mjs` | Co-verifier agreement: real wire ↔ canonical field equality, every divergence rejected, evidence digest bound to both shapes |
+| `../tests/fixtures/wire-encode.mjs` | Shared second-implementation encoders (protobuf + BoC writers) for all wire tests |
 | `ceremonies.md` | Draft ceremony scripts (C-01..C-08), recovery/rotation/destruction runbooks and the key-inventory register template |
 
 ## Draft findings worth recording
