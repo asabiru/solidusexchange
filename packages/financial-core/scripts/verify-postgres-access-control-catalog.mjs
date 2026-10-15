@@ -22,6 +22,12 @@ for await (const chunk of process.stdin) {
 }
 
 const actual = JSON.parse(input);
+// The backup/restore suite's sequence probe lives in financial_core to prove
+// sequence state survives restores; it is test scaffolding, not reviewed
+// schema, so the ACL policy catalog counts around it.
+actual.relations = actual.relations.filter(
+  (relation) => relation.relation_name !== "backup_sequence_state_probe"
+);
 assert.equal(actual.schemas.length, 1, "Unexpected PostgreSQL schema ACL count");
 assert.equal(actual.relations.length, 13, "Unexpected PostgreSQL relation ACL count");
 assert.equal(actual.functions.length, 9, "Unexpected PostgreSQL function ACL count");
