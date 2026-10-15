@@ -68,6 +68,8 @@ Only the ledger posting boundary may accept journals. Controllers, provider call
 | `src/session-d.mjs` | Session D semantic layer over the posting boundary: hold lifecycle, reversal binding, reconciliation breaks and suspense review |
 | `session-d/README.md` | Session D proposal semantics, fail-closed layering and the promotion path on Finance/CTO/Security approval |
 | `tests/session-d.test.mjs` | Synthetic Session D lifecycle, binding and fail-closed tests |
+| `src/migration.mjs` | Dev-only migration dry-run pipeline: snapshot registration, classification to cases, position reconstruction, opening-journal emission and statement reconciliation |
+| `tests/migration.test.mjs` | Synthetic migration pipeline evidence end to end into the draft ledger |
 | `tests/postgres-reject-incomplete.sql` | Database rejection test for a one-entry journal |
 | `tests/postgres-reject-unbalanced.sql` | Database rejection test for an unbalanced journal |
 | `tests/postgres-reject-late-entry.sql` | Database rejection test for post-acceptance entry insertion |

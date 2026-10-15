@@ -208,7 +208,7 @@ test("session-d draft artifacts remain dev-only drafts over the foundation shape
   assert.equal(chart.reversals_in_scope, false);
   assert.equal(chart.reconciliation_in_scope, false);
   assert.equal(chart.account_definitions.length, 9);
-  assert.equal(postingRules.rules.length, 11);
+  assert.equal(postingRules.rules.length, 12);
   for (const rule of postingRules.rules) {
     assert.equal(rule.scope, "synthetic-test-only");
     assert.equal(postingRules.runtime_boundary, "dev-dry-run");

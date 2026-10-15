@@ -75,6 +75,20 @@ the same posting-rule boundary that guards the foundation registry.
 `CUSTOMER_SETTLED_LIABILITY` credit) seeds funded customer positions in
 synthetic tests so holds and charges operate on realistic balances.
 
+### Migration openings (migration-boundary dry-run)
+
+`SYNTHETIC_MIGRATION_OPENING` (`TREASURY_ASSET` debit /
+`CUSTOMER_SETTLED_LIABILITY` credit, `MIGRATION_JOB` actor only) posts opening
+customer positions under a `migration_opening` source binding. It exists for
+the dev-only dry-run pipeline in `../src/migration.mjs`, which implements the
+migration-boundary steps that are executable without approvals: snapshot
+registration with counts and payload digests, classification
+(settled/pending/cancelled/disputed/unresolved) routing every non-settled row
+to a `migration_case_*` case, position reconstruction, deterministic
+journal-command emission and statement reconciliation with match/break
+reporting — never a balancing plug. `tests/migration.test.mjs` covers the
+pipeline end to end into a balanced draft ledger.
+
 ### Reconciliation: match, break, suspense
 
 `reconcileAccount` compares a projected normal balance against an external
