@@ -61,6 +61,7 @@ strictly advancing per `(tier, network)` → then counters commit.
 | `../src/tx-decoders.mjs` | Independent TON/TRON synthetic wire decoders (co-verifier stand-in) |
 | `../src/watcher.mjs` | Testnet watcher prototype: intent-matched outflows reconcile, unexplained outflows open a critical incident and freeze the network |
 | `../tests/hsm-custody.test.mjs` | Synthetic evidence for every check arm |
+| `ceremonies.md` | Draft ceremony scripts (C-01..C-08), recovery/rotation/destruction runbooks and the key-inventory register template |
 
 ## Draft findings worth recording
 
