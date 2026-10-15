@@ -289,9 +289,9 @@ export function arrayOf<T>(value: unknown): readonly T[] {
 
 /* ——— Served view validators (wave-73 audit: fail-closed member reads) ——— */
 
-const sessionIdPattern = /^sess_[0-9a-f]{24}$/;
+const sessionIdPattern = /^(?:ses_[0-9a-f]{32}|sess_[0-9a-f]{24})$/;
 const notificationIdPattern = /^ntf_[0-9a-f]{24}$/;
-const supportIdPattern = /^sup_[0-9a-f]{24}$/;
+const supportIdPattern = /^(?:sup|tck)_[0-9a-f]{24}$/;
 const operationKinds = new Set<OperationKind>(["exchange", "deposit", "withdrawal", "qr"]);
 const operationStatusNames = new Set<OperationStatus>(["completed", "in-review", "needs-action", "failed"]);
 const timelineStepStates = new Set(["done", "current", "pending", "blocked"]);
@@ -377,13 +377,14 @@ export function sessionsViewOf(view: unknown): DeviceSessionsView | undefined {
     || !(view.sessions as readonly unknown[]).every(
       (session) =>
         isRecord(session)
-        && hasExactKeys(session, ["handle", "client", "createdAt", "lastSeenAt", "current"])
+        && hasContractKeys(session, ["handle", "client", "createdAt", "lastSeenAt", "current"], ["revocable"])
         && typeof session.handle === "string"
         && sessionIdPattern.test(session.handle)
         && sessionClientNames.has(session.client as SessionClient)
         && isEpochMs(session.createdAt)
         && isEpochMs(session.lastSeenAt)
         && typeof session.current === "boolean"
+        && (session.revocable === undefined || typeof session.revocable === "boolean")
     )
   ) {
     return undefined;

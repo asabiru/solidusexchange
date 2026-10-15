@@ -16,6 +16,7 @@ import { screeningTargets } from "../shared/address-screening";
 import type { ScreeningNetwork } from "../shared/address-screening";
 import type { AssetCode } from "../shared/assets";
 import { ApiError, api } from "./api";
+import { CardsSheet } from "./CardsSheet";
 import { ChecksSheet } from "./ChecksSheet";
 import { MarketsSheet } from "./MarketsSheet";
 import { MoneyFlowSheet } from "./MoneyFlowSheet";
@@ -47,7 +48,7 @@ import {
   timelineStepState
 } from "./server-fields";
 import { SupportSheet } from "./SupportSheet";
-import { Sheet, StatusPill, Unavailable } from "./ui";
+import { Sheet, StatusPill, Unavailable, useAnimatedSheetClose } from "./ui";
 
 interface Props {
   sheet: SheetRequest;
@@ -98,6 +99,8 @@ export function SheetHost({ sheet, wallet, profile, close, open, onKycVerified, 
       return <OrdersSheet close={close} />;
     case "quotes":
       return <QuotesSheet close={close} />;
+    case "cards":
+      return <CardsSheet close={close} />;
     case "notifications":
       return <NotificationsSheet close={close} onRead={onNotificationsRead} />;
     case "qr-image":
@@ -173,6 +176,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
   const [view, setView] = useState<KycVerificationView | undefined>();
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const { closing: sheetClosing, requestClose: closeSheet } = useAnimatedSheetClose(close);
   const notified = useRef(false);
   const state = view?.state;
   const { t } = useI18n();
@@ -204,7 +208,10 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
     try {
       setView(await api.submitKyc());
     } catch (error) {
-      if (error instanceof ApiError && error.code === "kyc_unavailable") setView(await api.kycStatus().catch(() => view));
+      if (error instanceof ApiError && error.code === "kyc_already_verified") {
+        closeSheet();
+        void onVerified();
+      } else if (error instanceof ApiError && error.code === "kyc_unavailable") setView(await api.kycStatus().catch(() => view));
       else setFailed(true);
     } finally {
       setBusy(false);
@@ -213,7 +220,7 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
 
   const outcome = kycOutcomeOf(state ?? "not_started");
   return (
-    <Sheet title={t("kyc.title")} onClose={close}>
+    <Sheet title={t("kyc.title")} onClose={close} closing={sheetClosing}>
       <div className="sheet__summary" aria-live="polite" aria-atomic="true">
         <span className="sheet__eyebrow">{t("kyc.eyebrow")}</span>
         <span className="sheet__amount">{t(busy || !view ? "common.loading" : outcome.title)}</span>
@@ -241,16 +248,17 @@ function KycOnboardingSheet({ close, onVerified }: { close: () => void; onVerifi
             {t(state === "unavailable" ? "kyc.retry" : "kyc.start")}
           </button>
         ) : null}
-        <button type="button" className="cta cta--ghost" onClick={close}>{t(state === "approved" ? "common.done" : "common.close")}</button>
+        <button type="button" className="cta cta--ghost" onClick={closeSheet}>{t(state === "approved" ? "common.done" : "common.close")}</button>
       </div>
     </Sheet>
   );
 }
 
 function KycSheet({ profile, close }: { profile: ProfileView; close: () => void }) {
+  const { closing: sheetClosing, requestClose: closeSheet } = useAnimatedSheetClose(close);
   const { t } = useI18n();
   return (
-    <Sheet title={t("kyc.title")} onClose={close}>
+    <Sheet title={t("kyc.title")} onClose={close} closing={sheetClosing}>
       <div className="sheet__summary">
         <span className="sheet__eyebrow">{profile.kyc?.level ?? "—"}</span>
         <span className="sheet__amount">{t("kyc.identityConfirmed")}</span>
@@ -264,15 +272,16 @@ function KycSheet({ profile, close }: { profile: ProfileView; close: () => void 
           </li>
         ))}
       </ol>
-      <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
+      <button type="button" className="cta cta--ghost" onClick={closeSheet}>{t("common.close")}</button>
     </Sheet>
   );
 }
 
 function LimitsSheet({ profile, close }: { profile: ProfileView; close: () => void }) {
+  const { closing: sheetClosing, requestClose: closeSheet } = useAnimatedSheetClose(close);
   const { t } = useI18n();
   return (
-    <Sheet title={t("profile.limitsTitle")} onClose={close}>
+    <Sheet title={t("profile.limitsTitle")} onClose={close} closing={sheetClosing}>
       <div className="limits-state">
         <span className="limits-state__mark"><Icon name="sliders" size="sm" /></span>
         <div>
@@ -287,7 +296,7 @@ function LimitsSheet({ profile, close }: { profile: ProfileView; close: () => vo
           <div key={`${fee.title}:${index}`}><dt>{fee.title}</dt><dd>{fee.value}</dd></div>
         ))}
       </dl>
-      <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
+      <button type="button" className="cta cta--ghost" onClick={closeSheet}>{t("common.close")}</button>
     </Sheet>
   );
 }
@@ -533,6 +542,7 @@ function AddressScreeningSheet({ close }: { close: () => void }) {
 type SessionRevocation = { scope: "single"; session: DeviceSessionView } | { scope: "others"; count: number };
 
 function SessionsSheet({ close }: { close: () => void }) {
+  const { closing: sheetClosing, requestClose: closeSheet } = useAnimatedSheetClose(close);
   const [view, setView] = useState<DeviceSessionsView | undefined>();
   const [failed, setFailed] = useState(false);
   const [pending, setPending] = useState<SessionRevocation | undefined>();
@@ -599,13 +609,14 @@ function SessionsSheet({ close }: { close: () => void }) {
 
   const sessions = view?.sessions ?? [];
   const others = sessions.filter((session) => !session.current).length;
+  const revocableOthers = sessions.filter((session) => !session.current && session.revocable === true).length;
   const clientOf = (session: DeviceSessionView) => {
     const key = sessionClientKeyOf(session.client);
     return key ? t(key) : session.client;
   };
 
   return (
-    <Sheet title={t("sessions.title")} onClose={close}>
+    <Sheet title={t("sessions.title")} onClose={close} closing={sheetClosing}>
       <p className="sheet__note">{t("sessions.note")}</p>
       {failed ? <p className="form-error" role="alert">{t("sessions.loadFailed")}</p> : null}
       {view === undefined && !failed ? <p className="sheet__note">{t("common.loading")}</p> : null}
@@ -619,7 +630,7 @@ function SessionsSheet({ close }: { close: () => void }) {
                 <span className="num">{t("sessions.meta", { created: when(session.createdAt), seen: when(session.lastSeenAt) })}</span>
                 {session.current ? <span className="pill pill--success">{t("sessions.current")}</span> : null}
               </span>
-              {session.current ? null : (
+              {session.current || session.revocable !== true ? null : (
                 <button
                   type="button"
                   className="row-action"
@@ -647,16 +658,16 @@ function SessionsSheet({ close }: { close: () => void }) {
           </div>
         </div>
       ) : null}
-      {view && others > 0 && !pending ? (
+      {view && revocableOthers > 0 && !pending ? (
         <div className="sheet__actions">
-          <button type="button" className="cta cta--secondary" disabled={busy} onClick={() => ask({ scope: "others", count: others })}>
+          <button type="button" className="cta cta--secondary" disabled={busy} onClick={() => ask({ scope: "others", count: revocableOthers })}>
             {t("sessions.signOutOthers")}
           </button>
         </div>
       ) : null}
       {view && others === 0 ? <p className="sheet__note">{t("sessions.noOthers")}</p> : null}
       <p ref={status} tabIndex={-1} className="sheet__note" aria-live="polite" aria-atomic="true">{outcome ? t(outcome) : null}</p>
-      <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
+      <button type="button" className="cta cta--ghost" onClick={closeSheet}>{t("common.close")}</button>
     </Sheet>
   );
 }
@@ -675,6 +686,7 @@ const notificationTemplateKeys: Readonly<Record<NotificationTemplate, { title: M
 };
 
 function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (view: NotificationsView) => void }) {
+  const { closing: sheetClosing, requestClose: closeSheet } = useAnimatedSheetClose(close);
   const [drafts, setDrafts] = useState<readonly NotificationDraft[] | undefined>();
   const [seenAtOpen, setSeenAtOpen] = useState<ReadonlySet<string>>(() => new Set());
   const [failed, setFailed] = useState(false);
@@ -701,7 +713,7 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
   }, [onRead]);
 
   return (
-    <Sheet title={t("notifications.title")} onClose={close}>
+    <Sheet title={t("notifications.title")} onClose={close} closing={sheetClosing}>
       <div className="notice-banner">
         <Icon name="info" size="sm" />
         <span>{t("notifications.banner")}</span>
@@ -731,7 +743,7 @@ function NotificationsSheet({ close, onRead }: { close: () => void; onRead: (vie
         </ul>
       ) : null}
       <p className="sheet__note">{t("notifications.note")}</p>
-      <button type="button" className="cta cta--ghost" onClick={close}>{t("common.close")}</button>
+      <button type="button" className="cta cta--ghost" onClick={closeSheet}>{t("common.close")}</button>
     </Sheet>
   );
 }

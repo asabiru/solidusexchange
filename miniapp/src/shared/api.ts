@@ -14,6 +14,12 @@ export interface DeviceSessionView {
   createdAt: number;
   lastSeenAt: number;
   current: boolean;
+  /**
+   * Whether the handle resolves on the BFF's local revoke commands. Upstream
+   * reads own the list but not the commands, so upstream-listed rows are
+   * marked false and the sheet renders them without a sign-out action.
+   */
+  revocable?: boolean;
 }
 
 export interface DeviceSessionsView {

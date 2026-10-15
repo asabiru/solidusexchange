@@ -241,6 +241,65 @@ describe("GET /bff/kyc/status through the customer-api seam", () => {
     }
   });
 
+  it("lets a live local application own the read arm: the POST write is visible despite the upstream record", async () => {
+    const stub = kycStub({ status: "ok", view: upstreamView() });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "kyc-gated");
+      // Before any submission the upstream record answers (rejected + canSubmit).
+      const before = await (await get(running.base, "/bff/kyc/status", cookie)).json() as KycVerificationView;
+      assert.equal(before.state, "rejected");
+      assert.equal(before.canSubmit, true);
+      assert.equal(stub.calls.length, 1);
+      const created = await fetch(`${running.base}/bff/kyc/applications`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}"
+      });
+      assert.equal(created.status, 202);
+      const submitted = await created.json() as KycVerificationView;
+      assert.equal(submitted.state, "submitted");
+      // Once a local application exists it is a newer record than the
+      // upstream projection, so the read arm serves the local view and the
+      // upstream stub is not consulted again.
+      const after = await (await get(running.base, "/bff/kyc/status", cookie)).json() as KycVerificationView;
+      assert.equal(after.submittedAt, submitted.submittedAt);
+      assert.equal(after.canSubmit, false);
+      assert.equal(stub.calls.length, 1, "status reads stay local while the application lives");
+      const again = await (await get(running.base, "/bff/kyc/status", cookie)).json() as KycVerificationView;
+      assert.equal(again.submittedAt, submitted.submittedAt);
+      assert.equal(stub.calls.length, 1);
+    } finally {
+      await running.close();
+    }
+  });
+
+  it("still lets upstream answer a verified session with no local application", async () => {
+    const stub = kycStub({ status: "ok", view: upstreamView({ can_submit: true }) });
+    const running = await start(config(), stub);
+    try {
+      const cookie = await devLogin(running.base, "verified");
+      const view = await (await get(running.base, "/bff/kyc/status", cookie)).json() as KycVerificationView;
+      assert.equal(view.state, "rejected");
+      assert.equal(view.canSubmit, true);
+      assert.equal(stub.calls.length, 1);
+      // The served resubmittable record still cannot be submitted by a verified
+      // session: the session-flag gate answers 409 and the UI completes the flow.
+      const resubmit = await fetch(`${running.base}/bff/kyc/applications`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: "{}"
+      });
+      assert.equal(resubmit.status, 409);
+      assert.deepEqual(await resubmit.json(), { error: "kyc_already_verified" });
+      const after = await (await get(running.base, "/bff/kyc/status", cookie)).json() as KycVerificationView;
+      assert.equal(after.state, "rejected");
+      assert.equal(stub.calls.length, 2);
+    } finally {
+      await running.close();
+    }
+  });
+
   it("degrades to kyc_unavailable on upstream outage for gated and verified sessions without leaking the body", async () => {
     const stub = kycStub({ status: "unavailable" });
     const running = await start(config(), stub);

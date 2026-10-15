@@ -10,3 +10,6 @@
 # Dependencies and build output
 node_modules
 coverage
+
+# Playwright MCP artifacts
+.playwright-mcp/

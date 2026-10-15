@@ -478,7 +478,8 @@ export function createMiniappServer(
       client: entry.source === "telegram" ? "telegram" as const : "dev-login" as const,
       createdAt: entry.issued_at_ms,
       lastSeenAt: entry.last_used_at_ms,
-      current: entry.session_id === current.id
+      current: entry.session_id === current.id,
+      revocable: true
     }));
     own.sort((a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt);
     return { mode: "test", sessions: own };
@@ -1176,8 +1177,15 @@ export function createMiniappServer(
       // unconfigured dev BFF keeps the local synthetic view. Since the read is
       // never denied, an upstream 403 signals contract drift and maps, like
       // every other non-ok outcome, to the sibling *_unavailable shape.
-      if (!customerApi.configured) {
-        json(response, 200, kycOnboarding.view(session.subject, session.kyc));
+      // A live local application outranks that record: the BFF-owned
+      // onboarding simulator is the write arm of this surface and the only
+      // path that upgrades the session flag (see currentSession's lazy sync),
+      // so once a submission exists the local view owns the read arm too -
+      // otherwise POST /bff/kyc/applications would be invisible behind the
+      // deterministic upstream projection.
+      const local = kycOnboarding.view(session.subject, session.kyc);
+      if (local.submittedAt !== undefined || !customerApi.configured) {
+        json(response, 200, local);
         return;
       }
       const upstream = await customerApi.kyc(session.subject, clock());

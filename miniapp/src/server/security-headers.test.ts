@@ -520,8 +520,11 @@ describe("Mini App Vite document security headers", () => {
       await vite.listen();
       const { port } = vite.httpServer?.address() as AddressInfo;
       const preflight = { origin: "https://frame.example.test", "access-control-request-method": "POST" };
+      // The probe must name a file that exists but sits outside the Vite root,
+      // so the fs allowlist answers 403 instead of the SPA fallback's 200.
+      const outsideRoot = process.platform === "win32" ? "/@fs/C:/Windows/win.ini" : "/@fs/etc/passwd";
       const replies: [number, Reply][] = [
-        [403, await send(port, "GET", "/@fs/etc/passwd")],
+        [403, await send(port, "GET", outsideRoot)],
         [404, await send(port, "POST", "/")],
         [204, await send(port, "OPTIONS", "/", { headers: preflight })],
         [500, await send(port, "GET", "/bff/health")]

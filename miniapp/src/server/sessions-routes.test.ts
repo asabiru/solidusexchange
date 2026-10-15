@@ -179,8 +179,9 @@ describe("sessions routes: listing", () => {
     assert.equal(view.sessions.length, 2);
     assert.deepEqual(view.sessions.map((session) => session.current), [true, false]);
     for (const session of view.sessions) {
-      assert.deepEqual(Object.keys(session).sort(), ["client", "createdAt", "current", "handle", "lastSeenAt"]);
+      assert.deepEqual(Object.keys(session).sort(), ["client", "createdAt", "current", "handle", "lastSeenAt", "revocable"]);
       assert.match(session.handle, sessionHandlePattern);
+      assert.equal(session.revocable, true, "locally listed handles resolve on the revoke commands");
       assert.equal(session.client, "telegram");
       assert.equal(session.createdAt, now);
       assert.equal(session.lastSeenAt, now);

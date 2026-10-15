@@ -13,7 +13,7 @@ import { createMiniappServer } from "./server.js";
 
 const origin = "http://127.0.0.1:4183";
 const marker = "sess_upstreammarker000000";
-const sessionKeys = ["client", "createdAt", "current", "handle", "lastSeenAt"];
+const sessionKeys = ["client", "createdAt", "current", "handle", "lastSeenAt", "revocable"];
 let now = 1_790_000_000_000;
 
 function config(overrides: Partial<ServerConfig> = {}): ServerConfig {
@@ -205,6 +205,7 @@ describe("GET /bff/sessions through the customer-api seam", () => {
       assert.equal(current.handle, marker);
       assert.equal(current.client, "telegram");
       assert.equal(current.current, true);
+      assert.equal(current.revocable, false, "upstream handles never resolve on local revoke commands");
       assert.equal(current.createdAt, Date.parse("2026-10-01T12:00:00.000Z"));
       assert.equal(current.lastSeenAt, Date.parse("2026-10-01T13:00:00.000Z"));
       const other = view.sessions[1];

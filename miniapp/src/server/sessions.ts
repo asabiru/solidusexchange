@@ -37,7 +37,8 @@ export function contractAuthSessionsView(view: ContractAuthSessionsView): Device
       client: (session.platform === "telegram-mini-app" ? "telegram" : "dev-login") as SessionClient,
       createdAt: Date.parse(session.created_at),
       lastSeenAt: Date.parse(session.last_seen_at),
-      current: session.current
+      current: session.current,
+      revocable: false
     }));
   sessions.sort(
     (a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt - a.lastSeenAt || b.createdAt - a.createdAt
